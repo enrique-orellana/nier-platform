@@ -204,6 +204,11 @@ Navigate to **`http://localhost:5175`**
 4. **YouTube Studio**: Generate thumbnails, titles, and descriptions for YouTube
 5. **UGC Gallery**: Browse all generated videos and avatars
 
+### Kubernetes / MinIO
+If you want to run the app on Kubernetes against the recovered MinIO data,
+see [`k8s/README.md`](./k8s/README.md). It includes the ingress setup, image
+build commands, and the `openshorts.yaml` bundle.
+
 ---
 
 ## Technical Pipeline
@@ -248,11 +253,15 @@ Navigate to **`http://localhost:5175`**
 **Server-side (.env):**
 | Variable | Description |
 |----------|------------|
-| `AWS_ACCESS_KEY_ID` | AWS access key for S3 |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key |
-| `AWS_REGION` | AWS region (default: us-east-1) |
+| `AWS_ACCESS_KEY_ID` | S3 access key, including MinIO |
+| `AWS_SECRET_ACCESS_KEY` | S3 secret key, including MinIO |
+| `AWS_REGION` | Region label used for S3 signing and fallback URLs |
 | `AWS_S3_BUCKET` | Private bucket for clip backup |
 | `AWS_S3_PUBLIC_BUCKET` | Public bucket for gallery/avatars |
+| `AWS_S3_ENDPOINT_URL` | Custom S3 endpoint, such as MinIO |
+| `AWS_S3_PUBLIC_URL_BASE` | Browser-facing base URL for public media links |
+| `AWS_S3_PUBLIC_ENDPOINT_URL` | Endpoint used to generate presigned URLs for public access |
+| `AWS_S3_FORCE_PATH_STYLE` | Force path-style URLs, recommended for MinIO |
 | `MAX_CONCURRENT_JOBS` | Concurrent processing limit (default: 5) |
 
 **Client-side (encrypted in localStorage):**
