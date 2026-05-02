@@ -7,7 +7,8 @@ export default defineConfig({
   server: {
     allowedHosts: [
       'openshorts.app',
-      'www.openshorts.app'
+      'www.openshorts.app',
+      'openshorts.127.0.0.1.nip.io'
     ],
     proxy: {
       '/api': {
