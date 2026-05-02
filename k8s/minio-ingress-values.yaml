@@ -1,0 +1,15 @@
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hosts:
+    - minio.127.0.0.1.nip.io
+  path: /
+  tls: []
+
+consoleIngress:
+  enabled: true
+  ingressClassName: nginx
+  hosts:
+    - console.minio.127.0.0.1.nip.io
+  path: /
+  tls: []

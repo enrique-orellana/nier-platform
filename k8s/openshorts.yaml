@@ -1,0 +1,296 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshorts
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openshorts-workdir
+  namespace: openshorts
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openshorts-config
+  namespace: openshorts
+data:
+  MAX_CONCURRENT_JOBS: "5"
+  AWS_REGION: eu-west-3
+  AWS_S3_BUCKET: openshorts-media
+  AWS_S3_PUBLIC_BUCKET: openshorts-media
+  AWS_S3_ENDPOINT_URL: http://minio.minio-system.svc.cluster.local:9000
+  AWS_S3_PUBLIC_URL_BASE: http://minio.127.0.0.1.nip.io
+  AWS_S3_PUBLIC_ENDPOINT_URL: http://minio.127.0.0.1.nip.io
+  AWS_S3_FORCE_PATH_STYLE: "true"
+  RENDER_SERVICE_URL: http://openshorts-renderer.openshorts.svc.cluster.local:3100
+  PORT: "3100"
+  OUTPUT_DIR: /output
+  REMOTION_BUNDLE_PATH: /app/remotion
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openshorts-backend
+  namespace: openshorts
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openshorts-backend
+  template:
+    metadata:
+      labels:
+        app: openshorts-backend
+    spec:
+      containers:
+        - name: backend
+          image: openshorts-backend:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: openshorts-config
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: openshorts-minio
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openshorts-minio
+                  key: AWS_SECRET_ACCESS_KEY
+          volumeMounts:
+            - name: workdir
+              mountPath: /app/output
+            - name: uploads
+              mountPath: /app/uploads
+          readinessProbe:
+            httpGet:
+              path: /openapi.json
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /openapi.json
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+      volumes:
+        - name: workdir
+          persistentVolumeClaim:
+            claimName: openshorts-workdir
+        - name: uploads
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openshorts-backend
+  namespace: openshorts
+spec:
+  selector:
+    app: openshorts-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openshorts-renderer
+  namespace: openshorts
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openshorts-renderer
+  template:
+    metadata:
+      labels:
+        app: openshorts-renderer
+    spec:
+      containers:
+        - name: renderer
+          image: openshorts-renderer:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3100
+          envFrom:
+            - configMapRef:
+                name: openshorts-config
+          volumeMounts:
+            - name: workdir
+              mountPath: /output
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3100
+            failureThreshold: 60
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3100
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3100
+            initialDelaySeconds: 30
+            periodSeconds: 20
+      volumes:
+        - name: workdir
+          persistentVolumeClaim:
+            claimName: openshorts-workdir
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openshorts-renderer
+  namespace: openshorts
+spec:
+  selector:
+    app: openshorts-renderer
+  ports:
+    - name: http
+      port: 3100
+      targetPort: 3100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openshorts-frontend
+  namespace: openshorts
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openshorts-frontend
+  template:
+    metadata:
+      labels:
+        app: openshorts-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: openshorts-frontend:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5173
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5173
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5173
+            initialDelaySeconds: 30
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openshorts-frontend
+  namespace: openshorts
+spec:
+  selector:
+    app: openshorts-frontend
+  ports:
+    - name: http
+      port: 5173
+      targetPort: 5173
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: openshorts
+  namespace: openshorts
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: openshorts.127.0.0.1.nip.io
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: openshorts-backend
+                port:
+                  number: 8000
+          - path: /videos
+            pathType: Prefix
+            backend:
+              service:
+                name: openshorts-backend
+                port:
+                  number: 8000
+          - path: /thumbnails
+            pathType: Prefix
+            backend:
+              service:
+                name: openshorts-backend
+                port:
+                  number: 8000
+          - path: /gallery
+            pathType: Prefix
+            backend:
+              service:
+                name: openshorts-backend
+                port:
+                  number: 8000
+          - path: /video
+            pathType: Prefix
+            backend:
+              service:
+                name: openshorts-backend
+                port:
+                  number: 8000
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: openshorts-backend
+                port:
+                  number: 8000
+          - path: /openapi.json
+            pathType: Prefix
+            backend:
+              service:
+                name: openshorts-backend
+                port:
+                  number: 8000
+          - path: /redoc
+            pathType: Prefix
+            backend:
+              service:
+                name: openshorts-backend
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openshorts-frontend
+                port:
+                  number: 5173
