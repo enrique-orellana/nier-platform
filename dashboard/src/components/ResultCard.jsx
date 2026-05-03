@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Share2, Instagram, Youtube, Video, CheckCircle, AlertCircle, X, Loader2, Copy, Wand2, Type, Calendar, Clock, Languages } from 'lucide-react';
+import { Download, Share2, Instagram, Youtube, Video, CheckCircle, AlertCircle, X, Loader2, Copy, Wand2, Type, Calendar, Clock, Languages, Sparkles, Crop } from 'lucide-react';
 import { getApiUrl } from '../config';
 import SubtitleModal from './SubtitleModal';
 import HookModal from './HookModal';
@@ -12,6 +12,8 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     const videoRef = React.useRef(null);
     const originalVideoUrl = getApiUrl(clip.video_url); // Never changes — used for Remotion previews
     const [currentVideoUrl, setCurrentVideoUrl] = useState(originalVideoUrl);
+    const [persistedVideoUrl, setPersistedVideoUrl] = useState(originalVideoUrl);
+    const lastObjectUrlRef = React.useRef(null);
 
     const [platforms, setPlatforms] = useState({
         tiktok: true,
@@ -30,6 +32,8 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     const [isSubtitling, setIsSubtitling] = useState(false);
     const [isHooking, setIsHooking] = useState(false);
     const [isTranslating, setIsTranslating] = useState(false);
+    const [isConvertingNativeShort, setIsConvertingNativeShort] = useState(false);
+    const [isQualityImproving, setIsQualityImproving] = useState(false);
     const [showHookModal, setShowHookModal] = useState(false);
     const [showTranslateModal, setShowTranslateModal] = useState(false);
     const [editError, setEditError] = useState(null);
@@ -38,6 +42,26 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
 
     // Accumulate Remotion layers across operations
     const [activeLayers, setActiveLayers] = useState({ subtitles: null, hook: null, effects: null });
+
+    useEffect(() => {
+        if (lastObjectUrlRef.current && lastObjectUrlRef.current !== currentVideoUrl) {
+            URL.revokeObjectURL(lastObjectUrlRef.current);
+            lastObjectUrlRef.current = null;
+        }
+
+        if (currentVideoUrl.startsWith('blob:')) {
+            lastObjectUrlRef.current = currentVideoUrl;
+        }
+    }, [currentVideoUrl]);
+
+    useEffect(() => {
+        return () => {
+            if (lastObjectUrlRef.current) {
+                URL.revokeObjectURL(lastObjectUrlRef.current);
+                lastObjectUrlRef.current = null;
+            }
+        };
+    }, []);
 
     const getVideoFilename = (videoUrl) => {
         if (!videoUrl) return '';
@@ -49,6 +73,8 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             return videoUrl.split('?')[0].split('#')[0].split('/').filter(Boolean).pop() || '';
         }
     };
+
+    const getBackendSourceUrl = () => persistedVideoUrl || originalVideoUrl;
 
     // Fetch clip duration from transcript endpoint
     useEffect(() => {
@@ -94,7 +120,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 body: JSON.stringify({
                     job_id: jobId,
                     clip_index: index,
-                    input_filename: getVideoFilename(currentVideoUrl)
+                    input_filename: getVideoFilename(getBackendSourceUrl())
                 })
             });
 
@@ -104,7 +130,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     const newLayers = { ...activeLayers, effects: data.effects };
                     setActiveLayers(newLayers);
                     const blobUrl = await renderInBrowser({
-                        videoUrl: originalVideoUrl,
+                        videoUrl: getBackendSourceUrl(),
                         durationInSeconds: clipDuration,
                         subtitles: newLayers.subtitles,
                         hook: newLayers.hook,
@@ -123,7 +149,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 body: JSON.stringify({
                     job_id: jobId,
                     clip_index: index,
-                    input_filename: getVideoFilename(currentVideoUrl)
+                    input_filename: getVideoFilename(getBackendSourceUrl())
                 })
             });
 
@@ -139,7 +165,9 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
 
             const data = await res.json();
             if (data.new_video_url) {
-                setCurrentVideoUrl(getApiUrl(data.new_video_url));
+                const nextUrl = getApiUrl(data.new_video_url);
+                setPersistedVideoUrl(nextUrl);
+                setCurrentVideoUrl(nextUrl);
                 if (videoRef.current) {
                     videoRef.current.load();
                 }
@@ -153,6 +181,124 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
         }
     };
 
+    const handleConvertNativeShort = async () => {
+        setIsConvertingNativeShort(true);
+        setEditError(null);
+
+        try {
+            const renderSourceVideoUrl = getBackendSourceUrl();
+            const renderLayers = activeLayers;
+
+            const renderRes = await fetch(getApiUrl('/api/render'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jobId,
+                    clipIndex: index,
+                    props: {
+                        videoUrl: renderSourceVideoUrl,
+                        durationInFrames: Math.max(1, Math.round(clipDuration * 30)),
+                        fps: 30,
+                        width: 1080,
+                        height: 1920,
+                        subtitles: renderLayers?.subtitles || null,
+                        hook: renderLayers?.hook || null,
+                        effects: renderLayers?.effects || null,
+                    },
+                }),
+            });
+
+            if (!renderRes.ok) {
+                throw new Error(await renderRes.text());
+            }
+
+            const renderData = await renderRes.json();
+            const renderId = renderData.renderId;
+            if (!renderId) {
+                throw new Error('Render service did not return a render ID.');
+            }
+
+            let finishedRender = null;
+            while (true) {
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+
+                const statusRes = await fetch(getApiUrl(`/api/render/${renderId}`));
+                if (!statusRes.ok) {
+                    throw new Error(await statusRes.text());
+                }
+
+                finishedRender = await statusRes.json();
+                if (finishedRender.status === 'done') break;
+                if (finishedRender.status === 'error') {
+                    throw new Error(finishedRender.error || 'Quality render failed.');
+                }
+            }
+
+            const outputUrl = finishedRender?.outputUrl || '';
+            const outputFilename = outputUrl.split(/[\\/]/).filter(Boolean).pop();
+            if (!outputFilename) {
+                throw new Error('Native short render completed, but no output file was returned.');
+            }
+
+            const newVideoUrl = `/videos/${jobId}/${outputFilename}`;
+            const persistRes = await fetch(getApiUrl(`/api/clip/${jobId}/${index}/video-url`), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ new_video_url: newVideoUrl }),
+            });
+
+            if (!persistRes.ok) {
+                throw new Error(await persistRes.text());
+            }
+
+            const nextUrl = getApiUrl(newVideoUrl);
+            setPersistedVideoUrl(nextUrl);
+            setCurrentVideoUrl(nextUrl);
+            if (videoRef.current) {
+                videoRef.current.load();
+            }
+        } catch (e) {
+            setEditError(e.message);
+            setTimeout(() => setEditError(null), 5000);
+        } finally {
+            setIsConvertingNativeShort(false);
+        }
+    };
+
+    const handleImproveQuality = async () => {
+        setIsQualityImproving(true);
+        setEditError(null);
+
+        try {
+            const res = await fetch(getApiUrl(`/api/clip/${jobId}/${index}/quality`), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    input_filename: getVideoFilename(getBackendSourceUrl()),
+                }),
+            });
+
+            if (!res.ok) {
+                throw new Error(await res.text());
+            }
+
+            const data = await res.json();
+            if (data.video_url) {
+                const nextUrl = getApiUrl(data.video_url);
+                setPersistedVideoUrl(nextUrl);
+                setCurrentVideoUrl(nextUrl);
+                if (videoRef.current) {
+                    videoRef.current.load();
+                }
+            }
+        } catch (e) {
+            setEditError(e.message);
+            setTimeout(() => setEditError(null), 5000);
+        } finally {
+            setIsQualityImproving(false);
+        }
+    };
+
     const handleSubtitle = async (options) => {
         setIsSubtitling(true);
         setEditError(null);
@@ -162,7 +308,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 const newLayers = { ...activeLayers, subtitles: options.remotion };
                 setActiveLayers(newLayers);
                 const blobUrl = await renderInBrowser({
-                    videoUrl: originalVideoUrl,
+                    videoUrl: getBackendSourceUrl(),
                     durationInSeconds: clipDuration,
                     subtitles: newLayers.subtitles,
                     hook: newLayers.hook,
@@ -189,14 +335,16 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     border_width: options.borderWidth,
                     bg_color: options.bgColor,
                     bg_opacity: options.bgOpacity,
-                    input_filename: getVideoFilename(currentVideoUrl)
+                    input_filename: getVideoFilename(getBackendSourceUrl())
                 })
             });
 
             if (!res.ok) throw new Error(await res.text());
             const data = await res.json();
             if (data.new_video_url) {
-                setCurrentVideoUrl(getApiUrl(data.new_video_url));
+                const nextUrl = getApiUrl(data.new_video_url);
+                setPersistedVideoUrl(nextUrl);
+                setCurrentVideoUrl(nextUrl);
                 if (videoRef.current) videoRef.current.load();
                 setShowSubtitleModal(false);
             }
@@ -217,7 +365,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 const newLayers = { ...activeLayers, hook: hookData.remotion };
                 setActiveLayers(newLayers);
                 const blobUrl = await renderInBrowser({
-                    videoUrl: originalVideoUrl,
+                    videoUrl: getBackendSourceUrl(),
                     durationInSeconds: clipDuration,
                     subtitles: newLayers.subtitles,
                     hook: newLayers.hook,
@@ -243,14 +391,16 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     text: payload.text,
                     position: payload.position,
                     size: payload.size,
-                    input_filename: getVideoFilename(currentVideoUrl)
+                    input_filename: getVideoFilename(getBackendSourceUrl())
                 })
             });
 
             if (!res.ok) throw new Error(await res.text());
             const data = await res.json();
             if (data.new_video_url) {
-                setCurrentVideoUrl(getApiUrl(data.new_video_url));
+                const nextUrl = getApiUrl(data.new_video_url);
+                setPersistedVideoUrl(nextUrl);
+                setCurrentVideoUrl(nextUrl);
                 if (videoRef.current) videoRef.current.load();
                 setShowHookModal(false);
             }
@@ -278,7 +428,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 job_id: jobId,
                 clip_index: index,
                 target_language: options.targetLanguage,
-                input_filename: getVideoFilename(currentVideoUrl)
+                input_filename: getVideoFilename(getBackendSourceUrl())
             };
             console.log('[Translate] Request body:', requestBody);
             console.log('[Translate] Sending request to /api/translate');
@@ -309,7 +459,9 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             const data = await res.json();
             console.log('[Translate] Success response:', data);
             if (data.new_video_url) {
-                setCurrentVideoUrl(getApiUrl(data.new_video_url));
+                const nextUrl = getApiUrl(data.new_video_url);
+                setPersistedVideoUrl(nextUrl);
+                setCurrentVideoUrl(nextUrl);
                 if (videoRef.current) {
                     videoRef.current.load();
                 }
@@ -421,11 +573,23 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 </div>
 
                 {/* Auto Edit Overlay if Processing */}
-                {isEditing && (
+                {(isEditing || isConvertingNativeShort || isQualityImproving) && (
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-10 p-4 text-center">
                         <Loader2 size={32} className="text-primary animate-spin mb-3" />
-                        <span className="text-xs font-bold text-white uppercase tracking-wider">AI Magic in Progress...</span>
-                        <span className="text-[10px] text-zinc-400 mt-1">Applying viral edits & zooms</span>
+                        <span className="text-xs font-bold text-white uppercase tracking-wider">
+                            {isConvertingNativeShort
+                                ? 'Converting to Native Short...'
+                                : isQualityImproving
+                                    ? 'Improving Quality...'
+                                    : 'AI Magic in Progress...'}
+                        </span>
+                        <span className="text-[10px] text-zinc-400 mt-1">
+                            {isConvertingNativeShort
+                                ? 'Re-rendering to 1080x1920'
+                                : isQualityImproving
+                                    ? 'Re-encoding without changing framing'
+                                    : 'Applying viral edits & zooms'}
+                        </span>
                     </div>
                 )}
             </div>
@@ -486,6 +650,24 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     >
                         {isEditing ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
                         {isEditing ? 'Editing...' : 'Auto Edit'}
+                    </button>
+
+                    <button
+                        onClick={handleConvertNativeShort}
+                        disabled={isConvertingNativeShort}
+                        className="col-span-1 py-2 bg-gradient-to-r from-cyan-600 to-sky-700 hover:from-cyan-500 hover:to-sky-600 text-white rounded-lg text-xs font-bold shadow-lg shadow-cyan-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 mb-1 truncate px-1"
+                    >
+                        {isConvertingNativeShort ? <Loader2 size={14} className="animate-spin" /> : <Crop size={14} />}
+                        {isConvertingNativeShort ? 'Converting...' : 'Convert to Native Short'}
+                    </button>
+
+                    <button
+                        onClick={handleImproveQuality}
+                        disabled={isQualityImproving}
+                        className="col-span-1 py-2 bg-gradient-to-r from-sky-500 to-cyan-600 hover:from-sky-400 hover:to-cyan-500 text-white rounded-lg text-xs font-bold shadow-lg shadow-cyan-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 mb-1 truncate px-1"
+                    >
+                        {isQualityImproving ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                        {isQualityImproving ? 'Improving...' : 'Improve Quality'}
                     </button>
 
                     <button
