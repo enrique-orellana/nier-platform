@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/deploy-local.sh [--profile <name>]
+
+Options:
+  --profile <name>   Load .env.<name> after .env (examples: local, devel, quality)
+EOF
+}
+
+PROFILE="${OPENSHORTS_ENV_PROFILE:-}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --profile)
+      PROFILE="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'Unknown argument: %s\n' "$1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+EXPLICIT_NAMESPACE="${OPENSHORTS_NAMESPACE-}"
+EXPLICIT_KUBE_CONTEXT="${OPENSHORTS_KUBE_CONTEXT-}"
+EXPLICIT_CONFIG_ENV_FILE="${OPENSHORTS_CONFIG_ENV_FILE-}"
+EXPLICIT_BACKEND_BASE_URL="${OPENSHORTS_AI_BASE_URL-}"
+EXPLICIT_FRONTEND_BASE_URL="${OPENSHORTS_VITE_AI_BASE_URL-}"
+EXPLICIT_S3_PUBLIC_URL_BASE="${OPENSHORTS_S3_PUBLIC_URL_BASE-}"
+EXPLICIT_S3_PUBLIC_ENDPOINT_URL="${OPENSHORTS_S3_PUBLIC_ENDPOINT_URL-}"
+
+load_env_file() {
+  local env_file="$1"
+  if [[ ! -f "$env_file" ]]; then
+    return 0
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  source "$env_file"
+  set +a
+}
+
+if [[ -f ".env" ]]; then
+  load_env_file ".env"
+elif [[ -f ".env.example" ]]; then
+  load_env_file ".env.example"
+else
+  printf 'No .env or .env.example found. Continuing with process environment only.\n' >&2
+fi
+
+if [[ -n "$PROFILE" ]]; then
+  PROFILE_ENV_FILE=".env.${PROFILE}"
+  if [[ -f "$PROFILE_ENV_FILE" ]]; then
+    load_env_file "$PROFILE_ENV_FILE"
+  else
+    printf 'Profile env file not found: %s\n' "$PROFILE_ENV_FILE" >&2
+  fi
+fi
+
+if [[ -n "$EXPLICIT_NAMESPACE" ]]; then export OPENSHORTS_NAMESPACE="$EXPLICIT_NAMESPACE"; fi
+if [[ -n "$EXPLICIT_KUBE_CONTEXT" ]]; then export OPENSHORTS_KUBE_CONTEXT="$EXPLICIT_KUBE_CONTEXT"; fi
+if [[ -n "$EXPLICIT_CONFIG_ENV_FILE" ]]; then export OPENSHORTS_CONFIG_ENV_FILE="$EXPLICIT_CONFIG_ENV_FILE"; fi
+if [[ -n "$PROFILE" ]]; then export OPENSHORTS_ENV_PROFILE="$PROFILE"; fi
+if [[ -n "$EXPLICIT_BACKEND_BASE_URL" ]]; then export OPENSHORTS_AI_BASE_URL="$EXPLICIT_BACKEND_BASE_URL"; fi
+if [[ -n "$EXPLICIT_FRONTEND_BASE_URL" ]]; then export OPENSHORTS_VITE_AI_BASE_URL="$EXPLICIT_FRONTEND_BASE_URL"; fi
+if [[ -n "$EXPLICIT_S3_PUBLIC_URL_BASE" ]]; then export OPENSHORTS_S3_PUBLIC_URL_BASE="$EXPLICIT_S3_PUBLIC_URL_BASE"; fi
+if [[ -n "$EXPLICIT_S3_PUBLIC_ENDPOINT_URL" ]]; then export OPENSHORTS_S3_PUBLIC_ENDPOINT_URL="$EXPLICIT_S3_PUBLIC_ENDPOINT_URL"; fi
+
+KUBE_CONTEXT="${OPENSHORTS_KUBE_CONTEXT:-}"
+CONFIG_ENV_FILE="${OPENSHORTS_CONFIG_ENV_FILE:-k8s/openshorts.env.example}"
+AI_BASE_URL="${OPENSHORTS_AI_BASE_URL:-}"
+VITE_AI_BASE_URL="${OPENSHORTS_VITE_AI_BASE_URL:-}"
+S3_PUBLIC_URL_BASE="${OPENSHORTS_S3_PUBLIC_URL_BASE:-}"
+S3_PUBLIC_ENDPOINT_URL="${OPENSHORTS_S3_PUBLIC_ENDPOINT_URL:-}"
+
+log_step() {
+  printf '\n==> %s\n' "$1"
+}
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Required command 'docker' was not found in PATH." >&2
+  exit 1
+fi
+if ! command -v kubectl >/dev/null 2>&1; then
+  echo "Required command 'kubectl' was not found in PATH." >&2
+  exit 1
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "Required command 'python3' was not found in PATH." >&2
+  exit 1
+fi
+
+backend_image="openshorts-backend:local"
+frontend_image="openshorts-frontend:local"
+renderer_image="openshorts-renderer:local"
+
+kubectl_cmd=(kubectl)
+if [[ -n "$KUBE_CONTEXT" ]]; then
+  kubectl_cmd+=(--context "$KUBE_CONTEXT")
+fi
+
+apply_kubectl() {
+  "${kubectl_cmd[@]}" "$@"
+}
+
+log_step "Building local images"
+docker build -t "$backend_image" .
+docker build -t "$frontend_image" -f dashboard/Dockerfile dashboard
+docker build -t "$renderer_image" -f render-service/Dockerfile .
+
+if [[ ! -f "k8s/openshorts.yaml" ]]; then
+  echo "Missing k8s/openshorts.yaml" >&2
+  exit 1
+fi
+
+log_step "Applying bundle"
+apply_kubectl apply -f k8s/openshorts.yaml
+
+if [[ ! -f "$CONFIG_ENV_FILE" ]]; then
+  echo "Config env file not found: $CONFIG_ENV_FILE" >&2
+  exit 1
+fi
+
+log_step "Updating config map from env file"
+temp_env_file="$(mktemp)"
+cp "$CONFIG_ENV_FILE" "$temp_env_file"
+
+python3 - "$temp_env_file" "$AI_BASE_URL" "$VITE_AI_BASE_URL" "$S3_PUBLIC_URL_BASE" "$S3_PUBLIC_ENDPOINT_URL" <<'PY'
+import pathlib
+import re
+import sys
+
+path = pathlib.Path(sys.argv[1])
+ai_base = sys.argv[2]
+vite_base = sys.argv[3]
+s3_public = sys.argv[4]
+s3_endpoint = sys.argv[5]
+
+text = path.read_text()
+
+def replace_line(name: str, value: str, content: str) -> str:
+    if not value:
+        return content
+    pattern = rf"^{re.escape(name)}=.*$"
+    replacement = f"{name}={value}"
+    if re.search(pattern, content, flags=re.MULTILINE):
+        return re.sub(pattern, replacement, content, flags=re.MULTILINE)
+    return content + ("" if content.endswith("\n") else "\n") + replacement + "\n"
+
+text = replace_line("AI_BASE_URL", ai_base, text)
+text = replace_line("VITE_AI_BASE_URL", vite_base, text)
+text = replace_line("AWS_S3_PUBLIC_URL_BASE", s3_public, text)
+text = replace_line("AWS_S3_PUBLIC_ENDPOINT_URL", s3_endpoint, text)
+
+path.write_text(text)
+PY
+
+apply_kubectl create configmap openshorts-config \
+  -n openshorts \
+  --from-env-file="$temp_env_file" \
+  --dry-run=client -o yaml | apply_kubectl apply -f -
+rm -f "$temp_env_file"
+
+log_step "Restarting deployments"
+apply_kubectl rollout restart deployment/openshorts-backend deployment/openshorts-frontend deployment/openshorts-renderer -n openshorts
+
+log_step "Waiting for rollouts"
+apply_kubectl rollout status deployment/openshorts-backend -n openshorts --timeout=180s
+apply_kubectl rollout status deployment/openshorts-frontend -n openshorts --timeout=180s
+apply_kubectl rollout status deployment/openshorts-renderer -n openshorts --timeout=180s
+
+printf '\nLocal deploy completed successfully.\n'

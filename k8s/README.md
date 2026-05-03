@@ -83,6 +83,83 @@ served back through the same ingress host. The recovered buckets remain:
 - `AWS_S3_BUCKET=openshorts-media`
 - `AWS_S3_PUBLIC_BUCKET=openshorts-media`
 
+## One-command local update
+
+This is the default Docker Desktop / local cluster flow. It keeps the `:local`
+image tags and uses the checked-in manifest directly. The helper script loads
+the root `.env` automatically, so you do not need to export anything. If you
+want a different environment flavor, create a matching overlay file such as
+`.env.local`, `.env.devel`, or `.env.quality` and pass the profile name.
+
+```powershell
+.\scripts\deploy-local.ps1
+.\scripts\deploy-local.ps1 -Profile devel
+```
+
+```bash
+bash ./scripts/deploy-local.sh
+bash ./scripts/deploy-local.sh --profile quality
+```
+
+That single command:
+
+- builds the backend, frontend, and renderer images with local tags
+- applies `k8s/openshorts.yaml`
+- refreshes the `openshorts-config` ConfigMap from `k8s/openshorts.env.example`
+- restarts the three deployments
+- waits for all rollouts to finish
+
+If you want to change the local host URLs or model defaults, edit `.env` once
+and rerun the same command. Profile overlays let you keep alternate settings in
+`.env.local`, `.env.devel`, or `.env.quality` without exporting variables.
+
+## One-command remote update
+
+If you are deploying to a remote cluster with a registry, use the remote
+helper from the repo root.
+
+It reads the root `.env` by default and also accepts these environment
+variables:
+
+- `OPENSHORTS_REGISTRY`
+- `OPENSHORTS_TAG`
+- `OPENSHORTS_NAMESPACE`
+- `OPENSHORTS_KUBE_CONTEXT`
+- `OPENSHORTS_CONFIG_ENV_FILE`
+- `OPENSHORTS_BACKEND_BASE_URL`
+- `OPENSHORTS_FRONTEND_BASE_URL`
+- `OPENSHORTS_S3_PUBLIC_URL_BASE`
+- `OPENSHORTS_S3_PUBLIC_ENDPOINT_URL`
+
+```powershell
+$env:OPENSHORTS_REGISTRY = "ghcr.io/your-org"
+$env:OPENSHORTS_TAG = "2026-05-03"
+$env:OPENSHORTS_BACKEND_BASE_URL = "http://ollama.your-cluster.svc.cluster.local:11434"
+$env:OPENSHORTS_FRONTEND_BASE_URL = "http://ollama.your-cluster.svc.cluster.local:11434"
+$env:OPENSHORTS_S3_PUBLIC_URL_BASE = "https://minio.your-domain.example"
+$env:OPENSHORTS_S3_PUBLIC_ENDPOINT_URL = "https://minio.your-domain.example"
+.\scripts\deploy-remote.ps1
+.\scripts\deploy-remote.ps1 -Profile quality
+```
+
+```bash
+export OPENSHORTS_REGISTRY="ghcr.io/your-org"
+export OPENSHORTS_TAG="2026-05-03"
+export OPENSHORTS_BACKEND_BASE_URL="http://ollama.your-cluster.svc.cluster.local:11434"
+export OPENSHORTS_FRONTEND_BASE_URL="http://ollama.your-cluster.svc.cluster.local:11434"
+export OPENSHORTS_S3_PUBLIC_URL_BASE="https://minio.your-domain.example"
+export OPENSHORTS_S3_PUBLIC_ENDPOINT_URL="https://minio.your-domain.example"
+bash ./scripts/deploy-remote.sh
+bash ./scripts/deploy-remote.sh --profile devel
+```
+
+The remote helper:
+
+- builds and pushes registry images
+- updates `openshorts-config`
+- patches the three Kubernetes deployments
+- waits for all rollouts to finish
+
 ## OpenShorts S3 settings
 
 Use the variables in `openshorts.env.example` if you want a quick reference for

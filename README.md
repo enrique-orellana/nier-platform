@@ -187,7 +187,8 @@ cd OpenShorts
 ### 2. Configure (optional)
 ```bash
 cp .env.example .env
-# Edit .env with your AWS keys for S3 backup
+# Edit .env for app defaults, and use .env.local / .env.devel / .env.quality
+# if you want profile-specific deploy helper settings.
 ```
 
 ### 3. Launch
@@ -207,7 +208,7 @@ Navigate to **`http://localhost:5175`**
 ### Kubernetes / MinIO
 If you want to run the app on Kubernetes against the recovered MinIO data,
 see [`k8s/README.md`](./k8s/README.md). It includes the ingress setup, image
-build commands, and the `openshorts.yaml` bundle.
+build commands, the `openshorts.yaml` bundle, and a remote-deploy update flow.
 
 ---
 

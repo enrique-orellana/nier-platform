@@ -26,6 +26,9 @@ output/
 
 # Secrets
 .env
+.env.local
+.env.devel
+.env.quality
 
 # Generated metadata
 *_metadata.json
