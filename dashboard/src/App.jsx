@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Upload, FileVideo, Sparkles, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2 } from 'lucide-react';
+import { Upload, FileVideo, Sparkles, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2, FolderOpen } from 'lucide-react';
 import KeyInput from './components/KeyInput';
 import MediaInput from './components/MediaInput';
 import ResultCard from './components/ResultCard';
 import ProcessingAnimation from './components/ProcessingAnimation';
 // import Gallery from './components/Gallery';
 import ThumbnailStudio from './components/ThumbnailStudio';
+import ProjectLibrary from './components/ProjectLibrary';
 import SaaShortsTab from './components/SaaShortsTab';
 import UGCGallery from './components/UGCGallery';
 import ScheduleWeekModal from './components/ScheduleWeekModal';
@@ -169,7 +170,7 @@ function App() {
   const [logs, setLogs] = useState([]);
   const [logsVisible, setLogsVisible] = useState(true);
   const [processingMedia, setProcessingMedia] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, settings
+  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, settings, projects
   const [clipCount, setClipCount] = useState(() => {
     const stored = Number(localStorage.getItem('clip_count_v1'));
     return Number.isFinite(stored) && stored >= 3 && stored <= 15 ? stored : 6;
@@ -476,6 +477,14 @@ function App() {
         >
           <Image size={20} />
           <span className="font-medium hidden lg:block">YouTube Studio</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('projects')}
+          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'projects' ? 'bg-cyan-500/10 text-cyan-400' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
+        >
+          <FolderOpen size={20} />
+          <span className="font-medium hidden lg:block">Projects</span>
         </button>
 
         {/* <button
@@ -973,6 +982,10 @@ function App() {
           {/* View: Thumbnails */}
           {activeTab === 'thumbnails' && (
             <ThumbnailStudio aiProvider={aiProvider} aiApiKey={apiKey} getAiHeaders={getAiHeaders} uploadPostKey={uploadPostKey} uploadUserId={uploadUserId} />
+          )}
+
+          {activeTab === 'projects' && (
+            <ProjectLibrary />
           )}
 
           {/* View: Gallery */}
