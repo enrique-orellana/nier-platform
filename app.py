@@ -63,7 +63,10 @@ def build_ai_config(
         source["X-AI-Vision-Model"] = vision_model
     if image_model:
         source["X-AI-Image-Model"] = image_model
-    return load_ai_config(source)
+    ai_config = load_ai_config(source)
+    if ai_config.is_ollama() and not ai_config.base_url:
+        raise HTTPException(status_code=400, detail="Missing Ollama base URL. Set it in Settings.")
+    return ai_config
 
 def _relocate_root_job_artifacts(job_id: str, job_output_dir: str) -> bool:
     """

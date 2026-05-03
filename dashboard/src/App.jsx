@@ -130,7 +130,7 @@ const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
 const GEMINI_VISION_MODEL = 'gemini-3.1-flash-image-preview';
 const OLLAMA_TEXT_MODEL = 'qwen3:latest';
 const OLLAMA_VISION_MODEL = 'qwen2.5vl:latest';
-const OLLAMA_BASE_URL = 'http://host.docker.internal:11434';
+const CONFIGURED_OLLAMA_BASE_URL = (import.meta.env.VITE_AI_BASE_URL || '').trim();
 
 // Mock polling function
 const pollJob = async (jobId) => {
@@ -142,7 +142,7 @@ const pollJob = async (jobId) => {
 function App() {
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_key') || '');
   const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('ai_provider_v1') || import.meta.env.VITE_AI_PROVIDER || 'gemini');
-  const [aiBaseUrl, setAiBaseUrl] = useState(() => localStorage.getItem('ai_base_url_v1') || import.meta.env.VITE_AI_BASE_URL || OLLAMA_BASE_URL);
+  const [aiBaseUrl, setAiBaseUrl] = useState(() => localStorage.getItem('ai_base_url_v1') || CONFIGURED_OLLAMA_BASE_URL || '');
   const [aiTextModel, setAiTextModel] = useState(() => localStorage.getItem('ai_text_model_v1') || import.meta.env.VITE_AI_MODEL || 'auto');
   const [aiVisionModel, setAiVisionModel] = useState(() => localStorage.getItem('ai_vision_model_v1') || import.meta.env.VITE_AI_VISION_MODEL || 'auto');
   const [aiImageModel, setAiImageModel] = useState(() => localStorage.getItem('ai_image_model_v1') || import.meta.env.VITE_AI_IMAGE_MODEL || 'auto');
@@ -203,8 +203,7 @@ function App() {
 
   const shouldSendAiBaseUrl = useCallback(() => {
     if (aiProvider !== 'ollama') return false;
-    const defaultBaseUrl = import.meta.env.VITE_AI_BASE_URL || OLLAMA_BASE_URL;
-    return aiBaseUrl && aiBaseUrl.trim() && aiBaseUrl.trim() !== defaultBaseUrl;
+    return !!aiBaseUrl && !!aiBaseUrl.trim();
   }, [aiProvider, aiBaseUrl]);
 
   // Session Recovery: Restore on mount
@@ -293,9 +292,12 @@ function App() {
     if (aiProvider === 'ollama') {
       setAiBaseUrl((current) => {
         const cleaned = (current || '').trim().replace(/\/$/, '');
-        const defaultOllamaBaseUrl = (import.meta.env.VITE_AI_BASE_URL || OLLAMA_BASE_URL).replace(/\/$/, '');
-        if (!cleaned || cleaned === 'http://localhost:11434' || cleaned === 'http://127.0.0.1:11434' || cleaned === defaultOllamaBaseUrl) {
-          return defaultOllamaBaseUrl;
+        if (!CONFIGURED_OLLAMA_BASE_URL && (
+          cleaned === 'http://localhost:11434' ||
+          cleaned === 'http://127.0.0.1:11434' ||
+          cleaned === 'http://host.docker.internal:11434'
+        )) {
+          return '';
         }
         return current;
       });
@@ -424,6 +426,12 @@ function App() {
   const handleProcess = async (data) => {
     if (aiProvider === 'gemini' && !apiKey) {
       setShowKeyModal(true);
+      return;
+    }
+    if (aiProvider === 'ollama' && !aiBaseUrl.trim()) {
+      setActiveTab('settings');
+      setLogs(["Ollama mode needs a Base URL. Set it in Settings first."]);
+      setStatus('error');
       return;
     }
     setStatus('processing');
@@ -703,8 +711,16 @@ function App() {
                       value={aiBaseUrl}
                       onChange={(e) => setAiBaseUrl(e.target.value)}
                       className="input-field"
-                      placeholder={OLLAMA_BASE_URL}
+                      placeholder="http://ollama:11434"
                     />
+                    <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
+                      Enter the reachable Ollama endpoint for your cluster or host. The app will not guess one for local mode.
+                    </p>
+                    {aiProvider === 'ollama' && !aiBaseUrl.trim() && (
+                      <p className="mt-2 text-xs text-amber-400">
+                        Base URL required for local models.
+                      </p>
+                    )}
                   </label>
                   <label className="block">
                     <span className="block text-sm text-zinc-400 mb-2">Text Model</span>
@@ -744,7 +760,7 @@ function App() {
                 <p className="text-xs text-zinc-500 mt-4 leading-relaxed">
                   {aiProvider === 'gemini'
                     ? 'Gemini mode keeps the cloud flow. Switch to Ollama for a fully local setup.'
-                    : 'Ollama mode uses your local model stack. On Docker Desktop or Kubernetes, the base URL usually needs to be host.docker.internal:11434 or your Ollama service DNS.'}
+                    : 'Ollama mode uses your local model stack. Set the Base URL to the exact Ollama service you want to use.'}
                 </p>
               </div>
 

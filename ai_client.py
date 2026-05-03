@@ -12,7 +12,6 @@ GEMINI_TEXT_MODEL = "gemini-2.5-flash"
 GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview"
 OLLAMA_TEXT_MODEL = "qwen3:latest"
 OLLAMA_VISION_MODEL = "qwen2.5vl:latest"
-OLLAMA_BASE_URL = "http://host.docker.internal:11434"
 
 
 @dataclass
@@ -37,11 +36,7 @@ class AIConfig:
         return self.normalized_provider() == "ollama"
 
     def resolved_base_url(self) -> str:
-        if self.base_url:
-            return self.base_url.rstrip("/")
-        if self.is_ollama():
-            return OLLAMA_BASE_URL
-        return ""
+        return self.base_url.rstrip("/") if self.base_url else ""
 
 
 def _normalize_model_for_provider(model: str, provider: str, kind: str) -> str:
@@ -95,7 +90,7 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         "X-AI-Base-Url",
         "AI_BASE_URL",
         "OLLAMA_BASE_URL",
-        default=OLLAMA_BASE_URL if provider_normalized == "ollama" else "",
+        default="",
     )
 
     text_model = _pick(
