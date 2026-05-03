@@ -1,12 +1,14 @@
 controller:
   hostNetwork: false
   hostPort:
-    enabled: true
+    enabled: false
     ports:
       http: 80
       https: 443
   service:
-    type: ClusterIP
+    type: LoadBalancer
+  publishService:
+    enabled: true
   ingressClassResource:
     enabled: true
     name: nginx

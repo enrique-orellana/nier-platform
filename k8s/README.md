@@ -14,12 +14,9 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   -f k8s/ingress-nginx-values.yaml
 ```
 
-For this Docker Desktop cluster, I used a local port-forward so the nip.io
-hostnames work without a port number:
-
-```bash
-kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 80:80
-```
+The ingress controller is exposed as a `LoadBalancer`, so the `nip.io`
+hostnames should be reachable directly once the controller gets its external
+address from the cluster.
 
 ## MinIO ingress
 
