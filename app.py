@@ -295,13 +295,8 @@ async def run_job(job_id, job_data):
         returncode = process.returncode
         
         if returncode == 0:
-            jobs[job_id]['status'] = 'completed'
             jobs[job_id]['logs'].append("Process finished successfully.")
-            
-            # Start S3 upload in background (silent, non-blocking)
-            loop = asyncio.get_event_loop()
-            loop.run_in_executor(None, upload_job_artifacts, output_dir, job_id)
-            
+
             # Find result JSON
             json_files = glob.glob(os.path.join(output_dir, "*_metadata.json"))
             if not json_files:
@@ -321,11 +316,22 @@ async def run_job(job_id, job_data):
                 for i, clip in enumerate(clips):
                      clip_filename = f"{base_name}_clip_{i+1}.mp4"
                      clip['video_url'] = f"/videos/{job_id}/{clip_filename}"
-                
+
                 jobs[job_id]['result'] = {'clips': clips, 'cost_analysis': cost_analysis}
             else:
                  jobs[job_id]['status'] = 'failed'
                  jobs[job_id]['logs'].append("No metadata file generated.")
+
+            # Persist the generated artifacts before marking the job complete,
+            # so the Projects view can discover them right away.
+            try:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, upload_job_artifacts, output_dir, job_id)
+                jobs[job_id]['logs'].append("Job artifacts saved to S3.")
+            except Exception as upload_error:
+                jobs[job_id]['logs'].append(f"Artifact upload warning: {upload_error}")
+
+            jobs[job_id]['status'] = 'completed'
         else:
             jobs[job_id]['status'] = 'failed'
             jobs[job_id]['logs'].append(f"Process failed with exit code {returncode}")
@@ -1624,6 +1630,81 @@ async def thumbnail_projects(limit: int = Query(24, ge=1, le=100)):
     return {"projects": projects}
 
 
+def _group_clip_history(all_clips: List[Dict], limit: int):
+    grouped = {}
+
+    for clip in all_clips:
+        job_id = clip.get("job_id") or "unknown"
+        entry = grouped.setdefault(job_id, {
+            "job_id": job_id,
+            "title": clip.get("title") or job_id,
+            "description": clip.get("tiktok_desc") or clip.get("insta_desc") or "",
+            "created_at": clip.get("created_at"),
+            "clip_count": 0,
+            "total_duration": 0,
+            "preview_url": clip.get("url") or "",
+            "preview_image_url": clip.get("preview_image_url") or clip.get("thumbnail_url") or clip.get("poster_url") or clip.get("image_url") or clip.get("actor_url") or "",
+            "clips": [],
+        })
+
+        entry["clips"].append(clip)
+        entry["clip_count"] += 1
+        entry["total_duration"] += float(clip.get("duration") or 0)
+
+        if not entry.get("title"):
+            entry["title"] = clip.get("title") or job_id
+        if not entry.get("description"):
+            entry["description"] = clip.get("tiktok_desc") or clip.get("insta_desc") or ""
+        if not entry.get("created_at"):
+            entry["created_at"] = clip.get("created_at")
+        if not entry.get("preview_url") and clip.get("url"):
+            entry["preview_url"] = clip.get("url")
+        if not entry.get("preview_image_url"):
+            entry["preview_image_url"] = (
+                clip.get("preview_image_url")
+                or clip.get("thumbnail_url")
+                or clip.get("poster_url")
+                or clip.get("image_url")
+                or clip.get("actor_url")
+                or ""
+            )
+
+    projects = list(grouped.values())
+    for entry in projects:
+        entry["clips"].sort(key=lambda clip: int(clip.get("index") or 0))
+        entry["clip_count"] = len(entry["clips"])
+        if not entry.get("preview_url") and entry["clips"]:
+            entry["preview_url"] = entry["clips"][0].get("url") or ""
+        if not entry.get("preview_image_url") and entry["clips"]:
+            first_clip = entry["clips"][0]
+            entry["preview_image_url"] = (
+                first_clip.get("preview_image_url")
+                or first_clip.get("thumbnail_url")
+                or first_clip.get("poster_url")
+                or first_clip.get("image_url")
+                or first_clip.get("actor_url")
+                or ""
+            )
+        if entry["clips"]:
+            entry["title"] = entry["title"] or entry["clips"][0].get("title") or entry["job_id"]
+            entry["description"] = entry["description"] or entry["clips"][0].get("tiktok_desc") or entry["clips"][0].get("insta_desc") or ""
+
+    projects.sort(key=lambda project: project.get("created_at") or "", reverse=True)
+    return projects[:limit] if limit else projects
+
+
+@app.get("/api/projects/history")
+async def list_project_history(limit: int = Query(48, ge=1, le=100), refresh: bool = Query(True)):
+    """List historical clip-generation jobs grouped by job ID."""
+    try:
+        loop = asyncio.get_running_loop()
+        all_clips = await loop.run_in_executor(None, list_all_clips, None, 0, refresh)
+        projects = _group_clip_history(all_clips, limit)
+        return {"projects": projects, "total": len(projects)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/thumbnail/projects/migrate-legacy")
 async def thumbnail_projects_migrate_legacy(
     dry_run: bool = Query(False, description="Preview the migration without writing to MinIO"),
@@ -1829,12 +1910,12 @@ async def thumbnail_publish_status(publish_id: str):
 
 
 @app.get("/api/projects/clips/{session_id}")
-async def list_project_clips_endpoint(session_id: str):
+async def list_project_clips_endpoint(session_id: str, refresh: bool = Query(True)):
     """List all clips associated with a session ID/job ID from S3."""
     try:
         loop = asyncio.get_running_loop()
         # Fetch normal clipping results
-        all_clips = await loop.run_in_executor(None, list_all_clips)
+        all_clips = await loop.run_in_executor(None, list_all_clips, None, 0, refresh)
         # Filter by job_id (which matches the project session_id)
         project_clips = [c for c in all_clips if c.get('job_id') == session_id]
         return {"clips": project_clips, "total": len(project_clips)}

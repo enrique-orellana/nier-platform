@@ -211,7 +211,7 @@ def list_all_clips(bucket_name=None, limit=50, force_refresh=False):
                     signed_url = generate_presigned_url(bucket_name, clip_key, expiration=7200) # 2 hours
                     
                     if signed_url:
-                        all_clips.append({
+                        clip_entry = {
                             "job_id": job_id,
                             "index": i,
                             "url": signed_url,
@@ -220,6 +220,21 @@ def list_all_clips(bucket_name=None, limit=50, force_refresh=False):
                             "insta_desc": clip.get('video_description_for_instagram', ''),
                             "created_at": meta_obj['LastModified'].isoformat(),
                             "duration": clip.get('end', 0) - clip.get('start', 0)
+                        }
+
+                        for key in (
+                            "thumbnail_url",
+                            "poster_url",
+                            "preview_image_url",
+                            "image_url",
+                            "actor_url",
+                        ):
+                            value = clip.get(key)
+                            if value:
+                                clip_entry[key] = value
+
+                        all_clips.append({
+                            **clip_entry,
                         })
                         
                         # Early exit if we have enough clips
