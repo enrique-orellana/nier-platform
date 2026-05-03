@@ -524,6 +524,27 @@ def upload_job_artifacts(directory, job_id):
             upload_file_to_s3(file_path, bucket_name, s3_key)
 
 
+def delete_job_artifacts(job_id):
+    """
+    Delete all generated clips and metadata for a job from S3.
+    """
+    bucket_name = os.environ.get('AWS_S3_BUCKET', 'my-clips-bucket')
+    s3_client = get_s3_client()
+    if not s3_client:
+        return 0
+
+    prefix = f"{job_id}/"
+    try:
+        deleted = _delete_objects_with_prefix(s3_client, bucket_name, prefix)
+        # Invalidate clips cache
+        global _clips_cache
+        _clips_cache["data"] = None
+        return deleted
+    except Exception as e:
+        logger.error(f"Failed to delete job artifacts for {job_id}: {e}")
+        return 0
+
+
 def _slugify(value, fallback="project"):
     text = re.sub(r"[^a-zA-Z0-9]+", "_", (value or "").strip().lower()).strip("_")
     return text[:80] or fallback

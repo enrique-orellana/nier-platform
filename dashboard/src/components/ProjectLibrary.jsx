@@ -1,4 +1,4 @@
-import { ChevronLeft, FolderOpen, Image as ImageIcon, Loader2, Play, RefreshCw, Search } from 'lucide-react';
+import { ChevronLeft, FolderOpen, Image as ImageIcon, Loader2, Play, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { getApiUrl } from '../config';
 import ResultCard from './ResultCard';
@@ -122,6 +122,29 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
     }
   };
 
+  const handleDeleteProject = async (e, project) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete project "${project.title || project.job_id}"?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(getApiUrl(`/api/projects/${encodeURIComponent(project.job_id)}`), {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      setProjects((prev) => prev.filter((p) => p.job_id !== project.job_id));
+      if (selectedProject?.job_id === project.job_id) {
+        setSelectedProject(null);
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('Failed to delete project: ' + err.message);
+    }
+  };
+
   const activeClip = projectClips[activeClipIndex] || projectClips[0] || null;
   const normalizedProjectClips = projectClips.map((clip, index) =>
     normalizeClipForResultCard(clip, index, selectedProject?.job_id || selectedProject?.session_id || selectedProject?.id)
@@ -179,13 +202,22 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
               </p>
             </div>
 
-            <button
-              onClick={loadProjects}
-              className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm text-zinc-300 flex items-center gap-2 transition-colors"
-            >
-              <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-              Refresh
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={loadProjects}
+                className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm text-zinc-300 flex items-center gap-2 transition-colors"
+              >
+                <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+              <button
+                onClick={(e) => handleDeleteProject(e, selectedProject)}
+                className="px-3 py-2 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/20 text-sm text-red-400 flex items-center gap-2 transition-colors"
+              >
+                <Trash2 size={14} />
+                Delete
+              </button>
+            </div>
           </div>
 
           <div className="grid lg:grid-cols-3 gap-6 min-h-0">
@@ -379,6 +411,13 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
                         <FolderOpen size={32} />
                       </div>
                     )}
+                    <button
+                      onClick={(e) => handleDeleteProject(e, project)}
+                      className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-zinc-400 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 z-10"
+                      title="Delete Project"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <span className="text-xs font-bold text-white bg-cyan-500 px-3 py-1.5 rounded-full shadow-xl">
                         VIEW CLIPS

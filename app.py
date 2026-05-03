@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from s3_uploader import upload_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
+from s3_uploader import upload_job_artifacts, delete_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
 from ai_client import AIConfig, load_ai_config, ai_config_to_env
 
 load_dotenv()
@@ -1896,6 +1896,29 @@ async def list_project_history(limit: int = Query(48, ge=1, le=100), refresh: bo
         projects = _group_clip_history(all_clips, limit)
         return {"projects": projects, "total": len(projects)}
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/projects/{job_id}")
+async def delete_project(job_id: str):
+    """Delete a historical project and all its artifacts (local and S3)."""
+    try:
+        # 1. Delete Local Artifacts
+        job_output_dir = os.path.join(OUTPUT_DIR, job_id)
+        if os.path.exists(job_output_dir):
+            shutil.rmtree(job_output_dir, ignore_errors=True)
+        
+        # 2. Delete S3 Artifacts
+        loop = asyncio.get_running_loop()
+        s3_deleted = await loop.run_in_executor(None, delete_job_artifacts, job_id)
+        
+        # 3. Remove from in-memory state
+        if job_id in jobs:
+            del jobs[job_id]
+            
+        return {"success": True, "job_id": job_id, "s3_deleted_count": s3_deleted}
+    except Exception as e:
+        print(f"❌ Project Deletion Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
