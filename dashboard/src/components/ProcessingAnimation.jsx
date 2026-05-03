@@ -1,11 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Scan, Scissors, Activity, Radio, CheckCircle, Play } from 'lucide-react';
 
-const ProcessingAnimation = ({ media, isComplete, syncedTime, isSyncedPlaying, syncTrigger }) => {
+const ProcessingAnimation = ({ media, isComplete, syncedTime, isSyncedPlaying, syncTrigger, aiProvider = 'gemini', aiTextModel = '' }) => {
   const [videoSrc, setVideoSrc] = useState(null);
   const [isYouTube, setIsYouTube] = useState(false);
   const videoRef = useRef(null);
   const iframeRef = useRef(null);
+
+  const modelLabel = aiProvider === 'gemini'
+    ? (aiTextModel || 'gemini-2.5-flash')
+    : (aiTextModel || 'qwen3:latest');
+  const providerLabel = aiProvider === 'gemini' ? 'GEMINI' : 'OLLAMA';
 
   useEffect(() => {
     if (!media) return;
@@ -196,7 +201,7 @@ const ProcessingAnimation = ({ media, isComplete, syncedTime, isSyncedPlaying, s
       
       {!isSyncedPlaying && !isComplete && (
           <div className="absolute top-4 right-4 z-30 flex items-center gap-2 px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-lg border border-white/10 text-white/50 text-[10px] font-mono">
-            AI_MODEL: GEMINI-2.5-PRO
+            AI_MODEL: {providerLabel} / {modelLabel.toUpperCase()}
           </div>
       )}
       

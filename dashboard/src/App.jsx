@@ -1036,6 +1036,8 @@ function App() {
                     syncedTime={syncedTime}
                     isSyncedPlaying={isSyncedPlaying}
                     syncTrigger={syncTrigger}
+                    aiProvider={aiProvider}
+                    aiTextModel={aiTextModel}
                   />
                 )}
 
