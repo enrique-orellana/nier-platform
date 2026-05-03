@@ -8,6 +8,11 @@ from typing import Any, Mapping, Optional, Sequence
 
 import httpx
 
+GEMINI_TEXT_MODEL = "gemini-2.5-flash"
+GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview"
+OLLAMA_TEXT_MODEL = "qwen3:latest"
+OLLAMA_VISION_MODEL = "qwen2.5vl:latest"
+
 
 @dataclass
 class AIConfig:
@@ -36,6 +41,23 @@ class AIConfig:
         if self.is_ollama():
             return "http://localhost:11434"
         return ""
+
+
+def _normalize_model_for_provider(model: str, provider: str, kind: str) -> str:
+    cleaned = (model or "").strip()
+    if provider == "gemini":
+        if kind == "text" and cleaned in {"", OLLAMA_TEXT_MODEL}:
+            return GEMINI_TEXT_MODEL
+        if kind in {"vision", "image"} and cleaned in {"", OLLAMA_VISION_MODEL, OLLAMA_TEXT_MODEL}:
+            return GEMINI_VISION_MODEL
+    if provider == "ollama":
+        if kind == "text" and cleaned in {"", GEMINI_TEXT_MODEL}:
+            return OLLAMA_TEXT_MODEL
+        if kind == "vision" and cleaned in {"", GEMINI_VISION_MODEL, GEMINI_TEXT_MODEL}:
+            return OLLAMA_VISION_MODEL
+        if kind == "image" and cleaned in {"", GEMINI_VISION_MODEL, GEMINI_TEXT_MODEL}:
+            return ""
+    return cleaned
 
 
 def _pick(source: Optional[Mapping[str, Any]], *keys: str, default: str = "") -> str:
@@ -79,22 +101,26 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         "X-AI-Model",
         "AI_MODEL",
         "OLLAMA_TEXT_MODEL",
-        default="gemini-2.5-flash" if provider_normalized == "gemini" else "qwen3:latest",
+        default=GEMINI_TEXT_MODEL if provider_normalized == "gemini" else OLLAMA_TEXT_MODEL,
     )
     vision_model = _pick(
         source,
         "X-AI-Vision-Model",
         "AI_VISION_MODEL",
         "OLLAMA_VISION_MODEL",
-        default="gemini-3.1-flash-image-preview" if provider_normalized == "gemini" else "qwen2.5vl:latest",
+        default=GEMINI_VISION_MODEL if provider_normalized == "gemini" else OLLAMA_VISION_MODEL,
     )
     image_model = _pick(
         source,
         "X-AI-Image-Model",
         "AI_IMAGE_MODEL",
         "OLLAMA_IMAGE_MODEL",
-        default="gemini-3.1-flash-image-preview" if provider_normalized == "gemini" else "",
+        default=GEMINI_VISION_MODEL if provider_normalized == "gemini" else "",
     )
+
+    text_model = _normalize_model_for_provider(text_model, provider_normalized, "text")
+    vision_model = _normalize_model_for_provider(vision_model, provider_normalized, "vision")
+    image_model = _normalize_model_for_provider(image_model, provider_normalized, "image")
 
     return AIConfig(
         provider=provider_normalized,
@@ -285,4 +311,3 @@ def chat_json(
     )
     text = extract_json_text(raw)
     return json.loads(text)
-

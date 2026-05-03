@@ -22,6 +22,14 @@ metadata:
   namespace: openshorts
 data:
   MAX_CONCURRENT_JOBS: "5"
+  AI_PROVIDER: gemini
+  AI_MODEL: gemini-2.5-flash
+  AI_VISION_MODEL: gemini-3.1-flash-image-preview
+  AI_IMAGE_MODEL: gemini-3.1-flash-image-preview
+  VITE_AI_PROVIDER: gemini
+  VITE_AI_MODEL: gemini-2.5-flash
+  VITE_AI_VISION_MODEL: gemini-3.1-flash-image-preview
+  VITE_AI_IMAGE_MODEL: gemini-3.1-flash-image-preview
   AWS_REGION: eu-west-3
   AWS_S3_BUCKET: openshorts-media
   AWS_S3_PUBLIC_BUCKET: openshorts-media
@@ -190,6 +198,9 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5173
+          envFrom:
+            - configMapRef:
+                name: openshorts-config
           readinessProbe:
             httpGet:
               path: /

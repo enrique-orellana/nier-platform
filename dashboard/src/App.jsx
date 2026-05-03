@@ -1,12 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Upload, FileVideo, Sparkles, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2, FolderOpen } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Upload, FileVideo, Sparkles, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2 } from 'lucide-react';
 import KeyInput from './components/KeyInput';
 import MediaInput from './components/MediaInput';
 import ResultCard from './components/ResultCard';
 import ProcessingAnimation from './components/ProcessingAnimation';
 // import Gallery from './components/Gallery';
 import ThumbnailStudio from './components/ThumbnailStudio';
-import ProjectLibrary from './components/ProjectLibrary';
 import SaaShortsTab from './components/SaaShortsTab';
 import UGCGallery from './components/UGCGallery';
 import ScheduleWeekModal from './components/ScheduleWeekModal';
@@ -126,6 +125,10 @@ const UserProfileSelector = ({ profiles, selectedUserId, onSelect }) => {
 
 const SESSION_KEY = 'openshorts_session';
 const SESSION_MAX_AGE = 3600000; // 1 hour (matches server job retention)
+const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
+const GEMINI_VISION_MODEL = 'gemini-3.1-flash-image-preview';
+const OLLAMA_TEXT_MODEL = 'qwen3:latest';
+const OLLAMA_VISION_MODEL = 'qwen2.5vl:latest';
 
 // Mock polling function
 const pollJob = async (jobId) => {
@@ -140,7 +143,7 @@ function App() {
   const [aiBaseUrl, setAiBaseUrl] = useState(() => localStorage.getItem('ai_base_url_v1') || import.meta.env.VITE_AI_BASE_URL || 'http://localhost:11434');
   const [aiTextModel, setAiTextModel] = useState(() => localStorage.getItem('ai_text_model_v1') || import.meta.env.VITE_AI_MODEL || 'qwen3:latest');
   const [aiVisionModel, setAiVisionModel] = useState(() => localStorage.getItem('ai_vision_model_v1') || import.meta.env.VITE_AI_VISION_MODEL || 'qwen2.5vl:latest');
-  const [aiImageModel, setAiImageModel] = useState(() => localStorage.getItem('ai_image_model_v1') || '');
+  const [aiImageModel, setAiImageModel] = useState(() => localStorage.getItem('ai_image_model_v1') || import.meta.env.VITE_AI_IMAGE_MODEL || '');
   // Social API State - Load encrypted or plain
   const [uploadPostKey, setUploadPostKey] = useState(() => {
     const stored = localStorage.getItem('uploadPostKey_v3');
@@ -170,7 +173,7 @@ function App() {
   const [logs, setLogs] = useState([]);
   const [logsVisible, setLogsVisible] = useState(true);
   const [processingMedia, setProcessingMedia] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, settings, projects
+  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, settings
   const [clipCount, setClipCount] = useState(() => {
     const stored = Number(localStorage.getItem('clip_count_v1'));
     return Number.isFinite(stored) && stored >= 3 && stored <= 15 ? stored : 6;
@@ -179,6 +182,7 @@ function App() {
   const [sessionRecovered, setSessionRecovered] = useState(false);
   const [showScheduleWeek, setShowScheduleWeek] = useState(false);
   const isLocalAi = aiProvider !== 'gemini';
+  const lastProviderRef = useRef(aiProvider);
 
   // Sync state for original video playback
   const [syncedTime, setSyncedTime] = useState(0);
@@ -196,7 +200,7 @@ function App() {
   };
 
   const shouldSendAiBaseUrl = useCallback(() => {
-    if (aiProvider !== 'ollama') return true;
+    if (aiProvider !== 'ollama') return false;
     const defaultBaseUrl = import.meta.env.VITE_AI_BASE_URL || 'http://localhost:11434';
     return aiBaseUrl && aiBaseUrl.trim() && aiBaseUrl.trim() !== defaultBaseUrl;
   }, [aiProvider, aiBaseUrl]);
@@ -272,6 +276,24 @@ function App() {
   useEffect(() => {
     localStorage.setItem('ai_image_model_v1', aiImageModel);
   }, [aiImageModel]);
+
+  useEffect(() => {
+    const previousProvider = lastProviderRef.current;
+    lastProviderRef.current = aiProvider;
+
+    if (aiProvider === 'gemini') {
+      setAiTextModel((current) => (!current || current === OLLAMA_TEXT_MODEL) ? GEMINI_TEXT_MODEL : current);
+      setAiVisionModel((current) => (!current || current === OLLAMA_VISION_MODEL) ? GEMINI_VISION_MODEL : current);
+      setAiImageModel((current) => (!current || current === OLLAMA_VISION_MODEL) ? GEMINI_VISION_MODEL : current);
+      return;
+    }
+
+    if (previousProvider === 'gemini' || previousProvider === 'ollama') {
+      setAiTextModel((current) => (!current || current === GEMINI_TEXT_MODEL) ? OLLAMA_TEXT_MODEL : current);
+      setAiVisionModel((current) => (!current || current === GEMINI_VISION_MODEL) ? OLLAMA_VISION_MODEL : current);
+      setAiImageModel((current) => (!current || current === GEMINI_VISION_MODEL) ? '' : current);
+    }
+  }, [aiProvider]);
 
   useEffect(() => {
     localStorage.setItem('clip_count_v1', String(clipCount));
@@ -488,14 +510,6 @@ function App() {
           <span className="font-medium hidden lg:block">YouTube Studio</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('projects')}
-          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'projects' ? 'bg-cyan-500/10 text-cyan-400' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
-        >
-          <FolderOpen size={20} />
-          <span className="font-medium hidden lg:block">Projects</span>
-        </button>
-
         {/* <button
           onClick={() => setActiveTab('gallery')}
           className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'gallery' ? 'bg-primary/10 text-primary' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
@@ -709,7 +723,7 @@ function App() {
                 </p>
               </div>
 
-              {aiProvider === 'gemini' && <KeyInput onKeySet={setApiKey} savedKey={apiKey} />}
+              {aiProvider === 'gemini' && <KeyInput onKeySet={(key) => { setApiKey(key); setAiProvider('gemini'); }} savedKey={apiKey} />}
 
               <div className={`glass-panel p-6 mt-8 ${!uploadPostKey ? 'border-amber-500/30 ring-1 ring-amber-500/20' : ''}`}>
                 <div className="flex items-center justify-between mb-4">
@@ -991,10 +1005,6 @@ function App() {
           {/* View: Thumbnails */}
           {activeTab === 'thumbnails' && (
             <ThumbnailStudio aiProvider={aiProvider} aiApiKey={apiKey} getAiHeaders={getAiHeaders} uploadPostKey={uploadPostKey} uploadUserId={uploadUserId} />
-          )}
-
-          {activeTab === 'projects' && (
-            <ProjectLibrary />
           )}
 
           {/* View: Gallery */}

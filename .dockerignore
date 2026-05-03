@@ -35,9 +35,12 @@ dashboard/node_modules/
 *.gif
 videos/
 
-# Model files (downloaded at build time)
+# Cache and Data
 *.pt
 .cache/
+output/
+uploads/
+.remotion/
 
 # Docker
 Dockerfile

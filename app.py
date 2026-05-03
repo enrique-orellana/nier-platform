@@ -1828,6 +1828,20 @@ async def thumbnail_publish_status(publish_id: str):
     return publish_jobs[publish_id]
 
 
+@app.get("/api/projects/clips/{session_id}")
+async def list_project_clips_endpoint(session_id: str):
+    """List all clips associated with a session ID/job ID from S3."""
+    try:
+        loop = asyncio.get_running_loop()
+        # Fetch normal clipping results
+        all_clips = await loop.run_in_executor(None, list_all_clips)
+        # Filter by job_id (which matches the project session_id)
+        project_clips = [c for c in all_clips if c.get('job_id') == session_id]
+        return {"clips": project_clips, "total": len(project_clips)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # @app.get("/api/gallery/clips")
 # async def get_gallery_clips(limit: int = 20, offset: int = 0, refresh: bool = False):
 #     """

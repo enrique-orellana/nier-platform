@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { ExternalLink, FileText, FolderOpen, Image, Loader2, Pencil, RefreshCw, Trash2, Search } from 'lucide-react';
+import { ChevronLeft, Download, ExternalLink, FileText, FolderOpen, Image, Loader2, Play, RefreshCw, Search } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getApiUrl } from '../config';
 
 function formatDate(value) {
@@ -16,6 +16,9 @@ export default function ProjectLibrary() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [projectClips, setProjectClips] = useState([]);
+  const [isLoadingClips, setIsLoadingClips] = useState(false);
 
   const loadProjects = useCallback(async () => {
     setIsLoading(true);
@@ -37,6 +40,47 @@ export default function ProjectLibrary() {
   useEffect(() => {
     loadProjects().catch(() => {});
   }, [loadProjects]);
+  
+  const loadProjectClips = useCallback(async (project) => {
+    setIsLoadingClips(true);
+    try {
+      // session_id is used as the job_id for linking clips to projects
+      const session_id = project.session_id || project.id;
+      if (!session_id) {
+        setProjectClips([]);
+        return;
+      }
+
+      // Fetch clips specifically for this project session
+      const res = await fetch(getApiUrl(`/api/projects/clips/${encodeURIComponent(session_id)}`));
+      if (!res.ok) throw new Error('Failed to load project clips');
+      const data = await res.json();
+      
+      // If no project clips found, try the general SaaS Shorts gallery as fallback
+      // (in case it was a SaaS generation that isn't indexed by job_id prefix)
+      if (!data.clips || data.clips.length === 0) {
+        const saasRes = await fetch(getApiUrl(`/api/saasshorts/gallery?session_id=${encodeURIComponent(session_id)}`));
+        if (saasRes.ok) {
+          const saasData = await saasRes.json();
+          setProjectClips(saasData.videos || []);
+        } else {
+          setProjectClips([]);
+        }
+      } else {
+        setProjectClips(data.clips);
+      }
+    } catch (e) {
+      console.error('Error loading project clips:', e);
+      setProjectClips([]);
+    } finally {
+      setIsLoadingClips(false);
+    }
+  }, []);
+
+  const handleViewProject = (project) => {
+    setSelectedProject(project);
+    loadProjectClips(project);
+  };
 
   const projectApiBase = useCallback((project) => {
     return getApiUrl(`/api/thumbnail/projects/${encodeURIComponent(project.session_id)}/${encodeURIComponent(project.project_slug)}`);
@@ -144,6 +188,113 @@ export default function ProjectLibrary() {
     return haystack.includes(search.trim().toLowerCase());
   });
 
+  if (selectedProject) {
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <button
+          onClick={() => setSelectedProject(null)}
+          className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors mb-6 group"
+        >
+          <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+          Back to Library
+        </button>
+
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* Left Column: Metadata & Files */}
+          <div className="lg:col-span-1 space-y-6">
+            <div className="glass-panel p-5 space-y-4">
+              <div className="aspect-video rounded-xl overflow-hidden border border-white/10 bg-white/5">
+                {(selectedProject.files || []).find(f => f.kind === 'image') ? (
+                  <img 
+                    src={(selectedProject.files || []).find(f => f.kind === 'image').url} 
+                    alt="Preview" 
+                    className="w-full h-full object-cover" 
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-zinc-600">
+                    <Image size={32} />
+                  </div>
+                )}
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white mb-1">{selectedProject.title || 'Untitled Project'}</h2>
+                <p className="text-[11px] text-zinc-500 break-all">{selectedProject.project_slug}</p>
+              </div>
+
+              <div className="pt-4 border-t border-white/5 grid grid-cols-2 gap-3 text-center">
+                <div className="p-2 rounded-lg bg-white/5 border border-white/5">
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Clips</p>
+                  <p className="text-sm font-bold text-white">{projectClips.length}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-white/5 border border-white/5">
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Files</p>
+                  <p className="text-sm font-bold text-white">{selectedProject.files?.length || 0}</p>
+                </div>
+              </div>
+
+              {selectedProject.description && (
+                <div className="p-3 rounded-xl bg-black/20 border border-white/5 text-xs text-zinc-400 leading-relaxed italic">
+                  "{selectedProject.description}"
+                </div>
+              )}
+            </div>
+
+            <div className="glass-panel p-5">
+              <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <FileText size={12} /> Project Files
+              </h3>
+              <div className="space-y-2">
+                {(selectedProject.files || []).map((file) => (
+                  <div key={file.key} className="p-2 rounded-lg bg-white/5 border border-white/5 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-zinc-300 truncate">{file.name}</p>
+                      <p className="text-[9px] text-zinc-600">{file.kind || 'file'}</p>
+                    </div>
+                    {file.url && (
+                      <a href={file.url} target="_blank" rel="noreferrer" className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-zinc-400 transition-colors">
+                        <ExternalLink size={12} />
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Clips Gallery */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="glass-panel p-5">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Play size={18} className="text-cyan-400" /> Generated Clips
+                </h3>
+                <span className="text-xs text-zinc-500 bg-white/5 px-2 py-1 rounded-full">{projectClips.length} results</span>
+              </div>
+
+              {isLoadingClips ? (
+                <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
+                  <Loader2 size={32} className="animate-spin text-cyan-500 mb-4" />
+                  <p className="text-sm">Loading project clips...</p>
+                </div>
+              ) : projectClips.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-white/5 rounded-2xl text-zinc-600">
+                  <Play size={40} className="mb-4 opacity-20" />
+                  <p className="text-sm">No clips found for this project</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {projectClips.map((video) => (
+                    <ProjectVideoCard key={video.video_id} video={video} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="flex items-start justify-between gap-4 mb-6">
@@ -154,7 +305,7 @@ export default function ProjectLibrary() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-white tracking-tight">Project Library</h1>
-              <p className="text-sm text-zinc-500">Browse saved thumbnail projects in MinIO or S3, edit text files, and delete folders when they are no longer needed.</p>
+              <p className="text-sm text-zinc-500">Browse saved projects and view their generated video clips.</p>
             </div>
           </div>
         </div>
@@ -177,172 +328,53 @@ export default function ProjectLibrary() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by title, slug, session id, or description"
+          placeholder="Search projects..."
           className="input-field flex-1 text-sm"
         />
-        <div className="text-xs text-zinc-500 md:text-right md:min-w-[120px]">
-          {filteredProjects.length} / {projects.length} projects
-        </div>
       </div>
 
-      {error && (
-        <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-300">
-          {error}
-        </div>
-      )}
-
       {isLoading ? (
-        <div className="glass-panel p-8 flex items-center gap-3 text-zinc-400">
-          <Loader2 size={18} className="animate-spin text-cyan-400" />
-          Loading saved projects...
+        <div className="glass-panel p-20 flex flex-col items-center justify-center gap-4 text-zinc-500">
+          <Loader2 size={32} className="animate-spin text-cyan-400" />
+          <p>Loading your projects...</p>
         </div>
       ) : filteredProjects.length === 0 ? (
-        <div className="glass-panel p-8 text-zinc-500">
-          No saved projects found yet.
+        <div className="glass-panel p-20 text-center text-zinc-500 border-2 border-dashed border-white/5">
+          <FolderOpen size={48} className="mx-auto mb-4 opacity-10" />
+          <p>No projects found matching your search.</p>
         </div>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredProjects.map((project) => {
             const previewFile = project.selected_thumbnail
-              ? { url: project.selected_thumbnail, name: 'Selected thumbnail' }
+              ? { url: project.selected_thumbnail }
               : (project.files || []).find((file) => file.kind === 'image' && file.url);
-            const fileCount = project.file_count ?? (project.files?.length ?? 0);
 
             return (
-              <div key={`${project.session_id}/${project.project_slug}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:p-5">
-                <div className="flex flex-col xl:flex-row gap-4">
-                  <div className="w-full xl:w-60 shrink-0">
-                    {previewFile ? (
-                      <img
-                        src={previewFile.url}
-                        alt={project.title || 'Project preview'}
-                        className="w-full aspect-video rounded-xl object-cover border border-white/10"
-                      />
-                    ) : (
-                      <div className="w-full aspect-video rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-zinc-600">
-                        <Image size={28} />
-                      </div>
-                    )}
+              <div 
+                key={`${project.session_id}/${project.project_slug}`}
+                onClick={() => handleViewProject(project)}
+                className="group glass-panel p-3 cursor-pointer hover:border-cyan-500/30 transition-all active:scale-[0.98]"
+              >
+                <div className="aspect-video rounded-lg overflow-hidden bg-white/5 mb-3 border border-white/5 relative">
+                  {previewFile ? (
+                    <img src={previewFile.url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-zinc-700">
+                      <FolderOpen size={32} />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <span className="text-xs font-bold text-white bg-cyan-500 px-3 py-1.5 rounded-full shadow-xl">VIEW CLIPS</span>
                   </div>
-
-                  <div className="min-w-0 flex-1 space-y-4">
-                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-                      <div className="min-w-0">
-                        <h2 className="text-lg font-semibold text-white truncate">{project.title || 'Untitled Project'}</h2>
-                        <p className="text-xs text-zinc-500 break-all mt-1">{project.project_slug}</p>
-                        <p className="text-[11px] text-zinc-600 break-all mt-1">Session: {project.session_id}</p>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => handleRenameProject(project)}
-                          className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-zinc-300 flex items-center gap-2 transition-colors"
-                        >
-                          <Pencil size={12} />
-                          Rename
-                        </button>
-                        <button
-                          onClick={() => handleEditProjectDescription(project)}
-                          className="px-3 py-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-xs text-cyan-300 flex items-center gap-2 transition-colors"
-                        >
-                          <FileText size={12} />
-                          Description
-                        </button>
-                        {project.url && (
-                          <a
-                            href={project.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-zinc-300 flex items-center gap-2 transition-colors"
-                          >
-                            <ExternalLink size={12} />
-                            Manifest
-                          </a>
-                        )}
-                        <button
-                          onClick={() => handleDeleteProject(project)}
-                          className="px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-xs text-red-300 flex items-center gap-2 transition-colors"
-                        >
-                          <Trash2 size={12} />
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid md:grid-cols-4 gap-3 text-xs">
-                      <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3">
-                        <div className="text-zinc-500 uppercase tracking-wider text-[10px]">Files</div>
-                        <div className="text-zinc-200 mt-1 font-medium">{fileCount}</div>
-                      </div>
-                      <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3">
-                        <div className="text-zinc-500 uppercase tracking-wider text-[10px]">Thumbnail Count</div>
-                        <div className="text-zinc-200 mt-1 font-medium">{project.thumbnail_count ?? 0}</div>
-                      </div>
-                      <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3">
-                        <div className="text-zinc-500 uppercase tracking-wider text-[10px]">Created</div>
-                        <div className="text-zinc-200 mt-1 font-medium">{formatDate(project.created_at)}</div>
-                      </div>
-                      <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3">
-                        <div className="text-zinc-500 uppercase tracking-wider text-[10px]">Language</div>
-                        <div className="text-zinc-200 mt-1 font-medium">{project.language || 'en'}</div>
-                      </div>
-                    </div>
-
-                    {project.description && (
-                      <div className="rounded-xl bg-black/20 border border-white/5 p-3 text-sm text-zinc-300 leading-relaxed">
-                        {project.description}
-                      </div>
-                    )}
-
-                    <div className="max-h-64 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
-                      {(project.files || []).map((file) => (
-                        <div key={file.key} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-zinc-200 truncate">{file.name}</span>
-                              <span className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] uppercase tracking-wider text-zinc-500">
-                                {file.kind || 'file'}
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-zinc-500 mt-1">
-                              {file.size ? `${(file.size / 1024).toFixed(1)} KB` : 'file'}
-                            </p>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-2 shrink-0">
-                            {file.editable && (
-                              <button
-                                onClick={() => handleEditProjectFile(project, file)}
-                                className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] text-zinc-300 flex items-center gap-1.5 transition-colors"
-                              >
-                                <Pencil size={11} />
-                                Edit
-                              </button>
-                            )}
-                            {file.url && (
-                              <a
-                                href={file.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="px-2.5 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-[11px] text-cyan-300 flex items-center gap-1.5 transition-colors"
-                              >
-                                <ExternalLink size={11} />
-                                Open
-                              </a>
-                            )}
-                            {file.deletable && (
-                              <button
-                                onClick={() => handleDeleteProjectFile(project, file)}
-                                className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-[11px] text-red-300 flex items-center gap-1.5 transition-colors"
-                              >
-                                <Trash2 size={11} />
-                                Delete
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-white truncate group-hover:text-cyan-400 transition-colors">{project.title || 'Untitled Project'}</h3>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-[10px] text-zinc-500">{formatDate(project.created_at)}</span>
+                    <span className="text-[10px] text-zinc-400 font-medium px-2 py-0.5 rounded bg-white/5 border border-white/5">
+                      {project.file_count || project.files?.length || 0} FILES
+                    </span>
                   </div>
                 </div>
               </div>
@@ -350,6 +382,74 @@ export default function ProjectLibrary() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function ProjectVideoCard({ video }) {
+  const videoRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+
+  const handleMouseEnter = () => {
+    if (videoRef.current) {
+      videoRef.current.play().catch(() => {});
+      setPlaying(true);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+      setPlaying(false);
+    }
+  };
+
+  return (
+    <div className="group rounded-xl overflow-hidden border border-white/10 bg-white/5 hover:border-cyan-500/30 transition-all">
+      <div
+        className="relative aspect-[9/16] bg-black cursor-pointer"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        <video
+          ref={videoRef}
+          src={video.video_url || video.url}
+          poster={video.actor_url || video.thumbnail_url}
+          muted
+          playsInline
+          preload="metadata"
+          className="w-full h-full object-cover"
+        />
+        {!playing && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/20 transition-colors">
+            <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center">
+              <Play size={24} className="text-white fill-white ml-1" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="p-3 space-y-2">
+        <h3 className="text-xs font-bold text-zinc-200 truncate">{video.title || 'Untitled Clip'}</h3>
+        <div className="flex gap-1">
+          <a
+            href={video.video_url || video.url}
+            download
+            className="flex-1 flex items-center justify-center gap-1 text-[10px] bg-white/5 hover:bg-white/10 text-zinc-400 py-1.5 rounded-lg transition-colors border border-white/5"
+          >
+            <Download size={10} /> Save
+          </a>
+          <a
+            href={video.video_url || video.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 flex items-center justify-center gap-1 text-[10px] bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 py-1.5 rounded-lg transition-colors border border-cyan-500/20"
+          >
+            <ExternalLink size={10} /> Link
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
