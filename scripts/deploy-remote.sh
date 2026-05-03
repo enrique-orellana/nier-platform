@@ -213,6 +213,7 @@ cp "$CONFIG_ENV_FILE" "$temp_env_file"
 python3 - "$temp_env_file" "$BACKEND_BASE_URL" "$FRONTEND_BASE_URL" "$S3_PUBLIC_URL_BASE" "$S3_PUBLIC_ENDPOINT_URL" <<'PY'
 import pathlib
 import re
+import os
 import sys
 
 path = pathlib.Path(sys.argv[1])
@@ -232,10 +233,37 @@ def replace_line(name: str, value: str, content: str) -> str:
         return re.sub(pattern, replacement, content, flags=re.MULTILINE)
     return content + ("" if content.endswith("\n") else "\n") + replacement + "\n"
 
-text = replace_line("AI_BASE_URL", backend, text)
-text = replace_line("VITE_AI_BASE_URL", frontend, text)
-text = replace_line("AWS_S3_PUBLIC_URL_BASE", s3_public, text)
-text = replace_line("AWS_S3_PUBLIC_ENDPOINT_URL", s3_endpoint, text)
+def env(name: str) -> str:
+    return os.environ.get(name, "")
+
+overrides = {
+    "MAX_CONCURRENT_JOBS": env("MAX_CONCURRENT_JOBS"),
+    "AI_PROVIDER": env("AI_PROVIDER"),
+    "AI_BASE_URL": backend or env("AI_BASE_URL"),
+    "AI_QUALITY_PRESET": env("AI_QUALITY_PRESET"),
+    "AI_MODEL": env("AI_MODEL"),
+    "AI_ANALYZE_MODEL": env("AI_ANALYZE_MODEL"),
+    "AI_VISION_MODEL": env("AI_VISION_MODEL"),
+    "AI_IMAGE_MODEL": env("AI_IMAGE_MODEL"),
+    "VITE_AI_PROVIDER": env("VITE_AI_PROVIDER"),
+    "VITE_AI_BASE_URL": frontend or env("VITE_AI_BASE_URL"),
+    "VITE_AI_QUALITY_PRESET": env("VITE_AI_QUALITY_PRESET"),
+    "VITE_AI_MODEL": env("VITE_AI_MODEL"),
+    "VITE_AI_ANALYZE_MODEL": env("VITE_AI_ANALYZE_MODEL"),
+    "VITE_AI_VISION_MODEL": env("VITE_AI_VISION_MODEL"),
+    "VITE_AI_IMAGE_MODEL": env("VITE_AI_IMAGE_MODEL"),
+    "AWS_REGION": env("AWS_REGION"),
+    "AWS_S3_BUCKET": env("AWS_S3_BUCKET"),
+    "AWS_S3_PUBLIC_BUCKET": env("AWS_S3_PUBLIC_BUCKET"),
+    "AWS_S3_ENDPOINT_URL": env("AWS_S3_ENDPOINT_URL"),
+    "AWS_S3_PUBLIC_URL_BASE": s3_public or env("AWS_S3_PUBLIC_URL_BASE"),
+    "AWS_S3_PUBLIC_ENDPOINT_URL": s3_endpoint or env("AWS_S3_PUBLIC_ENDPOINT_URL"),
+    "AWS_S3_FORCE_PATH_STYLE": env("AWS_S3_FORCE_PATH_STYLE"),
+    "RENDER_SERVICE_URL": env("RENDER_SERVICE_URL"),
+}
+
+for key, value in overrides.items():
+    text = replace_line(key, value, text)
 
 path.write_text(text)
 PY

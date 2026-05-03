@@ -37,6 +37,17 @@ function Get-EnvValue {
     return ""
 }
 
+function Get-PreferredEnvValue {
+    param(
+        [string]$PrimaryName,
+        [string]$FallbackName
+    )
+
+    $primary = Get-EnvValue $PrimaryName
+    if ($primary) { return $primary }
+    return (Get-EnvValue $FallbackName)
+}
+
 function Import-EnvFile {
     param([string]$Path)
     if (-not (Test-Path $Path)) {
@@ -135,10 +146,29 @@ Copy-Item $ConfigEnvFile $tempEnvFile -Force
 try {
     $envContent = Get-Content $tempEnvFile -Raw
     $overrides = @{
-        "AI_BASE_URL" = (Get-EnvValue "OPENSHORTS_AI_BASE_URL")
-        "VITE_AI_BASE_URL" = (Get-EnvValue "OPENSHORTS_VITE_AI_BASE_URL")
-        "AWS_S3_PUBLIC_URL_BASE" = (Get-EnvValue "OPENSHORTS_S3_PUBLIC_URL_BASE")
-        "AWS_S3_PUBLIC_ENDPOINT_URL" = (Get-EnvValue "OPENSHORTS_S3_PUBLIC_ENDPOINT_URL")
+        "MAX_CONCURRENT_JOBS" = (Get-EnvValue "MAX_CONCURRENT_JOBS")
+        "AI_PROVIDER" = (Get-EnvValue "AI_PROVIDER")
+        "AI_BASE_URL" = (Get-PreferredEnvValue "AI_BASE_URL" "OPENSHORTS_AI_BASE_URL")
+        "AI_QUALITY_PRESET" = (Get-EnvValue "AI_QUALITY_PRESET")
+        "AI_MODEL" = (Get-EnvValue "AI_MODEL")
+        "AI_ANALYZE_MODEL" = (Get-EnvValue "AI_ANALYZE_MODEL")
+        "AI_VISION_MODEL" = (Get-EnvValue "AI_VISION_MODEL")
+        "AI_IMAGE_MODEL" = (Get-EnvValue "AI_IMAGE_MODEL")
+        "VITE_AI_PROVIDER" = (Get-EnvValue "VITE_AI_PROVIDER")
+        "VITE_AI_BASE_URL" = (Get-PreferredEnvValue "VITE_AI_BASE_URL" "OPENSHORTS_VITE_AI_BASE_URL")
+        "VITE_AI_QUALITY_PRESET" = (Get-EnvValue "VITE_AI_QUALITY_PRESET")
+        "VITE_AI_MODEL" = (Get-EnvValue "VITE_AI_MODEL")
+        "VITE_AI_ANALYZE_MODEL" = (Get-EnvValue "VITE_AI_ANALYZE_MODEL")
+        "VITE_AI_VISION_MODEL" = (Get-EnvValue "VITE_AI_VISION_MODEL")
+        "VITE_AI_IMAGE_MODEL" = (Get-EnvValue "VITE_AI_IMAGE_MODEL")
+        "AWS_REGION" = (Get-EnvValue "AWS_REGION")
+        "AWS_S3_BUCKET" = (Get-EnvValue "AWS_S3_BUCKET")
+        "AWS_S3_PUBLIC_BUCKET" = (Get-EnvValue "AWS_S3_PUBLIC_BUCKET")
+        "AWS_S3_ENDPOINT_URL" = (Get-EnvValue "AWS_S3_ENDPOINT_URL")
+        "AWS_S3_PUBLIC_URL_BASE" = (Get-PreferredEnvValue "AWS_S3_PUBLIC_URL_BASE" "OPENSHORTS_S3_PUBLIC_URL_BASE")
+        "AWS_S3_PUBLIC_ENDPOINT_URL" = (Get-PreferredEnvValue "AWS_S3_PUBLIC_ENDPOINT_URL" "OPENSHORTS_S3_PUBLIC_ENDPOINT_URL")
+        "AWS_S3_FORCE_PATH_STYLE" = (Get-EnvValue "AWS_S3_FORCE_PATH_STYLE")
+        "RENDER_SERVICE_URL" = (Get-EnvValue "RENDER_SERVICE_URL")
     }
 
     foreach ($entry in $overrides.GetEnumerator()) {
