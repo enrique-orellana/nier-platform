@@ -4,10 +4,17 @@ services:
     container_name: openshorts-backend
     ports:
       - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - .:/app
       - /app/__pycache__
       - ./output:/app/output
+    environment:
+      - AI_PROVIDER=ollama
+      - AI_BASE_URL=http://host.docker.internal:11434
+      - AI_MODEL=qwen3:latest
+      - AI_VISION_MODEL=qwen2.5vl:latest
     restart: unless-stopped
 
   frontend:
@@ -18,6 +25,11 @@ services:
     volumes:
       - ./dashboard:/app
       - /app/node_modules
+    environment:
+      - VITE_AI_PROVIDER=ollama
+      - VITE_AI_BASE_URL=http://localhost:11434
+      - VITE_AI_MODEL=qwen3:latest
+      - VITE_AI_VISION_MODEL=qwen2.5vl:latest
     restart: unless-stopped
     depends_on:
       - backend
