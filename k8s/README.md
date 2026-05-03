@@ -46,6 +46,7 @@ Create the namespace, then load the non-secret runtime settings from the env
 example into a ConfigMap.
 
 ```bash
+cp k8s/openshorts.env.example k8s/openshorts.env
 kubectl create namespace openshorts --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl create configmap openshorts-config \
