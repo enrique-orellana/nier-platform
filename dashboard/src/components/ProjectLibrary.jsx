@@ -55,7 +55,7 @@ function normalizeClipForResultCard(clip, index, fallbackJobId) {
   };
 }
 
-export default function ProjectLibrary() {
+export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiHeaders }) {
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -281,7 +281,9 @@ export default function ProjectLibrary() {
                         clip={clip}
                         index={clip.index ?? index}
                         jobId={clip.job_id}
-                        aiProvider="gemini"
+                        aiProvider={aiProvider}
+                        aiApiKey={aiApiKey}
+                        getAiHeaders={getAiHeaders}
                         onPlay={() => setActiveClipIndex(index)}
                       />
                     ))}

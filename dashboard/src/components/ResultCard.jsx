@@ -39,6 +39,17 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     // Accumulate Remotion layers across operations
     const [activeLayers, setActiveLayers] = useState({ subtitles: null, hook: null, effects: null });
 
+    const getVideoFilename = (videoUrl) => {
+        if (!videoUrl) return '';
+        try {
+            const parsed = new URL(videoUrl, window.location.origin);
+            const pathname = decodeURIComponent(parsed.pathname || '');
+            return pathname.split('/').filter(Boolean).pop() || '';
+        } catch {
+            return videoUrl.split('?')[0].split('#')[0].split('/').filter(Boolean).pop() || '';
+        }
+    };
+
     // Fetch clip duration from transcript endpoint
     useEffect(() => {
         if (!jobId || index === undefined) return;
@@ -83,7 +94,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 body: JSON.stringify({
                     job_id: jobId,
                     clip_index: index,
-                    input_filename: currentVideoUrl.split('/').pop()
+                    input_filename: getVideoFilename(currentVideoUrl)
                 })
             });
 
@@ -112,7 +123,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 body: JSON.stringify({
                     job_id: jobId,
                     clip_index: index,
-                    input_filename: currentVideoUrl.split('/').pop()
+                    input_filename: getVideoFilename(currentVideoUrl)
                 })
             });
 
@@ -178,7 +189,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     border_width: options.borderWidth,
                     bg_color: options.bgColor,
                     bg_opacity: options.bgOpacity,
-                    input_filename: currentVideoUrl.split('/').pop()
+                    input_filename: getVideoFilename(currentVideoUrl)
                 })
             });
 
@@ -232,7 +243,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     text: payload.text,
                     position: payload.position,
                     size: payload.size,
-                    input_filename: currentVideoUrl.split('/').pop()
+                    input_filename: getVideoFilename(currentVideoUrl)
                 })
             });
 
@@ -267,7 +278,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 job_id: jobId,
                 clip_index: index,
                 target_language: options.targetLanguage,
-                input_filename: currentVideoUrl.split('/').pop()
+                input_filename: getVideoFilename(currentVideoUrl)
             };
             console.log('[Translate] Request body:', requestBody);
             console.log('[Translate] Sending request to /api/translate');

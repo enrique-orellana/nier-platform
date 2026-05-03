@@ -379,6 +379,29 @@ class VideoEditor:
         self.client = genai.Client(api_key=self.ai_config.api_key) if self.ai_config.is_gemini() and self.ai_config.api_key else None
         self.model_name = self.ai_config.text_model or "gemini-3-flash-preview"
 
+    @staticmethod
+    def _default_filter_data() -> dict:
+        """Neutral fallback when the model does not return valid FFmpeg JSON."""
+        return {}
+
+    @staticmethod
+    def _default_effects_config(duration: float) -> dict:
+        """Neutral fallback when the model does not return valid Remotion JSON."""
+        return {
+            "segments": [
+                {
+                    "startSec": 0,
+                    "endSec": max(float(duration or 0), 0.0),
+                    "zoom": 1.0,
+                    "zoomCenterX": 0.5,
+                    "zoomCenterY": 0.5,
+                    "brightness": 1.0,
+                    "contrast": 1.0,
+                    "saturate": 1.0,
+                }
+            ]
+        }
+
     def upload_video(self, video_path):
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Video file not found: {video_path}")
@@ -422,17 +445,27 @@ class VideoEditor:
                 contents=[video_file_obj, prompt],
                 config=types.GenerateContentConfig(response_mime_type="application/json"),
             )
-            raw = response.text or ""
-            try:
-                return json.loads(raw)
-            except json.JSONDecodeError:
-                cleaned = re.sub(r"^```(?:json)?\n?|\n?```$", "", raw.strip())
-                start_idx = cleaned.find("{")
-                end_idx = cleaned.rfind("}")
-                if start_idx != -1 and end_idx != -1:
-                    cleaned = cleaned[start_idx:end_idx + 1]
-                return json.loads(cleaned)
-        return chat_json(self.ai_config, prompt, model=self.ai_config.text_model)
+            raw = (response.text or "").strip()
+            candidates = [raw]
+            cleaned = re.sub(r"^```(?:json)?\n?|\n?```$", "", raw)
+            start_idx = cleaned.find("{")
+            end_idx = cleaned.rfind("}")
+            if start_idx != -1 and end_idx != -1:
+                candidates.append(cleaned[start_idx:end_idx + 1].strip())
+            for candidate in candidates:
+                if not candidate:
+                    continue
+                try:
+                    return json.loads(candidate)
+                except Exception:
+                    continue
+            print("⚠️ Gemini filter returned empty or invalid JSON; using neutral fallback.")
+            return self._default_filter_data()
+        try:
+            return chat_json(self.ai_config, prompt, model=self.ai_config.text_model)
+        except Exception as e:
+            print(f"⚠️ Ollama filter JSON fallback: {e}")
+            return self._default_filter_data()
 
     def get_effects_config(self, video_file_obj, duration, fps=30, width=None, height=None, transcript=None):
         if width is None or height is None:
@@ -458,17 +491,27 @@ class VideoEditor:
                 contents=[video_file_obj, prompt],
                 config=types.GenerateContentConfig(response_mime_type="application/json"),
             )
-            raw = response.text or ""
-            try:
-                return json.loads(raw)
-            except json.JSONDecodeError:
-                cleaned = re.sub(r"^```(?:json)?\n?|\n?```$", "", raw.strip())
-                start_idx = cleaned.find("{")
-                end_idx = cleaned.rfind("}")
-                if start_idx != -1 and end_idx != -1:
-                    cleaned = cleaned[start_idx:end_idx + 1]
-                return json.loads(cleaned)
-        return chat_json(self.ai_config, prompt, model=self.ai_config.text_model)
+            raw = (response.text or "").strip()
+            candidates = [raw]
+            cleaned = re.sub(r"^```(?:json)?\n?|\n?```$", "", raw)
+            start_idx = cleaned.find("{")
+            end_idx = cleaned.rfind("}")
+            if start_idx != -1 and end_idx != -1:
+                candidates.append(cleaned[start_idx:end_idx + 1].strip())
+            for candidate in candidates:
+                if not candidate:
+                    continue
+                try:
+                    return json.loads(candidate)
+                except Exception:
+                    continue
+            print("⚠️ Gemini effects returned empty or invalid JSON; using neutral fallback.")
+            return self._default_effects_config(duration)
+        try:
+            return chat_json(self.ai_config, prompt, model=self.ai_config.text_model)
+        except Exception as e:
+            print(f"⚠️ Ollama effects JSON fallback: {e}")
+            return self._default_effects_config(duration)
 
     @staticmethod
     def _split_filter_chain(filter_string: str) -> list[str]:

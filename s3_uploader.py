@@ -204,17 +204,20 @@ def list_all_clips(bucket_name=None, limit=50, force_refresh=False):
                 clips_data = data.get('shorts', [])
                 
                 for i, clip in enumerate(clips_data):
-                    clip_filename = f"{base_name}_clip_{i+1}.mp4"
-                    clip_key = f"{job_id}/{clip_filename}"
+                    stored_video_url = (clip.get("video_url") or clip.get("url") or "").strip()
+                    if stored_video_url.startswith(("http://", "https://")):
+                        resolved_url = stored_video_url
+                    else:
+                        clip_filename = os.path.basename(stored_video_url.split("?")[0].split("#")[0]) if stored_video_url else f"{base_name}_clip_{i+1}.mp4"
+                        clip_key = f"{job_id}/{clip_filename}"
+                        resolved_url = generate_presigned_url(bucket_name, clip_key, expiration=7200)  # 2 hours
                     
-                    # Generate signed URL
-                    signed_url = generate_presigned_url(bucket_name, clip_key, expiration=7200) # 2 hours
-                    
-                    if signed_url:
+                    if resolved_url:
                         clip_entry = {
                             "job_id": job_id,
                             "index": i,
-                            "url": signed_url,
+                            "url": resolved_url,
+                            "video_url": resolved_url,
                             "title": clip.get('video_title_for_youtube_short', 'Untitled Clip'),
                             "tiktok_desc": clip.get('video_description_for_tiktok', ''),
                             "insta_desc": clip.get('video_description_for_instagram', ''),

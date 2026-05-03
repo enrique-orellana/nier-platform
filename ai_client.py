@@ -4,6 +4,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 from typing import Any, Mapping, Optional, Sequence
 
 import httpx
@@ -37,7 +38,18 @@ class AIConfig:
         return self.normalized_provider() == "ollama"
 
     def resolved_base_url(self) -> str:
-        return self.base_url.rstrip("/") if self.base_url else ""
+        if not self.base_url:
+            return ""
+
+        cleaned = self.base_url.strip().rstrip("/")
+        parsed = urlsplit(cleaned)
+        if not parsed.scheme or not parsed.netloc:
+            return cleaned
+
+        # Ollama chat endpoints are rooted at the service origin. Users often
+        # paste /api or /api/ into the field, which would otherwise create
+        # accidental /api/api/chat requests.
+        return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 
 
 def _normalize_model_for_provider(model: str, provider: str, kind: str) -> str:
@@ -226,7 +238,17 @@ def _ollama_chat(
 
     with httpx.Client(timeout=timeout) as client:
         response = client.post(url, json=payload)
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        body = exc.response.text.strip()
+        if body:
+            raise RuntimeError(
+                f"Ollama chat request failed ({exc.response.status_code}) for {url}: {body}"
+            ) from exc
+        raise RuntimeError(
+            f"Ollama chat request failed ({exc.response.status_code}) for {url}"
+        ) from exc
     data = response.json()
     message = data.get("message") or {}
     return message.get("content") or data.get("response") or ""

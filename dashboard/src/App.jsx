@@ -1176,7 +1176,7 @@ function App() {
           )}
 
           {activeTab === 'projects' && (
-            <ProjectLibrary />
+            <ProjectLibrary aiProvider={aiProvider} aiApiKey={apiKey} getAiHeaders={getAiHeaders} />
           )}
 
           {/* View: Gallery */}

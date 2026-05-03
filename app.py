@@ -10,12 +10,13 @@ import asyncio
 from dotenv import load_dotenv
 from typing import Dict, Optional, List
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Header, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from s3_uploader import upload_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects
+from s3_uploader import upload_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
 from ai_client import AIConfig, load_ai_config, ai_config_to_env
 
 load_dotenv()
@@ -111,6 +112,229 @@ def _relocate_root_job_artifacts(job_id: str, job_output_dir: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def _rehydrate_job_from_disk(job_id: str) -> Optional[Dict]:
+    """Rebuild a minimal job record from persisted output artifacts."""
+    output_dir = os.path.join(OUTPUT_DIR, job_id)
+    if not os.path.isdir(output_dir):
+        return None
+
+    json_files = sorted(
+        glob.glob(os.path.join(output_dir, "*_metadata.json")),
+        key=lambda p: os.path.getmtime(p),
+        reverse=True,
+    )
+    if not json_files:
+        return None
+
+    metadata_path = json_files[0]
+    with open(metadata_path, "r") as f:
+        data = json.load(f)
+
+    base_name = os.path.basename(metadata_path).replace("_metadata.json", "")
+    clips = []
+    for index, clip in enumerate(data.get("shorts", [])):
+        normalized_clip = dict(clip)
+        video_url = normalized_clip.get("video_url") or f"/videos/{job_id}/{base_name}_clip_{index + 1}.mp4"
+        normalized_clip["video_url"] = f"/videos/{job_id}/{os.path.basename(video_url)}"
+        clips.append(normalized_clip)
+
+    return {
+        "status": "completed",
+        "logs": [f"Job rehydrated from persisted artifacts: {job_id}"],
+        "result": {
+            "clips": clips,
+            "cost_analysis": data.get("cost_analysis"),
+        },
+        "output_dir": output_dir,
+        "metadata_path": metadata_path,
+    }
+
+
+def _download_s3_object_to_file(s3_client, bucket_name: str, object_key: str, destination_path: str) -> bool:
+    """Download an S3 object to a local file path."""
+    try:
+        os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+        obj = s3_client.get_object(Bucket=bucket_name, Key=object_key)
+        body = obj["Body"]
+        with open(destination_path, "wb") as handle:
+            for chunk in iter(lambda: body.read(1024 * 1024), b""):
+                if not chunk:
+                    break
+                handle.write(chunk)
+        return True
+    except Exception as e:
+        print(f"⚠️ Failed to download S3 object {object_key} -> {destination_path}: {e}")
+        return False
+
+
+def _rehydrate_job_from_s3(job_id: str) -> Optional[Dict]:
+    """Rebuild a completed job from S3 artifacts and download files locally."""
+    bucket_name = os.environ.get("AWS_S3_BUCKET", "").strip()
+    if not bucket_name:
+        return None
+
+    s3_client = get_s3_client()
+    if not s3_client:
+        return None
+
+    output_dir = os.path.join(OUTPUT_DIR, job_id)
+    try:
+        paginator = s3_client.get_paginator("list_objects_v2")
+        pages = paginator.paginate(Bucket=bucket_name, Prefix=f"{job_id}/")
+
+        metadata_key = None
+        clip_keys: list[str] = []
+        for page in pages:
+            for obj in page.get("Contents", []):
+                key = obj.get("Key", "")
+                if key.endswith("_metadata.json"):
+                    metadata_key = key
+                elif key.endswith(".mp4"):
+                    clip_keys.append(key)
+
+        if not metadata_key:
+            return None
+
+        metadata_path = os.path.join(output_dir, os.path.basename(metadata_key))
+        if not os.path.exists(metadata_path):
+            if not _download_s3_object_to_file(s3_client, bucket_name, metadata_key, metadata_path):
+                return None
+
+        with open(metadata_path, "r") as f:
+            data = json.load(f)
+
+        base_name = os.path.basename(metadata_key).replace("_metadata.json", "")
+        clips: list[Dict] = []
+        for index, clip in enumerate(data.get("shorts", [])):
+            normalized_clip = dict(clip)
+            clip_filename = f"{base_name}_clip_{index + 1}.mp4"
+            local_clip_path = os.path.join(output_dir, clip_filename)
+            s3_clip_key = f"{job_id}/{clip_filename}"
+
+            if not os.path.exists(local_clip_path):
+                if s3_clip_key in clip_keys:
+                    _download_s3_object_to_file(s3_client, bucket_name, s3_clip_key, local_clip_path)
+                else:
+                    # Fallback to any clip URL already present in the metadata.
+                    source_url = normalized_clip.get("url") or normalized_clip.get("video_url") or ""
+                    if source_url.startswith("http"):
+                        try:
+                            import httpx
+
+                            with httpx.Client(timeout=300.0, follow_redirects=True) as client:
+                                response = client.get(source_url)
+                                response.raise_for_status()
+                                os.makedirs(os.path.dirname(local_clip_path), exist_ok=True)
+                                with open(local_clip_path, "wb") as handle:
+                                    handle.write(response.content)
+                        except Exception as e:
+                            print(f"⚠️ Failed to hydrate clip from URL {source_url}: {e}")
+
+            normalized_clip["video_url"] = f"/videos/{job_id}/{clip_filename}"
+            clips.append(normalized_clip)
+
+        return {
+            "status": "completed",
+            "logs": [f"Job rehydrated from S3 artifacts: {job_id}"],
+            "result": {
+                "clips": clips,
+                "cost_analysis": data.get("cost_analysis"),
+            },
+            "output_dir": output_dir,
+            "metadata_path": metadata_path,
+        }
+    except Exception as e:
+        print(f"⚠️ Failed to rehydrate job {job_id} from S3: {e}")
+        return None
+
+
+def _get_job(job_id: str) -> Optional[Dict]:
+    """Fetch a job from memory, or recover it from disk if the pod restarted."""
+    job = jobs.get(job_id)
+    if job:
+        return job
+
+    try:
+        rehydrated = _rehydrate_job_from_disk(job_id)
+        if rehydrated:
+            jobs[job_id] = rehydrated
+            return rehydrated
+        rehydrated = _rehydrate_job_from_s3(job_id)
+        if rehydrated:
+            jobs[job_id] = rehydrated
+            return rehydrated
+    except Exception as e:
+        print(f"⚠️ Failed to rehydrate job {job_id}: {e}")
+
+    return None
+
+
+def _resolve_job_clip_input(
+    job_id: str,
+    job: Dict,
+    clip_index: int,
+    requested_input_filename: Optional[str] = None,
+) -> tuple[str, str]:
+    """Resolve a clip to a local file path, downloading from S3/HTTP if needed."""
+    if "result" not in job or "clips" not in job["result"]:
+        raise HTTPException(status_code=400, detail="Job result not available")
+    clips = job["result"]["clips"]
+    if clip_index < 0 or clip_index >= len(clips):
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    output_dir = os.path.join(OUTPUT_DIR, job_id)
+    os.makedirs(output_dir, exist_ok=True)
+    clip = clips[clip_index]
+
+    candidates: list[str] = []
+    if requested_input_filename:
+        requested_name = os.path.basename(requested_input_filename.split("?")[0].split("#")[0].strip())
+        if requested_name:
+            candidates.append(requested_name)
+
+    for key in ("video_url", "url"):
+        raw_value = clip.get(key) or ""
+        if not raw_value:
+            continue
+        parsed = urlsplit(raw_value)
+        candidate_name = os.path.basename(parsed.path or raw_value.split("?")[0].split("#")[0])
+        if candidate_name:
+            candidates.append(candidate_name)
+
+    # Prefer any existing local file.
+    for candidate_name in dict.fromkeys(candidates):
+        local_path = os.path.join(output_dir, candidate_name)
+        if os.path.exists(local_path):
+            return local_path, candidate_name
+
+    # If we have a remote source URL, hydrate it locally.
+    source_url = clip.get("url") or clip.get("video_url") or ""
+    if source_url.startswith(("http://", "https://")):
+        candidate_name = next((name for name in dict.fromkeys(candidates) if name), None)
+        if not candidate_name:
+            candidate_name = f"{job_id}_clip_{clip_index + 1}.mp4"
+        local_path = os.path.join(output_dir, candidate_name)
+
+        import httpx
+
+        with httpx.Client(timeout=300.0, follow_redirects=True) as client:
+            response = client.get(source_url)
+            response.raise_for_status()
+            with open(local_path, "wb") as handle:
+                handle.write(response.content)
+        return local_path, candidate_name
+
+    # Final fallback: use the last path component if it already points at /videos/...
+    if source_url.startswith("/videos/"):
+        candidate_name = os.path.basename(urlsplit(source_url).path)
+        if candidate_name:
+            local_path = os.path.join(output_dir, candidate_name)
+            if os.path.exists(local_path):
+                return local_path, candidate_name
+
+    raise HTTPException(status_code=404, detail="Video file not found for this clip")
 
 async def cleanup_jobs():
     """Background task to remove old jobs and files."""
@@ -430,10 +654,10 @@ async def process_endpoint(
 
 @app.get("/api/status/{job_id}")
 async def get_status(job_id: str):
-    if job_id not in jobs:
+    job = _get_job(job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
-    job = jobs[job_id]
+
     return {
         "status": job['status'],
         "logs": job['logs'],
@@ -476,28 +700,19 @@ async def edit_clip(
     if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing Gemini API Key (Header or Body)")
 
-    if req.job_id not in jobs:
+    job = _get_job(req.job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
-    job = jobs[req.job_id]
     if 'result' not in job or 'clips' not in job['result']:
         raise HTTPException(status_code=400, detail="Job result not available")
         
     try:
-        # Resolve Input Path: Prefer explict input_filename from frontend (chaining edits)
-        if req.input_filename:
-            # Security: Ensure just a filename, no paths
-            safe_name = os.path.basename(req.input_filename)
-            input_path = os.path.join(OUTPUT_DIR, req.job_id, safe_name)
-            filename = safe_name
-        else:
-            # Fallback to original clip
-            clip = job['result']['clips'][req.clip_index]
-            filename = clip['video_url'].split('/')[-1]
-            input_path = os.path.join(OUTPUT_DIR, req.job_id, filename)
-        
-        if not os.path.exists(input_path):
-             raise HTTPException(status_code=404, detail=f"Video file not found: {input_path}")
+        input_path, filename = _resolve_job_clip_input(
+            req.job_id,
+            job,
+            req.clip_index,
+            req.input_filename,
+        )
 
         # Define output path for edited video
         edited_filename = f"edited_{filename}"
@@ -605,7 +820,8 @@ class SubtitleRequest(BaseModel):
 @app.get("/api/clip/{job_id}/{clip_index}/transcript")
 async def get_clip_transcript(job_id: str, clip_index: int):
     """Return word-level captions for a specific clip, formatted for Remotion."""
-    if job_id not in jobs:
+    job = _get_job(job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
     output_dir = os.path.join(OUTPUT_DIR, job_id)
@@ -705,25 +921,20 @@ async def generate_effects_config(
     if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing Gemini API Key (Header)")
 
-    if req.job_id not in jobs:
+    job = _get_job(req.job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    job = jobs[req.job_id]
     if 'result' not in job or 'clips' not in job['result']:
         raise HTTPException(status_code=400, detail="Job result not available")
 
     try:
-        # Resolve input path
-        if req.input_filename:
-            safe_name = os.path.basename(req.input_filename)
-            input_path = os.path.join(OUTPUT_DIR, req.job_id, safe_name)
-        else:
-            clip = job['result']['clips'][req.clip_index]
-            filename = clip['video_url'].split('/')[-1]
-            input_path = os.path.join(OUTPUT_DIR, req.job_id, filename)
-
-        if not os.path.exists(input_path):
-            raise HTTPException(status_code=404, detail=f"Video file not found: {input_path}")
+        input_path, filename = _resolve_job_clip_input(
+            req.job_id,
+            job,
+            req.clip_index,
+            req.input_filename,
+        )
 
         def run_effects_generation():
             editor = VideoEditor(api_key_or_config=ai_config)
@@ -800,12 +1011,10 @@ async def generate_effects_config(
 
 @app.post("/api/subtitle")
 async def add_subtitles(req: SubtitleRequest):
-    if req.job_id not in jobs:
+    job = _get_job(req.job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
-    # Reload job data from disk just in case metadata was updated
-    job = jobs[req.job_id]
-    
+
     # We need to access metadata.json to get the transcript
     output_dir = os.path.join(OUTPUT_DIR, req.job_id)
     json_files = glob.glob(os.path.join(output_dir, "*_metadata.json"))
@@ -826,22 +1035,12 @@ async def add_subtitles(req: SubtitleRequest):
         
     clip_data = clips[req.clip_index]
     
-    # Video Path
-    if req.input_filename:
-        # Use chained file
-        filename = os.path.basename(req.input_filename)
-    else:
-        # Fallback to standard naming
-        filename = clip_data.get('video_url', '').split('/')[-1]
-        if not filename:
-             base_name = os.path.basename(json_files[0]).replace('_metadata.json', '')
-             filename = f"{base_name}_clip_{req.clip_index+1}.mp4"
-         
-    input_path = os.path.join(output_dir, filename)
-    if not os.path.exists(input_path):
-        # Try looking for edited version if url implied it?
-        # Just fail if not found.
-        raise HTTPException(status_code=404, detail=f"Video file not found: {input_path}")
+    input_path, filename = _resolve_job_clip_input(
+        req.job_id,
+        job,
+        req.clip_index,
+        req.input_filename,
+    )
         
     # Define outputs
     srt_filename = f"subs_{req.clip_index}_{int(time.time())}.srt"
@@ -921,10 +1120,9 @@ class HookRequest(BaseModel):
 
 @app.post("/api/hook")
 async def add_hook(req: HookRequest):
-    if req.job_id not in jobs:
+    job = _get_job(req.job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
-    job = jobs[req.job_id]
     output_dir = os.path.join(OUTPUT_DIR, req.job_id)
     json_files = glob.glob(os.path.join(output_dir, "*_metadata.json"))
     
@@ -940,18 +1138,12 @@ async def add_hook(req: HookRequest):
         
     clip_data = clips[req.clip_index]
     
-    # Video Path
-    if req.input_filename:
-        filename = os.path.basename(req.input_filename)
-    else:
-        filename = clip_data.get('video_url', '').split('/')[-1]
-        if not filename:
-             base_name = os.path.basename(json_files[0]).replace('_metadata.json', '')
-             filename = f"{base_name}_clip_{req.clip_index+1}.mp4"
-         
-    input_path = os.path.join(output_dir, filename)
-    if not os.path.exists(input_path):
-        raise HTTPException(status_code=404, detail=f"Video file not found: {input_path}")
+    input_path, filename = _resolve_job_clip_input(
+        req.job_id,
+        job,
+        req.clip_index,
+        req.input_filename,
+    )
         
     # Output video
     output_filename = f"hook_{filename}"
@@ -1015,10 +1207,10 @@ async def translate_clip(
     if not x_elevenlabs_key:
         raise HTTPException(status_code=400, detail="Missing X-ElevenLabs-Key header")
 
-    if req.job_id not in jobs:
+    job = _get_job(req.job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    job = jobs[req.job_id]
     output_dir = os.path.join(OUTPUT_DIR, req.job_id)
     json_files = glob.glob(os.path.join(output_dir, "*_metadata.json"))
 
@@ -1034,18 +1226,12 @@ async def translate_clip(
 
     clip_data = clips[req.clip_index]
 
-    # Video Path
-    if req.input_filename:
-        filename = os.path.basename(req.input_filename)
-    else:
-        filename = clip_data.get('video_url', '').split('/')[-1]
-        if not filename:
-             base_name = os.path.basename(json_files[0]).replace('_metadata.json', '')
-             filename = f"{base_name}_clip_{req.clip_index+1}.mp4"
-
-    input_path = os.path.join(output_dir, filename)
-    if not os.path.exists(input_path):
-        raise HTTPException(status_code=404, detail=f"Video file not found: {input_path}")
+    input_path, filename = _resolve_job_clip_input(
+        req.job_id,
+        job,
+        req.clip_index,
+        req.input_filename,
+    )
 
     # Output video with language suffix
     base, ext = os.path.splitext(filename)
@@ -1106,10 +1292,10 @@ import httpx
 
 @app.post("/api/social/post")
 async def post_to_socials(req: SocialPostRequest):
-    if req.job_id not in jobs:
+    job = _get_job(req.job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
-    job = jobs[req.job_id]
+
     if 'result' not in job or 'clips' not in job['result']:
         raise HTTPException(status_code=400, detail="Job result not available")
         
