@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Upload, FileVideo, Sparkles, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2 } from 'lucide-react';
+import { Upload, FileVideo, Sparkles, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2, FolderOpen } from 'lucide-react';
 import KeyInput from './components/KeyInput';
 import MediaInput from './components/MediaInput';
 import ResultCard from './components/ResultCard';
 import ProcessingAnimation from './components/ProcessingAnimation';
 // import Gallery from './components/Gallery';
 import ThumbnailStudio from './components/ThumbnailStudio';
+import ProjectLibrary from './components/ProjectLibrary';
 import SaaShortsTab from './components/SaaShortsTab';
 import UGCGallery from './components/UGCGallery';
 import ScheduleWeekModal from './components/ScheduleWeekModal';
@@ -129,6 +130,7 @@ const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
 const GEMINI_VISION_MODEL = 'gemini-3.1-flash-image-preview';
 const OLLAMA_TEXT_MODEL = 'qwen3:latest';
 const OLLAMA_VISION_MODEL = 'qwen2.5vl:latest';
+const OLLAMA_BASE_URL = 'http://host.docker.internal:11434';
 
 // Mock polling function
 const pollJob = async (jobId) => {
@@ -140,10 +142,10 @@ const pollJob = async (jobId) => {
 function App() {
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_key') || '');
   const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('ai_provider_v1') || import.meta.env.VITE_AI_PROVIDER || 'gemini');
-  const [aiBaseUrl, setAiBaseUrl] = useState(() => localStorage.getItem('ai_base_url_v1') || import.meta.env.VITE_AI_BASE_URL || 'http://localhost:11434');
-  const [aiTextModel, setAiTextModel] = useState(() => localStorage.getItem('ai_text_model_v1') || import.meta.env.VITE_AI_MODEL || 'qwen3:latest');
-  const [aiVisionModel, setAiVisionModel] = useState(() => localStorage.getItem('ai_vision_model_v1') || import.meta.env.VITE_AI_VISION_MODEL || 'qwen2.5vl:latest');
-  const [aiImageModel, setAiImageModel] = useState(() => localStorage.getItem('ai_image_model_v1') || import.meta.env.VITE_AI_IMAGE_MODEL || '');
+  const [aiBaseUrl, setAiBaseUrl] = useState(() => localStorage.getItem('ai_base_url_v1') || import.meta.env.VITE_AI_BASE_URL || OLLAMA_BASE_URL);
+  const [aiTextModel, setAiTextModel] = useState(() => localStorage.getItem('ai_text_model_v1') || import.meta.env.VITE_AI_MODEL || 'auto');
+  const [aiVisionModel, setAiVisionModel] = useState(() => localStorage.getItem('ai_vision_model_v1') || import.meta.env.VITE_AI_VISION_MODEL || 'auto');
+  const [aiImageModel, setAiImageModel] = useState(() => localStorage.getItem('ai_image_model_v1') || import.meta.env.VITE_AI_IMAGE_MODEL || 'auto');
   // Social API State - Load encrypted or plain
   const [uploadPostKey, setUploadPostKey] = useState(() => {
     const stored = localStorage.getItem('uploadPostKey_v3');
@@ -173,7 +175,7 @@ function App() {
   const [logs, setLogs] = useState([]);
   const [logsVisible, setLogsVisible] = useState(true);
   const [processingMedia, setProcessingMedia] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, settings
+  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, settings, projects
   const [clipCount, setClipCount] = useState(() => {
     const stored = Number(localStorage.getItem('clip_count_v1'));
     return Number.isFinite(stored) && stored >= 3 && stored <= 15 ? stored : 6;
@@ -201,7 +203,7 @@ function App() {
 
   const shouldSendAiBaseUrl = useCallback(() => {
     if (aiProvider !== 'ollama') return false;
-    const defaultBaseUrl = import.meta.env.VITE_AI_BASE_URL || 'http://localhost:11434';
+    const defaultBaseUrl = import.meta.env.VITE_AI_BASE_URL || OLLAMA_BASE_URL;
     return aiBaseUrl && aiBaseUrl.trim() && aiBaseUrl.trim() !== defaultBaseUrl;
   }, [aiProvider, aiBaseUrl]);
 
@@ -286,6 +288,17 @@ function App() {
       setAiVisionModel((current) => (!current || current === OLLAMA_VISION_MODEL) ? GEMINI_VISION_MODEL : current);
       setAiImageModel((current) => (!current || current === OLLAMA_VISION_MODEL) ? GEMINI_VISION_MODEL : current);
       return;
+    }
+
+    if (aiProvider === 'ollama') {
+      setAiBaseUrl((current) => {
+        const cleaned = (current || '').trim().replace(/\/$/, '');
+        const defaultOllamaBaseUrl = (import.meta.env.VITE_AI_BASE_URL || OLLAMA_BASE_URL).replace(/\/$/, '');
+        if (!cleaned || cleaned === 'http://localhost:11434' || cleaned === 'http://127.0.0.1:11434' || cleaned === defaultOllamaBaseUrl) {
+          return defaultOllamaBaseUrl;
+        }
+        return current;
+      });
     }
 
     if (previousProvider === 'gemini' || previousProvider === 'ollama') {
@@ -510,6 +523,14 @@ function App() {
           <span className="font-medium hidden lg:block">YouTube Studio</span>
         </button>
 
+        <button
+          onClick={() => setActiveTab('projects')}
+          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'projects' ? 'bg-cyan-500/10 text-cyan-400' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
+        >
+          <FolderOpen size={20} />
+          <span className="font-medium hidden lg:block">Projects</span>
+        </button>
+
         {/* <button
           onClick={() => setActiveTab('gallery')}
           className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'gallery' ? 'bg-primary/10 text-primary' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
@@ -682,28 +703,32 @@ function App() {
                       value={aiBaseUrl}
                       onChange={(e) => setAiBaseUrl(e.target.value)}
                       className="input-field"
-                      placeholder="http://localhost:11434"
+                      placeholder={OLLAMA_BASE_URL}
                     />
                   </label>
                   <label className="block">
                     <span className="block text-sm text-zinc-400 mb-2">Text Model</span>
-                    <input
-                      type="text"
+                    <select
                       value={aiTextModel}
                       onChange={(e) => setAiTextModel(e.target.value)}
                       className="input-field"
-                      placeholder="qwen3:latest"
-                    />
+                    >
+                      <option value="auto">Auto (recommended)</option>
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                      <option value="qwen3:latest">Qwen3 Latest</option>
+                    </select>
                   </label>
                   <label className="block">
                     <span className="block text-sm text-zinc-400 mb-2">Vision Model</span>
-                    <input
-                      type="text"
+                    <select
                       value={aiVisionModel}
                       onChange={(e) => setAiVisionModel(e.target.value)}
                       className="input-field"
-                      placeholder="qwen2.5vl:latest"
-                    />
+                    >
+                      <option value="auto">Auto (recommended)</option>
+                      <option value="gemini-3.1-flash-image-preview">Gemini 3.1 Flash Image Preview</option>
+                      <option value="qwen2.5vl:latest">Qwen2.5VL Latest</option>
+                    </select>
                   </label>
                   <label className="block">
                     <span className="block text-sm text-zinc-400 mb-2">Image Model</span>
@@ -719,7 +744,7 @@ function App() {
                 <p className="text-xs text-zinc-500 mt-4 leading-relaxed">
                   {aiProvider === 'gemini'
                     ? 'Gemini mode keeps the cloud flow. Switch to Ollama for a fully local setup.'
-                    : 'Ollama mode uses your local model stack. Suggested defaults: qwen3:latest for text and qwen2.5vl:latest for vision.'}
+                    : 'Ollama mode uses your local model stack. On Docker Desktop or Kubernetes, the base URL usually needs to be host.docker.internal:11434 or your Ollama service DNS.'}
                 </p>
               </div>
 
@@ -1007,6 +1032,10 @@ function App() {
             <ThumbnailStudio aiProvider={aiProvider} aiApiKey={apiKey} getAiHeaders={getAiHeaders} uploadPostKey={uploadPostKey} uploadUserId={uploadUserId} />
           )}
 
+          {activeTab === 'projects' && (
+            <ProjectLibrary />
+          )}
+
           {/* View: Gallery */}
           {/* {activeTab === 'gallery' && (
             <Gallery />
@@ -1111,7 +1140,7 @@ function App() {
                   )}
                   {results?.cost_analysis && (
                     <span className="text-xs bg-green-500/10 border border-green-500/20 text-green-400 px-2 py-0.5 rounded-full ml-2" title={`Input: ${results.cost_analysis.input_tokens} | Output: ${results.cost_analysis.output_tokens}`}>
-                      ${results.cost_analysis.total_cost.toFixed(5)}
+                      ${Number.isFinite(results.cost_analysis.total_cost) ? results.cost_analysis.total_cost.toFixed(5) : 'N/A'}
                     </span>
                   )}
                   {results?.clips?.length > 1 && status === 'complete' && (

@@ -12,6 +12,7 @@ GEMINI_TEXT_MODEL = "gemini-2.5-flash"
 GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview"
 OLLAMA_TEXT_MODEL = "qwen3:latest"
 OLLAMA_VISION_MODEL = "qwen2.5vl:latest"
+OLLAMA_BASE_URL = "http://host.docker.internal:11434"
 
 
 @dataclass
@@ -39,23 +40,24 @@ class AIConfig:
         if self.base_url:
             return self.base_url.rstrip("/")
         if self.is_ollama():
-            return "http://localhost:11434"
+            return OLLAMA_BASE_URL
         return ""
 
 
 def _normalize_model_for_provider(model: str, provider: str, kind: str) -> str:
     cleaned = (model or "").strip()
+    auto_values = {"", "auto", "default"}
     if provider == "gemini":
-        if kind == "text" and cleaned in {"", OLLAMA_TEXT_MODEL}:
+        if kind == "text" and cleaned in auto_values | {OLLAMA_TEXT_MODEL}:
             return GEMINI_TEXT_MODEL
-        if kind in {"vision", "image"} and cleaned in {"", OLLAMA_VISION_MODEL, OLLAMA_TEXT_MODEL}:
+        if kind in {"vision", "image"} and cleaned in auto_values | {OLLAMA_VISION_MODEL, OLLAMA_TEXT_MODEL}:
             return GEMINI_VISION_MODEL
     if provider == "ollama":
-        if kind == "text" and cleaned in {"", GEMINI_TEXT_MODEL}:
+        if kind == "text" and cleaned in auto_values | {GEMINI_TEXT_MODEL}:
             return OLLAMA_TEXT_MODEL
-        if kind == "vision" and cleaned in {"", GEMINI_VISION_MODEL, GEMINI_TEXT_MODEL}:
+        if kind == "vision" and cleaned in auto_values | {GEMINI_VISION_MODEL, GEMINI_TEXT_MODEL}:
             return OLLAMA_VISION_MODEL
-        if kind == "image" and cleaned in {"", GEMINI_VISION_MODEL, GEMINI_TEXT_MODEL}:
+        if kind == "image" and cleaned in auto_values | {GEMINI_VISION_MODEL, GEMINI_TEXT_MODEL}:
             return ""
     return cleaned
 
@@ -89,7 +91,7 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         "X-AI-Base-Url",
         "AI_BASE_URL",
         "OLLAMA_BASE_URL",
-        default="http://localhost:11434",
+        default=OLLAMA_BASE_URL if provider_normalized == "ollama" else "",
     )
 
     provider_normalized = provider.strip().lower()
