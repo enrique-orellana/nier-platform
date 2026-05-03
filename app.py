@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from s3_uploader import upload_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery
+from s3_uploader import upload_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file
 from ai_client import AIConfig, load_ai_config, ai_config_to_env
 
 load_dotenv()
@@ -1543,6 +1543,14 @@ async def thumbnail_generate(
         if not thumbnails:
             raise HTTPException(status_code=500, detail="Thumbnail generation failed. Please check your AI provider configuration.")
 
+        if session_id not in thumbnail_sessions:
+            thumbnail_sessions[session_id] = {}
+        thumbnail_sessions[session_id].update({
+            "titles": thumbnail_sessions[session_id].get("titles", [title]),
+            "generated_thumbnails": thumbnails,
+            "selected_thumbnail": thumbnail_sessions[session_id].get("selected_thumbnail", thumbnails[0] if thumbnails else None),
+        })
+
         return {"thumbnails": thumbnails}
 
     except HTTPException:
@@ -1555,6 +1563,120 @@ async def thumbnail_generate(
 class ThumbnailDescribeRequest(BaseModel):
     session_id: str
     title: str
+
+
+class ThumbnailProjectSaveRequest(BaseModel):
+    session_id: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+    selected_thumbnail: Optional[str] = None
+    thumbnail_urls: List[str] = []
+
+
+class ThumbnailProjectUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    selected_thumbnail: Optional[str] = None
+
+
+class ThumbnailProjectFileUpdateRequest(BaseModel):
+    content: str
+
+
+@app.post("/api/thumbnail/save")
+async def thumbnail_save(req: ThumbnailProjectSaveRequest):
+    """Save the full thumbnail project bundle to MinIO/S3 as a browsable project folder."""
+    if req.session_id not in thumbnail_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    bucket_name = os.environ.get("AWS_S3_BUCKET", "").strip() or os.environ.get("AWS_S3_PUBLIC_BUCKET", "").strip()
+    if not bucket_name:
+        raise HTTPException(status_code=400, detail="Missing AWS_S3_BUCKET or AWS_S3_PUBLIC_BUCKET")
+    if not os.environ.get("AWS_ACCESS_KEY_ID") or not os.environ.get("AWS_SECRET_ACCESS_KEY"):
+        raise HTTPException(status_code=400, detail="Missing AWS S3 credentials")
+
+    session = thumbnail_sessions[req.session_id]
+    thumbnail_urls = req.thumbnail_urls or session.get("generated_thumbnails", [])
+    if not thumbnail_urls:
+        raise HTTPException(status_code=400, detail="No generated thumbnails available to save")
+
+    final_title = req.title or (session.get("titles", [""])[0] if session.get("titles") else "")
+    result = upload_thumbnail_project(
+        req.session_id,
+        session,
+        title=final_title,
+        description=req.description if req.description is not None else session.get("description", ""),
+        thumbnail_urls=thumbnail_urls,
+        selected_thumbnail=req.selected_thumbnail or session.get("selected_thumbnail"),
+    )
+
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to upload the project bundle to MinIO/S3")
+
+    session["saved_project"] = result
+    return result
+
+
+@app.get("/api/thumbnail/projects")
+async def thumbnail_projects(limit: int = Query(24, ge=1, le=100)):
+    """List saved thumbnail projects and their files from S3/MinIO."""
+    projects = list_thumbnail_projects(limit=limit)
+    return {"projects": projects}
+
+
+@app.patch("/api/thumbnail/projects/{session_id}/{project_slug}")
+async def thumbnail_project_update(
+    session_id: str,
+    project_slug: str,
+    req: ThumbnailProjectUpdateRequest,
+):
+    """Update project metadata such as title, description, or selected thumbnail."""
+    result = update_thumbnail_project(
+        session_id,
+        project_slug,
+        title=req.title,
+        description=req.description,
+        selected_thumbnail=req.selected_thumbnail,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Project not found or update failed")
+    return result
+
+
+@app.delete("/api/thumbnail/projects/{session_id}/{project_slug}")
+async def thumbnail_project_delete(session_id: str, project_slug: str):
+    """Delete a saved thumbnail project and all of its files."""
+    result = delete_thumbnail_project(session_id, project_slug)
+    if not result:
+        raise HTTPException(status_code=404, detail="Project not found or delete failed")
+    return result
+
+
+@app.patch("/api/thumbnail/projects/{session_id}/{project_slug}/files/{file_path:path}")
+async def thumbnail_project_file_update(
+    session_id: str,
+    project_slug: str,
+    file_path: str,
+    req: ThumbnailProjectFileUpdateRequest,
+):
+    """Edit a text-based file inside a thumbnail project."""
+    result = update_thumbnail_project_file(session_id, project_slug, file_path, req.content)
+    if not result:
+        raise HTTPException(status_code=400, detail="File update failed")
+    return result
+
+
+@app.delete("/api/thumbnail/projects/{session_id}/{project_slug}/files/{file_path:path}")
+async def thumbnail_project_file_delete(
+    session_id: str,
+    project_slug: str,
+    file_path: str,
+):
+    """Delete a file inside a thumbnail project."""
+    result = delete_thumbnail_project_file(session_id, project_slug, file_path)
+    if not result:
+        raise HTTPException(status_code=404, detail="File not found or delete failed")
+    return result
 
 @app.post("/api/thumbnail/describe")
 async def thumbnail_describe(
@@ -1598,7 +1720,9 @@ async def thumbnail_describe(
             session.get("language", "en"),
             session.get("video_duration", 0)
         )
-        return {"description": result.get("description", "")}
+        description = result.get("description", "")
+        session["description"] = description
+        return {"description": description}
 
     except Exception as e:
         print(f"❌ Thumbnail Describe Error: {e}")

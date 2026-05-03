@@ -1,5 +1,5 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { Upload, Image, Loader2, Send, Check, Download, ArrowRight, ArrowLeft, Sparkles, Video, Type, X, Plus, MessageSquare, FileText, Youtube, AlertCircle, CheckCircle2, Settings } from 'lucide-react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { Upload, Image, Loader2, Send, Check, Download, ArrowRight, ArrowLeft, Sparkles, Video, Type, X, Plus, MessageSquare, FileText, Youtube, AlertCircle, CheckCircle2, Settings, Save, FolderOpen, RefreshCw, ExternalLink, Pencil, Trash2 } from 'lucide-react';
 import { getApiUrl } from '../config';
 
 const STEPS = ['Input', 'Titles', 'Generate', 'Description', 'Publish'];
@@ -127,6 +127,11 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
   const [selectedThumbnail, setSelectedThumbnail] = useState(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState(null);
+  const [isSavingProject, setIsSavingProject] = useState(false);
+  const [saveProjectResult, setSaveProjectResult] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [projectsError, setProjectsError] = useState('');
 
   // Background preprocessing state
   const [preprocessSessionId, setPreprocessSessionId] = useState(null);
@@ -137,6 +142,120 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  const loadProjects = useCallback(async () => {
+    setIsLoadingProjects(true);
+    setProjectsError('');
+    try {
+      const res = await fetch(getApiUrl('/api/thumbnail/projects?limit=24'));
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const data = await res.json();
+      setProjects(Array.isArray(data.projects) ? data.projects : []);
+    } catch (e) {
+      setProjectsError(e.message);
+    } finally {
+      setIsLoadingProjects(false);
+    }
+  }, []);
+
+  const projectApiBase = useCallback((project) => {
+    return getApiUrl(`/api/thumbnail/projects/${encodeURIComponent(project.session_id)}/${encodeURIComponent(project.project_slug)}`);
+  }, []);
+
+  const handleUpdateProject = async (project, patch) => {
+    try {
+      const res = await fetch(projectApiBase(project), {
+        method: 'PATCH',
+        headers: getAiHeaders('json'),
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      await loadProjects();
+    } catch (e) {
+      setProjectsError(e.message);
+    }
+  };
+
+  const handleRenameProject = async (project) => {
+    const nextTitle = window.prompt('Rename project', project.title || '');
+    if (nextTitle === null) return;
+    await handleUpdateProject(project, {
+      title: nextTitle.trim(),
+    });
+  };
+
+  const handleEditProjectDescription = async (project) => {
+    const nextDescription = window.prompt('Edit project description', project.description || '');
+    if (nextDescription === null) return;
+    await handleUpdateProject(project, {
+      description: nextDescription,
+    });
+  };
+
+  const handleDeleteProject = async (project) => {
+    try {
+      if (!window.confirm(`Delete project "${project.title || project.project_slug}"? This removes every file in the folder.`)) {
+        return;
+      }
+      const res = await fetch(projectApiBase(project), {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      await loadProjects();
+    } catch (e) {
+      setProjectsError(e.message);
+    }
+  };
+
+  const handleEditProjectFile = async (project, file) => {
+    try {
+      if (!file.editable) return;
+      const fileUrl = file.url;
+      if (!fileUrl) throw new Error(`Missing download URL for ${file.name}`);
+      const currentText = await fetch(fileUrl).then((res) => {
+        if (!res.ok) throw new Error(`Failed to load ${file.name}`);
+        return res.text();
+      });
+      const nextContent = window.prompt(`Edit ${file.name}`, currentText);
+      if (nextContent === null) return;
+      const res = await fetch(`${projectApiBase(project)}/files/${encodeURI(file.name)}`, {
+        method: 'PATCH',
+        headers: getAiHeaders('json'),
+        body: JSON.stringify({ content: nextContent }),
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      await loadProjects();
+    } catch (e) {
+      setProjectsError(e.message);
+    }
+  };
+
+  const handleDeleteProjectFile = async (project, file) => {
+    try {
+      if (!window.confirm(`Delete file "${file.name}" from this project?`)) return;
+      const res = await fetch(`${projectApiBase(project)}/files/${encodeURI(file.name)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      await loadProjects();
+    } catch (e) {
+      setProjectsError(e.message);
+    }
+  };
+
+  useEffect(() => {
+    loadProjects().catch(() => {});
+  }, [loadProjects]);
 
   // --- Background Pre-upload (starts Whisper immediately) ---
   const handlePreUpload = async (file) => {
@@ -355,6 +474,47 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
     }
   };
 
+  const handleSaveProject = async () => {
+    const finalTitle = selectedTitle || manualTitle;
+    if (!sessionId) return alert('No session available.');
+
+    setIsSavingProject(true);
+    setSaveProjectResult(null);
+
+    try {
+      const res = await fetch(getApiUrl('/api/thumbnail/save'), {
+        method: 'POST',
+        headers: getAiHeaders('json'),
+        body: JSON.stringify({
+          session_id: sessionId,
+          title: finalTitle,
+          description,
+          selected_thumbnail: selectedThumbnail,
+          thumbnail_urls: generatedThumbnails,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err);
+      }
+
+      const data = await res.json();
+      setSaveProjectResult({
+        success: true,
+        data,
+      });
+      await loadProjects();
+    } catch (e) {
+      setSaveProjectResult({
+        success: false,
+        error: e.message,
+      });
+    } finally {
+      setIsSavingProject(false);
+    }
+  };
+
   // --- Publish to YouTube ---
   const handlePublish = async () => {
     if (!uploadPostKey || !uploadUserId) {
@@ -443,6 +603,8 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
     setSelectedThumbnail(null);
     setIsPublishing(false);
     setPublishResult(null);
+    setIsSavingProject(false);
+    setSaveProjectResult(null);
     setPreprocessSessionId(null);
     setIsPreprocessing(false);
     setRecommended([]);
@@ -466,6 +628,154 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
           )}
         </div>
         <p className="text-sm text-zinc-500 mb-6">Generate viral titles, AI thumbnails, descriptions and publish directly to YouTube</p>
+
+        <div className="glass-panel p-5 mb-6 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <FolderOpen size={16} className="text-cyan-400" />
+                <h2 className="text-sm font-semibold text-white">Projects</h2>
+              </div>
+              <p className="text-xs text-zinc-500 mt-1">Saved thumbnail projects from MinIO/S3, including the files in each project folder.</p>
+            </div>
+            <button
+              onClick={loadProjects}
+              className="text-xs text-zinc-400 hover:text-white transition-colors flex items-center gap-1"
+            >
+              <RefreshCw size={12} className={isLoadingProjects ? 'animate-spin' : ''} />
+              Refresh
+            </button>
+          </div>
+
+          {projectsError && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-300">
+              {projectsError}
+            </div>
+          )}
+
+          {isLoadingProjects ? (
+            <div className="flex items-center gap-2 text-xs text-zinc-500">
+              <Loader2 size={14} className="animate-spin" />
+              Loading saved projects...
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="text-xs text-zinc-500 border border-dashed border-white/10 rounded-xl p-4">
+              No saved projects yet. Generate thumbnails and click <span className="text-zinc-300">Save Project to MinIO/S3</span> to create one.
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {projects.map((project) => {
+                const previewFile = project.files?.find((file) => file.name.startsWith('thumbnails/') && file.url);
+                return (
+                  <div key={project.prefix} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                    <div className="flex flex-col lg:flex-row gap-4">
+                      <div className="w-full lg:w-40 shrink-0">
+                        {previewFile ? (
+                          <img
+                            src={previewFile.url}
+                            alt={project.title || 'Project preview'}
+                            className="w-full aspect-video rounded-lg object-cover border border-white/10"
+                          />
+                        ) : (
+                          <div className="w-full aspect-video rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-zinc-600">
+                            <Image size={24} />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-semibold text-white truncate">{project.title || 'Untitled Project'}</h3>
+                            <p className="text-[11px] text-zinc-500 break-all">{project.prefix}</p>
+                          </div>
+                          <div className="flex items-start gap-2 sm:text-right flex-wrap sm:justify-end">
+                            <div className="text-[11px] text-zinc-500">
+                              <p>{project.file_count || 0} files</p>
+                              <p>{project.thumbnail_count || 0} thumbnails</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleRenameProject(project)}
+                                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 transition-colors"
+                                title="Rename project"
+                              >
+                                <Pencil size={12} />
+                              </button>
+                              <button
+                                onClick={() => handleEditProjectDescription(project)}
+                                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 transition-colors"
+                                title="Edit project description"
+                              >
+                                <FileText size={12} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteProject(project)}
+                                className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 transition-colors"
+                                title="Delete project"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {project.description && (
+                          <p className="text-xs text-zinc-400 leading-relaxed">
+                            {project.description}
+                          </p>
+                        )}
+
+                        <div className="max-h-44 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                          {(project.files || []).map((file) => (
+                            <div key={file.key} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-white/[0.03] border border-white/5">
+                              <div className="min-w-0">
+                                <p className="text-xs text-zinc-200 truncate">{file.name}</p>
+                                <p className="text-[10px] text-zinc-500">
+                                  {file.size ? `${(file.size / 1024).toFixed(1)} KB` : 'file'}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {file.editable && (
+                                  <button
+                                    onClick={() => handleEditProjectFile(project, file)}
+                                    className="text-[11px] text-zinc-300 hover:text-white flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                                  >
+                                    <Pencil size={11} />
+                                    Edit
+                                  </button>
+                                )}
+                                {file.url && (
+                                  <a
+                                    href={file.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[11px] text-cyan-300 hover:text-cyan-200 flex items-center gap-1 px-2 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 transition-colors"
+                                  >
+                                    Open <ExternalLink size={11} />
+                                  </a>
+                                )}
+                                {file.deletable && (
+                                  <button
+                                    onClick={() => handleDeleteProjectFile(project, file)}
+                                    className="text-[11px] text-red-300 hover:text-red-200 flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 transition-colors"
+                                  >
+                                    <Trash2 size={11} />
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <StepIndicator currentStep={step} />
 
@@ -1054,6 +1364,39 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                 />
               </div>
 
+              {/* Save Project */}
+              <div className="glass-panel p-6 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">Save Project</h3>
+                    <p className="text-xs text-zinc-500">Upload the title, transcript, description, and thumbnails to MinIO/S3.</p>
+                  </div>
+                  <Save size={16} className="text-cyan-400 shrink-0" />
+                </div>
+                <button
+                  onClick={handleSaveProject}
+                  disabled={isSavingProject || generatedThumbnails.length === 0}
+                  className="w-full py-3 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors border border-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSavingProject ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Saving to MinIO/S3...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={16} />
+                      Save Project to MinIO/S3
+                    </>
+                  )}
+                </button>
+                {generatedThumbnails.length === 0 && (
+                  <p className="text-xs text-zinc-600">
+                    Generate thumbnails first so the project bundle includes the image files too.
+                  </p>
+                )}
+              </div>
+
               {/* Publish Button */}
               {(!uploadPostKey || !uploadUserId) ? (
                 <div className="glass-panel p-6 space-y-3">
@@ -1089,6 +1432,31 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                     </>
                   )}
                 </button>
+              )}
+
+              {/* Save Result */}
+              {saveProjectResult && (
+                <div className={`glass-panel p-4 ${saveProjectResult.success ? 'border-cyan-500/30' : 'border-red-500/30'}`}>
+                  {saveProjectResult.success ? (
+                    <div className="flex items-start gap-2 text-cyan-300">
+                      <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">Project saved to MinIO/S3</p>
+                        <p className="text-xs text-zinc-500 mt-1 break-all">
+                          {saveProjectResult.data?.url || saveProjectResult.data?.key}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2 text-red-400">
+                      <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Save failed</p>
+                        <p className="text-xs text-zinc-500 mt-1">{saveProjectResult.error}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Publish Result */}

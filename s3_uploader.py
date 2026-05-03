@@ -1,4 +1,7 @@
 import os
+import re
+import tempfile
+import zipfile
 from dotenv import load_dotenv
 load_dotenv()
 import boto3
@@ -501,5 +504,431 @@ def upload_job_artifacts(directory, job_id):
             file_path = os.path.join(directory, filename)
             s3_key = f"{job_id}/{filename}"
             upload_file_to_s3(file_path, bucket_name, s3_key)
+
+
+def _slugify(value, fallback="project"):
+    text = re.sub(r"[^a-zA-Z0-9]+", "_", (value or "").strip().lower()).strip("_")
+    return text[:80] or fallback
+
+
+def _project_prefix(session_id, project_slug):
+    return f"thumbnail-projects/{session_id}/{project_slug}/"
+
+
+def _project_manifest_key(session_id, project_slug):
+    return f"{_project_prefix(session_id, project_slug)}manifest.json"
+
+
+def _read_s3_text_object(s3_client, bucket_name, object_key):
+    obj = s3_client.get_object(Bucket=bucket_name, Key=object_key)
+    return obj["Body"].read().decode("utf-8")
+
+
+def _write_s3_text_object(s3_client, bucket_name, object_key, content, content_type):
+    s3_client.put_object(
+        Bucket=bucket_name,
+        Key=object_key,
+        Body=content.encode("utf-8"),
+        ContentType=content_type,
+    )
+
+
+def _delete_objects_with_prefix(s3_client, bucket_name, prefix):
+    paginator = s3_client.get_paginator("list_objects_v2")
+    pages = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
+    deleted = 0
+    for page in pages:
+        keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+        if not keys:
+            continue
+        for start in range(0, len(keys), 1000):
+            batch = keys[start:start + 1000]
+            s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": batch, "Quiet": True})
+            deleted += len(batch)
+    return deleted
+
+
+def _project_file_kind(name):
+    ext = os.path.splitext(name.lower())[1]
+    if ext in (".txt", ".json", ".md", ".csv", ".yaml", ".yml"):
+        return "text"
+    if ext in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
+        return "image"
+    return "file"
+
+
+def upload_thumbnail_project(session_id, session_data, title=None, description=None, thumbnail_urls=None, selected_thumbnail=None):
+    """
+    Upload a thumbnail studio session into a browsable S3/MinIO project prefix.
+    Each project is stored as a folder-like prefix with manifest and file objects.
+    """
+    bucket_name = os.environ.get("AWS_S3_BUCKET", "").strip() or os.environ.get("AWS_S3_PUBLIC_BUCKET", "").strip()
+    s3_client = get_s3_client()
+    if not s3_client or not bucket_name:
+        return None
+
+    safe_title = _slugify(title or (session_data.get("titles") or ["thumbnail_project"])[0])
+    thumbnail_urls = thumbnail_urls or session_data.get("generated_thumbnails", []) or []
+    description = description if description is not None else session_data.get("description", "")
+    selected_thumbnail = selected_thumbnail or session_data.get("selected_thumbnail")
+    transcript = session_data.get("transcript") or {}
+    transcript_text = transcript.get("text", "")
+    transcript_segments = session_data.get("transcript_segments", [])
+    timestamp = time_module.strftime("%Y%m%dT%H%M%SZ", time_module.gmtime())
+    project_slug = f"{timestamp}_{safe_title}"
+    prefix = _project_prefix(session_id, project_slug)
+
+    manifest = {
+        "session_id": session_id,
+        "project_slug": project_slug,
+        "project_title": title or "",
+        "description": description or "",
+        "selected_thumbnail": selected_thumbnail or "",
+        "titles": session_data.get("titles", []),
+        "generated_thumbnails": thumbnail_urls,
+        "language": session_data.get("language", "en"),
+        "context": session_data.get("context", ""),
+        "video_duration": session_data.get("video_duration", 0),
+        "video_path": os.path.basename(session_data.get("video_path", "")) if session_data.get("video_path") else "",
+        "transcript_text": transcript_text,
+        "transcript_segments": transcript_segments,
+        "transcript": transcript,
+        "created_at": timestamp,
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        manifest_path = os.path.join(tmpdir, "manifest.json")
+        selected_title_path = os.path.join(tmpdir, "selected_title.txt")
+        description_path = os.path.join(tmpdir, "description.txt")
+        titles_path = os.path.join(tmpdir, "titles.txt")
+        transcript_text_path = os.path.join(tmpdir, "transcript.txt")
+        transcript_json_path = os.path.join(tmpdir, "transcript.json")
+
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+        with open(selected_title_path, "w", encoding="utf-8") as f:
+            f.write(title or "")
+        with open(description_path, "w", encoding="utf-8") as f:
+            f.write(description or "")
+        with open(titles_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(f"{i+1}. {t}" for i, t in enumerate(session_data.get("titles", []))))
+        with open(transcript_text_path, "w", encoding="utf-8") as f:
+            f.write(transcript_text or "")
+        with open(transcript_json_path, "w", encoding="utf-8") as f:
+            json.dump(transcript, f, ensure_ascii=False, indent=2)
+
+        def _put_text(local_path, key, content_type):
+            s3_client.upload_file(
+                local_path,
+                bucket_name,
+                key,
+                ExtraArgs={"ContentType": content_type},
+            )
+
+        _put_text(manifest_path, f"{prefix}manifest.json", "application/json")
+        _put_text(selected_title_path, f"{prefix}selected_title.txt", "text/plain; charset=utf-8")
+        _put_text(description_path, f"{prefix}description.txt", "text/plain; charset=utf-8")
+        _put_text(titles_path, f"{prefix}titles.txt", "text/plain; charset=utf-8")
+        _put_text(transcript_text_path, f"{prefix}transcript.txt", "text/plain; charset=utf-8")
+        _put_text(transcript_json_path, f"{prefix}transcript.json", "application/json")
+
+        uploaded_thumbnails = []
+        for i, url in enumerate(thumbnail_urls, start=1):
+            rel_path = (url or "").split("?", 1)[0].lstrip("/")
+            local_path = os.path.join("output", rel_path)
+            if not os.path.exists(local_path):
+                continue
+            ext = os.path.splitext(local_path)[1].lower() or ".jpg"
+            thumb_name = os.path.basename(local_path)
+            thumb_key = f"{prefix}thumbnails/{thumb_name}"
+            content_type = "image/png" if ext == ".png" else "image/jpeg"
+            s3_client.upload_file(
+                local_path,
+                bucket_name,
+                thumb_key,
+                ExtraArgs={"ContentType": content_type},
+            )
+            uploaded_thumbnails.append({
+                "name": os.path.basename(local_path),
+                "key": thumb_key,
+                "url": _build_public_gallery_url(bucket_name, thumb_key, expiration=604800),
+            })
+
+    return {
+        "bucket": bucket_name,
+        "prefix": prefix,
+        "key": f"{prefix}manifest.json",
+        "url": generate_presigned_url(bucket_name, f"{prefix}manifest.json", expiration=604800),
+        "project_title": title or "",
+        "project_slug": project_slug,
+        "thumbnail_count": len(thumbnail_urls),
+        "files": [
+            {"name": "manifest.json", "key": f"{prefix}manifest.json"},
+            {"name": "selected_title.txt", "key": f"{prefix}selected_title.txt"},
+            {"name": "description.txt", "key": f"{prefix}description.txt"},
+            {"name": "titles.txt", "key": f"{prefix}titles.txt"},
+            {"name": "transcript.txt", "key": f"{prefix}transcript.txt"},
+            {"name": "transcript.json", "key": f"{prefix}transcript.json"},
+        ] + uploaded_thumbnails,
+    }
+
+
+def get_thumbnail_project(session_id, project_slug):
+    bucket_name = os.environ.get("AWS_S3_BUCKET", "").strip() or os.environ.get("AWS_S3_PUBLIC_BUCKET", "").strip()
+    if not bucket_name:
+        return None
+
+    s3_client = get_s3_client()
+    if not s3_client:
+        return None
+
+    prefix = _project_prefix(session_id, project_slug)
+    manifest_key = _project_manifest_key(session_id, project_slug)
+    try:
+        manifest_text = _read_s3_text_object(s3_client, bucket_name, manifest_key)
+        manifest = json.loads(manifest_text)
+
+        paginator = s3_client.get_paginator("list_objects_v2")
+        pages = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
+        files = []
+        for page in pages:
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                if key == prefix:
+                    continue
+                if key.endswith("/"):
+                    continue
+                rel_name = key[len(prefix):] if key.startswith(prefix) else key
+                files.append({
+                    "name": rel_name,
+                    "key": key,
+                    "size": obj.get("Size", 0),
+                    "created_at": obj["LastModified"].isoformat(),
+                    "url": generate_presigned_url(bucket_name, key, expiration=604800),
+                    "kind": _project_file_kind(rel_name),
+                    "editable": _project_file_kind(rel_name) == "text",
+                    "deletable": rel_name != "manifest.json",
+                })
+
+        files.sort(key=lambda item: item["name"])
+        manifest["files"] = files
+        manifest["bucket"] = bucket_name
+        manifest["prefix"] = prefix
+        manifest["key"] = manifest_key
+        manifest["url"] = generate_presigned_url(bucket_name, manifest_key, expiration=604800)
+        manifest["project_slug"] = project_slug
+        manifest["session_id"] = session_id
+        manifest["file_count"] = len(files)
+        manifest["thumbnail_count"] = len([f for f in files if f["name"].startswith("thumbnails/")])
+        return manifest
+    except Exception as e:
+        logger.error(f"Failed to read thumbnail project {prefix}: {e}")
+        return None
+
+
+def update_thumbnail_project(session_id, project_slug, title=None, description=None, selected_thumbnail=None):
+    bucket_name = os.environ.get("AWS_S3_BUCKET", "").strip() or os.environ.get("AWS_S3_PUBLIC_BUCKET", "").strip()
+    if not bucket_name:
+        return None
+
+    s3_client = get_s3_client()
+    if not s3_client:
+        return None
+
+    manifest_key = _project_manifest_key(session_id, project_slug)
+    try:
+        manifest = json.loads(_read_s3_text_object(s3_client, bucket_name, manifest_key))
+    except Exception:
+        return None
+
+    if title is not None:
+        manifest["project_title"] = title
+        manifest["title"] = title
+        _write_s3_text_object(s3_client, bucket_name, f"{_project_prefix(session_id, project_slug)}selected_title.txt", title, "text/plain; charset=utf-8")
+    if description is not None:
+        manifest["description"] = description
+        _write_s3_text_object(s3_client, bucket_name, f"{_project_prefix(session_id, project_slug)}description.txt", description, "text/plain; charset=utf-8")
+    if selected_thumbnail is not None:
+        manifest["selected_thumbnail"] = selected_thumbnail
+
+    _write_s3_text_object(s3_client, bucket_name, manifest_key, json.dumps(manifest, ensure_ascii=False, indent=2), "application/json")
+    return get_thumbnail_project(session_id, project_slug)
+
+
+def update_thumbnail_project_file(session_id, project_slug, file_path, content):
+    bucket_name = os.environ.get("AWS_S3_BUCKET", "").strip() or os.environ.get("AWS_S3_PUBLIC_BUCKET", "").strip()
+    if not bucket_name:
+        return None
+
+    s3_client = get_s3_client()
+    if not s3_client:
+        return None
+
+    prefix = _project_prefix(session_id, project_slug)
+    normalized = file_path.lstrip("/")
+    if normalized.startswith(prefix):
+        object_key = normalized
+        rel_name = normalized[len(prefix):]
+    else:
+        object_key = f"{prefix}{normalized}"
+        rel_name = normalized
+
+    if object_key.endswith("manifest.json"):
+        try:
+            manifest = json.loads(content)
+        except Exception:
+            return None
+        _write_s3_text_object(s3_client, bucket_name, object_key, json.dumps(manifest, ensure_ascii=False, indent=2), "application/json")
+        return get_thumbnail_project(session_id, project_slug)
+
+    kind = _project_file_kind(rel_name)
+    if kind != "text":
+        return None
+
+    content_type = "application/json" if rel_name.endswith(".json") else "text/plain; charset=utf-8"
+    _write_s3_text_object(s3_client, bucket_name, object_key, content, content_type)
+    return get_thumbnail_project(session_id, project_slug)
+
+
+def delete_thumbnail_project_file(session_id, project_slug, file_path):
+    bucket_name = os.environ.get("AWS_S3_BUCKET", "").strip() or os.environ.get("AWS_S3_PUBLIC_BUCKET", "").strip()
+    if not bucket_name:
+        return None
+
+    s3_client = get_s3_client()
+    if not s3_client:
+        return None
+
+    prefix = _project_prefix(session_id, project_slug)
+    normalized = file_path.lstrip("/")
+    if normalized.startswith(prefix):
+        object_key = normalized
+        rel_name = normalized[len(prefix):]
+    else:
+        object_key = f"{prefix}{normalized}"
+        rel_name = normalized
+
+    if object_key.endswith("manifest.json"):
+        return None
+
+    try:
+        s3_client.delete_object(Bucket=bucket_name, Key=object_key)
+    except Exception:
+        return None
+
+    if rel_name.startswith("thumbnails/"):
+        try:
+            manifest_key = _project_manifest_key(session_id, project_slug)
+            manifest = json.loads(_read_s3_text_object(s3_client, bucket_name, manifest_key))
+            thumb_name = os.path.basename(rel_name)
+            thumb_candidates = {thumb_name}
+            match = re.match(r"^(\d+)\.(jpg|jpeg|png|webp|gif)$", thumb_name, re.IGNORECASE)
+            if match:
+                thumb_candidates.add(f"thumb_{int(match.group(1))}.{match.group(2).lower()}")
+            urls = []
+            for url in manifest.get("generated_thumbnails", []):
+                url_rel = (url or "").split("?", 1)[0].lstrip("/")
+                if os.path.basename(url_rel) not in thumb_candidates:
+                    urls.append(url)
+            manifest["generated_thumbnails"] = urls
+            selected = manifest.get("selected_thumbnail", "")
+            if selected and os.path.basename((selected or "").split("?", 1)[0].lstrip("/")) in thumb_candidates:
+                manifest["selected_thumbnail"] = ""
+            _write_s3_text_object(s3_client, bucket_name, manifest_key, json.dumps(manifest, ensure_ascii=False, indent=2), "application/json")
+        except Exception:
+            pass
+
+    return get_thumbnail_project(session_id, project_slug)
+
+
+def delete_thumbnail_project(session_id, project_slug):
+    bucket_name = os.environ.get("AWS_S3_BUCKET", "").strip() or os.environ.get("AWS_S3_PUBLIC_BUCKET", "").strip()
+    if not bucket_name:
+        return None
+
+    s3_client = get_s3_client()
+    if not s3_client:
+        return None
+
+    prefix = _project_prefix(session_id, project_slug)
+    try:
+        deleted = _delete_objects_with_prefix(s3_client, bucket_name, prefix)
+        return {"deleted": deleted, "prefix": prefix}
+    except Exception:
+        return None
+
+
+def list_thumbnail_projects(limit=24, force_refresh=False):
+    """
+    List saved thumbnail studio projects from S3/MinIO.
+    Projects are grouped by thumbnail-projects/<session>/<project_slug>/ prefixes.
+    """
+    bucket_name = os.environ.get("AWS_S3_BUCKET", "").strip() or os.environ.get("AWS_S3_PUBLIC_BUCKET", "").strip()
+    if not bucket_name:
+        return []
+
+    s3_client = get_s3_client()
+    if not s3_client:
+        return []
+
+    projects = {}
+    try:
+        paginator = s3_client.get_paginator("list_objects_v2")
+        pages = paginator.paginate(Bucket=bucket_name, Prefix="thumbnail-projects/")
+
+        for page in pages:
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                if not key.startswith("thumbnail-projects/"):
+                    continue
+                parts = key.split("/")
+                if len(parts) < 4:
+                    continue
+                project_prefix = "/".join(parts[:3]) + "/"
+                project = projects.setdefault(project_prefix, {
+                    "prefix": project_prefix,
+                    "bucket": bucket_name,
+                    "files": [],
+                    "created_at": obj["LastModified"].isoformat(),
+                    "title": "",
+                    "description": "",
+                    "thumbnail_count": 0,
+                    "selected_thumbnail": "",
+                    "session_id": parts[1],
+                    "project_slug": parts[2],
+                })
+                project["files"].append({
+                    "name": "/".join(parts[3:]),
+                    "key": key,
+                    "size": obj.get("Size", 0),
+                    "created_at": obj["LastModified"].isoformat(),
+                    "url": generate_presigned_url(bucket_name, key, expiration=604800),
+                    "kind": _project_file_kind("/".join(parts[3:])),
+                    "editable": _project_file_kind("/".join(parts[3:])) == "text",
+                    "deletable": "/".join(parts[3:]) != "manifest.json",
+                })
+
+        for project_prefix, project in projects.items():
+            manifest_file = next((f for f in project["files"] if f["key"].endswith("/manifest.json")), None)
+            if manifest_file:
+                try:
+                    resp = s3_client.get_object(Bucket=bucket_name, Key=manifest_file["key"])
+                    manifest = json.loads(resp["Body"].read().decode("utf-8"))
+                    project["title"] = manifest.get("project_title") or manifest.get("title") or project["project_slug"]
+                    project["description"] = manifest.get("description", "")
+                    project["thumbnail_count"] = len(manifest.get("generated_thumbnails", []))
+                    project["selected_thumbnail"] = manifest.get("selected_thumbnail", "")
+                    project["created_at"] = manifest.get("created_at", project["created_at"])
+                except Exception:
+                    project["title"] = project["project_slug"]
+
+            project["files"].sort(key=lambda item: item["name"])
+            project["file_count"] = len(project["files"])
+
+        ordered = sorted(projects.values(), key=lambda item: item.get("created_at", ""), reverse=True)
+        return ordered[:limit] if limit else ordered
+    except Exception as e:
+        logger.error(f"Failed to list thumbnail projects: {e}")
+        return []
 
 
