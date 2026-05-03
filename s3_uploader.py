@@ -557,6 +557,45 @@ def _project_file_kind(name):
     return "file"
 
 
+def _write_project_manifest_and_metadata_files(s3_client, bucket_name, session_id, project_slug, manifest):
+    prefix = _project_prefix(session_id, project_slug)
+    _write_s3_text_object(s3_client, bucket_name, _project_manifest_key(session_id, project_slug), json.dumps(manifest, ensure_ascii=False, indent=2), "application/json")
+
+    title = manifest.get("project_title") or manifest.get("title") or ""
+    description = manifest.get("description", "") or ""
+    _write_s3_text_object(s3_client, bucket_name, f"{prefix}selected_title.txt", title, "text/plain; charset=utf-8")
+    _write_s3_text_object(s3_client, bucket_name, f"{prefix}description.txt", description, "text/plain; charset=utf-8")
+
+
+def _write_project_manifest_only(s3_client, bucket_name, session_id, project_slug, manifest):
+    _write_s3_text_object(
+        s3_client,
+        bucket_name,
+        _project_manifest_key(session_id, project_slug),
+        json.dumps(manifest, ensure_ascii=False, indent=2),
+        "application/json",
+    )
+
+
+def _sync_manifest_from_file_change(manifest, rel_name, content=None):
+    normalized = rel_name.replace("\\", "/").lstrip("/")
+    base = os.path.basename(normalized)
+
+    if base == "selected_title.txt":
+        title = (content or "").strip()
+        manifest["project_title"] = title
+        manifest["title"] = title
+    elif base == "description.txt":
+        manifest["description"] = content or ""
+    elif base == "manifest.json" and content is not None:
+        try:
+            updated = json.loads(content)
+        except Exception:
+            return None
+        manifest.update(updated)
+    return manifest
+
+
 def upload_thumbnail_project(session_id, session_data, title=None, description=None, thumbnail_urls=None, selected_thumbnail=None):
     """
     Upload a thumbnail studio session into a browsable S3/MinIO project prefix.
@@ -778,7 +817,7 @@ def update_thumbnail_project_file(session_id, project_slug, file_path, content):
             manifest = json.loads(content)
         except Exception:
             return None
-        _write_s3_text_object(s3_client, bucket_name, object_key, json.dumps(manifest, ensure_ascii=False, indent=2), "application/json")
+        _write_project_manifest_and_metadata_files(s3_client, bucket_name, session_id, project_slug, manifest)
         return get_thumbnail_project(session_id, project_slug)
 
     kind = _project_file_kind(rel_name)
@@ -787,6 +826,16 @@ def update_thumbnail_project_file(session_id, project_slug, file_path, content):
 
     content_type = "application/json" if rel_name.endswith(".json") else "text/plain; charset=utf-8"
     _write_s3_text_object(s3_client, bucket_name, object_key, content, content_type)
+    if os.path.basename(rel_name) in ("selected_title.txt", "description.txt"):
+        manifest_key = _project_manifest_key(session_id, project_slug)
+        try:
+            manifest = json.loads(_read_s3_text_object(s3_client, bucket_name, manifest_key))
+        except Exception:
+            return None
+        updated_manifest = _sync_manifest_from_file_change(manifest, rel_name, content)
+        if updated_manifest is None:
+            return None
+        _write_project_manifest_and_metadata_files(s3_client, bucket_name, session_id, project_slug, updated_manifest)
     return get_thumbnail_project(session_id, project_slug)
 
 
@@ -834,7 +883,16 @@ def delete_thumbnail_project_file(session_id, project_slug, file_path):
             selected = manifest.get("selected_thumbnail", "")
             if selected and os.path.basename((selected or "").split("?", 1)[0].lstrip("/")) in thumb_candidates:
                 manifest["selected_thumbnail"] = ""
-            _write_s3_text_object(s3_client, bucket_name, manifest_key, json.dumps(manifest, ensure_ascii=False, indent=2), "application/json")
+            _write_project_manifest_only(s3_client, bucket_name, session_id, project_slug, manifest)
+        except Exception:
+            pass
+    elif os.path.basename(rel_name) in ("selected_title.txt", "description.txt"):
+        try:
+            manifest_key = _project_manifest_key(session_id, project_slug)
+            manifest = json.loads(_read_s3_text_object(s3_client, bucket_name, manifest_key))
+            updated_manifest = _sync_manifest_from_file_change(manifest, rel_name, "")
+            if updated_manifest is not None:
+                _write_project_manifest_only(s3_client, bucket_name, session_id, project_slug, updated_manifest)
         except Exception:
             pass
 
