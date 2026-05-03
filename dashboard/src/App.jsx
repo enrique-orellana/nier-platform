@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Upload, FileVideo, Sparkles, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2 } from 'lucide-react';
 import KeyInput from './components/KeyInput';
 import MediaInput from './components/MediaInput';
@@ -135,6 +135,11 @@ const pollJob = async (jobId) => {
 
 function App() {
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_key') || '');
+  const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('ai_provider_v1') || import.meta.env.VITE_AI_PROVIDER || 'gemini');
+  const [aiBaseUrl, setAiBaseUrl] = useState(() => localStorage.getItem('ai_base_url_v1') || import.meta.env.VITE_AI_BASE_URL || 'http://localhost:11434');
+  const [aiTextModel, setAiTextModel] = useState(() => localStorage.getItem('ai_text_model_v1') || import.meta.env.VITE_AI_MODEL || 'qwen3:latest');
+  const [aiVisionModel, setAiVisionModel] = useState(() => localStorage.getItem('ai_vision_model_v1') || import.meta.env.VITE_AI_VISION_MODEL || 'qwen2.5vl:latest');
+  const [aiImageModel, setAiImageModel] = useState(() => localStorage.getItem('ai_image_model_v1') || '');
   // Social API State - Load encrypted or plain
   const [uploadPostKey, setUploadPostKey] = useState(() => {
     const stored = localStorage.getItem('uploadPostKey_v3');
@@ -165,9 +170,14 @@ function App() {
   const [logsVisible, setLogsVisible] = useState(true);
   const [processingMedia, setProcessingMedia] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, settings
+  const [clipCount, setClipCount] = useState(() => {
+    const stored = Number(localStorage.getItem('clip_count_v1'));
+    return Number.isFinite(stored) && stored >= 3 && stored <= 15 ? stored : 6;
+  });
 
   const [sessionRecovered, setSessionRecovered] = useState(false);
   const [showScheduleWeek, setShowScheduleWeek] = useState(false);
+  const isLocalAi = aiProvider !== 'gemini';
 
   // Sync state for original video playback
   const [syncedTime, setSyncedTime] = useState(0);
@@ -228,13 +238,37 @@ function App() {
     } catch (e) {
       // localStorage full or serialization error - ignore
     }
-  }, [jobId, status, results, activeTab]);
+  }, [jobId, status, results, activeTab, processingMedia]);
 
   useEffect(() => {
     // Encrypt Gemini Key too for consistency if desired, but user asked specifically about Social integration not saving well.
     // For now keeping gemini plain for compatibility unless requested.
     if (apiKey) localStorage.setItem('gemini_key', apiKey);
   }, [apiKey]);
+
+  useEffect(() => {
+    localStorage.setItem('ai_provider_v1', aiProvider);
+  }, [aiProvider]);
+
+  useEffect(() => {
+    localStorage.setItem('ai_base_url_v1', aiBaseUrl);
+  }, [aiBaseUrl]);
+
+  useEffect(() => {
+    localStorage.setItem('ai_text_model_v1', aiTextModel);
+  }, [aiTextModel]);
+
+  useEffect(() => {
+    localStorage.setItem('ai_vision_model_v1', aiVisionModel);
+  }, [aiVisionModel]);
+
+  useEffect(() => {
+    localStorage.setItem('ai_image_model_v1', aiImageModel);
+  }, [aiImageModel]);
+
+  useEffect(() => {
+    localStorage.setItem('clip_count_v1', String(clipCount));
+  }, [clipCount]);
 
   useEffect(() => {
     if (uploadPostKey) {
@@ -257,11 +291,56 @@ function App() {
     }
   }, [falKey]);
 
+  const getAiHeaders = (contentType = null) => {
+    const headers = {
+      'X-AI-Provider': aiProvider,
+      'X-AI-Base-Url': aiBaseUrl,
+      'X-AI-Model': aiTextModel,
+      'X-AI-Vision-Model': aiVisionModel,
+      'X-AI-Image-Model': aiImageModel,
+    };
+
+    if (aiProvider === 'gemini' && apiKey) {
+      headers['X-Gemini-Key'] = apiKey;
+    } else if (apiKey) {
+      headers['X-AI-Api-Key'] = apiKey;
+    }
+
+    if (contentType === 'json') {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    return headers;
+  };
+
+  const fetchUserProfiles = useCallback(async () => {
+    if (!uploadPostKey) return;
+    try {
+      const res = await fetch(getApiUrl('/api/social/user'), {
+        headers: { 'X-Upload-Post-Key': uploadPostKey }
+      });
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      if (data.profiles && data.profiles.length > 0) {
+        setUserProfiles(data.profiles);
+        // Auto select first if none selected
+        if (!uploadUserId) {
+          setUploadUserId(data.profiles[0].username);
+        }
+      } else {
+        alert("No profiles found for this API Key.");
+      }
+    } catch (e) {
+      alert("Error fetching User Profiles. Please check key.");
+      console.error(e);
+    }
+  }, [uploadPostKey, uploadUserId]);
+
   useEffect(() => {
     if (uploadPostKey && userProfiles.length === 0) {
       fetchUserProfiles();
     }
-  }, [uploadPostKey]);
+  }, [uploadPostKey, userProfiles.length, fetchUserProfiles]);
 
   useEffect(() => {
     let interval;
@@ -297,31 +376,8 @@ function App() {
   }, [status, jobId]);
 
 
-  const fetchUserProfiles = async () => {
-    if (!uploadPostKey) return;
-    try {
-      const res = await fetch(getApiUrl('/api/social/user'), {
-        headers: { 'X-Upload-Post-Key': uploadPostKey }
-      });
-      if (!res.ok) throw new Error("Failed to fetch");
-      const data = await res.json();
-      if (data.profiles && data.profiles.length > 0) {
-        setUserProfiles(data.profiles);
-        // Auto select first if none selected
-        if (!uploadUserId) {
-          setUploadUserId(data.profiles[0].username);
-        }
-      } else {
-        alert("No profiles found for this API Key.");
-      }
-    } catch (e) {
-      alert("Error fetching User Profiles. Please check key.");
-      console.error(e);
-    }
-  };
-
   const handleProcess = async (data) => {
-    if (!apiKey) {
+    if (aiProvider === 'gemini' && !apiKey) {
       setShowKeyModal(true);
       return;
     }
@@ -332,7 +388,9 @@ function App() {
 
     try {
       let body;
-      const headers = { 'X-Gemini-Key': apiKey };
+      const headers = getAiHeaders();
+      const selectedClipCount = data.clipCount || clipCount;
+      const processUrl = getApiUrl(`/api/process?clip_count=${encodeURIComponent(selectedClipCount)}`);
 
       if (data.type === 'url') {
         headers['Content-Type'] = 'application/json';
@@ -343,9 +401,9 @@ function App() {
         body = formData;
       }
 
-      const res = await fetch(getApiUrl('/api/process'), {
+      const res = await fetch(processUrl, {
         method: 'POST',
-        headers: data.type === 'url' ? headers : { 'X-Gemini-Key': apiKey },
+        headers: data.type === 'url' ? headers : getAiHeaders(),
         body
       });
 
@@ -502,7 +560,7 @@ function App() {
               />
             )}
 
-            {!apiKey && (
+            {!isLocalAi && !apiKey && (
               <button
                 onClick={() => setActiveTab('settings')}
                 className="text-xs text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1 rounded-full border border-amber-500/30 transition-colors flex items-center gap-1.5"
@@ -516,7 +574,7 @@ function App() {
         </header>
 
         {/* Persistent Missing Keys Banner — visible on every screen */}
-        {!apiKey && activeTab !== 'settings' && (
+        {!isLocalAi && !apiKey && activeTab !== 'settings' && (
           <div className="mx-6 mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between gap-4 shrink-0 animate-[fadeIn_0.3s_ease-out]">
             <div className="flex items-center gap-3 text-sm text-amber-200">
               <KeyRound size={16} className="shrink-0 text-amber-400" />
@@ -562,7 +620,78 @@ function App() {
                   <Shield size={12} /> Privacy: keys only live in your browser (sent to backend just to process)
                 </div>
               </div>
-              <KeyInput onKeySet={setApiKey} savedKey={apiKey} />
+              <div className="glass-panel p-6 mb-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold">AI Provider</h2>
+                  <span className="text-[10px] bg-white/5 border border-white/5 px-2 py-0.5 rounded text-zinc-500 uppercase tracking-wider">Optional</span>
+                </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="block text-sm text-zinc-400 mb-2">Provider</span>
+                    <select value={aiProvider} onChange={(e) => setAiProvider(e.target.value)} className="input-field">
+                      <option value="gemini">Gemini (Cloud)</option>
+                      <option value="ollama">Ollama (Local)</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="block text-sm text-zinc-400 mb-2">API / Access Key</span>
+                    <input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      className="input-field"
+                      placeholder={aiProvider === 'gemini' ? 'AIza...' : 'Optional'}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="block text-sm text-zinc-400 mb-2">Base URL</span>
+                    <input
+                      type="text"
+                      value={aiBaseUrl}
+                      onChange={(e) => setAiBaseUrl(e.target.value)}
+                      className="input-field"
+                      placeholder="http://localhost:11434"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="block text-sm text-zinc-400 mb-2">Text Model</span>
+                    <input
+                      type="text"
+                      value={aiTextModel}
+                      onChange={(e) => setAiTextModel(e.target.value)}
+                      className="input-field"
+                      placeholder="qwen3:latest"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="block text-sm text-zinc-400 mb-2">Vision Model</span>
+                    <input
+                      type="text"
+                      value={aiVisionModel}
+                      onChange={(e) => setAiVisionModel(e.target.value)}
+                      className="input-field"
+                      placeholder="qwen2.5vl:latest"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="block text-sm text-zinc-400 mb-2">Image Model</span>
+                    <input
+                      type="text"
+                      value={aiImageModel}
+                      onChange={(e) => setAiImageModel(e.target.value)}
+                      className="input-field"
+                      placeholder="Optional"
+                    />
+                  </label>
+                </div>
+                <p className="text-xs text-zinc-500 mt-4 leading-relaxed">
+                  {aiProvider === 'gemini'
+                    ? 'Gemini mode keeps the cloud flow. Switch to Ollama for a fully local setup.'
+                    : 'Ollama mode uses your local model stack. Suggested defaults: qwen3:latest for text and qwen2.5vl:latest for vision.'}
+                </p>
+              </div>
+
+              {aiProvider === 'gemini' && <KeyInput onKeySet={setApiKey} savedKey={apiKey} />}
 
               <div className={`glass-panel p-6 mt-8 ${!uploadPostKey ? 'border-amber-500/30 ring-1 ring-amber-500/20' : ''}`}>
                 <div className="flex items-center justify-between mb-4">
@@ -717,7 +846,7 @@ function App() {
 
           {/* View: SaaS Shorts */}
           {activeTab === 'saasshorts' && (
-            <SaaShortsTab geminiApiKey={apiKey} elevenLabsKey={elevenLabsKey} falKey={falKey} uploadPostKey={uploadPostKey} uploadUserId={uploadUserId} />
+            <SaaShortsTab aiProvider={aiProvider} aiApiKey={apiKey} getAiHeaders={getAiHeaders} elevenLabsKey={elevenLabsKey} falKey={falKey} uploadPostKey={uploadPostKey} uploadUserId={uploadUserId} />
           )}
 
           {/* View: AI Agent */}
@@ -843,7 +972,7 @@ function App() {
 
           {/* View: Thumbnails */}
           {activeTab === 'thumbnails' && (
-            <ThumbnailStudio geminiApiKey={apiKey} uploadPostKey={uploadPostKey} uploadUserId={uploadUserId} />
+            <ThumbnailStudio aiProvider={aiProvider} aiApiKey={apiKey} getAiHeaders={getAiHeaders} uploadPostKey={uploadPostKey} uploadUserId={uploadUserId} />
           )}
 
           {/* View: Gallery */}
@@ -864,7 +993,12 @@ function App() {
                   </p>
                 </div>
 
-                <MediaInput onProcess={handleProcess} isProcessing={status === 'processing'} />
+                <MediaInput
+                  onProcess={handleProcess}
+                  isProcessing={status === 'processing'}
+                  targetClipCount={clipCount}
+                  onTargetClipCountChange={setClipCount}
+                />
 
                 <div className="flex items-center justify-center gap-8 text-zinc-500 text-sm">
                   <span className="flex items-center gap-2"><Youtube size={16} /> YouTube</span>
@@ -968,7 +1102,9 @@ function App() {
                           jobId={jobId}
                           uploadPostKey={uploadPostKey}
                           uploadUserId={uploadUserId}
-                          geminiApiKey={apiKey}
+                          aiProvider={aiProvider}
+                          aiApiKey={apiKey}
+                          getAiHeaders={getAiHeaders}
                           elevenLabsKey={elevenLabsKey}
                           onPlay={(time) => handleClipPlay(time)}
                           onPause={handleClipPause}

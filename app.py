@@ -10,12 +10,13 @@ import asyncio
 from dotenv import load_dotenv
 from typing import Dict, Optional, List
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Header, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Header, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from s3_uploader import upload_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery
+from ai_client import AIConfig, load_ai_config, ai_config_to_env
 
 load_dotenv()
 
@@ -38,6 +39,31 @@ thumbnail_sessions: Dict[str, Dict] = {}
 publish_jobs: Dict[str, Dict] = {}  # {publish_id: {status, result, error}}
 # Semester to limit concurrency to MAX_CONCURRENT_JOBS
 concurrency_semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
+
+
+def build_ai_config(
+    provider: Optional[str] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    model: Optional[str] = None,
+    vision_model: Optional[str] = None,
+    image_model: Optional[str] = None,
+    extra: Optional[Dict[str, str]] = None,
+) -> AIConfig:
+    source = dict(extra or {})
+    if provider:
+        source["X-AI-Provider"] = provider
+    if api_key:
+        source["X-AI-Api-Key"] = api_key
+    if base_url:
+        source["X-AI-Base-Url"] = base_url
+    if model:
+        source["X-AI-Model"] = model
+    if vision_model:
+        source["X-AI-Vision-Model"] = vision_model
+    if image_model:
+        source["X-AI-Image-Model"] = image_model
+    return load_ai_config(source)
 
 def _relocate_root_job_artifacts(job_id: str, job_output_dir: str) -> bool:
     """
@@ -312,11 +338,26 @@ async def run_job(job_id, job_data):
 async def process_endpoint(
     request: Request,
     file: Optional[UploadFile] = File(None),
-    url: Optional[str] = Form(None)
+    url: Optional[str] = Form(None),
+    clip_count: int = Query(6, ge=3, le=15),
+    x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
+    x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
+    x_ai_base_url: Optional[str] = Header(None, alias="X-AI-Base-Url"),
+    x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
+    x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
+    x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
 ):
-    api_key = request.headers.get("X-Gemini-Key")
-    if not api_key:
-        raise HTTPException(status_code=400, detail="Missing X-Gemini-Key header")
+    ai_config = build_ai_config(
+        provider=x_ai_provider or request.headers.get("X-Gemini-Key") and "gemini",
+        api_key=x_ai_api_key or request.headers.get("X-Gemini-Key"),
+        base_url=x_ai_base_url,
+        model=x_ai_model,
+        vision_model=x_ai_vision_model,
+        image_model=x_ai_image_model,
+        extra=dict(request.headers),
+    )
+    if ai_config.is_gemini() and not ai_config.api_key:
+        raise HTTPException(status_code=400, detail="Missing Gemini API key")
     
     # Handle JSON body manually for URL payload
     content_type = request.headers.get("content-type", "")
@@ -334,7 +375,7 @@ async def process_endpoint(
     # Prepare Command
     cmd = ["python", "-u", "main.py"] # -u for unbuffered
     env = os.environ.copy()
-    env["GEMINI_API_KEY"] = api_key # Override with key from request
+    env.update(ai_config_to_env(ai_config))
     
     if url:
         cmd.extend(["-u", url])
@@ -357,6 +398,7 @@ async def process_endpoint(
                 
         cmd.extend(["-i", input_path])
 
+    cmd.extend(["--target-clips", str(clip_count)])
     cmd.extend(["-o", job_output_dir])
 
     # Enqueue Job
@@ -399,12 +441,25 @@ class EditRequest(BaseModel):
 @app.post("/api/edit")
 async def edit_clip(
     req: EditRequest,
-    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key")
+    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key"),
+    x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
+    x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
+    x_ai_base_url: Optional[str] = Header(None, alias="X-AI-Base-Url"),
+    x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
+    x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
+    x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
 ):
-    # Determine API Key
-    final_api_key = req.api_key or x_gemini_key or os.environ.get("GEMINI_API_KEY")
-    
-    if not final_api_key:
+    ai_config = build_ai_config(
+        provider=x_ai_provider or ("gemini" if (req.api_key or x_gemini_key or os.environ.get("GEMINI_API_KEY")) else None),
+        api_key=req.api_key or x_ai_api_key or x_gemini_key,
+        base_url=x_ai_base_url,
+        model=x_ai_model,
+        vision_model=x_ai_vision_model,
+        image_model=x_ai_image_model,
+        extra=dict(os.environ),
+    )
+
+    if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing Gemini API Key (Header or Body)")
 
     if req.job_id not in jobs:
@@ -437,7 +492,7 @@ async def edit_clip(
         # Run editing in a thread to avoid blocking main loop
         # Since VideoEditor uses blocking calls (subprocess, API wait)
         def run_edit():
-            editor = VideoEditor(api_key=final_api_key)
+            editor = VideoEditor(api_key_or_config=ai_config)
             
             # SAFE FILE RENAMING STRATEGY (Avoid UnicodeEncodeError in Docker)
             # Create a safe ASCII filename in the same directory
@@ -615,12 +670,25 @@ class EffectsGenerateRequest(BaseModel):
 @app.post("/api/effects/generate")
 async def generate_effects_config(
     req: EffectsGenerateRequest,
-    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key")
+    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key"),
+    x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
+    x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
+    x_ai_base_url: Optional[str] = Header(None, alias="X-AI-Base-Url"),
+    x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
+    x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
+    x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
 ):
-    """Generate structured EffectsConfig JSON for Remotion rendering via Gemini AI."""
-    final_api_key = x_gemini_key or os.environ.get("GEMINI_API_KEY")
+    """Generate structured EffectsConfig JSON for Remotion rendering via the selected AI provider."""
+    ai_config = build_ai_config(
+        provider=x_ai_provider or ("gemini" if (x_gemini_key or os.environ.get("GEMINI_API_KEY")) else None),
+        api_key=x_ai_api_key or x_gemini_key,
+        base_url=x_ai_base_url,
+        model=x_ai_model,
+        vision_model=x_ai_vision_model,
+        image_model=x_ai_image_model,
+    )
 
-    if not final_api_key:
+    if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing Gemini API Key (Header)")
 
     if req.job_id not in jobs:
@@ -644,7 +712,7 @@ async def generate_effects_config(
             raise HTTPException(status_code=404, detail=f"Video file not found: {input_path}")
 
         def run_effects_generation():
-            editor = VideoEditor(api_key=final_api_key)
+            editor = VideoEditor(api_key_or_config=ai_config)
 
             # Create safe ASCII filename to avoid encoding issues
             safe_filename = f"temp_effects_{req.job_id}.mp4"
@@ -652,7 +720,6 @@ async def generate_effects_config(
             shutil.copy(input_path, safe_input_path)
 
             try:
-                # Upload video to Gemini
                 vid_file = editor.upload_video(safe_input_path)
 
                 # Get video metadata via ffprobe
@@ -1241,11 +1308,24 @@ async def thumbnail_analyze(
     file: Optional[UploadFile] = File(None),
     url: Optional[str] = Form(None),
     session_id: Optional[str] = Form(None),
-    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key")
+    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key"),
+    x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
+    x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
+    x_ai_base_url: Optional[str] = Header(None, alias="X-AI-Base-Url"),
+    x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
+    x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
+    x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
 ):
     """Analyze a video and suggest viral YouTube titles."""
-    api_key = x_gemini_key
-    if not api_key:
+    ai_config = build_ai_config(
+        provider=x_ai_provider or ("gemini" if (x_gemini_key or os.environ.get("GEMINI_API_KEY")) else None),
+        api_key=x_ai_api_key or x_gemini_key,
+        base_url=x_ai_base_url,
+        model=x_ai_model,
+        vision_model=x_ai_vision_model,
+        image_model=x_ai_image_model,
+    )
+    if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing X-Gemini-Key header")
 
     pre_transcript = None
@@ -1288,7 +1368,7 @@ async def thumbnail_analyze(
     try:
         # Run analysis in thread pool (skips Whisper if pre_transcript is available)
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, analyze_video_for_titles, api_key, video_path, pre_transcript)
+        result = await loop.run_in_executor(None, analyze_video_for_titles, ai_config, video_path, pre_transcript)
 
         # Store/update session context
         if session_id not in thumbnail_sessions:
@@ -1325,11 +1405,24 @@ class ThumbnailTitlesRequest(BaseModel):
 @app.post("/api/thumbnail/titles")
 async def thumbnail_titles(
     req: ThumbnailTitlesRequest,
-    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key")
+    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key"),
+    x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
+    x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
+    x_ai_base_url: Optional[str] = Header(None, alias="X-AI-Base-Url"),
+    x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
+    x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
+    x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
 ):
     """Refine title suggestions or accept a manual title."""
-    api_key = x_gemini_key
-    if not api_key:
+    ai_config = build_ai_config(
+        provider=x_ai_provider or ("gemini" if (x_gemini_key or os.environ.get("GEMINI_API_KEY")) else None),
+        api_key=x_ai_api_key or x_gemini_key,
+        base_url=x_ai_base_url,
+        model=x_ai_model,
+        vision_model=x_ai_vision_model,
+        image_model=x_ai_image_model,
+    )
+    if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing X-Gemini-Key header")
 
     # Manual title mode - just create a session with the user's title
@@ -1361,7 +1454,7 @@ async def thumbnail_titles(
         result = await loop.run_in_executor(
             None,
             refine_titles,
-            api_key,
+            ai_config,
             session["context"],
             req.message,
             session["conversation"]
@@ -1387,11 +1480,24 @@ async def thumbnail_generate(
     count: int = Form(3),
     face: Optional[UploadFile] = File(None),
     background: Optional[UploadFile] = File(None),
-    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key")
+    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key"),
+    x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
+    x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
+    x_ai_base_url: Optional[str] = Header(None, alias="X-AI-Base-Url"),
+    x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
+    x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
+    x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
 ):
     """Generate YouTube thumbnails with Gemini image generation."""
-    api_key = x_gemini_key
-    if not api_key:
+    ai_config = build_ai_config(
+        provider=x_ai_provider or ("gemini" if (x_gemini_key or os.environ.get("GEMINI_API_KEY")) else None),
+        api_key=x_ai_api_key or x_gemini_key,
+        base_url=x_ai_base_url,
+        model=x_ai_model,
+        vision_model=x_ai_vision_model,
+        image_model=x_ai_image_model,
+    )
+    if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing X-Gemini-Key header")
 
     # Clamp count
@@ -1424,7 +1530,7 @@ async def thumbnail_generate(
         thumbnails = await loop.run_in_executor(
             None,
             generate_thumbnail,
-            api_key,
+            ai_config,
             title,
             session_id,
             face_path,
@@ -1435,7 +1541,7 @@ async def thumbnail_generate(
         )
 
         if not thumbnails:
-            raise HTTPException(status_code=500, detail="Thumbnail generation failed. Please check your Gemini API key has access to image generation (gemini-3.1-flash-image-preview model).")
+            raise HTTPException(status_code=500, detail="Thumbnail generation failed. Please check your AI provider configuration.")
 
         return {"thumbnails": thumbnails}
 
@@ -1453,11 +1559,24 @@ class ThumbnailDescribeRequest(BaseModel):
 @app.post("/api/thumbnail/describe")
 async def thumbnail_describe(
     req: ThumbnailDescribeRequest,
-    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key")
+    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key"),
+    x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
+    x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
+    x_ai_base_url: Optional[str] = Header(None, alias="X-AI-Base-Url"),
+    x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
+    x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
+    x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
 ):
     """Generate a YouTube description with chapters from the transcript."""
-    api_key = x_gemini_key
-    if not api_key:
+    ai_config = build_ai_config(
+        provider=x_ai_provider or ("gemini" if (x_gemini_key or os.environ.get("GEMINI_API_KEY")) else None),
+        api_key=x_ai_api_key or x_gemini_key,
+        base_url=x_ai_base_url,
+        model=x_ai_model,
+        vision_model=x_ai_vision_model,
+        image_model=x_ai_image_model,
+    )
+    if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing X-Gemini-Key header")
 
     if req.session_id not in thumbnail_sessions:
@@ -1473,7 +1592,7 @@ async def thumbnail_describe(
         result = await loop.run_in_executor(
             None,
             generate_youtube_description,
-            api_key,
+            ai_config,
             req.title,
             segments,
             session.get("language", "en"),
@@ -1639,10 +1758,23 @@ class SaaSAnalyzeRequest(BaseModel):
 async def saasshorts_analyze(
     req: SaaSAnalyzeRequest,
     x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key"),
+    x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
+    x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
+    x_ai_base_url: Optional[str] = Header(None, alias="X-AI-Base-Url"),
+    x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
+    x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
+    x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
 ):
     """Analyze a URL or manual description and generate video scripts."""
-    gemini_key = x_gemini_key or os.environ.get("GEMINI_API_KEY")
-    if not gemini_key:
+    ai_config = build_ai_config(
+        provider=x_ai_provider or ("gemini" if (x_gemini_key or os.environ.get("GEMINI_API_KEY")) else None),
+        api_key=x_ai_api_key or x_gemini_key,
+        base_url=x_ai_base_url,
+        model=x_ai_model,
+        vision_model=x_ai_vision_model,
+        image_model=x_ai_image_model,
+    )
+    if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing Gemini API Key")
 
     if not req.url and not req.description:
@@ -1657,8 +1789,8 @@ async def saasshorts_analyze(
             if req.url and req.url.strip():
                 # URL provided: full scrape + research pipeline
                 scraped = scrape_website(req.url)
-                web_research = research_saas_online(req.url, gemini_key)
-                analysis = analyze_saas(scraped, gemini_key, web_research=web_research)
+                web_research = research_saas_online(req.url, ai_config, scraped_data=scraped)
+                analysis = analyze_saas(scraped, ai_config, web_research=web_research)
             else:
                 # Manual description: build analysis from description
                 analysis = {
@@ -1671,7 +1803,7 @@ async def saasshorts_analyze(
                     "tone": "casual and authentic",
                 }
 
-            scripts = generate_scripts(analysis, gemini_key, req.num_scripts, req.style, req.language, req.actor_gender)
+            scripts = generate_scripts(analysis, ai_config, req.num_scripts, req.style, req.language, req.actor_gender)
             return {
                 "analysis": analysis,
                 "scripts": scripts,

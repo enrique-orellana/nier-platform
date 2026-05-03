@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.jsx'
 import Landing from './Landing.jsx'
 
+// eslint-disable-next-line react-refresh/only-export-components
 function Root() {
   const [showApp, setShowApp] = useState(() => {
     return window.location.hash === '#app' || localStorage.getItem('openshorts_skip_landing') === '1';

@@ -92,7 +92,7 @@ function DragDropZone({ label, accept, onFile, file, onClear, icon: Icon }) {
   );
 }
 
-export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUserId }) {
+export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, uploadPostKey, uploadUserId }) {
   // Step management
   const [step, setStep] = useState(0);
   const [mode, setMode] = useState(null); // 'video' or 'manual'
@@ -165,7 +165,7 @@ export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUse
 
   // --- Step 1: Analyze Video ---
   const handleAnalyze = async () => {
-    if (!geminiApiKey) return alert('Please set your Gemini API key in Settings first.');
+    if (aiProvider === 'gemini' && !aiApiKey) return alert('Please set your Gemini API key in Settings first.');
     setIsAnalyzing(true);
 
     try {
@@ -182,7 +182,7 @@ export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUse
 
       const res = await fetch(getApiUrl('/api/thumbnail/analyze'), {
         method: 'POST',
-        headers: { 'X-Gemini-Key': geminiApiKey },
+        headers: getAiHeaders(),
         body: formData
       });
 
@@ -225,10 +225,7 @@ export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUse
       setSessionId(newSessionId);
       fetch(getApiUrl('/api/thumbnail/titles'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Gemini-Key': geminiApiKey
-        },
+        headers: getAiHeaders('json'),
         body: JSON.stringify({ title: manualTitle, session_id: newSessionId })
       }).catch(() => { });
     }
@@ -248,10 +245,7 @@ export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUse
     try {
       const res = await fetch(getApiUrl('/api/thumbnail/titles'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Gemini-Key': geminiApiKey
-        },
+        headers: getAiHeaders('json'),
         body: JSON.stringify({ session_id: sessionId, message: userMsg })
       });
 
@@ -275,7 +269,7 @@ export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUse
 
   // --- Step 3: Generate Thumbnails ---
   const handleGenerate = async () => {
-    if (!geminiApiKey) return alert('Please set your Gemini API key in Settings first.');
+    if (aiProvider === 'gemini' && !aiApiKey) return alert('Please set your Gemini API key in Settings first.');
     const finalTitle = selectedTitle || manualTitle;
     if (!finalTitle) return alert('Please select or enter a title first.');
 
@@ -293,7 +287,7 @@ export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUse
 
       const res = await fetch(getApiUrl('/api/thumbnail/generate'), {
         method: 'POST',
-        headers: { 'X-Gemini-Key': geminiApiKey },
+        headers: getAiHeaders(),
         body: formData
       });
 
@@ -304,7 +298,7 @@ export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUse
 
       const data = await res.json();
       if (!data.thumbnails || data.thumbnails.length === 0) {
-        throw new Error('No thumbnails were generated. Your Gemini API key may not have access to image generation.');
+        throw new Error('No thumbnails were generated. Check your AI provider configuration.');
       }
       setGeneratedThumbnails(data.thumbnails);
     } catch (e) {
@@ -334,7 +328,7 @@ export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUse
 
   // --- Description Generation ---
   const handleGenerateDescription = async () => {
-    if (!geminiApiKey) return alert('Please set your Gemini API key in Settings first.');
+    if (aiProvider === 'gemini' && !aiApiKey) return alert('Please set your Gemini API key in Settings first.');
     const finalTitle = selectedTitle || manualTitle;
     if (!finalTitle) return alert('Please select a title first.');
     if (!sessionId) return alert('No session available.');
@@ -343,10 +337,7 @@ export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUse
     try {
       const res = await fetch(getApiUrl('/api/thumbnail/describe'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Gemini-Key': geminiApiKey
-        },
+        headers: getAiHeaders('json'),
         body: JSON.stringify({ session_id: sessionId, title: finalTitle })
       });
 
@@ -479,19 +470,19 @@ export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUse
         <StepIndicator currentStep={step} />
 
         {/* Gemini API Key Warning */}
-        {!geminiApiKey && (
+        {aiProvider === 'gemini' && !aiApiKey && (
           <div className="mb-6 p-5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-3">
             <AlertCircle size={20} className="text-amber-400 shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-semibold text-amber-300">Gemini API Key Required</p>
-              <p className="text-xs text-amber-400/70 mt-1">YouTube Studio requires a Google Gemini API key to function. Please configure it in the <strong>Settings</strong> tab before using this feature. Gemini's free tier includes 1,500 requests per day.</p>
+              <p className="text-xs text-amber-400/70 mt-1">Switch to Ollama in Settings for a fully local setup, or keep Gemini mode and set a cloud key.</p>
             </div>
           </div>
         )}
 
         {/* ===== STEP 0: Input Mode Selection ===== */}
         {step === 0 && (
-          <div className={`grid md:grid-cols-2 gap-6 ${!geminiApiKey ? 'opacity-50 pointer-events-none select-none' : ''}`}>
+          <div className={`grid md:grid-cols-2 gap-6 ${aiProvider === 'gemini' && !aiApiKey ? 'opacity-50 pointer-events-none select-none' : ''}`}>
             {/* Mode A: Video Analysis */}
             <div className="glass-panel p-6 space-y-4">
               <div className="flex items-center gap-3 mb-2">

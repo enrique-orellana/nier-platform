@@ -21,6 +21,7 @@ import httpx
 from urllib.parse import urljoin
 from typing import Optional, List, Dict, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from ai_client import AIConfig, load_ai_config, chat_json
 
 
 ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1"
@@ -1472,3 +1473,272 @@ def generate_full_video(
         "duration": audio_duration,
         "cost_estimate": cost,
     }
+
+
+# ---------------------------------------------------------------------------
+# Provider-aware overrides
+# ---------------------------------------------------------------------------
+
+def research_saas_online(url: str, ai_config: AIConfig, scraped_data: Optional[dict] = None) -> dict:
+    """Local-first research helper with Gemini web-search fallback."""
+    domain = url.replace("https://", "").replace("http://", "").split("/")[0]
+
+    if not ai_config.is_gemini():
+        prompt = f"""You are a SaaS market researcher working in local-only mode.
+
+You do not have web search. Use the provided scraped website content to infer:
+1. What the product does
+2. Who it is for
+3. Pricing clues
+4. Likely pain points and differentiators
+5. Viral content angles based on the site copy
+
+URL: {url}
+Domain: {domain}
+
+SCRAPED WEBSITE DATA:
+{json.dumps(scraped_data or {}, indent=2)[:8000]}
+
+Return a comprehensive JSON research report:
+{{
+    "product_name": "...",
+    "website_url": "{url}",
+    "what_it_does": "Detailed description inferred from the site",
+    "target_market": "Who this product is for",
+    "pricing_info": "Pricing clues from the site, if any",
+    "user_sentiment": "overall positive/mixed/negative",
+    "real_reviews": [],
+    "common_complaints": [],
+    "common_praise": [],
+    "competitors": [],
+    "viral_potential": ["angle 1", "angle 2"],
+    "key_differentiators": ["what makes them unique"],
+    "content_angles_from_web": ["angles from the site copy"],
+    "sources_found": ["local-scrape"]
+}}"""
+        research = chat_json(ai_config, prompt, model=ai_config.text_model)
+        research["grounding_sources"] = [{"title": "Local scrape", "url": url}]
+        return research
+
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=ai_config.api_key)
+    prompt = f"""You are a world-class SaaS market researcher. Research this product thoroughly using Google Search.
+
+Product URL: {url}
+Domain: {domain}
+
+SEARCH AND INVESTIGATE:
+1. What does this SaaS product do? (search their website, Product Hunt, G2, Capterra)
+2. What are REAL user reviews saying? (G2, Capterra, TrustPilot, Reddit, Twitter/X)
+3. What are the most common complaints and pain points users mention?
+4. Who are their main competitors and how do they compare?
+5. What is their pricing and do users think it's worth it?
+6. What is their target market and ideal customer profile?
+7. Are there any viral posts, memes, or discussions about this product?
+8. What content creators or influencers have talked about them?
+
+Return a comprehensive JSON research report:
+{{
+    "product_name": "...",
+    "website_url": "{url}",
+    "what_it_does": "Detailed description of the product based on web research",
+    "target_market": "Who this product is for",
+    "pricing_info": "Pricing details found online (plans, costs, free tier)",
+    "user_sentiment": "overall positive/mixed/negative",
+    "real_reviews": [
+        {{"source": "G2/Reddit/Twitter/etc", "quote": "actual user quote or paraphrase", "sentiment": "positive/negative/neutral"}},
+        ...
+    ],
+    "common_complaints": ["complaint 1 from real users", "complaint 2", ...],
+    "common_praise": ["what users love 1", "what users love 2", ...],
+    "competitors": [
+        {{"name": "competitor", "comparison": "how they compare"}}
+    ],
+    "viral_potential": ["angle 1 based on real discussions", "angle 2", ...],
+    "key_differentiators": ["what makes them unique based on research"],
+    "content_angles_from_web": ["angles found from existing content about this product"],
+    "sources_found": ["list of URLs where information was found"]
+}}
+
+Be thorough. Use REAL data from your search results, not made-up information."""
+
+    response = client.models.generate_content(
+        model=ai_config.text_model,
+        contents=[prompt],
+        config=types.GenerateContentConfig(
+            tools=[types.Tool(google_search=types.GoogleSearch())],
+        ),
+    )
+
+    sources = []
+    try:
+        metadata = response.candidates[0].grounding_metadata
+        if metadata and metadata.grounding_chunks:
+            for chunk in metadata.grounding_chunks:
+                if chunk.web:
+                    sources.append({"title": chunk.web.title, "url": chunk.web.uri})
+        if metadata and metadata.web_search_queries:
+            print(f"[SaaSShorts]   Searches performed: {metadata.web_search_queries}")
+    except Exception:
+        pass
+
+    raw = response.text or ""
+    if not raw.strip():
+        return {"raw_research": "", "product_name": domain, "grounding_sources": sources}
+
+    try:
+        research = json.loads(raw)
+    except json.JSONDecodeError:
+        cleaned = re.sub(r"^```(?:json)?\n?|\n?```$", "", raw.strip())
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start != -1 and end != -1:
+            cleaned = cleaned[start : end + 1]
+        research = json.loads(cleaned)
+
+    research["grounding_sources"] = sources
+    return research
+
+
+def analyze_saas(scraped_data: dict, ai_config: AIConfig, web_research: dict = None) -> dict:
+    """Analyze a SaaS product using either Gemini or a local model."""
+    research_context = ""
+    if web_research:
+        research_context = f"""
+=== WEB RESEARCH ===
+Product: {web_research.get('product_name', 'Unknown')}
+What it does: {web_research.get('what_it_does', 'N/A')}
+Target market: {web_research.get('target_market', 'N/A')}
+Pricing: {web_research.get('pricing_info', 'N/A')}
+User sentiment: {web_research.get('user_sentiment', 'N/A')}
+
+Real user reviews:
+{json.dumps(web_research.get('real_reviews', [])[:8], indent=2)}
+
+Common complaints:
+{json.dumps(web_research.get('common_complaints', []), indent=2)}
+
+What users love:
+{json.dumps(web_research.get('common_praise', []), indent=2)}
+
+Competitors:
+{json.dumps(web_research.get('competitors', []), indent=2)}
+
+Viral angles:
+{json.dumps(web_research.get('viral_potential', []), indent=2)}
+
+Key differentiators:
+{json.dumps(web_research.get('key_differentiators', []), indent=2)}
+"""
+
+    prompt = f"""You are an expert SaaS marketing analyst and UGC content strategist. Analyze this SaaS product for creating viral UGC-style marketing videos.
+
+Website: {scraped_data['url']}
+Title: {scraped_data['title']}
+Meta: {scraped_data['meta_description']}
+Headings: {json.dumps(scraped_data['headings'][:15])}
+
+=== WEBSITE CONTENT ===
+{scraped_data['main_content'][:6000]}
+
+=== ADDITIONAL PAGES ===
+{scraped_data['additional_pages'][:8000]}
+{research_context}
+
+Return a JSON object:
+{{
+    "product_name": "Name of the SaaS",
+    "one_liner": "One-sentence description",
+    "target_audience": ["audience 1", "audience 2", "audience 3"],
+    "pain_points": [
+        {{"pain": "specific pain point (from real user feedback if available)", "intensity": "high/medium/low", "emotional_trigger": "frustration/fear/time-waste/money-loss/overwhelm", "source": "website/user-reviews/reddit/general"}}
+    ],
+    "key_features": ["feature 1", "feature 2", "feature 3"],
+    "unique_selling_points": ["usp 1", "usp 2"],
+    "competitors": [
+        {{"name": "competitor", "comparison": "how they compare"}}
+    ],
+    "pricing_model": "freemium/subscription/one-time/usage-based",
+    "pricing_details": "specific pricing info if found",
+    "industry": "category",
+    "user_sentiment_summary": "what real users think overall",
+    "emotional_hooks": [
+        "Stop wasting X hours on...",
+        "Your competitors are already using...",
+        "I wish I knew about this sooner..."
+    ],
+    "transformation_story": "Before (with real pain) → After (with product) narrative",
+    "viral_angles": [
+        {{"angle": "description", "platform": "tiktok/instagram/both", "style": "ugc/educational/shock/story", "why_viral": "reason this angle works"}}
+    ]
+}}"""
+
+    analysis = chat_json(ai_config, prompt, model=ai_config.text_model)
+    if web_research and web_research.get("grounding_sources"):
+        analysis["_web_sources"] = web_research["grounding_sources"]
+    return analysis
+
+
+def generate_scripts(
+    analysis: dict,
+    ai_config: AIConfig,
+    num_scripts: int = 3,
+    style: str = "ugc",
+    language: str = "en",
+    actor_gender: str = "female",
+) -> list:
+    """Generate video scripts based on SaaS analysis."""
+    lang_name = "Spanish" if language == "es" else "English"
+    style_guide = {
+        "ugc": "Natural, authentic UGC style. Person talking to camera like sharing a discovery with a friend. Casual, genuine.",
+        "educational": "Educational style. Clear explanations.",
+        "shock": "Shock/discovery style. Surprising opener.",
+        "story": "Storytelling style. Mini narrative.",
+        "comparison": "Before/after comparison.",
+    }
+
+    lang_instructions = ""
+    if language == "es":
+        lang_instructions = """
+LANGUAGE: ALL narrations, subtitles, captions, and hashtags MUST be in SPANISH (Spain/Latin America).
+Use natural casual Spanish like a real person would speak on TikTok. Contractions, slang OK.
+"""
+    else:
+        lang_instructions = """
+LANGUAGE: ALL narrations, subtitles, captions, and hashtags MUST be in ENGLISH.
+Use natural casual American English like a real person on TikTok. Contractions, slang OK.
+"""
+
+    prompt = f"""You are a viral short-form video scriptwriter for TikTok/Instagram Reels.
+Generate {num_scripts} video scripts to promote this product/business.
+{lang_instructions}
+PRODUCT ANALYSIS:
+{json.dumps(analysis, indent=2)}
+
+STYLE: {style_guide.get(style, style_guide['ugc'])}
+
+Each script MUST be 20-25 seconds total. NEVER longer than 25 seconds.
+
+YOU MUST USE EXACTLY THIS 5-SEGMENT STRUCTURE. NO EXCEPTIONS:
+1. HOOK (0-5s): type="hook", visual="actor_talking", broll_prompt=null
+2. B-ROLL 1 (5-9s): type="problem", visual="broll", broll_prompt="..." (REQUIRED)
+3. BODY (9-16s): type="solution", visual="actor_talking", broll_prompt=null
+4. B-ROLL 2 (16-21s): type="demo", visual="broll", broll_prompt="..." (REQUIRED)
+5. CTA (21-25s): type="cta", visual="actor_talking", broll_prompt=null
+
+Return a JSON array with the exact structure expected by the app.
+
+RULES:
+- EXACTLY 5 segments in order: actor, broll, actor, broll, actor
+- EXACTLY 2 broll segments with detailed broll_prompt (NOT null)
+- full_narration = ALL narration text (both actor and broll voiceover segments joined)
+- Keep narrations punchy, conversational, with contractions
+- Actor descriptions: casual, real-person look (NOT model/influencer)
+- CTA MUST always mention "link in bio" / "enlace en la bio"
+- Write ALL text in {lang_name}
+- Actor gender: {actor_gender}
+"""
+
+    return chat_json(ai_config, prompt, model=ai_config.text_model)

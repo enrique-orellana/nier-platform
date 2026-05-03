@@ -5,6 +5,7 @@ import subprocess
 import time
 from google import genai
 from google.genai import types
+from ai_client import AIConfig, load_ai_config, chat_json
 
 class VideoEditor:
     def __init__(self, api_key):
@@ -371,6 +372,163 @@ class VideoEditor:
         except subprocess.CalledProcessError as e:
             print(f"❌ FFmpeg failed: {e}")
             raise e
+
+class VideoEditor:
+    def __init__(self, api_key_or_config):
+        self.ai_config = api_key_or_config if isinstance(api_key_or_config, AIConfig) else load_ai_config({"X-AI-Api-Key": api_key_or_config or ""})
+        self.client = genai.Client(api_key=self.ai_config.api_key) if self.ai_config.is_gemini() and self.ai_config.api_key else None
+        self.model_name = self.ai_config.text_model or "gemini-3-flash-preview"
+
+    def upload_video(self, video_path):
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"Video file not found: {video_path}")
+        if not self.ai_config.is_gemini():
+            return video_path
+        if not self.client:
+            raise Exception("Gemini API key missing")
+        file_upload = self.client.files.upload(file=video_path)
+        while True:
+            file_info = self.client.files.get(name=file_upload.name)
+            if file_info.state == "ACTIVE":
+                return file_upload
+            if file_info.state == "FAILED":
+                raise Exception("Video processing failed by Gemini.")
+            time.sleep(2)
+
+    def _build_prompt(self, duration, fps, width, height, transcript):
+        transcript_text = json.dumps(transcript) if transcript else "Not available."
+        return f"""
+        You are an expert FFmpeg video editor. Your task is to generate a complex video filter string to make a short video viral, BUT ONLY apply effects where they make sense contextually.
+
+        Video Duration: {duration} seconds.
+        Video FPS: {fps}
+        Video Resolution (MUST KEEP EXACT): {width}x{height}
+
+        TRANSCRIPT (Context of what is being said):
+        {transcript_text}
+
+        Output JSON with a single key: "filter_string".
+        """
+
+    def get_ffmpeg_filter(self, video_file_obj, duration, fps=30, width=None, height=None, transcript=None):
+        if width is None or height is None:
+            width, height = 1080, 1920
+        prompt = self._build_prompt(duration, fps, width, height, transcript)
+        if self.ai_config.is_gemini():
+            if not self.client:
+                raise Exception("Gemini API key missing")
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[video_file_obj, prompt],
+                config=types.GenerateContentConfig(response_mime_type="application/json"),
+            )
+            raw = response.text or ""
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                cleaned = re.sub(r"^```(?:json)?\n?|\n?```$", "", raw.strip())
+                start_idx = cleaned.find("{")
+                end_idx = cleaned.rfind("}")
+                if start_idx != -1 and end_idx != -1:
+                    cleaned = cleaned[start_idx:end_idx + 1]
+                return json.loads(cleaned)
+        return chat_json(self.ai_config, prompt, model=self.ai_config.text_model)
+
+    def get_effects_config(self, video_file_obj, duration, fps=30, width=None, height=None, transcript=None):
+        if width is None or height is None:
+            width, height = 1080, 1920
+        transcript_text = json.dumps(transcript) if transcript else "Not available."
+        prompt = f"""
+        You are an expert video editor analyzing a video and its transcript to generate dynamic visual effects for a Remotion-based renderer.
+
+        Video Duration: {duration} seconds.
+        Video FPS: {fps}
+        Video Resolution: {width}x{height}
+
+        TRANSCRIPT (Context of what is being said):
+        {transcript_text}
+
+        Return only JSON with a "segments" array covering the full video duration.
+        """
+        if self.ai_config.is_gemini():
+            if not self.client:
+                raise Exception("Gemini API key missing")
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[video_file_obj, prompt],
+                config=types.GenerateContentConfig(response_mime_type="application/json"),
+            )
+            raw = response.text or ""
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                cleaned = re.sub(r"^```(?:json)?\n?|\n?```$", "", raw.strip())
+                start_idx = cleaned.find("{")
+                end_idx = cleaned.rfind("}")
+                if start_idx != -1 and end_idx != -1:
+                    cleaned = cleaned[start_idx:end_idx + 1]
+                return json.loads(cleaned)
+        return chat_json(self.ai_config, prompt, model=self.ai_config.text_model)
+
+    @staticmethod
+    def _split_filter_chain(filter_string: str) -> list[str]:
+        parts = []
+        start = 0
+        in_quote = False
+        for i, ch in enumerate(filter_string):
+            if ch == "'":
+                in_quote = not in_quote
+            elif ch == "," and not in_quote:
+                parts.append(filter_string[start:i])
+                start = i + 1
+        parts.append(filter_string[start:])
+        return parts
+
+    @classmethod
+    def _enforce_zoompan_output_size(cls, filter_string: str, width: int, height: int) -> str:
+        parts = cls._split_filter_chain(filter_string)
+        out_parts = []
+        for part in parts:
+            if "zoompan=" in part:
+                if re.search(r":s=\d+x\d+", part):
+                    part = re.sub(r":s=\d+x\d+", f":s={width}x{height}", part)
+                else:
+                    part = f"{part}:s={width}x{height}"
+            out_parts.append(part)
+        return ",".join(out_parts)
+
+    @staticmethod
+    def _sanitize_filter_string(filter_string: str) -> str:
+        s = filter_string
+        patterns = [
+            (re.compile(r"(?<![A-Za-z0-9_])([A-Za-z_]\w*)\s*>=\s*(-?\d+(?:\.\d+)?)"), r"gte(\1,\2)"),
+            (re.compile(r"(?<![A-Za-z0-9_])([A-Za-z_]\w*)\s*<=\s*(-?\d+(?:\.\d+)?)"), r"lte(\1,\2)"),
+            (re.compile(r"(?<![A-Za-z0-9_])([A-Za-z_]\w*)\s*>\s*(-?\d+(?:\.\d+)?)"), r"gt(\1,\2)"),
+            (re.compile(r"(?<![A-Za-z0-9_])([A-Za-z_]\w*)\s*<\s*(-?\d+(?:\.\d+)?)"), r"lt(\1,\2)"),
+        ]
+        for pat, repl in patterns:
+            s = pat.sub(repl, s)
+        return s
+
+    def apply_edits(self, input_path, output_path, filter_data):
+        if not filter_data or "filter_string" not in filter_data:
+            subprocess.run(['ffmpeg', '-y', '-i', input_path, '-c', 'copy', output_path])
+            return
+
+        filter_string = filter_data["filter_string"]
+        try:
+            probe_cmd = ['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0', input_path]
+            res_out = subprocess.check_output(probe_cmd, env={**os.environ, "LANG": "C.UTF-8"}).decode().strip()
+            w, h = map(int, res_out.split('x'))
+        except Exception:
+            w, h = None, None
+
+        sanitized = self._sanitize_filter_string(filter_string)
+        if w and h:
+            sanitized = self._enforce_zoompan_output_size(sanitized, w, h)
+
+        subprocess.run(['ffmpeg', '-y', '-i', input_path, '-vf', sanitized, '-c:v', 'libx264', '-c:a', 'aac', output_path], check=True)
+
 
 if __name__ == "__main__":
     pass

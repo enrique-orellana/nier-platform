@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { Youtube, Upload, FileVideo, X } from 'lucide-react';
 
-export default function MediaInput({ onProcess, isProcessing }) {
+export default function MediaInput({
+    onProcess,
+    isProcessing,
+    targetClipCount,
+    onTargetClipCountChange,
+}) {
     const [mode, setMode] = useState('url'); // 'url' | 'file'
     const [url, setUrl] = useState('');
     const [file, setFile] = useState(null);
@@ -94,6 +99,27 @@ export default function MediaInput({ onProcess, isProcessing }) {
                         )}
                     </div>
                 )}
+
+                <div className="mt-5">
+                    <label className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-zinc-500 mb-2">
+                        <span>Target clips</span>
+                        <span className="text-zinc-400 normal-case tracking-normal">{targetClipCount} clips</span>
+                    </label>
+                    <select
+                        value={targetClipCount}
+                        onChange={(e) => onTargetClipCountChange(Number(e.target.value))}
+                        className="input-field"
+                    >
+                        {Array.from({ length: 13 }, (_, i) => i + 3).map((count) => (
+                            <option key={count} value={count}>
+                                {count} clips
+                            </option>
+                        ))}
+                    </select>
+                    <p className="mt-2 text-xs text-zinc-500">
+                        The model will aim for this many viral moments. Longer videos can still return fewer if the content is weak.
+                    </p>
+                </div>
 
                 <button
                     type="submit"

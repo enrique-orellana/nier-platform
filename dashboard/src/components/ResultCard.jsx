@@ -6,7 +6,7 @@ import HookModal from './HookModal';
 import TranslateModal from './TranslateModal';
 import { renderInBrowser } from '../lib/renderInBrowser';
 
-export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, geminiApiKey, elevenLabsKey, onPlay, onPause }) {
+export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause }) {
     const [showModal, setShowModal] = useState(false);
     const [showSubtitleModal, setShowSubtitleModal] = useState(false);
     const videoRef = React.useRef(null);
@@ -65,19 +65,21 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
         setIsEditing(true);
         setEditError(null);
         try {
-            const apiKey = geminiApiKey || localStorage.getItem('gemini_key');
+            const apiKey = aiApiKey || geminiApiKey || localStorage.getItem('gemini_key');
 
-            if (!apiKey) {
+            if (aiProvider === 'gemini' && !apiKey) {
                 throw new Error("Gemini API Key is missing. Please set it in Settings.");
             }
+
+            const headers = getAiHeaders ? getAiHeaders('json') : {
+                'Content-Type': 'application/json',
+                ...(apiKey ? { 'X-Gemini-Key': apiKey } : {}),
+            };
 
             // Try Remotion effects endpoint first
             const effectsRes = await fetch(getApiUrl('/api/effects/generate'), {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Gemini-Key': apiKey
-                },
+                headers,
                 body: JSON.stringify({
                     job_id: jobId,
                     clip_index: index,
@@ -106,10 +108,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             // Fallback: legacy FFmpeg edit endpoint
             const res = await fetch(getApiUrl('/api/edit'), {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Gemini-Key': apiKey
-                },
+                headers,
                 body: JSON.stringify({
                     job_id: jobId,
                     clip_index: index,

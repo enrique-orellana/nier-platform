@@ -15,12 +15,12 @@ from tqdm import tqdm
 import yt_dlp
 import mediapipe as mp
 # import whisper (replaced by faster_whisper inside function)
-from google import genai
 from dotenv import load_dotenv
 import json
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='google.protobuf')
+from ai_client import load_ai_config, chat_json
 
 # Load environment variables
 load_dotenv()
@@ -30,6 +30,10 @@ ASPECT_RATIO = 9 / 16
 
 GEMINI_PROMPT_TEMPLATE = """
 You are a senior short-form video editor. Read the ENTIRE transcript and word-level timestamps to choose the 3–15 MOST VIRAL moments for TikTok/IG Reels/YouTube Shorts. Each clip must be between 15 and 60 seconds long.
+
+TARGET_CLIP_COUNT: {target_clips}
+
+If possible, aim to return about TARGET_CLIP_COUNT clips. Do not stop early unless the video genuinely has fewer strong moments.
 
 ⚠️ FFMPEG TIME CONTRACT — STRICT REQUIREMENTS:
 - Return timestamps in ABSOLUTE SECONDS from the start of the video (usable in: ffmpeg -ss <start> -to <end> -i <input> ...).
@@ -794,21 +798,13 @@ def transcribe_video(video_path):
         'language': info.language
     }
 
-def get_viral_clips(transcript_result, video_duration):
-    print("🤖  Analyzing with Gemini...")
-    
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
+def get_viral_clips(transcript_result, video_duration, target_clips=6):
+    ai_config = load_ai_config()
+    print(f"🤖  Analyzing with {ai_config.normalized_provider()}...")
+
+    if ai_config.is_gemini() and not ai_config.api_key:
         print("❌ Error: GEMINI_API_KEY not found in environment variables.")
         return None
-
-
-    client = genai.Client(api_key=api_key)
-    
-    # We use gemini-2.5-flash as requested.
-    model_name = 'gemini-2.5-flash' 
-    
-    print(f"🤖  Initializing Gemini with model: {model_name}")
 
     # Extract words
     words = []
@@ -822,68 +818,29 @@ def get_viral_clips(transcript_result, video_duration):
 
     prompt = GEMINI_PROMPT_TEMPLATE.format(
         video_duration=video_duration,
+        target_clips=target_clips,
         transcript_text=json.dumps(transcript_result['text']),
         words_json=json.dumps(words)
     )
 
     try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt
-        )
-        
-        # --- Cost Calculation ---
-        try:
-            usage = response.usage_metadata
-            if usage:
-                # Gemini 2.5 Flash Pricing (Dec 2025)
-                # Input: $0.10 per 1M tokens
-                # Output: $0.40 per 1M tokens
-                
-                input_price_per_million = 0.10
-                output_price_per_million = 0.40
-                
-                prompt_tokens = usage.prompt_token_count
-                output_tokens = usage.candidates_token_count
-                
-                input_cost = (prompt_tokens / 1_000_000) * input_price_per_million
-                output_cost = (output_tokens / 1_000_000) * output_price_per_million
-                total_cost = input_cost + output_cost
-                
-                cost_analysis = {
-                    "input_tokens": prompt_tokens,
-                    "output_tokens": output_tokens,
-                    "input_cost": input_cost,
-                    "output_cost": output_cost,
-                    "total_cost": total_cost,
-                    "model": model_name
-                }
+        model_name = ai_config.text_model or ("gemini-2.5-flash" if ai_config.is_gemini() else "qwen3:latest")
+        text = chat_json(ai_config, prompt, model=model_name)
 
-                print(f"💰 Token Usage ({model_name}):")
-                print(f"   - Input Tokens: {prompt_tokens} (${input_cost:.6f})")
-                print(f"   - Output Tokens: {output_tokens} (${output_cost:.6f})")
-                print(f"   - Total Estimated Cost: ${total_cost:.6f}")
-                
-        except Exception as e:
-            print(f"⚠️ Could not calculate cost: {e}")
-            cost_analysis = None
-        # ------------------------
-
-        # Clean response if it contains markdown code blocks
-        text = response.text
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
-        
-        result_json = json.loads(text)
-        if cost_analysis:
-            result_json['cost_analysis'] = cost_analysis
+        result_json = text
+        if ai_config.is_gemini():
+            result_json['cost_analysis'] = {
+                "input_tokens": None,
+                "output_tokens": None,
+                "input_cost": None,
+                "output_cost": None,
+                "total_cost": None,
+                "model": model_name,
+            }
             
         return result_json
     except Exception as e:
-        print(f"❌ Gemini Error: {e}")
+        print(f"❌ AI Error: {e}")
         return None
 
 if __name__ == '__main__':
@@ -896,8 +853,10 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', type=str, help="Output directory or file (if processing whole video).")
     parser.add_argument('--keep-original', action='store_true', help="Keep the downloaded YouTube video.")
     parser.add_argument('--skip-analysis', action='store_true', help="Skip AI analysis and convert the whole video.")
+    parser.add_argument('--target-clips', type=int, default=6, help="Preferred number of viral clips to generate (3-15).")
     
     args = parser.parse_args()
+    target_clips = min(max(3, args.target_clips), 15)
 
     script_start_time = time.time()
     
@@ -960,7 +919,7 @@ if __name__ == '__main__':
         cap.release()
 
         # 4. Gemini Analysis
-        clips_data = get_viral_clips(transcript, duration)
+        clips_data = get_viral_clips(transcript, duration, target_clips=target_clips)
         
         if not clips_data or 'shorts' not in clips_data:
             print("❌ Failed to identify clips. Converting whole video as fallback.")

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Globe, Sparkles, Download, Copy, Check, ChevronRight, ChevronLeft, Loader2, AlertCircle, Volume2, User, Film, Terminal, ChevronDown, RefreshCw, Zap, Target, TrendingUp, MessageSquare, Eye, Share2, Calendar, Upload } from 'lucide-react';
 import { getApiUrl } from '../config';
 
@@ -34,7 +34,7 @@ function saveCache(url, analysis, webResearch, scripts) {
   } catch { /* localStorage full */ }
 }
 
-export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uploadPostKey, uploadUserId }) {
+export default function SaaShortsTab({ aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, falKey, uploadPostKey, uploadUserId }) {
   // Wizard state
   const [step, setStep] = useState(() => {
     const cache = loadCache();
@@ -70,8 +70,6 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
   const [actorGallery, setActorGallery] = useState([]);
   const [loadingGallery, setLoadingGallery] = useState(false);
   const [uploadedActorPreview, setUploadedActorPreview] = useState(null); // {localPreview, serverUrl}
-  const [productPhoto, setProductPhoto] = useState(null); // {preview, serverUrl}
-  const [productDescription, setProductDescription] = useState('');
 
   // Step 3: Generate
   const [generating, setGenerating] = useState(false);
@@ -97,7 +95,7 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
       setActorDescription(scripts[0].actor_description || '');
       setEditedNarration(scripts[0].full_narration || '');
     }
-  }, []);
+  }, [fromCache, scripts, actorDescription]);
 
   // Fetch actor gallery on mount
   useEffect(() => {
@@ -109,12 +107,26 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
       .finally(() => setLoadingGallery(false));
   }, []);
 
+  const fetchVoices = useCallback(async () => {
+    try {
+      const res = await fetch(getApiUrl('/api/saasshorts/voices'), {
+        headers: { 'X-ElevenLabs-Key': elevenLabsKey },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVoices(data.voices || []);
+      }
+    } catch (e) {
+      console.error('Voices fetch error:', e);
+    }
+  }, [elevenLabsKey]);
+
   // Fetch voices on mount
   useEffect(() => {
     if (elevenLabsKey) {
       fetchVoices();
     }
-  }, [elevenLabsKey]);
+  }, [elevenLabsKey, fetchVoices]);
 
   // Reset selected voice when actor gender changes
   useEffect(() => {
@@ -131,7 +143,7 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
     } else {
       setSelectedVoice(genderDefaults[`${language}-${actorGender}`] || genderDefaults['en-female']);
     }
-  }, [actorGender, language]);
+  }, [actorGender, language, voices]);
 
   // Poll generation status
   useEffect(() => {
@@ -170,23 +182,10 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
     return () => clearInterval(interval);
   }, [jobId, genStatus]);
 
-  const fetchVoices = async () => {
-    try {
-      const res = await fetch(getApiUrl('/api/saasshorts/voices'), {
-        headers: { 'X-ElevenLabs-Key': elevenLabsKey },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setVoices(data.voices || []);
-      }
-    } catch (e) {
-      console.error('Voices fetch error:', e);
-    }
-  };
-
   const handleAnalyze = async () => {
     if (!url.trim() && !description.trim()) return;
-    if (!geminiApiKey) {
+    const activeAiKey = aiApiKey || geminiApiKey;
+    if (aiProvider === 'gemini' && !activeAiKey) {
       setAnalyzeError('Gemini API key required. Set it in Settings.');
       return;
     }
@@ -197,10 +196,7 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
     try {
       const res = await fetch(getApiUrl('/api/saasshorts/analyze'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Gemini-Key': geminiApiKey,
-        },
+        headers: getAiHeaders ? getAiHeaders('json') : { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url: url.trim() || undefined,
           description: description.trim() || undefined,

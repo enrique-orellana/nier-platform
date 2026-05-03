@@ -1,0 +1,288 @@
+import base64
+import json
+import os
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Mapping, Optional, Sequence
+
+import httpx
+
+
+@dataclass
+class AIConfig:
+    provider: str = "gemini"
+    api_key: str = ""
+    base_url: str = ""
+    text_model: str = ""
+    vision_model: str = ""
+    image_model: str = ""
+
+    def normalized_provider(self) -> str:
+        provider = (self.provider or "gemini").strip().lower()
+        if provider in {"local", "ollama-local"}:
+            return "ollama"
+        return provider
+
+    def is_gemini(self) -> bool:
+        return self.normalized_provider() == "gemini"
+
+    def is_ollama(self) -> bool:
+        return self.normalized_provider() == "ollama"
+
+    def resolved_base_url(self) -> str:
+        if self.base_url:
+            return self.base_url.rstrip("/")
+        if self.is_ollama():
+            return "http://localhost:11434"
+        return ""
+
+
+def _pick(source: Optional[Mapping[str, Any]], *keys: str, default: str = "") -> str:
+    if source:
+        for key in keys:
+            if key in source:
+                value = source[key]
+                if value is not None and str(value).strip():
+                    return str(value).strip()
+    for key in keys:
+        value = os.environ.get(key)
+        if value and value.strip():
+            return value.strip()
+    return default
+
+
+def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
+    provider = _pick(source, "X-AI-Provider", "AI_PROVIDER", default="gemini")
+    api_key = _pick(
+        source,
+        "X-AI-Api-Key",
+        "X-Gemini-Key",
+        "AI_API_KEY",
+        "GEMINI_API_KEY",
+        default="",
+    )
+    base_url = _pick(
+        source,
+        "X-AI-Base-Url",
+        "AI_BASE_URL",
+        "OLLAMA_BASE_URL",
+        default="http://localhost:11434",
+    )
+
+    provider_normalized = provider.strip().lower()
+    if provider_normalized in {"local", "ollama-local"}:
+        provider_normalized = "ollama"
+
+    text_model = _pick(
+        source,
+        "X-AI-Model",
+        "AI_MODEL",
+        "OLLAMA_TEXT_MODEL",
+        default="gemini-2.5-flash" if provider_normalized == "gemini" else "qwen3:latest",
+    )
+    vision_model = _pick(
+        source,
+        "X-AI-Vision-Model",
+        "AI_VISION_MODEL",
+        "OLLAMA_VISION_MODEL",
+        default="gemini-3.1-flash-image-preview" if provider_normalized == "gemini" else "qwen2.5vl:latest",
+    )
+    image_model = _pick(
+        source,
+        "X-AI-Image-Model",
+        "AI_IMAGE_MODEL",
+        "OLLAMA_IMAGE_MODEL",
+        default="gemini-3.1-flash-image-preview" if provider_normalized == "gemini" else "",
+    )
+
+    return AIConfig(
+        provider=provider_normalized,
+        api_key=api_key,
+        base_url=base_url,
+        text_model=text_model,
+        vision_model=vision_model,
+        image_model=image_model,
+    )
+
+
+def ai_config_to_env(config: AIConfig) -> dict[str, str]:
+    env = {
+        "AI_PROVIDER": config.normalized_provider(),
+        "AI_BASE_URL": config.resolved_base_url(),
+        "AI_MODEL": config.text_model,
+        "AI_VISION_MODEL": config.vision_model,
+        "AI_IMAGE_MODEL": config.image_model,
+    }
+    if config.api_key:
+        env["AI_API_KEY"] = config.api_key
+        if config.is_gemini():
+            env["GEMINI_API_KEY"] = config.api_key
+    return env
+
+
+def _strip_code_fences(text: str) -> str:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\n?", "", cleaned)
+        cleaned = re.sub(r"\n?```$", "", cleaned)
+    return cleaned.strip()
+
+
+def extract_json_text(text: str) -> str:
+    cleaned = _strip_code_fences(text)
+    start_obj = cleaned.find("{")
+    start_arr = cleaned.find("[")
+    if start_obj == -1 and start_arr == -1:
+        return cleaned
+
+    if start_arr != -1 and (start_obj == -1 or start_arr < start_obj):
+        start = start_arr
+        end = cleaned.rfind("]")
+    else:
+        start = start_obj
+        end = cleaned.rfind("}")
+
+    if start != -1 and end != -1 and end > start:
+        return cleaned[start : end + 1].strip()
+    return cleaned
+
+
+def _encode_image_source(image: Any) -> str:
+    if isinstance(image, (str, os.PathLike)):
+        with open(image, "rb") as handle:
+            return base64.b64encode(handle.read()).decode("utf-8")
+    if isinstance(image, bytes):
+        return base64.b64encode(image).decode("utf-8")
+    if hasattr(image, "read"):
+        raw = image.read()
+        return base64.b64encode(raw).decode("utf-8")
+    raise TypeError(f"Unsupported image source type: {type(image)!r}")
+
+
+def _ollama_chat(
+    config: AIConfig,
+    prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    json_mode: bool = False,
+    model: Optional[str] = None,
+    images: Optional[Sequence[Any]] = None,
+    timeout: float = 300.0,
+) -> str:
+    url = f"{config.resolved_base_url()}/api/chat"
+    messages: list[dict[str, Any]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+
+    user_message: dict[str, Any] = {"role": "user", "content": prompt}
+    if images:
+        user_message["images"] = [_encode_image_source(image) for image in images]
+    messages.append(user_message)
+
+    payload: dict[str, Any] = {
+        "model": model or config.text_model,
+        "messages": messages,
+        "stream": False,
+        "options": {
+            "temperature": 0.2,
+        },
+    }
+    if json_mode:
+        payload["format"] = "json"
+
+    with httpx.Client(timeout=timeout) as client:
+        response = client.post(url, json=payload)
+    response.raise_for_status()
+    data = response.json()
+    message = data.get("message") or {}
+    return message.get("content") or data.get("response") or ""
+
+
+def _gemini_chat(
+    config: AIConfig,
+    prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    json_mode: bool = False,
+    model: Optional[str] = None,
+    contents: Optional[Sequence[Any]] = None,
+):
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=config.api_key)
+    content_items: list[Any] = list(contents or [])
+    if not content_items:
+        content_items = [prompt]
+
+    generate_config_kwargs: dict[str, Any] = {}
+    if system_prompt:
+        generate_config_kwargs["system_instruction"] = system_prompt
+    if json_mode:
+        generate_config_kwargs["response_mime_type"] = "application/json"
+
+    response = client.models.generate_content(
+        model=model or config.text_model,
+        contents=content_items,
+        config=types.GenerateContentConfig(**generate_config_kwargs) if generate_config_kwargs else None,
+    )
+    return response.text or ""
+
+
+def chat_completion(
+    config: AIConfig,
+    prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    json_mode: bool = False,
+    model: Optional[str] = None,
+    images: Optional[Sequence[Any]] = None,
+    timeout: float = 300.0,
+) -> str:
+    provider = config.normalized_provider()
+    if provider == "gemini":
+        return _gemini_chat(
+            config,
+            prompt,
+            system_prompt=system_prompt,
+            json_mode=json_mode,
+            model=model or config.text_model,
+            contents=[prompt] if not images else [prompt, *images],
+        )
+
+    if provider == "ollama":
+        return _ollama_chat(
+            config,
+            prompt,
+            system_prompt=system_prompt,
+            json_mode=json_mode,
+            model=model or config.text_model,
+            images=images,
+            timeout=timeout,
+        )
+
+    raise ValueError(f"Unsupported AI provider: {config.provider}")
+
+
+def chat_json(
+    config: AIConfig,
+    prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    model: Optional[str] = None,
+    images: Optional[Sequence[Any]] = None,
+    timeout: float = 300.0,
+) -> dict[str, Any]:
+    raw = chat_completion(
+        config,
+        prompt,
+        system_prompt=system_prompt,
+        json_mode=True,
+        model=model,
+        images=images,
+        timeout=timeout,
+    )
+    text = extract_json_text(raw)
+    return json.loads(text)
+
