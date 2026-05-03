@@ -366,7 +366,13 @@ export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUse
 
   // --- Publish to YouTube ---
   const handlePublish = async () => {
-    if (!uploadPostKey || !uploadUserId) return alert('Please configure your Upload-Post API key and user in Settings first.');
+    if (!uploadPostKey || !uploadUserId) {
+      setPublishResult({
+        success: false,
+        error: 'Publishing is optional. Configure Upload-Post only if you want to publish from this screen.',
+      });
+      return;
+    }
     const finalTitle = selectedTitle || manualTitle;
     if (!finalTitle) return alert('No title selected.');
     if (!selectedThumbnail) return alert('Please select a thumbnail first.');
@@ -1062,16 +1068,16 @@ export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUse
                 <div className="glass-panel p-6 space-y-3">
                   <div className="flex items-center gap-2 text-amber-400">
                     <AlertCircle size={16} />
-                    <span className="text-sm font-medium">Upload-Post Not Configured</span>
+                    <span className="text-sm font-medium">Publishing is disabled</span>
                   </div>
                   <p className="text-xs text-zinc-500">
-                    To publish directly to YouTube, configure your Upload-Post API key and connect a profile in Settings.
+                    This is optional. You can keep working locally and only configure Upload-Post if you want to publish later.
                   </p>
                   <button
-                    onClick={() => { }}
+                    onClick={() => { setPublishResult(null); }}
                     className="text-xs text-primary hover:underline flex items-center gap-1"
                   >
-                    <Settings size={12} /> Go to Settings
+                    <Settings size={12} /> Dismiss
                   </button>
                 </div>
               ) : (
@@ -1109,7 +1115,7 @@ export default function ThumbnailStudio({ geminiApiKey, uploadPostKey, uploadUse
                     <div className="flex items-center gap-2 text-red-400">
                       <AlertCircle size={16} />
                       <div>
-                        <p className="text-sm font-medium">Publish failed</p>
+                        <p className="text-sm font-medium">Publish unavailable</p>
                         <p className="text-xs text-zinc-500 mt-1">{publishResult.error}</p>
                       </div>
                     </div>

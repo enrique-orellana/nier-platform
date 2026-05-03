@@ -1395,15 +1395,15 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
                     </button>
                   </div>
 
-                  {/* Publish to Social Media */}
-                  <div className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-3 mt-2">
-                    <h3 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
-                      <Share2 size={14} /> Publish to Social Media
-                    </h3>
+                    {/* Publish to Social Media */}
+                    <div className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-3 mt-2">
+                      <h3 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
+                        <Share2 size={14} /> Publish to Social Media
+                      </h3>
 
-                    {!uploadPostKey ? (
-                      <p className="text-xs text-zinc-500">Set your Upload-Post API key in Settings to enable publishing.</p>
-                    ) : (
+                      {!uploadPostKey ? (
+                        <p className="text-xs text-zinc-500">Publishing is optional. Keep working locally, or add Upload-Post later if you want to post to social platforms.</p>
+                      ) : (
                       <>
                         {/* Platform checkboxes */}
                         <div className="flex gap-4">
@@ -1485,11 +1485,11 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
                           }}
                           disabled={publishing}
                           className="w-full btn-primary py-2 text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-                        >
-                          {publishing ? (
-                            <><Loader2 size={14} className="animate-spin" /> {isScheduling ? 'Scheduling...' : 'Publishing...'}</>
-                          ) : (
-                            <><Share2 size={14} /> {isScheduling ? 'Schedule Post' : 'Publish Now'}</>
+                          >
+                            {publishing ? (
+                              <><Loader2 size={14} className="animate-spin" /> {isScheduling ? 'Scheduling...' : 'Publishing...'}</>
+                            ) : (
+                              <><Share2 size={14} /> {isScheduling ? 'Schedule Post' : 'Publish Now'}</>
                           )}
                         </button>
 
