@@ -41,10 +41,13 @@ Key areas:
 The UI now exposes model selection for:
 
 - text models
+- clip analysis models
 - vision models
 - image models
 
 The app also applies provider-aware defaults and normalization so switching providers does not accidentally keep a Gemini model name in Ollama mode, or vice versa.
+
+The clip-identification pipeline now has its own analysis-model override, so you can keep the main text model and the viral-clip analysis model separate.
 
 ### 3. Ollama integration
 
@@ -161,4 +164,3 @@ The branch also added:
 
 This summary reflects the committed repository changes from the original snapshot up to `HEAD`.
 There is also a separate in-progress local edit in `dashboard/src/components/ProjectLibrary.jsx` that is not part of this summary.
-

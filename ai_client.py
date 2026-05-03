@@ -20,6 +20,7 @@ class AIConfig:
     api_key: str = ""
     base_url: str = ""
     text_model: str = ""
+    analyze_model: str = ""
     vision_model: str = ""
     image_model: str = ""
 
@@ -43,12 +44,12 @@ def _normalize_model_for_provider(model: str, provider: str, kind: str) -> str:
     cleaned = (model or "").strip()
     auto_values = {"", "auto", "default"}
     if provider == "gemini":
-        if kind == "text" and cleaned in auto_values | {OLLAMA_TEXT_MODEL}:
+        if kind in {"text", "analysis"} and cleaned in auto_values | {OLLAMA_TEXT_MODEL}:
             return GEMINI_TEXT_MODEL
         if kind in {"vision", "image"} and cleaned in auto_values | {OLLAMA_VISION_MODEL, OLLAMA_TEXT_MODEL}:
             return GEMINI_VISION_MODEL
     if provider == "ollama":
-        if kind == "text" and cleaned in auto_values | {GEMINI_TEXT_MODEL}:
+        if kind in {"text", "analysis"} and cleaned in auto_values | {GEMINI_TEXT_MODEL}:
             return OLLAMA_TEXT_MODEL
         if kind == "vision" and cleaned in auto_values | {GEMINI_VISION_MODEL, GEMINI_TEXT_MODEL}:
             return OLLAMA_VISION_MODEL
@@ -100,6 +101,12 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         "OLLAMA_TEXT_MODEL",
         default=GEMINI_TEXT_MODEL if provider_normalized == "gemini" else OLLAMA_TEXT_MODEL,
     )
+    analyze_model = _pick(
+        source,
+        "X-AI-Analyze-Model",
+        "AI_ANALYZE_MODEL",
+        default=GEMINI_TEXT_MODEL if provider_normalized == "gemini" else OLLAMA_TEXT_MODEL,
+    )
     vision_model = _pick(
         source,
         "X-AI-Vision-Model",
@@ -116,6 +123,7 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
     )
 
     text_model = _normalize_model_for_provider(text_model, provider_normalized, "text")
+    analyze_model = _normalize_model_for_provider(analyze_model, provider_normalized, "analysis")
     vision_model = _normalize_model_for_provider(vision_model, provider_normalized, "vision")
     image_model = _normalize_model_for_provider(image_model, provider_normalized, "image")
 
@@ -124,6 +132,7 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         api_key=api_key,
         base_url=base_url,
         text_model=text_model,
+        analyze_model=analyze_model,
         vision_model=vision_model,
         image_model=image_model,
     )
@@ -134,6 +143,7 @@ def ai_config_to_env(config: AIConfig) -> dict[str, str]:
         "AI_PROVIDER": config.normalized_provider(),
         "AI_BASE_URL": config.resolved_base_url(),
         "AI_MODEL": config.text_model,
+        "AI_ANALYZE_MODEL": config.analyze_model,
         "AI_VISION_MODEL": config.vision_model,
         "AI_IMAGE_MODEL": config.image_model,
     }

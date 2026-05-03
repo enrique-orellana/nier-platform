@@ -46,6 +46,7 @@ def build_ai_config(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     model: Optional[str] = None,
+    analyze_model: Optional[str] = None,
     vision_model: Optional[str] = None,
     image_model: Optional[str] = None,
     extra: Optional[Dict[str, str]] = None,
@@ -59,6 +60,8 @@ def build_ai_config(
         source["X-AI-Base-Url"] = base_url
     if model:
         source["X-AI-Model"] = model
+    if analyze_model:
+        source["X-AI-Analyze-Model"] = analyze_model
     if vision_model:
         source["X-AI-Vision-Model"] = vision_model
     if image_model:
@@ -353,6 +356,7 @@ async def process_endpoint(
     x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
     x_ai_base_url: Optional[str] = Header(None, alias="X-AI-Base-Url"),
     x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
+    x_ai_analyze_model: Optional[str] = Header(None, alias="X-AI-Analyze-Model"),
     x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
     x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
 ):
@@ -361,6 +365,7 @@ async def process_endpoint(
         api_key=x_ai_api_key or request.headers.get("X-Gemini-Key"),
         base_url=x_ai_base_url,
         model=x_ai_model,
+        analyze_model=x_ai_analyze_model,
         vision_model=x_ai_vision_model,
         image_model=x_ai_image_model,
         extra=dict(request.headers),

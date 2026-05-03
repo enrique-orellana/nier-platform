@@ -130,7 +130,56 @@ const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
 const GEMINI_VISION_MODEL = 'gemini-3.1-flash-image-preview';
 const OLLAMA_TEXT_MODEL = 'qwen3:latest';
 const OLLAMA_VISION_MODEL = 'qwen2.5vl:latest';
+const normalizeQualityPreset = (value) => {
+  const preset = (value || '').trim().toLowerCase();
+  if (preset === 'fast') return 'lite';
+  if (['lite', 'balanced', 'best', 'custom'].includes(preset)) return preset;
+  return 'balanced';
+};
+const QUALITY_PRESETS = {
+  gemini: {
+    lite: {
+      text: 'gemini-2.5-flash-lite',
+      analyze: 'gemini-2.5-flash-lite',
+      vision: 'gemini-2.5-flash-lite',
+      image: 'gemini-2.5-flash-image',
+    },
+    balanced: {
+      text: 'gemini-2.5-flash',
+      analyze: 'gemini-2.5-flash',
+      vision: 'gemini-2.5-flash',
+      image: 'gemini-2.5-flash-image',
+    },
+    best: {
+      text: 'gemini-2.5-pro',
+      analyze: 'gemini-2.5-pro',
+      vision: 'gemini-2.5-pro',
+      image: 'gemini-2.5-flash-image',
+    },
+  },
+  ollama: {
+    lite: {
+      text: 'gemma3:1b',
+      analyze: 'gemma3:1b',
+      vision: 'gemma3:4b',
+      image: '',
+    },
+    balanced: {
+      text: 'gemma3:4b',
+      analyze: 'gemma3:4b',
+      vision: 'gemma3:4b',
+      image: '',
+    },
+    best: {
+      text: 'gemma3:12b',
+      analyze: 'gemma3:12b',
+      vision: 'gemma3:12b',
+      image: '',
+    },
+  },
+};
 const CONFIGURED_OLLAMA_BASE_URL = (import.meta.env.VITE_AI_BASE_URL || '').trim();
+const CONFIGURED_AI_QUALITY_PRESET = (import.meta.env.VITE_AI_QUALITY_PRESET || 'balanced').trim();
 
 // Mock polling function
 const pollJob = async (jobId) => {
@@ -143,7 +192,9 @@ function App() {
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_key') || '');
   const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('ai_provider_v1') || import.meta.env.VITE_AI_PROVIDER || 'gemini');
   const [aiBaseUrl, setAiBaseUrl] = useState(() => localStorage.getItem('ai_base_url_v1') || CONFIGURED_OLLAMA_BASE_URL || '');
+  const [aiQualityPreset, setAiQualityPreset] = useState(() => normalizeQualityPreset(localStorage.getItem('ai_quality_preset_v1') || CONFIGURED_AI_QUALITY_PRESET || 'balanced'));
   const [aiTextModel, setAiTextModel] = useState(() => localStorage.getItem('ai_text_model_v1') || import.meta.env.VITE_AI_MODEL || 'auto');
+  const [aiAnalyzeModel, setAiAnalyzeModel] = useState(() => localStorage.getItem('ai_analyze_model_v1') || import.meta.env.VITE_AI_ANALYZE_MODEL || 'auto');
   const [aiVisionModel, setAiVisionModel] = useState(() => localStorage.getItem('ai_vision_model_v1') || import.meta.env.VITE_AI_VISION_MODEL || 'auto');
   const [aiImageModel, setAiImageModel] = useState(() => localStorage.getItem('ai_image_model_v1') || import.meta.env.VITE_AI_IMAGE_MODEL || 'auto');
   // Social API State - Load encrypted or plain
@@ -267,8 +318,16 @@ function App() {
   }, [aiBaseUrl]);
 
   useEffect(() => {
+    localStorage.setItem('ai_quality_preset_v1', aiQualityPreset);
+  }, [aiQualityPreset]);
+
+  useEffect(() => {
     localStorage.setItem('ai_text_model_v1', aiTextModel);
   }, [aiTextModel]);
+
+  useEffect(() => {
+    localStorage.setItem('ai_analyze_model_v1', aiAnalyzeModel);
+  }, [aiAnalyzeModel]);
 
   useEffect(() => {
     localStorage.setItem('ai_vision_model_v1', aiVisionModel);
@@ -284,6 +343,7 @@ function App() {
 
     if (aiProvider === 'gemini') {
       setAiTextModel((current) => (!current || current === OLLAMA_TEXT_MODEL) ? GEMINI_TEXT_MODEL : current);
+      setAiAnalyzeModel((current) => (!current || current === OLLAMA_TEXT_MODEL) ? GEMINI_TEXT_MODEL : current);
       setAiVisionModel((current) => (!current || current === OLLAMA_VISION_MODEL) ? GEMINI_VISION_MODEL : current);
       setAiImageModel((current) => (!current || current === OLLAMA_VISION_MODEL) ? GEMINI_VISION_MODEL : current);
       return;
@@ -303,12 +363,27 @@ function App() {
       });
     }
 
+    if (aiQualityPreset !== 'custom') {
+      return;
+    }
+
     if (previousProvider === 'gemini' || previousProvider === 'ollama') {
       setAiTextModel((current) => (!current || current === GEMINI_TEXT_MODEL) ? OLLAMA_TEXT_MODEL : current);
+      setAiAnalyzeModel((current) => (!current || current === GEMINI_TEXT_MODEL) ? OLLAMA_TEXT_MODEL : current);
       setAiVisionModel((current) => (!current || current === GEMINI_VISION_MODEL) ? OLLAMA_VISION_MODEL : current);
       setAiImageModel((current) => (!current || current === GEMINI_VISION_MODEL) ? '' : current);
     }
-  }, [aiProvider]);
+  }, [aiProvider, aiQualityPreset]);
+
+  useEffect(() => {
+    if (aiQualityPreset === 'custom') return;
+    const preset = QUALITY_PRESETS[aiProvider]?.[aiQualityPreset];
+    if (!preset) return;
+    setAiTextModel(preset.text);
+    setAiAnalyzeModel(preset.analyze);
+    setAiVisionModel(preset.vision);
+    setAiImageModel(preset.image);
+  }, [aiProvider, aiQualityPreset]);
 
   useEffect(() => {
     localStorage.setItem('clip_count_v1', String(clipCount));
@@ -339,6 +414,7 @@ function App() {
     const headers = {
       'X-AI-Provider': aiProvider,
       'X-AI-Model': aiTextModel,
+      'X-AI-Analyze-Model': aiAnalyzeModel,
       'X-AI-Vision-Model': aiVisionModel,
       'X-AI-Image-Model': aiImageModel,
     };
@@ -723,27 +799,75 @@ function App() {
                     )}
                   </label>
                   <label className="block">
+                    <span className="block text-sm text-zinc-400 mb-2">Quality Preset</span>
+                    <select
+                      value={aiQualityPreset}
+                      onChange={(e) => setAiQualityPreset(normalizeQualityPreset(e.target.value))}
+                      className="input-field"
+                    >
+                      <option value="lite">Lite</option>
+                      <option value="balanced">Balanced</option>
+                      <option value="best">Best</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
+                      Lite uses the smallest practical local models, Balanced is the default, and Best prefers stronger local models for higher quality.
+                    </p>
+                  </label>
+                  <label className="block">
                     <span className="block text-sm text-zinc-400 mb-2">Text Model</span>
                     <select
                       value={aiTextModel}
-                      onChange={(e) => setAiTextModel(e.target.value)}
+                      onChange={(e) => {
+                        setAiQualityPreset('custom');
+                        setAiTextModel(e.target.value);
+                      }}
                       className="input-field"
                     >
                       <option value="auto">Auto (recommended)</option>
                       <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                       <option value="qwen3:latest">Qwen3 Latest</option>
+                      <option value="gemma3:1b">Gemma 3 1B</option>
+                      <option value="gemma3:4b">Gemma 3 4B</option>
+                      <option value="gemma3:12b">Gemma 3 12B</option>
                     </select>
+                  </label>
+                  <label className="block">
+                    <span className="block text-sm text-zinc-400 mb-2">Clip Analysis Model</span>
+                    <select
+                      value={aiAnalyzeModel}
+                      onChange={(e) => {
+                        setAiQualityPreset('custom');
+                        setAiAnalyzeModel(e.target.value);
+                      }}
+                      className="input-field"
+                    >
+                      <option value="auto">Auto (recommended)</option>
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                      <option value="qwen3:latest">Qwen3 Latest</option>
+                      <option value="gemma3:1b">Gemma 3 1B</option>
+                      <option value="gemma3:4b">Gemma 3 4B</option>
+                      <option value="gemma3:12b">Gemma 3 12B</option>
+                    </select>
+                    <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
+                      This model only drives viral clip detection. You can keep it separate from your main text model.
+                    </p>
                   </label>
                   <label className="block">
                     <span className="block text-sm text-zinc-400 mb-2">Vision Model</span>
                     <select
                       value={aiVisionModel}
-                      onChange={(e) => setAiVisionModel(e.target.value)}
+                      onChange={(e) => {
+                        setAiQualityPreset('custom');
+                        setAiVisionModel(e.target.value);
+                      }}
                       className="input-field"
                     >
                       <option value="auto">Auto (recommended)</option>
                       <option value="gemini-3.1-flash-image-preview">Gemini 3.1 Flash Image Preview</option>
                       <option value="qwen2.5vl:latest">Qwen2.5VL Latest</option>
+                      <option value="gemma3:4b">Gemma 3 4B</option>
+                      <option value="gemma3:12b">Gemma 3 12B</option>
                     </select>
                   </label>
                   <label className="block">
@@ -751,7 +875,10 @@ function App() {
                     <input
                       type="text"
                       value={aiImageModel}
-                      onChange={(e) => setAiImageModel(e.target.value)}
+                      onChange={(e) => {
+                        setAiQualityPreset('custom');
+                        setAiImageModel(e.target.value);
+                      }}
                       className="input-field"
                       placeholder="Optional"
                     />

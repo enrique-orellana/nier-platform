@@ -798,6 +798,113 @@ def transcribe_video(video_path):
         'language': info.language
     }
 
+def _clip_text_snippet(text, fallback="Auto-generated fallback clip"):
+    cleaned = re.sub(r"\s+", " ", (text or "").strip())
+    if not cleaned:
+        return fallback
+    words = cleaned.split()
+    snippet = " ".join(words[:14]).strip()
+    return snippet if snippet else fallback
+
+
+def _build_fallback_clip_plan(transcript_result, video_duration, target_clips=6):
+    """
+    Build a conservative clip plan when the AI returns no usable shorts.
+    This keeps the pipeline moving instead of falling back to the entire video.
+    """
+    segments = []
+    for segment in transcript_result.get("segments", []):
+        start = segment.get("start")
+        end = segment.get("end")
+        if start is None or end is None:
+            continue
+        try:
+            start_f = float(start)
+            end_f = float(end)
+        except (TypeError, ValueError):
+            continue
+        if end_f <= start_f:
+            continue
+        segments.append({
+            "start": start_f,
+            "end": end_f,
+            "text": (segment.get("text") or "").strip(),
+        })
+
+    language = transcript_result.get("language", "en")
+    total_duration = max(float(video_duration or 0), 0.0)
+    clip_limit = max(1, min(int(target_clips or 1), 15))
+
+    def make_short(start, end, text, index):
+        snippet = _clip_text_snippet(text)
+        title = snippet[:100].rstrip()
+        if not title:
+            title = f"Fallback Clip {index + 1}"
+        hook = snippet[:48].upper()
+        if not hook:
+            hook = "WATCH THIS"
+        description = f"Fallback clip generated from the transcript. {snippet}"
+        return {
+            "start": round(max(0.0, float(start)), 3),
+            "end": round(min(total_duration, float(end)), 3),
+            "video_description_for_tiktok": description,
+            "video_description_for_instagram": description,
+            "video_title_for_youtube_short": title,
+            "viral_hook_text": hook[:50],
+            "language": language,
+        }
+
+    shorts = []
+    if segments:
+        target_window = total_duration / clip_limit if clip_limit else total_duration
+        target_window = min(max(target_window, 20.0), 45.0)
+
+        idx = 0
+        while idx < len(segments) and len(shorts) < clip_limit:
+            start_idx = idx
+            start = segments[start_idx]["start"]
+            end = segments[start_idx]["end"]
+
+            # Accumulate adjacent transcript segments until the window is usable.
+            while (
+                idx + 1 < len(segments)
+                and (end - start) < target_window
+            ):
+                idx += 1
+                end = segments[idx]["end"]
+
+            # Ensure the clip is at least 15 seconds long when possible.
+            if (end - start) < 15.0 and idx + 1 < len(segments):
+                idx += 1
+                end = segments[idx]["end"]
+
+            start = max(0.0, start - 0.25)
+            end = min(total_duration or end, end + 0.25)
+
+            if end - start < 15.0 and total_duration >= 15.0:
+                mid = (start + end) / 2.0
+                start = max(0.0, mid - 7.5)
+                end = min(total_duration, start + 15.0)
+
+            if end > start:
+                clip_text = " ".join(
+                    part["text"] for part in segments[start_idx:idx + 1] if part["text"]
+                )
+                shorts.append(make_short(start, end, clip_text, len(shorts)))
+
+            idx += 1
+
+    if not shorts:
+        end = min(total_duration, 45.0 if total_duration >= 45.0 else total_duration)
+        if end <= 0:
+            end = 15.0
+        shorts.append(make_short(0.0, end, transcript_result.get("text", ""), 0))
+
+    return {
+        "shorts": shorts,
+        "fallback_reason": "AI returned no usable clip plan; generated transcript-based fallback clips.",
+    }
+
 def get_viral_clips(transcript_result, video_duration, target_clips=6):
     ai_config = load_ai_config()
     print(f"🤖  Analyzing with {ai_config.normalized_provider()}...")
@@ -824,10 +931,27 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6):
     )
 
     try:
-        model_name = ai_config.text_model or ("gemini-2.5-flash" if ai_config.is_gemini() else "qwen3:latest")
+        model_name = ai_config.analyze_model or ai_config.text_model or ("gemini-2.5-flash" if ai_config.is_gemini() else "qwen3:latest")
         text = chat_json(ai_config, prompt, model=model_name)
 
-        result_json = text
+        result_json = text if isinstance(text, dict) else {}
+        if not result_json:
+            print("⚠️ AI returned an empty payload. Using transcript-based fallback clips.")
+            return _build_fallback_clip_plan(transcript_result, video_duration, target_clips)
+
+        # Some models use alternate keys. Normalize those here before fallback.
+        if "shorts" not in result_json or not isinstance(result_json.get("shorts"), list):
+            for alt_key in ("clips", "moments", "clip_plan", "viral_clips"):
+                alt_value = result_json.get(alt_key)
+                if isinstance(alt_value, list) and alt_value:
+                    result_json["shorts"] = alt_value
+                    break
+
+        shorts = result_json.get("shorts")
+        if not isinstance(shorts, list) or not shorts:
+            print("⚠️ AI returned no usable shorts. Using transcript-based fallback clips.")
+            return _build_fallback_clip_plan(transcript_result, video_duration, target_clips)
+
         if ai_config.is_gemini():
             result_json['cost_analysis'] = {
                 "input_tokens": None,
@@ -837,11 +961,11 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6):
                 "total_cost": None,
                 "model": model_name,
             }
-            
+
         return result_json
     except Exception as e:
         print(f"❌ AI Error: {e}")
-        return None
+        return _build_fallback_clip_plan(transcript_result, video_duration, target_clips)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="AutoCrop-Vertical with Viral Clip Detection.")
