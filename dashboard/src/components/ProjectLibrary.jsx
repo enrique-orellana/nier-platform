@@ -1,4 +1,4 @@
-import { ChevronLeft, FolderOpen, Image as ImageIcon, Loader2, Play, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { ChevronLeft, FolderOpen, Loader2, Play, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { getApiUrl } from '../config';
 import ResultCard from './ResultCard';
@@ -63,7 +63,6 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
   const [selectedProject, setSelectedProject] = useState(null);
   const [projectClips, setProjectClips] = useState([]);
   const [isLoadingClips, setIsLoadingClips] = useState(false);
-  const [activeClipIndex, setActiveClipIndex] = useState(0);
 
   const loadProjects = useCallback(async () => {
     setIsLoading(true);
@@ -87,9 +86,7 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
     loadProjects().catch(() => {});
   }, [loadProjects]);
 
-  useEffect(() => {
-    setActiveClipIndex(0);
-  }, [selectedProject]);
+
 
   const loadProjectClips = useCallback(async (project) => {
     const jobId = project?.job_id || project?.session_id || project?.id;
@@ -145,18 +142,9 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
     }
   };
 
-  const activeClip = projectClips[activeClipIndex] || projectClips[0] || null;
   const normalizedProjectClips = projectClips.map((clip, index) =>
     normalizeClipForResultCard(clip, index, selectedProject?.job_id || selectedProject?.session_id || selectedProject?.id)
   );
-  const activeClipImage = selectedProject?.preview_image_url
-    || selectedProject?.selected_thumbnail
-    || activeClip?.preview_image_url
-    || activeClip?.thumbnail_url
-    || activeClip?.poster_url
-    || activeClip?.image_url
-    || activeClip?.actor_url
-    || '';
 
   const filteredProjects = projects.filter((project) => {
     const haystack = [
@@ -175,33 +163,16 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
   if (selectedProject) {
     return (
       <div className="h-full min-h-0 overflow-y-auto custom-scrollbar">
-        <div className="max-w-7xl mx-auto p-6 pb-10 space-y-6">
-          <button
-            onClick={() => setSelectedProject(null)}
-            className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group"
-          >
-            <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-            Back to Projects
-          </button>
-
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
-                  <ImageIcon size={20} className="text-cyan-400" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-white tracking-tight">
-                    {selectedProject.title || 'Untitled Project'}
-                  </h1>
-                  <p className="text-sm text-zinc-500 break-all">{selectedProject.job_id}</p>
-                </div>
-              </div>
-              <p className="text-sm text-zinc-400">
-                Historical clip generation results rendered the same way as the live generator.
-              </p>
-            </div>
-
+        <div className="max-w-7xl mx-auto p-6 pb-10 space-y-8">
+          {/* Header Navigation */}
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setSelectedProject(null)}
+              className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group"
+            >
+              <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+              Back to Projects
+            </button>
             <div className="flex items-center gap-2">
               <button
                 onClick={loadProjects}
@@ -220,109 +191,94 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
             </div>
           </div>
 
-          <div className="grid lg:grid-cols-3 gap-6 min-h-0">
-            <div className="lg:col-span-1 space-y-6">
-              <div className="glass-panel p-5 space-y-4">
-                <div className="aspect-[9/16] rounded-xl overflow-hidden border border-white/10 bg-black">
-                  {activeClipImage ? (
-                    <video
-                      key={activeClip.video_url || activeClip.url}
-                      src={activeClip.video_url || activeClip.url}
-                      poster={activeClipImage}
-                      controls
-                      autoPlay
-                      muted
-                      loop
-                      playsInline
-                      preload="metadata"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-zinc-600">
-                      <FolderOpen size={32} />
-                    </div>
-                  )}
+          {/* Project Header Card */}
+          <div className="glass-panel p-8 space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 shadow-lg shadow-cyan-500/5">
+                  <FolderOpen size={28} className="text-cyan-400" />
                 </div>
-
                 <div>
-                  <h2 className="text-xl font-bold text-white mb-1">
+                  <h1 className="text-3xl font-bold text-white tracking-tight mb-1">
                     {selectedProject.title || 'Untitled Project'}
-                  </h2>
-                  <p className="text-[11px] text-zinc-500 break-all">{selectedProject.job_id}</p>
+                  </h1>
+                  <p className="text-sm text-zinc-500 font-mono">{selectedProject.job_id}</p>
                 </div>
-
-                <div className="pt-4 border-t border-white/5 grid grid-cols-2 gap-3 text-center">
-                  <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Clips</p>
-                    <p className="text-sm font-bold text-white">{projectClips.length}</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Created</p>
-                    <p className="text-sm font-bold text-white">{formatDate(selectedProject.created_at)}</p>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-white/5 grid grid-cols-2 gap-3 text-center">
-                  <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Duration</p>
-                    <p className="text-sm font-bold text-white">
-                      {formatDuration(selectedProject.total_duration)}
-                    </p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Source</p>
-                    <p className="text-sm font-bold text-white">S3 History</p>
-                  </div>
-                </div>
-
-                {selectedProject.description && (
-                  <div className="p-3 rounded-xl bg-black/20 border border-white/5 text-xs text-zinc-400 leading-relaxed italic">
-                    "{selectedProject.description}"
-                  </div>
-                )}
               </div>
 
-            </div>
-
-            <div className="lg:col-span-2 space-y-6 min-h-0">
-              <div className="glass-panel p-5">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Play size={18} className="text-cyan-400" /> Generated Clips
-                  </h3>
-                  <span className="text-xs text-zinc-500 bg-white/5 px-2 py-1 rounded-full">
-                    {projectClips.length} results
-                  </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/5">
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-0.5">Clips</p>
+                  <p className="text-lg font-bold text-white leading-none">{projectClips.length}</p>
                 </div>
-
-                {isLoadingClips ? (
-                  <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
-                    <Loader2 size={32} className="animate-spin text-cyan-500 mb-4" />
-                    <p className="text-sm">Loading project clips...</p>
-                  </div>
-                ) : projectClips.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-white/5 rounded-2xl text-zinc-600">
-                    <Play size={40} className="mb-4 opacity-20" />
-                    <p className="text-sm">No clips found for this project</p>
-                  </div>
-                ) : (
-                  <div className={`grid gap-4 pb-10 ${projectClips.length > 1 ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}>
-                    {normalizedProjectClips.map((clip, index) => (
-                      <ResultCard
-                        key={clip.video_id || `${clip.job_id || 'clip'}-${clip.index ?? index}`}
-                        clip={clip}
-                        index={clip.index ?? index}
-                        jobId={clip.job_id}
-                        aiProvider={aiProvider}
-                        aiApiKey={aiApiKey}
-                        getAiHeaders={getAiHeaders}
-                        onPlay={() => setActiveClipIndex(index)}
-                      />
-                    ))}
-                  </div>
-                )}
+                <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/5">
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-0.5">Created</p>
+                  <p className="text-sm font-bold text-white leading-none">{formatDate(selectedProject.created_at).split(',')[0]}</p>
+                </div>
+                <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/5">
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-0.5">Duration</p>
+                  <p className="text-sm font-bold text-white leading-none">
+                    {formatDuration(selectedProject.total_duration) || 'N/A'}
+                  </p>
+                </div>
+                <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/5">
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-0.5">Source</p>
+                  <p className="text-sm font-bold text-white leading-none">S3 History</p>
+                </div>
               </div>
             </div>
+
+            {selectedProject.description && (
+              <div className="p-4 rounded-xl bg-black/20 border border-white/5 text-sm text-zinc-400 leading-relaxed italic max-w-3xl">
+                "{selectedProject.description}"
+              </div>
+            )}
+            
+            <p className="text-sm text-zinc-500">
+              Historical clip generation results rendered the same way as the live generator.
+            </p>
+          </div>
+
+          {/* Clips Gallery */}
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-cyan-400/10 flex items-center justify-center">
+                  <Play size={16} className="text-cyan-400" />
+                </div>
+                Generated Clips
+              </h3>
+              <span className="text-sm text-zinc-500 font-medium px-3 py-1 rounded-full bg-white/5 border border-white/5">
+                {projectClips.length} results
+              </span>
+            </div>
+
+            {isLoadingClips ? (
+              <div className="glass-panel py-24 flex flex-col items-center justify-center text-zinc-500">
+                <Loader2 size={40} className="animate-spin text-cyan-500 mb-4" />
+                <p className="text-lg font-medium">Loading project clips...</p>
+              </div>
+            ) : projectClips.length === 0 ? (
+              <div className="glass-panel py-24 flex flex-col items-center justify-center border-2 border-dashed border-white/5 text-zinc-600">
+                <Play size={48} className="mb-4 opacity-20" />
+                <p className="text-lg font-medium">No clips found for this project</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {normalizedProjectClips.map((clip, index) => (
+                  <ResultCard
+                    key={clip.video_id || `${clip.job_id || 'clip'}-${clip.index ?? index}`}
+                    clip={clip}
+                    index={clip.index ?? index}
+                    jobId={clip.job_id}
+                    aiProvider={aiProvider}
+                    aiApiKey={aiApiKey}
+                    getAiHeaders={getAiHeaders}
+                    onPlay={() => {}}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
