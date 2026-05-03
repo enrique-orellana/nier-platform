@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Download, Share2, Instagram, Youtube, Video, CheckCircle, AlertCircle, X, Loader2, Copy, Wand2, Type, Calendar, Clock, Languages, Sparkles, Crop } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle, Clock, Crop, Download, Instagram, Languages, Loader2, Share2, Sparkles, Type, Video, Wand2, X, Youtube } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { getApiUrl } from '../config';
-import SubtitleModal from './SubtitleModal';
-import HookModal from './HookModal';
-import TranslateModal from './TranslateModal';
 import { renderInBrowser } from '../lib/renderInBrowser';
+import HookModal from './HookModal';
+import SubtitleModal from './SubtitleModal';
+import TranslateModal from './TranslateModal';
 
 export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause }) {
     const [showModal, setShowModal] = useState(false);
@@ -219,7 +219,8 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             }
 
             let finishedRender = null;
-            while (true) {
+            let isProcessing = true;
+            while (isProcessing) {
                 await new Promise((resolve) => setTimeout(resolve, 2000));
 
                 const statusRes = await fetch(getApiUrl(`/api/render/${renderId}`));
@@ -228,7 +229,9 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 }
 
                 finishedRender = await statusRes.json();
-                if (finishedRender.status === 'done') break;
+                if (finishedRender.status === 'done') {
+                    isProcessing = false;
+                }
                 if (finishedRender.status === 'error') {
                     throw new Error(finishedRender.error || 'Quality render failed.');
                 }
@@ -418,8 +421,6 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
         setEditError(null);
         try {
             const apiKey = elevenLabsKey;
-            console.log('[Translate] API Key available:', !!apiKey);
-
             if (!apiKey) {
                 throw new Error("ElevenLabs API Key is missing. Please set it in Settings.");
             }
@@ -430,8 +431,6 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 target_language: options.targetLanguage,
                 input_filename: getVideoFilename(getBackendSourceUrl())
             };
-            console.log('[Translate] Request body:', requestBody);
-            console.log('[Translate] Sending request to /api/translate');
 
             const res = await fetch(getApiUrl('/api/translate'), {
                 method: 'POST',
@@ -442,29 +441,22 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 body: JSON.stringify(requestBody)
             });
 
-            console.log('[Translate] Response status:', res.status);
-
             if (!res.ok) {
                 const errText = await res.text();
-                console.error('[Translate] Error response:', errText);
                 try {
                     const jsonErr = JSON.parse(errText);
                     throw new Error(jsonErr.detail || errText);
                 } catch (e) {
-                    if (e.message !== errText) throw e;
                     throw new Error(errText);
                 }
             }
 
             const data = await res.json();
-            console.log('[Translate] Success response:', data);
             if (data.new_video_url) {
                 const nextUrl = getApiUrl(data.new_video_url);
                 setPersistedVideoUrl(nextUrl);
                 setCurrentVideoUrl(nextUrl);
-                if (videoRef.current) {
-                    videoRef.current.load();
-                }
+                if (videoRef.current) videoRef.current.load();
                 setShowTranslateModal(false);
             }
 
@@ -545,9 +537,9 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     };
 
     return (
-        <div className="bg-surface border border-white/5 rounded-2xl overflow-hidden flex flex-col md:flex-row group hover:border-white/10 transition-all animate-[fadeIn_0.5s_ease-out] min-h-[300px] h-auto" style={{ animationDelay: `${index * 0.1}s` }}>
-            {/* Left: Video Preview (Responsive Width) */}
-            <div className="w-full md:w-[180px] lg:w-[200px] bg-black relative shrink-0 aspect-[9/16] md:aspect-auto group/video">
+        <div className="bg-surface border border-white/5 rounded-2xl overflow-hidden flex flex-col group hover:border-white/10 transition-all animate-[fadeIn_0.5s_ease-out] h-full" style={{ animationDelay: `${index * 0.1}s` }}>
+            {/* Top: Video Preview */}
+            <div className="w-full bg-black relative shrink-0 aspect-[9/16] group/video">
                 <video
                     ref={videoRef}
                     src={currentVideoUrl}
@@ -594,8 +586,8 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 )}
             </div>
 
-            {/* Right: Content & Details */}
-            <div className="flex-1 p-4 md:p-5 flex flex-col bg-[#121214] overflow-hidden min-w-0">
+            {/* Bottom: Content & Details */}
+            <div className="flex-1 p-5 flex flex-col bg-[#121214] overflow-hidden min-w-0">
                 <div className="mb-4">
                     <h3 className="text-base font-bold text-white leading-tight line-clamp-2 mb-2 break-words" title={clip.video_title_for_youtube_short}>
                         {clip.video_title_for_youtube_short || "Viral Clip Generated"}

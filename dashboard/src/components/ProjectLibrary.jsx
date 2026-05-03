@@ -264,7 +264,7 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
                 <p className="text-lg font-medium">No clips found for this project</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {normalizedProjectClips.map((clip, index) => (
                   <ResultCard
                     key={clip.video_id || `${clip.job_id || 'clip'}-${clip.index ?? index}`}
