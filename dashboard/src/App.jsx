@@ -195,6 +195,12 @@ function App() {
     setIsSyncedPlaying(false);
   };
 
+  const shouldSendAiBaseUrl = useCallback(() => {
+    if (aiProvider !== 'ollama') return true;
+    const defaultBaseUrl = import.meta.env.VITE_AI_BASE_URL || 'http://localhost:11434';
+    return aiBaseUrl && aiBaseUrl.trim() && aiBaseUrl.trim() !== defaultBaseUrl;
+  }, [aiProvider, aiBaseUrl]);
+
   // Session Recovery: Restore on mount
   useEffect(() => {
     try {
@@ -295,11 +301,14 @@ function App() {
   const getAiHeaders = (contentType = null) => {
     const headers = {
       'X-AI-Provider': aiProvider,
-      'X-AI-Base-Url': aiBaseUrl,
       'X-AI-Model': aiTextModel,
       'X-AI-Vision-Model': aiVisionModel,
       'X-AI-Image-Model': aiImageModel,
     };
+
+    if (shouldSendAiBaseUrl()) {
+      headers['X-AI-Base-Url'] = aiBaseUrl;
+    }
 
     if (aiProvider === 'gemini' && apiKey) {
       headers['X-Gemini-Key'] = apiKey;

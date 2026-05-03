@@ -37,6 +37,7 @@ videos/
 
 # Model files (downloaded at build time)
 *.pt
+.cache/
 
 # Docker
 Dockerfile
