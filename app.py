@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from s3_uploader import upload_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file
+from s3_uploader import upload_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects
 from ai_client import AIConfig, load_ai_config, ai_config_to_env
 
 load_dotenv()
@@ -1622,6 +1622,16 @@ async def thumbnail_projects(limit: int = Query(24, ge=1, le=100)):
     """List saved thumbnail projects and their files from S3/MinIO."""
     projects = list_thumbnail_projects(limit=limit)
     return {"projects": projects}
+
+
+@app.post("/api/thumbnail/projects/migrate-legacy")
+async def thumbnail_projects_migrate_legacy(
+    dry_run: bool = Query(False, description="Preview the migration without writing to MinIO"),
+    delete_source: bool = Query(True, description="Delete the legacy root folder after copying"),
+):
+    """Move legacy bucket-root thumbnail folders into the browsable project prefix."""
+    result = migrate_legacy_thumbnail_projects(dry_run=dry_run, delete_source=delete_source)
+    return result
 
 
 @app.patch("/api/thumbnail/projects/{session_id}/{project_slug}")

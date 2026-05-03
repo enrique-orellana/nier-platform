@@ -533,18 +533,36 @@ def _write_s3_text_object(s3_client, bucket_name, object_key, content, content_t
     )
 
 
+def _s3_object_exists(s3_client, bucket_name, object_key):
+    try:
+        s3_client.head_object(Bucket=bucket_name, Key=object_key)
+        return True
+    except ClientError as e:
+        error_code = str(e.response.get("Error", {}).get("Code", ""))
+        if error_code in {"404", "NoSuchKey", "NotFound", "NoSuchBucket"}:
+            return False
+        raise
+
+
+def _copy_s3_object(s3_client, bucket_name, source_key, destination_key):
+    s3_client.copy_object(
+        Bucket=bucket_name,
+        CopySource={"Bucket": bucket_name, "Key": source_key},
+        Key=destination_key,
+    )
+
+
 def _delete_objects_with_prefix(s3_client, bucket_name, prefix):
     paginator = s3_client.get_paginator("list_objects_v2")
     pages = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
     deleted = 0
     for page in pages:
-        keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+        keys = [obj["Key"] for obj in page.get("Contents", [])]
         if not keys:
             continue
-        for start in range(0, len(keys), 1000):
-            batch = keys[start:start + 1000]
-            s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": batch, "Quiet": True})
-            deleted += len(batch)
+        for key in keys:
+            s3_client.delete_object(Bucket=bucket_name, Key=key)
+            deleted += 1
     return deleted
 
 
@@ -914,6 +932,223 @@ def delete_thumbnail_project(session_id, project_slug):
         return {"deleted": deleted, "prefix": prefix}
     except Exception:
         return None
+
+
+def _legacy_project_slug(root_prefix, metadata_key):
+    base_name = os.path.basename(metadata_key).replace("_metadata.json", "")
+    source_suffix = base_name
+    if base_name.startswith(f"{root_prefix}_"):
+        source_suffix = base_name[len(root_prefix) + 1 :]
+    elif base_name.startswith(root_prefix):
+        source_suffix = base_name[len(root_prefix):].lstrip("_")
+    slug = _slugify(source_suffix, fallback="imported")
+    return f"legacy_{slug}"
+
+
+def _build_legacy_project_manifest(root_prefix, metadata_key, metadata, copied_files, created_at):
+    shorts = metadata.get("shorts", []) if isinstance(metadata, dict) else []
+    titles = []
+    descriptions = []
+    for short in shorts:
+        if not isinstance(short, dict):
+            continue
+        title = short.get("video_title_for_youtube_short") or short.get("title") or short.get("hook_text") or ""
+        if title:
+            titles.append(title)
+        desc = short.get("video_description_for_tiktok") or short.get("video_description_for_instagram") or ""
+        if desc:
+            descriptions.append(desc)
+
+    project_title = titles[0] if titles else f"Imported {root_prefix}"
+    description = descriptions[0] if descriptions else ""
+    project_slug = _legacy_project_slug(root_prefix, metadata_key)
+
+    manifest = {
+        "session_id": root_prefix,
+        "project_slug": project_slug,
+        "project_title": project_title,
+        "title": project_title,
+        "description": description,
+        "selected_thumbnail": "",
+        "titles": titles,
+        "generated_thumbnails": [],
+        "language": metadata.get("language", "en") if isinstance(metadata, dict) else "en",
+        "context": metadata.get("context", "") if isinstance(metadata, dict) else "",
+        "video_duration": metadata.get("video_duration", 0) if isinstance(metadata, dict) else 0,
+        "video_path": "",
+        "transcript_text": "",
+        "transcript_segments": [],
+        "transcript": {},
+        "created_at": created_at,
+        "legacy_import": True,
+        "legacy_source_prefix": f"{root_prefix}/",
+        "legacy_metadata_key": metadata_key,
+        "legacy_files": copied_files,
+    }
+    return manifest
+
+
+def _list_legacy_thumbnail_roots(s3_client, bucket_name):
+    paginator = s3_client.get_paginator("list_objects_v2")
+    roots = {}
+    for page in paginator.paginate(Bucket=bucket_name):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            if not key or key.startswith("thumbnail-projects/"):
+                continue
+            parts = key.split("/", 1)
+            if len(parts) < 2:
+                continue
+            root_prefix = parts[0]
+            root = roots.setdefault(root_prefix, {"objects": [], "metadata": []})
+            root["objects"].append(obj)
+            if key.endswith("_metadata.json"):
+                root["metadata"].append(obj)
+    return roots
+
+
+def migrate_legacy_thumbnail_projects(dry_run=False, delete_source=True):
+    """
+    Move legacy bucket-root clip folders into thumbnail-projects/<session>/<slug>/.
+    Returns a summary of migrated projects.
+    """
+    bucket_name = os.environ.get("AWS_S3_BUCKET", "").strip() or os.environ.get("AWS_S3_PUBLIC_BUCKET", "").strip()
+    if not bucket_name:
+        return {"migrated": [], "skipped": [], "dry_run": dry_run, "delete_source": delete_source}
+
+    s3_client = get_s3_client()
+    if not s3_client:
+        return {"migrated": [], "skipped": [], "dry_run": dry_run, "delete_source": delete_source}
+
+    roots = _list_legacy_thumbnail_roots(s3_client, bucket_name)
+    migrated = []
+    skipped = []
+
+    for root_prefix, payload in sorted(roots.items()):
+        metadata_objs = payload.get("metadata", [])
+        object_objs = payload.get("objects", [])
+        if not metadata_objs:
+            continue
+
+        metadata_obj = sorted(metadata_objs, key=lambda item: item["LastModified"], reverse=True)[0]
+        metadata_key = metadata_obj["Key"]
+        project_slug = _legacy_project_slug(root_prefix, metadata_key)
+        destination_prefix = _project_prefix(root_prefix, project_slug)
+        manifest_key = _project_manifest_key(root_prefix, project_slug)
+
+        if _s3_object_exists(s3_client, bucket_name, manifest_key):
+            deleted_source_objects = 0
+            if delete_source:
+                deleted_source_objects = _delete_objects_with_prefix(s3_client, bucket_name, f"{root_prefix}/")
+            skipped.append({
+                "root_prefix": root_prefix,
+                "project_slug": project_slug,
+                "reason": "already_migrated",
+                "destination_prefix": destination_prefix,
+                "deleted_source_objects": deleted_source_objects,
+            })
+            continue
+
+        try:
+            metadata_text = _read_s3_text_object(s3_client, bucket_name, metadata_key)
+            metadata = json.loads(metadata_text)
+        except Exception:
+            metadata = {}
+
+        copied_files = []
+        for obj in object_objs:
+            source_key = obj["Key"]
+            rel_name = os.path.basename(source_key)
+            destination_key = f"{destination_prefix}source/{rel_name}"
+            copied_files.append({
+                "source_key": source_key,
+                "destination_key": destination_key,
+                "size": obj.get("Size", 0),
+            })
+
+        manifest = _build_legacy_project_manifest(
+            root_prefix=root_prefix,
+            metadata_key=metadata_key,
+            metadata=metadata,
+            copied_files=copied_files,
+            created_at=metadata_obj["LastModified"].isoformat(),
+        )
+
+        migrated_entry = {
+            "root_prefix": root_prefix,
+            "project_slug": project_slug,
+            "destination_prefix": destination_prefix,
+            "manifest_key": manifest_key,
+            "source_count": len(object_objs),
+            "dry_run": dry_run,
+        }
+
+        if dry_run:
+            migrated.append(migrated_entry)
+            continue
+
+        _write_s3_text_object(
+            s3_client,
+            bucket_name,
+            manifest_key,
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+            "application/json",
+        )
+        _write_s3_text_object(
+            s3_client,
+            bucket_name,
+            f"{destination_prefix}selected_title.txt",
+            manifest["project_title"],
+            "text/plain; charset=utf-8",
+        )
+        _write_s3_text_object(
+            s3_client,
+            bucket_name,
+            f"{destination_prefix}description.txt",
+            manifest["description"],
+            "text/plain; charset=utf-8",
+        )
+        _write_s3_text_object(
+            s3_client,
+            bucket_name,
+            f"{destination_prefix}titles.txt",
+            "\n".join(f"{i + 1}. {title}" for i, title in enumerate(manifest.get("titles", []))),
+            "text/plain; charset=utf-8",
+        )
+        _write_s3_text_object(
+            s3_client,
+            bucket_name,
+            f"{destination_prefix}transcript.txt",
+            "",
+            "text/plain; charset=utf-8",
+        )
+        _write_s3_text_object(
+            s3_client,
+            bucket_name,
+            f"{destination_prefix}transcript.json",
+            "{}",
+            "application/json",
+        )
+
+        for obj in object_objs:
+            source_key = obj["Key"]
+            rel_name = os.path.basename(source_key)
+            destination_key = f"{destination_prefix}source/{rel_name}"
+            _copy_s3_object(s3_client, bucket_name, source_key, destination_key)
+
+        if delete_source:
+            deleted = _delete_objects_with_prefix(s3_client, bucket_name, f"{root_prefix}/")
+            migrated_entry["deleted_source_objects"] = deleted
+
+        migrated.append(migrated_entry)
+
+    return {
+        "bucket": bucket_name,
+        "dry_run": dry_run,
+        "delete_source": delete_source,
+        "migrated": migrated,
+        "skipped": skipped,
+    }
 
 
 def list_thumbnail_projects(limit=24, force_refresh=False):
