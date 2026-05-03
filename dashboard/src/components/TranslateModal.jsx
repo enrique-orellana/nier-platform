@@ -93,7 +93,7 @@ export default function TranslateModal({ isOpen, onClose, onTranslate, isProcess
                     <select
                         value={targetLanguage}
                         onChange={(e) => setTargetLanguage(e.target.value)}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-green-500/50 appearance-none cursor-pointer"
+                        className="input-field"
                         disabled={isProcessing}
                     >
                         {Object.entries(LANGUAGES).sort((a, b) => a[1].localeCompare(b[1])).map(([code, name]) => (

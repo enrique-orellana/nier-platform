@@ -249,7 +249,7 @@ export default function SubtitleModal({ isOpen, onClose, onGenerate, isProcessin
                             <select
                                 value={fontName}
                                 onChange={(e) => setFontName(e.target.value)}
-                                className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-primary/50"
+                                className="input-field"
                             >
                                 {FONT_OPTIONS.map((f) => (
                                     <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>

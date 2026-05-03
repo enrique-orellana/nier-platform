@@ -1,4 +1,4 @@
-import { ChevronLeft, FolderOpen, Loader2, Play, RefreshCw, Search } from 'lucide-react';
+import { ChevronLeft, FolderOpen, Image as ImageIcon, Loader2, Play, RefreshCw, Search } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { getApiUrl } from '../config';
 import ResultCard from './ResultCard';
@@ -165,7 +165,7 @@ export default function ProjectLibrary() {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
-                  <Image size={20} className="text-cyan-400" />
+                  <ImageIcon size={20} className="text-cyan-400" />
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold text-white tracking-tight">

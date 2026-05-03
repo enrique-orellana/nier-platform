@@ -213,7 +213,7 @@ export default function ScheduleWeekModal({ isOpen, onClose, clips, jobId, uploa
                             value={timezone}
                             onChange={(e) => setTimezone(e.target.value)}
                             disabled={scheduling}
-                            className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-indigo-500/50 appearance-none cursor-pointer"
+                            className="input-field"
                         >
                             {TIMEZONES.map(tz => (
                                 <option key={tz.value} value={tz.value}>{tz.label}</option>
