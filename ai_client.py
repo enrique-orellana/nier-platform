@@ -78,6 +78,10 @@ def _pick(source: Optional[Mapping[str, Any]], *keys: str, default: str = "") ->
 
 def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
     provider = _pick(source, "X-AI-Provider", "AI_PROVIDER", default="gemini")
+    provider_normalized = provider.strip().lower()
+    if provider_normalized in {"local", "ollama-local"}:
+        provider_normalized = "ollama"
+
     api_key = _pick(
         source,
         "X-AI-Api-Key",
@@ -93,10 +97,6 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         "OLLAMA_BASE_URL",
         default=OLLAMA_BASE_URL if provider_normalized == "ollama" else "",
     )
-
-    provider_normalized = provider.strip().lower()
-    if provider_normalized in {"local", "ollama-local"}:
-        provider_normalized = "ollama"
 
     text_model = _pick(
         source,
