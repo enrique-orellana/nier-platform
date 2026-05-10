@@ -1,17 +1,21 @@
-import { defineConfig } from 'vite'
+import process from 'node:process'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const isKubernetes = Boolean(process.env.KUBERNETES_SERVICE_HOST || process.env.KUBERNETES_PORT)
-const backendTarget =
-  process.env.VITE_BACKEND_PROXY_TARGET ||
-  (isKubernetes ? 'http://openshorts-backend:8000' : 'http://backend:8000')
-const rendererTarget =
-  process.env.VITE_RENDERER_PROXY_TARGET ||
-  (isKubernetes ? 'http://openshorts-renderer:3100' : 'http://renderer:3100')
-
 // https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  
+  const isKubernetes = Boolean(env.KUBERNETES_SERVICE_HOST || env.KUBERNETES_PORT)
+  const backendTarget =
+    env.VITE_BACKEND_PROXY_TARGET ||
+    (isKubernetes ? 'http://openshorts-backend:8000' : 'http://localhost:8000')
+  const rendererTarget =
+    env.VITE_RENDERER_PROXY_TARGET ||
+    (isKubernetes ? 'http://openshorts-renderer:3100' : 'http://localhost:3100')
+
+  return {
+    plugins: [react()],
   server: {
     allowedHosts: [
       'openshorts.app',
@@ -45,4 +49,5 @@ export default defineConfig({
       }
     }
   }
+}
 })
