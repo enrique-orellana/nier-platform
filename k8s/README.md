@@ -76,9 +76,11 @@ OpenShorts is exposed on one host and uses path routing:
 
 - UI: `http://openshorts.127.0.0.1.nip.io`
 - API: `http://openshorts.127.0.0.1.nip.io/api`
+- MinIO: `http://minio.openshorts.127.0.0.1.nip.io`
+- MinIO console: `http://console.minio.openshorts.127.0.0.1.nip.io`
 
 The backend talks to MinIO inside the cluster, and gallery/video URLs are
-served back through the same ingress host. The recovered buckets remain:
+served back through the MinIO ingress host above. The recovered buckets remain:
 
 - `AWS_S3_BUCKET=openshorts-media`
 - `AWS_S3_PUBLIC_BUCKET=openshorts-media`
@@ -90,6 +92,9 @@ image tags and uses the checked-in manifest directly. The helper script loads
 the root `.env` automatically, so you do not need to export anything. If you
 want a different environment flavor, create a matching overlay file such as
 `.env.local`, `.env.devel`, or `.env.quality` and pass the profile name.
+
+On Windows, you can double-click [`deploy-local.cmd`](../deploy-local.cmd) for
+a one-click deploy that wraps the PowerShell helper.
 
 ```powershell
 .\scripts\deploy-local.ps1

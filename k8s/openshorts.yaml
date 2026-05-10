@@ -42,8 +42,8 @@ data:
   AWS_S3_BUCKET: openshorts-media
   AWS_S3_PUBLIC_BUCKET: openshorts-media
   AWS_S3_ENDPOINT_URL: http://minio.minio-system.svc.cluster.local:9000
-  AWS_S3_PUBLIC_URL_BASE: http://minio.127.0.0.1.nip.io
-  AWS_S3_PUBLIC_ENDPOINT_URL: http://minio.127.0.0.1.nip.io
+  AWS_S3_PUBLIC_URL_BASE: http://minio.openshorts.127.0.0.1.nip.io
+  AWS_S3_PUBLIC_ENDPOINT_URL: http://minio.openshorts.127.0.0.1.nip.io
   AWS_S3_FORCE_PATH_STYLE: "true"
   RENDER_SERVICE_URL: http://openshorts-renderer.openshorts.svc.cluster.local:3100
   PORT: "3100"
