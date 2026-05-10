@@ -36,6 +36,8 @@ data:
   VITE_AI_ANALYZE_MODEL: auto
   VITE_AI_VISION_MODEL: qwen2.5vl:latest
   VITE_AI_IMAGE_MODEL: auto
+  VITE_BACKEND_PROXY_TARGET: http://openshorts-backend:8000
+  VITE_RENDERER_PROXY_TARGET: http://openshorts-renderer:3100
   AWS_REGION: eu-west-3
   AWS_S3_BUCKET: openshorts-media
   AWS_S3_PUBLIC_BUCKET: openshorts-media
@@ -100,6 +102,17 @@ spec:
               port: 8000
             initialDelaySeconds: 30
             periodSeconds: 20
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
       volumes:
         - name: workdir
           persistentVolumeClaim:
@@ -165,6 +178,16 @@ spec:
               port: 3100
             initialDelaySeconds: 30
             periodSeconds: 20
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "4000m"
+              memory: "4Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+      terminationGracePeriodSeconds: 60
       volumes:
         - name: workdir
           persistentVolumeClaim:
@@ -200,7 +223,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: openshorts-frontend:local
+          image: openshorts-frontend:proxyfix-20260510f
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5173
@@ -219,6 +242,13 @@ spec:
               port: 5173
             initialDelaySeconds: 30
             periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
 ---
 apiVersion: v1
 kind: Service

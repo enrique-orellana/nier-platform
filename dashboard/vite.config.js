@@ -1,6 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const isKubernetes = Boolean(process.env.KUBERNETES_SERVICE_HOST || process.env.KUBERNETES_PORT)
+const backendTarget =
+  process.env.VITE_BACKEND_PROXY_TARGET ||
+  (isKubernetes ? 'http://openshorts-backend:8000' : 'http://backend:8000')
+const rendererTarget =
+  process.env.VITE_RENDERER_PROXY_TARGET ||
+  (isKubernetes ? 'http://openshorts-renderer:3100' : 'http://renderer:3100')
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
@@ -12,27 +20,27 @@ export default defineConfig({
     ],
     proxy: {
       '/api': {
-        target: 'http://backend:8000',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/videos': {
-        target: 'http://backend:8000',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/thumbnails': {
-        target: 'http://backend:8000',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/gallery': {
-        target: 'http://backend:8000',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/video': {
-        target: 'http://backend:8000',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/render': {
-        target: 'http://renderer:3100',
+        target: rendererTarget,
         changeOrigin: true,
       }
     }
