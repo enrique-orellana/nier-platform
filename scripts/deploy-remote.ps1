@@ -33,7 +33,8 @@ function Invoke-Kubectl {
 
     if ($KubeContext) {
         & kubectl --context $KubeContext @Args
-    } else {
+    }
+    else {
         & kubectl @Args
     }
 }
@@ -62,16 +63,16 @@ function Get-EffectiveValue {
 }
 
 $ExplicitEnv = @{
-    "OPENSHORTS_REGISTRY" = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_REGISTRY")
-    "OPENSHORTS_TAG" = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_TAG")
-    "OPENSHORTS_NAMESPACE" = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_NAMESPACE")
-    "OPENSHORTS_KUBE_CONTEXT" = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_KUBE_CONTEXT")
-    "OPENSHORTS_CONFIG_ENV_FILE" = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_CONFIG_ENV_FILE")
-    "OPENSHORTS_BACKEND_BASE_URL" = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_BACKEND_BASE_URL")
-    "OPENSHORTS_FRONTEND_BASE_URL" = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_FRONTEND_BASE_URL")
-    "OPENSHORTS_S3_PUBLIC_URL_BASE" = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_S3_PUBLIC_URL_BASE")
+    "OPENSHORTS_REGISTRY"               = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_REGISTRY")
+    "OPENSHORTS_TAG"                    = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_TAG")
+    "OPENSHORTS_NAMESPACE"              = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_NAMESPACE")
+    "OPENSHORTS_KUBE_CONTEXT"           = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_KUBE_CONTEXT")
+    "OPENSHORTS_CONFIG_ENV_FILE"        = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_CONFIG_ENV_FILE")
+    "OPENSHORTS_BACKEND_BASE_URL"       = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_BACKEND_BASE_URL")
+    "OPENSHORTS_FRONTEND_BASE_URL"      = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_FRONTEND_BASE_URL")
+    "OPENSHORTS_S3_PUBLIC_URL_BASE"     = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_S3_PUBLIC_URL_BASE")
     "OPENSHORTS_S3_PUBLIC_ENDPOINT_URL" = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_S3_PUBLIC_ENDPOINT_URL")
-    "OPENSHORTS_ENV_PROFILE" = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_ENV_PROFILE")
+    "OPENSHORTS_ENV_PROFILE"            = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_ENV_PROFILE")
 }
 
 function Restore-EnvValue {
@@ -90,7 +91,8 @@ function Import-BaseEnvFiles {
     $BaseEnvFile = if (Test-Path ".env") { ".env" } elseif (Test-Path ".env.example") { ".env.example" } else { "" }
     if ($BaseEnvFile) {
         Import-EnvFile $BaseEnvFile
-    } else {
+    }
+    else {
         Write-Host "No .env or .env.example found. Continuing with process environment only." -ForegroundColor Yellow
     }
 
@@ -98,7 +100,8 @@ function Import-BaseEnvFiles {
         $ProfileEnvFile = ".env.$ProfileName"
         if (Test-Path $ProfileEnvFile) {
             Import-EnvFile $ProfileEnvFile
-        } else {
+        }
+        else {
             Write-Host "Profile env file not found: $ProfileEnvFile" -ForegroundColor Yellow
         }
     }
@@ -153,16 +156,16 @@ try {
     $envContent = Get-Content $tempEnvFile -Raw
 
     if ($BackendBaseUrl) {
-        $envContent = [regex]::Replace($envContent, '^(AI_BASE_URL=).*$','${1}' + $BackendBaseUrl, [System.Text.RegularExpressions.RegexOptions]::Multiline)
+        $envContent = [regex]::Replace($envContent, '^(AI_BASE_URL=).*$', '${1}' + $BackendBaseUrl, [System.Text.RegularExpressions.RegexOptions]::Multiline)
     }
     if ($FrontendBaseUrl) {
-        $envContent = [regex]::Replace($envContent, '^(VITE_AI_BASE_URL=).*$','${1}' + $FrontendBaseUrl, [System.Text.RegularExpressions.RegexOptions]::Multiline)
+        $envContent = [regex]::Replace($envContent, '^(VITE_AI_BASE_URL=).*$', '${1}' + $FrontendBaseUrl, [System.Text.RegularExpressions.RegexOptions]::Multiline)
     }
     if ($S3PublicUrlBase) {
-        $envContent = [regex]::Replace($envContent, '^(AWS_S3_PUBLIC_URL_BASE=).*$','${1}' + $S3PublicUrlBase, [System.Text.RegularExpressions.RegexOptions]::Multiline)
+        $envContent = [regex]::Replace($envContent, '^(AWS_S3_PUBLIC_URL_BASE=).*$', '${1}' + $S3PublicUrlBase, [System.Text.RegularExpressions.RegexOptions]::Multiline)
     }
     if ($S3PublicEndpointUrl) {
-        $envContent = [regex]::Replace($envContent, '^(AWS_S3_PUBLIC_ENDPOINT_URL=).*$','${1}' + $S3PublicEndpointUrl, [System.Text.RegularExpressions.RegexOptions]::Multiline)
+        $envContent = [regex]::Replace($envContent, '^(AWS_S3_PUBLIC_ENDPOINT_URL=).*$', '${1}' + $S3PublicEndpointUrl, [System.Text.RegularExpressions.RegexOptions]::Multiline)
     }
 
     Set-Content -Path $tempEnvFile -Value $envContent -NoNewline
@@ -172,7 +175,8 @@ try {
             -n $Namespace `
             --from-env-file=$tempEnvFile `
             --dry-run=client -o yaml | kubectl --context $KubeContext apply -f -
-    } else {
+    }
+    else {
         kubectl create configmap openshorts-config `
             -n $Namespace `
             --from-env-file=$tempEnvFile `
