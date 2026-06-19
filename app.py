@@ -32,6 +32,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 MAX_CONCURRENT_JOBS = int(os.environ.get("MAX_CONCURRENT_JOBS", "5"))
 MAX_FILE_SIZE_MB = 2048  # 2GB limit
 JOB_RETENTION_SECONDS = 3600  # 1 hour retention
+DISABLE_YOUTUBE_URL = os.environ.get("DISABLE_YOUTUBE_URL", "false").lower() in ("1", "true", "yes")
 
 # Application State
 job_queue = asyncio.Queue()
@@ -570,11 +571,16 @@ async def run_job(job_id, job_data):
         jobs[job_id]['status'] = 'failed'
         jobs[job_id]['logs'].append(f"Execution error: {str(e)}")
 
+@app.get("/api/config")
+async def get_config():
+    return {"youtubeUrlEnabled": not DISABLE_YOUTUBE_URL}
+
 @app.post("/api/process")
 async def process_endpoint(
     request: Request,
     file: Optional[UploadFile] = File(None),
     url: Optional[str] = Form(None),
+    acknowledged: Optional[str] = Form(None),
     clip_count: int = Query(6, ge=3, le=15),
     x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
     x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
@@ -596,35 +602,56 @@ async def process_endpoint(
     )
     if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing Gemini API key")
-    
+
+    ack_flag = str(acknowledged).lower() in ("1", "true", "yes")
     # Handle JSON body manually for URL payload
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
         body = await request.json()
         url = body.get("url")
-    
+        ack_flag = bool(body.get("acknowledged"))
+
     if not url and not file:
         raise HTTPException(status_code=400, detail="Must provide URL or File")
+
+    if not ack_flag:
+        raise HTTPException(status_code=400, detail="You must confirm you own the content or have rights to process it.")
+
+    if url and DISABLE_YOUTUBE_URL:
+        raise HTTPException(status_code=403, detail="YouTube URL ingest is disabled on this deployment. Please upload a file you own.")
+
+    # Capture attestation context for legal record (IP + timestamp + UA)
+    client_ip = request.client.host if request.client else "unknown"
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        client_ip = fwd.split(",")[0].strip()
+    user_agent = request.headers.get("user-agent", "")
+    attestation = {
+        "acknowledged": True,
+        "ip": client_ip,
+        "user_agent": user_agent,
+        "timestamp": time.time(),
+        "source": "url" if url else "file",
+    }
 
     job_id = str(uuid.uuid4())
     job_output_dir = os.path.join(OUTPUT_DIR, job_id)
     os.makedirs(job_output_dir, exist_ok=True)
-    
+
     # Prepare Command
     cmd = ["python", "-u", "main.py"] # -u for unbuffered
     env = os.environ.copy()
     env.update(ai_config_to_env(ai_config))
-    
     if url:
         cmd.extend(["-u", url])
     else:
         # Save uploaded file with size limit check
         input_path = os.path.join(UPLOAD_DIR, f"{job_id}_{file.filename}")
-        
+
         # Read file in chunks to check size
         size = 0
         limit_bytes = MAX_FILE_SIZE_MB * 1024 * 1024
-        
+
         with open(input_path, "wb") as buffer:
             while content := await file.read(1024 * 1024): # Read 1MB chunks
                 size += len(content)
@@ -633,11 +660,13 @@ async def process_endpoint(
                     shutil.rmtree(job_output_dir)
                     raise HTTPException(status_code=413, detail=f"File too large. Max size {MAX_FILE_SIZE_MB}MB")
                 buffer.write(content)
-                
+
         cmd.extend(["-i", input_path])
 
     cmd.extend(["--target-clips", str(clip_count)])
     cmd.extend(["-o", job_output_dir])
+
+    print(f"[attestation] job={job_id} ip={attestation['ip']} source={attestation['source']} ack=true")
 
     # Enqueue Job
     jobs[job_id] = {
@@ -645,11 +674,12 @@ async def process_endpoint(
         'logs': [f"Job {job_id} queued."],
         'cmd': cmd,
         'env': env,
-        'output_dir': job_output_dir
+        'output_dir': job_output_dir,
+        'attestation': attestation
     }
-    
+
     await job_queue.put(job_id)
-    
+
     return {"job_id": job_id, "status": "queued"}
 
 @app.get("/api/status/{job_id}")

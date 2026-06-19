@@ -523,10 +523,11 @@ function App() {
 
       if (data.type === 'url') {
         headers['Content-Type'] = 'application/json';
-        body = JSON.stringify({ url: data.payload });
+        body = JSON.stringify({ url: data.payload, acknowledged: !!data.acknowledged });
       } else {
         const formData = new FormData();
         formData.append('file', data.payload);
+        formData.append('acknowledged', data.acknowledged ? 'true' : 'false');
         body = formData;
       }
 
@@ -1193,7 +1194,7 @@ function App() {
                     Create Viral Shorts
                   </h1>
                   <p className="text-zinc-400 text-lg">
-                    Drop your long-form video URL or file below to instantly generate viral clips with AI.
+                    Drop your long-form video below to instantly generate viral clips with AI.
                   </p>
                 </div>
 
@@ -1337,10 +1338,6 @@ function App() {
 
         </div>
 
-        {/* Footer */}
-        <div className="h-8 border-t border-white/5 flex items-center justify-center shrink-0">
-          <span className="text-[10px] text-zinc-600">Made with ❤️ by <a href="https://www.upload-post.com" target="_blank" rel="noopener noreferrer" className="text-zinc-500 hover:text-white transition-colors">Upload-Post</a></span>
-        </div>
       </main>
 
       {/* Missing API Key Modal */}
