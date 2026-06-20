@@ -264,6 +264,7 @@ function App() {
         textModels: data.textModels,
         visionModels: data.visionModels,
       });
+      setAiProvider('lmstudio');
       return data;
     } catch (e) {
       console.error('Failed to discover LM Studio', e);
