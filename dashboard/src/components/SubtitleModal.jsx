@@ -3,6 +3,28 @@ import { X, Type, Loader2 } from 'lucide-react';
 import { getApiUrl } from '../config';
 import RemotionPreview from './RemotionPreview';
 
+// Route MinIO URLs through the backend proxy to avoid CORS blocks
+const getUrlFilename = (url) => {
+    if (!url) return '';
+    try {
+        const parsed = new URL(url, window.location.origin);
+        const pathname = decodeURIComponent(parsed.pathname || '');
+        return pathname.split('/').filter(Boolean).pop() || '';
+    } catch {
+        return url.split('?')[0].split('#')[0].split('/').filter(Boolean).pop() || '';
+    }
+};
+
+const toProxiedVideoUrl = (url) => {
+    if (!url) return url;
+    // Only proxy external MinIO / presigned URLs (http/https, not relative paths)
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+        const proxyFilename = getUrlFilename(url) || 'video.mp4';
+        return getApiUrl(`/api/video-proxy/${encodeURIComponent(proxyFilename)}?url=${encodeURIComponent(url)}`);
+    }
+    return url;
+};
+
 const FONT_OPTIONS = [
     { value: 'Verdana', label: 'Verdana' },
     { value: 'Arial', label: 'Arial' },
@@ -160,7 +182,7 @@ export default function SubtitleModal({ isOpen, onClose, onGenerate, isProcessin
                         </div>
                     ) : useRemotionPreview ? (
                         <RemotionPreview
-                            videoUrl={videoUrl}
+                            videoUrl={toProxiedVideoUrl(videoUrl)}
                             durationInSeconds={durationSec}
                             subtitles={subtitleConfig}
                             hook={existingHook || null}

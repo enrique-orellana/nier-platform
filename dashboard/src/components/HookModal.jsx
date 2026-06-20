@@ -1,6 +1,28 @@
 import React, { useState } from 'react';
 import { X, Sparkles, Loader2, Maximize, MoveVertical, Zap } from 'lucide-react';
 import RemotionPreview from './RemotionPreview';
+import { getApiUrl } from '../config';
+
+// Route MinIO URLs through the backend proxy to avoid CORS blocks
+const getUrlFilename = (url) => {
+    if (!url) return '';
+    try {
+        const parsed = new URL(url, window.location.origin);
+        const pathname = decodeURIComponent(parsed.pathname || '');
+        return pathname.split('/').filter(Boolean).pop() || '';
+    } catch {
+        return url.split('?')[0].split('#')[0].split('/').filter(Boolean).pop() || '';
+    }
+};
+
+const toProxiedVideoUrl = (url) => {
+    if (!url) return url;
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+        const proxyFilename = getUrlFilename(url) || 'video.mp4';
+        return getApiUrl(`/api/video-proxy/${encodeURIComponent(proxyFilename)}?url=${encodeURIComponent(url)}`);
+    }
+    return url;
+};
 
 const ENTRANCE_OPTIONS = [
     { value: 'spring', label: 'Bounce' },
@@ -60,7 +82,7 @@ export default function HookModal({ isOpen, onClose, onGenerate, isProcessing, v
                 <div className="flex-1 flex flex-col items-center justify-center bg-black rounded-lg border border-white/5 overflow-hidden relative aspect-[9/16] max-h-[600px]">
                     {useRemotionPreview ? (
                         <RemotionPreview
-                            videoUrl={videoUrl}
+                            videoUrl={toProxiedVideoUrl(videoUrl)}
                             durationInSeconds={durationInSeconds || 30}
                             hook={hookConfig}
                             subtitles={existingSubtitles || null}

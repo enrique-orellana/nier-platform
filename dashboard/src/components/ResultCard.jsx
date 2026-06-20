@@ -5,6 +5,32 @@ import HookModal from './HookModal';
 import SubtitleModal from './SubtitleModal';
 import TranslateModal from './TranslateModal';
 
+// Route MinIO presigned URLs through the backend proxy to fix CORS/loopback issues.
+// Both browser-side and server-side Remotion flows use same-origin proxy URLs.
+// The backend rewrites renderer requests to an internal backend URL before
+// forwarding them to the render service.
+
+const getUrlFilename = (url) => {
+    if (!url) return '';
+    try {
+        const parsed = new URL(url, window.location.origin);
+        const pathname = decodeURIComponent(parsed.pathname || '');
+        return pathname.split('/').filter(Boolean).pop() || '';
+    } catch {
+        return url.split('?')[0].split('#')[0].split('/').filter(Boolean).pop() || '';
+    }
+};
+
+const toProxiedVideoUrl = (url, forRenderer = false) => {
+    if (!url) return url;
+    // Blob URLs and relative paths are already local — no proxy needed
+    if (url.startsWith('blob:') || !url.startsWith('http')) return url;
+    const encoded = encodeURIComponent(url);
+    const proxyFilename = getUrlFilename(url) || 'video.mp4';
+    // Relative URL — browser uses same-origin and backend resolves it for the renderer
+    return getApiUrl(`/api/video-proxy/${encodeURIComponent(proxyFilename)}?url=${encoded}`);
+};
+
 // Sub-components
 import VideoPreview from './ResultCard/VideoPreview';
 import CardContent from './ResultCard/CardContent';
@@ -68,18 +94,101 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
         };
     }, []);
 
-    const getVideoFilename = (videoUrl) => {
-        if (!videoUrl) return '';
-        try {
-            const parsed = new URL(videoUrl, window.location.origin);
-            const pathname = decodeURIComponent(parsed.pathname || '');
-            return pathname.split('/').filter(Boolean).pop() || '';
-        } catch {
-            return videoUrl.split('?')[0].split('#')[0].split('/').filter(Boolean).pop() || '';
+    const getSourceVideoUrl = () => persistedVideoUrl || originalVideoUrl;
+    const getVideoFilename = () => getUrlFilename(getSourceVideoUrl());
+    const getBackendSourceUrl = () => toProxiedVideoUrl(getSourceVideoUrl());
+    const getRendererSourceUrl = () => toProxiedVideoUrl(getSourceVideoUrl(), true);
+
+    const applyRenderedVideoUrl = (nextUrl, { persist = false } = {}) => {
+        if (persist) {
+            setPersistedVideoUrl(nextUrl);
+        }
+        setCurrentVideoUrl(nextUrl);
+        if (videoRef.current) {
+            videoRef.current.load();
         }
     };
 
-    const getBackendSourceUrl = () => persistedVideoUrl || originalVideoUrl;
+    const renderNativeShortAndPersist = async (renderLayers) => {
+        const renderRes = await fetch(getApiUrl('/api/render'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jobId,
+                clipIndex: index,
+                props: {
+                    videoUrl: getRendererSourceUrl(),
+                    durationInFrames: Math.max(1, Math.round(clipDuration * 30)),
+                    fps: 30,
+                    width: 1080,
+                    height: 1920,
+                    subtitles: renderLayers?.subtitles || null,
+                    hook: renderLayers?.hook || null,
+                    effects: renderLayers?.effects || null,
+                },
+            }),
+        });
+
+        if (!renderRes.ok) {
+            throw new Error(await renderRes.text());
+        }
+
+        const renderData = await renderRes.json();
+        const renderId = renderData.renderId;
+        if (!renderId) {
+            throw new Error('Render service did not return a render ID.');
+        }
+
+        let finishedRender = null;
+        let isProcessing = true;
+        while (isProcessing) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+
+            const statusRes = await fetch(getApiUrl(`/api/render/${renderId}`));
+            if (!statusRes.ok) {
+                throw new Error(await statusRes.text());
+            }
+
+            finishedRender = await statusRes.json();
+            if (finishedRender.status === 'done') {
+                isProcessing = false;
+            }
+            if (finishedRender.status === 'error') {
+                throw new Error(finishedRender.error || 'Quality render failed.');
+            }
+        }
+
+        const outputUrl = finishedRender?.outputUrl || '';
+        const outputFilename = outputUrl.split(/[\\/]/).filter(Boolean).pop();
+        if (!outputFilename) {
+            throw new Error('Native short render completed, but no output file was returned.');
+        }
+
+        const newVideoUrl = `/videos/${jobId}/${outputFilename}`;
+        const persistRes = await fetch(getApiUrl(`/api/clip/${jobId}/${index}/video-url`), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ new_video_url: newVideoUrl }),
+        });
+
+        if (!persistRes.ok) {
+            throw new Error(await persistRes.text());
+        }
+
+        return getApiUrl(newVideoUrl);
+    };
+
+    const renderRemotionLayers = async (renderLayers) => {
+        const blobUrl = await renderInBrowser({
+            videoUrl: getBackendSourceUrl(),
+            durationInSeconds: clipDuration,
+            subtitles: renderLayers?.subtitles || null,
+            hook: renderLayers?.hook || null,
+            effects: renderLayers?.effects || null,
+        });
+        applyRenderedVideoUrl(blobUrl);
+        return blobUrl;
+    };
 
     // Fetch clip duration from transcript endpoint
     useEffect(() => {
@@ -125,7 +234,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 body: JSON.stringify({
                     job_id: jobId,
                     clip_index: index,
-                    input_filename: getVideoFilename(getBackendSourceUrl())
+                    input_filename: getVideoFilename()
                 })
             });
 
@@ -134,15 +243,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 if (data.effects && data.effects.segments) {
                     const newLayers = { ...activeLayers, effects: data.effects };
                     setActiveLayers(newLayers);
-                    const blobUrl = await renderInBrowser({
-                        videoUrl: getBackendSourceUrl(),
-                        durationInSeconds: clipDuration,
-                        subtitles: newLayers.subtitles,
-                        hook: newLayers.hook,
-                        effects: newLayers.effects,
-                    });
-                    setCurrentVideoUrl(blobUrl);
-                    if (videoRef.current) videoRef.current.load();
+                    await renderRemotionLayers(newLayers);
                     return;
                 }
             }
@@ -154,7 +255,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 body: JSON.stringify({
                     job_id: jobId,
                     clip_index: index,
-                    input_filename: getVideoFilename(getBackendSourceUrl())
+                    input_filename: getVideoFilename()
                 })
             });
 
@@ -171,11 +272,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             const data = await res.json();
             if (data.new_video_url) {
                 const nextUrl = getApiUrl(data.new_video_url);
-                setPersistedVideoUrl(nextUrl);
-                setCurrentVideoUrl(nextUrl);
-                if (videoRef.current) {
-                    videoRef.current.load();
-                }
+                applyRenderedVideoUrl(nextUrl, { persist: true });
             }
 
         } catch (e) {
@@ -191,80 +288,9 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
         setEditError(null);
 
         try {
-            const renderSourceVideoUrl = getBackendSourceUrl();
             const renderLayers = activeLayers;
-
-            const renderRes = await fetch(getApiUrl('/api/render'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jobId,
-                    clipIndex: index,
-                    props: {
-                        videoUrl: renderSourceVideoUrl,
-                        durationInFrames: Math.max(1, Math.round(clipDuration * 30)),
-                        fps: 30,
-                        width: 1080,
-                        height: 1920,
-                        subtitles: renderLayers?.subtitles || null,
-                        hook: renderLayers?.hook || null,
-                        effects: renderLayers?.effects || null,
-                    },
-                }),
-            });
-
-            if (!renderRes.ok) {
-                throw new Error(await renderRes.text());
-            }
-
-            const renderData = await renderRes.json();
-            const renderId = renderData.renderId;
-            if (!renderId) {
-                throw new Error('Render service did not return a render ID.');
-            }
-
-            let finishedRender = null;
-            let isProcessing = true;
-            while (isProcessing) {
-                await new Promise((resolve) => setTimeout(resolve, 2000));
-
-                const statusRes = await fetch(getApiUrl(`/api/render/${renderId}`));
-                if (!statusRes.ok) {
-                    throw new Error(await statusRes.text());
-                }
-
-                finishedRender = await statusRes.json();
-                if (finishedRender.status === 'done') {
-                    isProcessing = false;
-                }
-                if (finishedRender.status === 'error') {
-                    throw new Error(finishedRender.error || 'Quality render failed.');
-                }
-            }
-
-            const outputUrl = finishedRender?.outputUrl || '';
-            const outputFilename = outputUrl.split(/[\\/]/).filter(Boolean).pop();
-            if (!outputFilename) {
-                throw new Error('Native short render completed, but no output file was returned.');
-            }
-
-            const newVideoUrl = `/videos/${jobId}/${outputFilename}`;
-            const persistRes = await fetch(getApiUrl(`/api/clip/${jobId}/${index}/video-url`), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ new_video_url: newVideoUrl }),
-            });
-
-            if (!persistRes.ok) {
-                throw new Error(await persistRes.text());
-            }
-
-            const nextUrl = getApiUrl(newVideoUrl);
-            setPersistedVideoUrl(nextUrl);
-            setCurrentVideoUrl(nextUrl);
-            if (videoRef.current) {
-                videoRef.current.load();
-            }
+            const nextUrl = await renderNativeShortAndPersist(renderLayers);
+            applyRenderedVideoUrl(nextUrl, { persist: true });
         } catch (e) {
             setEditError(e.message);
             setTimeout(() => setEditError(null), 5000);
@@ -282,7 +308,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    input_filename: getVideoFilename(getBackendSourceUrl()),
+                    input_filename: getVideoFilename(),
                 }),
             });
 
@@ -315,15 +341,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 // Accumulate layer and render all layers together
                 const newLayers = { ...activeLayers, subtitles: options.remotion };
                 setActiveLayers(newLayers);
-                const blobUrl = await renderInBrowser({
-                    videoUrl: getBackendSourceUrl(),
-                    durationInSeconds: clipDuration,
-                    subtitles: newLayers.subtitles,
-                    hook: newLayers.hook,
-                    effects: newLayers.effects,
-                });
-                setCurrentVideoUrl(blobUrl);
-                if (videoRef.current) videoRef.current.load();
+                await renderRemotionLayers(newLayers);
                 setShowSubtitleModal(false);
                 return;
             }
@@ -343,7 +361,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     border_width: options.borderWidth,
                     bg_color: options.bgColor,
                     bg_opacity: options.bgOpacity,
-                    input_filename: getVideoFilename(getBackendSourceUrl())
+                    input_filename: getVideoFilename()
                 })
             });
 
@@ -351,9 +369,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             const data = await res.json();
             if (data.new_video_url) {
                 const nextUrl = getApiUrl(data.new_video_url);
-                setPersistedVideoUrl(nextUrl);
-                setCurrentVideoUrl(nextUrl);
-                if (videoRef.current) videoRef.current.load();
+                applyRenderedVideoUrl(nextUrl, { persist: true });
                 setShowSubtitleModal(false);
             }
         } catch (e) {
@@ -372,15 +388,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 // Accumulate layer and render all layers together
                 const newLayers = { ...activeLayers, hook: hookData.remotion };
                 setActiveLayers(newLayers);
-                const blobUrl = await renderInBrowser({
-                    videoUrl: getBackendSourceUrl(),
-                    durationInSeconds: clipDuration,
-                    subtitles: newLayers.subtitles,
-                    hook: newLayers.hook,
-                    effects: newLayers.effects,
-                });
-                setCurrentVideoUrl(blobUrl);
-                if (videoRef.current) videoRef.current.load();
+                await renderRemotionLayers(newLayers);
                 setShowHookModal(false);
                 return;
             }
@@ -399,7 +407,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     text: payload.text,
                     position: payload.position,
                     size: payload.size,
-                    input_filename: getVideoFilename(getBackendSourceUrl())
+                    input_filename: getVideoFilename()
                 })
             });
 
@@ -407,9 +415,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             const data = await res.json();
             if (data.new_video_url) {
                 const nextUrl = getApiUrl(data.new_video_url);
-                setPersistedVideoUrl(nextUrl);
-                setCurrentVideoUrl(nextUrl);
-                if (videoRef.current) videoRef.current.load();
+                applyRenderedVideoUrl(nextUrl, { persist: true });
                 setShowHookModal(false);
             }
         } catch (e) {
@@ -434,7 +440,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 job_id: jobId,
                 clip_index: index,
                 target_language: options.targetLanguage,
-                input_filename: getVideoFilename(getBackendSourceUrl())
+                input_filename: getVideoFilename()
             };
 
             const res = await fetch(getApiUrl('/api/translate'), {
@@ -459,9 +465,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             const data = await res.json();
             if (data.new_video_url) {
                 const nextUrl = getApiUrl(data.new_video_url);
-                setPersistedVideoUrl(nextUrl);
-                setCurrentVideoUrl(nextUrl);
-                if (videoRef.current) videoRef.current.load();
+                applyRenderedVideoUrl(nextUrl, { persist: true });
                 setShowTranslateModal(false);
             }
 
