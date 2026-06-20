@@ -355,9 +355,8 @@ def _lmstudio_chat(
         "messages": messages,
         "temperature": 0.2,
     }
-    if json_mode:
-        payload["response_format"] = {"type": "json_object"}
-
+    # LM Studio requires 'json_schema' or 'text' for response_format.type.
+    # Since we don't have a JSON schema, rely on system prompts and extract_json_text.
     with httpx.Client(timeout=timeout) as client:
         response = client.post(
             url,
