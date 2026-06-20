@@ -135,3 +135,48 @@ class AIClientLmStudioChatTests(unittest.TestCase):
             RecordingChatClient.last_json["response_format"],
             {"type": "json_object"},
         )
+
+
+class DummyAuthErrorResponse:
+    def raise_for_status(self):
+        import httpx
+        raise httpx.HTTPStatusError("Auth failed", request=None, response=self)
+
+    @property
+    def status_code(self):
+        return 401
+
+
+class DummyAuthErrorClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def get(self, url, headers=None):
+        return DummyAuthErrorResponse()
+
+
+class AIClientLmStudioEdgeCaseTests(unittest.TestCase):
+    @patch("ai_client.httpx.Client", DummyAuthErrorClient)
+    def test_discover_lmstudio_models_surfaces_auth_error(self):
+        with self.assertRaises(Exception) as context:
+            ai_client.discover_lmstudio_models("http://localhost:1234/", api_key="bad")
+        self.assertIn("Auth failed", str(context.exception))
+
+    def test_lmstudio_config_normalizes_trailing_slash(self):
+        config1 = ai_client.AIConfig(
+            provider="lmstudio",
+            base_url="http://localhost:1234/"
+        )
+        self.assertEqual(config1.resolved_base_url(), "http://localhost:1234")
+
+        config2 = ai_client.AIConfig(
+            provider="lmstudio",
+            base_url="http://localhost:1234"
+        )
+        self.assertEqual(config2.resolved_base_url(), "http://localhost:1234")
