@@ -47,7 +47,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --upgrade yt-dlp
 
 # Create a non-root user
-RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
+RUN groupadd -g 1000 appuser && useradd -u 1000 -g appuser -d /app -s /sbin/nologin appuser
 
 # Create directories including Ultralytics cache config
 RUN mkdir -p /app/uploads /app/output /tmp/Ultralytics
@@ -56,6 +56,7 @@ RUN chown -R appuser:appuser /app /tmp/Ultralytics
 
 # Switch to non-root user
 USER appuser
+ENV USER=appuser
 
 # Pre-download YOLO model on build (now running as appuser, fully cached before source code copy)
 RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
