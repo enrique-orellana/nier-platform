@@ -130,8 +130,6 @@ const SESSION_KEY = 'openshorts_session';
 const SESSION_MAX_AGE = 3600000; // 1 hour (matches server job retention)
 const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
 const GEMINI_VISION_MODEL = 'gemini-3.1-flash-image-preview';
-const OLLAMA_TEXT_MODEL = 'qwen3:latest';
-const OLLAMA_VISION_MODEL = 'qwen2.5vl:latest';
 const normalizeQualityPreset = (value) => {
   const preset = (value || '').trim().toLowerCase();
   if (preset === 'fast') return 'lite';
@@ -159,28 +157,8 @@ const QUALITY_PRESETS = {
       image: 'gemini-2.5-flash-image',
     },
   },
-  ollama: {
-    lite: {
-      text: 'gemma3:1b',
-      analyze: 'gemma3:1b',
-      vision: 'gemma3:4b',
-      image: '',
-    },
-    balanced: {
-      text: 'gemma3:4b',
-      analyze: 'gemma3:4b',
-      vision: 'gemma3:4b',
-      image: '',
-    },
-    best: {
-      text: 'gemma3:12b',
-      analyze: 'gemma3:12b',
-      vision: 'gemma3:12b',
-      image: '',
-    },
-  },
 };
-const CONFIGURED_OLLAMA_BASE_URL = (import.meta.env.VITE_AI_BASE_URL || '').trim();
+const CONFIGURED_LMSTUDIO_BASE_URL = (import.meta.env.VITE_AI_BASE_URL || '').trim();
 const CONFIGURED_AI_QUALITY_PRESET = (import.meta.env.VITE_AI_QUALITY_PRESET || 'balanced').trim();
 
 // Mock polling function
@@ -193,7 +171,7 @@ const pollJob = async (jobId) => {
 function App() {
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_key') || '');
   const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('ai_provider_v1') || import.meta.env.VITE_AI_PROVIDER || 'gemini');
-  const [aiBaseUrl, setAiBaseUrl] = useState(() => localStorage.getItem('ai_base_url_v1') || CONFIGURED_OLLAMA_BASE_URL || '');
+  const [aiBaseUrl, setAiBaseUrl] = useState(() => localStorage.getItem('ai_base_url_v1') || CONFIGURED_LMSTUDIO_BASE_URL || '');
   const [aiQualityPreset, setAiQualityPreset] = useState(() => normalizeQualityPreset(localStorage.getItem('ai_quality_preset_v1') || CONFIGURED_AI_QUALITY_PRESET || 'balanced'));
   const [aiTextModel, setAiTextModel] = useState(() => localStorage.getItem('ai_text_model_v1') || import.meta.env.VITE_AI_MODEL || 'auto');
   const [aiAnalyzeModel, setAiAnalyzeModel] = useState(() => localStorage.getItem('ai_analyze_model_v1') || import.meta.env.VITE_AI_ANALYZE_MODEL || 'auto');
@@ -323,7 +301,6 @@ function App() {
       setLmStudioModels({ textModels: [], visionModels: [] });
       setAiProvider((current) => pickProviderAfterDiscoveryFailure({
         currentProvider: current,
-        ollamaBaseUrl: CONFIGURED_OLLAMA_BASE_URL || aiBaseUrl,
       }));
     }
   }, [aiBaseUrl, apiKey]);
@@ -333,7 +310,6 @@ function App() {
       setAiProvider(
         pickProviderAfterDiscoveryFailure({
           currentProvider: 'lmstudio',
-          ollamaBaseUrl: CONFIGURED_OLLAMA_BASE_URL || aiBaseUrl,
         }),
       );
     }
@@ -358,7 +334,7 @@ function App() {
   };
 
   const shouldSendAiBaseUrl = useCallback(() => {
-    if (aiProvider !== 'ollama') return false;
+    if (aiProvider !== 'lmstudio') return false;
     return !!aiBaseUrl && !!aiBaseUrl.trim();
   }, [aiProvider, aiBaseUrl]);
 
@@ -447,36 +423,22 @@ function App() {
     lastProviderRef.current = aiProvider;
 
     if (aiProvider === 'gemini') {
-      setAiTextModel((current) => (!current || current === OLLAMA_TEXT_MODEL) ? GEMINI_TEXT_MODEL : current);
-      setAiAnalyzeModel((current) => (!current || current === OLLAMA_TEXT_MODEL) ? GEMINI_TEXT_MODEL : current);
-      setAiVisionModel((current) => (!current || current === OLLAMA_VISION_MODEL) ? GEMINI_VISION_MODEL : current);
-      setAiImageModel((current) => (!current || current === OLLAMA_VISION_MODEL) ? GEMINI_VISION_MODEL : current);
+      setAiTextModel((current) => (!current || current === '') ? GEMINI_TEXT_MODEL : current);
+      setAiAnalyzeModel((current) => (!current || current === '') ? GEMINI_TEXT_MODEL : current);
+      setAiVisionModel((current) => (!current || current === '') ? GEMINI_VISION_MODEL : current);
+      setAiImageModel((current) => (!current || current === '') ? GEMINI_VISION_MODEL : current);
       return;
-    }
-
-    if (aiProvider === 'ollama') {
-      setAiBaseUrl((current) => {
-        const cleaned = (current || '').trim().replace(/\/$/, '');
-        if (!CONFIGURED_OLLAMA_BASE_URL && (
-          cleaned === 'http://localhost:11434' ||
-          cleaned === 'http://127.0.0.1:11434' ||
-          cleaned === 'http://host.docker.internal:11434'
-        )) {
-          return '';
-        }
-        return current;
-      });
     }
 
     if (aiQualityPreset !== 'custom') {
       return;
     }
 
-    if (previousProvider === 'gemini' || previousProvider === 'ollama') {
-      setAiTextModel((current) => (!current || current === GEMINI_TEXT_MODEL) ? OLLAMA_TEXT_MODEL : current);
-      setAiAnalyzeModel((current) => (!current || current === GEMINI_TEXT_MODEL) ? OLLAMA_TEXT_MODEL : current);
-      setAiVisionModel((current) => (!current || current === GEMINI_VISION_MODEL) ? OLLAMA_VISION_MODEL : current);
-      setAiImageModel((current) => (!current || current === GEMINI_VISION_MODEL) ? '' : current);
+    if (previousProvider === 'gemini') {
+      setAiTextModel('');
+      setAiAnalyzeModel('');
+      setAiVisionModel('');
+      setAiImageModel('');
     }
   }, [aiProvider, aiQualityPreset]);
 
@@ -609,9 +571,9 @@ function App() {
       setShowKeyModal(true);
       return;
     }
-    if (aiProvider === 'ollama' && !aiBaseUrl.trim()) {
+    if (aiProvider === 'lmstudio' && !aiBaseUrl.trim()) {
       setActiveTab('settings');
-      setLogs(["Ollama mode needs a Base URL. Set it in Settings first."]);
+      setLogs(["LM Studio mode needs a Base URL. Set it in Settings first."]);
       setStatus('error');
       return;
     }

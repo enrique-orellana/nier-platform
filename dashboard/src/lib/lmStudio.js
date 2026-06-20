@@ -1,8 +1,7 @@
-export const buildVisibleProviders = ({ lmStudioAvailable }) => (
-  lmStudioAvailable ? ['gemini', 'ollama', 'lmstudio'] : ['gemini', 'ollama']
+export const buildVisibleProviders = () => (
+  ['gemini', 'lmstudio']
 );
 
-export const pickProviderAfterDiscoveryFailure = ({ currentProvider, ollamaBaseUrl }) => {
-  if (currentProvider !== 'lmstudio') return currentProvider;
-  return (ollamaBaseUrl || '').trim() ? 'ollama' : 'gemini';
+export const pickProviderAfterDiscoveryFailure = ({ currentProvider }) => {
+  return currentProvider;
 };

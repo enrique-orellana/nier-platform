@@ -38,8 +38,7 @@ export default function AISettingsPanel({
           <span className="block text-sm text-zinc-400 mb-2">Provider</span>
           <select value={aiProvider} onChange={(e) => setAiProvider(e.target.value)} className="input-field">
             {providerOptions.includes('gemini') && <option value="gemini">Gemini (Cloud)</option>}
-            {providerOptions.includes('ollama') && <option value="ollama">Ollama (Local)</option>}
-            {providerOptions.includes('lmstudio') && <option value="lmstudio">LM Studio (Detected)</option>}
+            {providerOptions.includes('lmstudio') && <option value="lmstudio">LM Studio (Local)</option>}
           </select>
         </label>
         <label className="block">
@@ -64,7 +63,7 @@ export default function AISettingsPanel({
           <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
             Enter the reachable endpoint for your cluster or host.
           </p>
-          {aiProvider === 'ollama' && !aiBaseUrl.trim() && (
+          {aiProvider === 'lmstudio' && !aiBaseUrl.trim() && (
             <p className="mt-2 text-xs text-amber-400">
               Base URL required for local models.
             </p>
@@ -98,10 +97,6 @@ export default function AISettingsPanel({
               >
                 <option value="auto">Auto (recommended)</option>
                 <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                <option value="qwen3:latest">Qwen3 Latest</option>
-                <option value="gemma3:1b">Gemma 3 1B</option>
-                <option value="gemma3:4b">Gemma 3 4B</option>
-                <option value="gemma3:12b">Gemma 3 12B</option>
               </select>
             </label>
             <label className="block">
@@ -116,10 +111,6 @@ export default function AISettingsPanel({
               >
                 <option value="auto">Auto (recommended)</option>
                 <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                <option value="qwen3:latest">Qwen3 Latest</option>
-                <option value="gemma3:1b">Gemma 3 1B</option>
-                <option value="gemma3:4b">Gemma 3 4B</option>
-                <option value="gemma3:12b">Gemma 3 12B</option>
               </select>
             </label>
             <label className="block">
@@ -135,9 +126,6 @@ export default function AISettingsPanel({
               >
                 <option value="auto">Auto (recommended)</option>
                 <option value="gemini-3.1-flash-image-preview">Gemini 3.1 Flash Image Preview</option>
-                <option value="qwen2.5vl:latest">Qwen2.5 VL</option>
-                <option value="gemma3:4b">Gemma 3 4B</option>
-                <option value="gemma3:12b">Gemma 3 12B</option>
               </select>
             </label>
             <label className="block">

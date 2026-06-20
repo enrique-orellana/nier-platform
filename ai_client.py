@@ -11,8 +11,6 @@ import httpx
 
 GEMINI_TEXT_MODEL = "gemini-2.5-flash"
 GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview"
-OLLAMA_TEXT_MODEL = "qwen3:latest"
-OLLAMA_VISION_MODEL = "qwen2.5vl:latest"
 
 
 @dataclass
@@ -27,15 +25,12 @@ class AIConfig:
 
     def normalized_provider(self) -> str:
         provider = (self.provider or "gemini").strip().lower()
-        if provider in {"local", "ollama-local"}:
-            return "ollama"
+        if provider in {"local", "lmstudio-local", "ollama-local", "ollama"}:
+            return "lmstudio"
         return provider
 
     def is_gemini(self) -> bool:
         return self.normalized_provider() == "gemini"
-
-    def is_ollama(self) -> bool:
-        return self.normalized_provider() == "ollama"
 
     def is_lmstudio(self) -> bool:
         return self.normalized_provider() == "lmstudio"
@@ -59,17 +54,10 @@ def _normalize_model_for_provider(model: str, provider: str, kind: str) -> str:
     cleaned = (model or "").strip()
     auto_values = {"", "auto", "default"}
     if provider == "gemini":
-        if kind in {"text", "analysis"} and cleaned in auto_values | {OLLAMA_TEXT_MODEL}:
+        if kind in {"text", "analysis"} and cleaned in auto_values:
             return GEMINI_TEXT_MODEL
-        if kind in {"vision", "image"} and cleaned in auto_values | {OLLAMA_VISION_MODEL, OLLAMA_TEXT_MODEL}:
+        if kind in {"vision", "image"} and cleaned in auto_values:
             return GEMINI_VISION_MODEL
-    if provider == "ollama":
-        if kind in {"text", "analysis"} and cleaned in auto_values | {GEMINI_TEXT_MODEL}:
-            return OLLAMA_TEXT_MODEL
-        if kind == "vision" and cleaned in auto_values | {GEMINI_VISION_MODEL, GEMINI_TEXT_MODEL}:
-            return OLLAMA_VISION_MODEL
-        if kind == "image" and cleaned in auto_values | {GEMINI_VISION_MODEL, GEMINI_TEXT_MODEL}:
-            return ""
     return cleaned
 
 
@@ -90,8 +78,8 @@ def _pick(source: Optional[Mapping[str, Any]], *keys: str, default: str = "") ->
 def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
     provider = _pick(source, "X-AI-Provider", "AI_PROVIDER", default="gemini")
     provider_normalized = provider.strip().lower()
-    if provider_normalized in {"local", "ollama-local"}:
-        provider_normalized = "ollama"
+    if provider_normalized in {"local", "lmstudio-local", "ollama-local", "ollama"}:
+        provider_normalized = "lmstudio"
 
     api_key = _pick(
         source,
@@ -105,7 +93,6 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         source,
         "X-AI-Base-Url",
         "AI_BASE_URL",
-        "OLLAMA_BASE_URL",
         default="",
     )
 
@@ -113,27 +100,24 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         source,
         "X-AI-Model",
         "AI_MODEL",
-        "OLLAMA_TEXT_MODEL",
-        default=GEMINI_TEXT_MODEL if provider_normalized == "gemini" else OLLAMA_TEXT_MODEL,
+        default=GEMINI_TEXT_MODEL if provider_normalized == "gemini" else "",
     )
     analyze_model = _pick(
         source,
         "X-AI-Analyze-Model",
         "AI_ANALYZE_MODEL",
-        default=GEMINI_TEXT_MODEL if provider_normalized == "gemini" else OLLAMA_TEXT_MODEL,
+        default=GEMINI_TEXT_MODEL if provider_normalized == "gemini" else "",
     )
     vision_model = _pick(
         source,
         "X-AI-Vision-Model",
         "AI_VISION_MODEL",
-        "OLLAMA_VISION_MODEL",
-        default=GEMINI_VISION_MODEL if provider_normalized == "gemini" else OLLAMA_VISION_MODEL,
+        default=GEMINI_VISION_MODEL if provider_normalized == "gemini" else "",
     )
     image_model = _pick(
         source,
         "X-AI-Image-Model",
         "AI_IMAGE_MODEL",
-        "OLLAMA_IMAGE_MODEL",
         default=GEMINI_VISION_MODEL if provider_normalized == "gemini" else "",
     )
 
@@ -249,54 +233,6 @@ def discover_lmstudio_models(base_url: str, api_key: str = "", timeout: float = 
     }
 
 
-def _ollama_chat(
-    config: AIConfig,
-    prompt: str,
-    *,
-    system_prompt: Optional[str] = None,
-    json_mode: bool = False,
-    model: Optional[str] = None,
-    images: Optional[Sequence[Any]] = None,
-    timeout: float = 300.0,
-) -> str:
-    url = f"{config.resolved_base_url()}/api/chat"
-    messages: list[dict[str, Any]] = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-
-    user_message: dict[str, Any] = {"role": "user", "content": prompt}
-    if images:
-        user_message["images"] = [_encode_image_source(image) for image in images]
-    messages.append(user_message)
-
-    payload: dict[str, Any] = {
-        "model": model or config.text_model,
-        "messages": messages,
-        "stream": False,
-        "options": {
-            "temperature": 0.2,
-        },
-    }
-    if json_mode:
-        payload["format"] = "json"
-
-    with httpx.Client(timeout=timeout) as client:
-        response = client.post(url, json=payload)
-    try:
-        response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        body = exc.response.text.strip()
-        if body:
-            raise RuntimeError(
-                f"Ollama chat request failed ({exc.response.status_code}) for {url}: {body}"
-            ) from exc
-        raise RuntimeError(
-            f"Ollama chat request failed ({exc.response.status_code}) for {url}"
-        ) from exc
-    data = response.json()
-    message = data.get("message") or {}
-    return message.get("content") or data.get("response") or ""
-
 
 def _gemini_chat(
     config: AIConfig,
@@ -399,17 +335,6 @@ def chat_completion(
             json_mode=json_mode,
             model=model or config.text_model,
             contents=[prompt] if not images else [prompt, *images],
-        )
-
-    if provider == "ollama":
-        return _ollama_chat(
-            config,
-            prompt,
-            system_prompt=system_prompt,
-            json_mode=json_mode,
-            model=model or config.text_model,
-            images=images,
-            timeout=timeout,
         )
 
     if provider == "lmstudio":

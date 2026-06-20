@@ -464,7 +464,7 @@ class VideoEditor:
         try:
             return chat_json(self.ai_config, prompt, model=self.ai_config.text_model)
         except Exception as e:
-            print(f"⚠️ Ollama filter JSON fallback: {e}")
+            print(f"⚠️ Local AI filter JSON fallback: {e}")
             return self._default_filter_data()
 
     def get_effects_config(self, video_file_obj, duration, fps=30, width=None, height=None, transcript=None):
@@ -510,7 +510,7 @@ class VideoEditor:
         try:
             return chat_json(self.ai_config, prompt, model=self.ai_config.text_model)
         except Exception as e:
-            print(f"⚠️ Ollama effects JSON fallback: {e}")
+            print(f"⚠️ Local AI effects JSON fallback: {e}")
             return self._default_effects_config(duration)
 
     @staticmethod
