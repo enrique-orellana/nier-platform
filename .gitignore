@@ -42,4 +42,4 @@ output/
 .claude/
 skills/
 skills-lock.json
-
+.playwright-mcp

@@ -147,7 +147,7 @@ export default function AISettingsPanel({
           <>
             <label className="block">
               <span className="block text-sm text-zinc-400 mb-2">Text Model</span>
-              <select value={aiTextModel} onChange={(e) => setAiTextModel(e.target.value)} className="input-field">
+              <select value={aiTextModel} onChange={(e) => { setAiQualityPreset('custom'); setAiTextModel(e.target.value); }} className="input-field">
                 {textOptions.map((model) => (
                   <option key={model.id} value={model.id}>{model.label}</option>
                 ))}
@@ -155,7 +155,7 @@ export default function AISettingsPanel({
             </label>
             <label className="block">
               <span className="block text-sm text-zinc-400 mb-2">Clip Analysis Model</span>
-              <select value={aiAnalyzeModel} onChange={(e) => setAiAnalyzeModel(e.target.value)} className="input-field">
+              <select value={aiAnalyzeModel} onChange={(e) => { setAiQualityPreset('custom'); setAiAnalyzeModel(e.target.value); }} className="input-field">
                 {textOptions.map((model) => (
                   <option key={model.id} value={model.id}>{model.label}</option>
                 ))}
@@ -163,7 +163,7 @@ export default function AISettingsPanel({
             </label>
             <label className="block">
               <span className="block text-sm text-zinc-400 mb-2">Vision Model</span>
-              <select aria-label="Vision Model" value={aiVisionModel} onChange={(e) => setAiVisionModel(e.target.value)} className="input-field" disabled={aiProvider === 'lmstudio' && visionOptions.length === 0}>
+              <select aria-label="Vision Model" value={aiVisionModel} onChange={(e) => { setAiQualityPreset('custom'); setAiVisionModel(e.target.value); }} className="input-field" disabled={aiProvider === 'lmstudio' && visionOptions.length === 0}>
                 {visionOptions.map((model) => (
                   <option key={model.id} value={model.id}>{model.label}</option>
                 ))}
@@ -173,7 +173,7 @@ export default function AISettingsPanel({
               <span className="block text-sm text-zinc-400 mb-2">Image Generation Model</span>
               <select
                 value={aiImageModel}
-                onChange={(e) => setAiImageModel(e.target.value)}
+                onChange={(e) => { setAiQualityPreset('custom'); setAiImageModel(e.target.value); }}
                 className="input-field"
               >
                 <option value="">None (skip image generation)</option>
@@ -182,9 +182,6 @@ export default function AISettingsPanel({
           </>
         )}
       </div>
-      <button type="button" onClick={onDetectLmStudio} className="btn-primary py-2 px-4 text-sm mt-4 w-full md:w-auto">
-        Detect LM Studio
-      </button>
     </div>
   );
 }

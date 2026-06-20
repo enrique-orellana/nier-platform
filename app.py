@@ -10,7 +10,7 @@ import asyncio
 from dotenv import load_dotenv
 from typing import Dict, Optional, List, Any
 from contextlib import asynccontextmanager
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Header, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -1143,6 +1143,20 @@ async def video_proxy(request: Request, url: str = Query(...), filename: str | N
     range_header = request.headers.get("range")
     if range_header:
         upstream_headers["Range"] = range_header
+
+    internal_endpoint = os.environ.get("AWS_S3_ENDPOINT_URL", "")
+    if internal_endpoint and public_endpoint:
+        parsed_target = urlsplit(url)
+        parsed_internal = urlsplit(internal_endpoint)
+        original_netloc = parsed_target.netloc
+        url = urlunsplit((
+            parsed_internal.scheme,
+            parsed_internal.netloc,
+            parsed_target.path,
+            parsed_target.query,
+            parsed_target.fragment
+        ))
+        upstream_headers["Host"] = original_netloc
 
     try:
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:

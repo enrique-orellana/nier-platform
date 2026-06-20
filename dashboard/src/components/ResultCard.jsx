@@ -179,15 +179,11 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     };
 
     const renderRemotionLayers = async (renderLayers) => {
-        const blobUrl = await renderInBrowser({
-            videoUrl: getBackendSourceUrl(),
-            durationInSeconds: clipDuration,
-            subtitles: renderLayers?.subtitles || null,
-            hook: renderLayers?.hook || null,
-            effects: renderLayers?.effects || null,
-        });
-        applyRenderedVideoUrl(blobUrl);
-        return blobUrl;
+        // The user explicitly demanded backend rendering since their browser is failing to decode the video.
+        // We bypass `renderInBrowser` entirely and force the backend to process it natively.
+        const outputUrl = await renderNativeShortAndPersist(renderLayers);
+        applyRenderedVideoUrl(outputUrl, { persist: true });
+        return outputUrl;
     };
 
     // Fetch clip duration from transcript endpoint

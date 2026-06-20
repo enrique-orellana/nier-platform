@@ -11,6 +11,7 @@ import SaaShortsTab from './components/SaaShortsTab';
 import UGCGallery from './components/UGCGallery';
 import ScheduleWeekModal from './components/ScheduleWeekModal';
 import AISettingsPanel from './components/AISettingsPanel';
+
 import { pickProviderAfterDiscoveryFailure } from './lib/lmStudio';
 import { getApiUrl } from './config';
 
@@ -315,6 +316,15 @@ function App() {
     }
   }, [aiProvider, aiBaseUrl, lmStudioAvailable]);
 
+  useEffect(() => {
+    if (aiProvider === 'lmstudio') {
+      const timer = setTimeout(() => {
+        detectLmStudio();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [aiProvider, aiBaseUrl, detectLmStudio]);
+
   const isLocalAi = aiProvider !== 'gemini';
   const lastProviderRef = useRef(aiProvider);
 
@@ -430,17 +440,27 @@ function App() {
       return;
     }
 
-    if (aiQualityPreset !== 'custom') {
-      return;
-    }
-
     if (previousProvider === 'gemini') {
       setAiTextModel('');
       setAiAnalyzeModel('');
       setAiVisionModel('');
       setAiImageModel('');
     }
-  }, [aiProvider, aiQualityPreset]);
+  }, [aiProvider]);
+
+  useEffect(() => {
+    if (aiProvider === 'lmstudio') {
+      if (!aiTextModel && lmStudioModels.textModels.length > 0) {
+        setAiTextModel(lmStudioModels.textModels[0].id);
+      }
+      if (!aiAnalyzeModel && lmStudioModels.textModels.length > 0) {
+        setAiAnalyzeModel(lmStudioModels.textModels[0].id);
+      }
+      if (!aiVisionModel && lmStudioModels.visionModels.length > 0) {
+        setAiVisionModel(lmStudioModels.visionModels[0].id);
+      }
+    }
+  }, [aiProvider, aiTextModel, aiAnalyzeModel, aiVisionModel, lmStudioModels]);
 
   useEffect(() => {
     if (aiQualityPreset === 'custom') return;
@@ -681,6 +701,14 @@ function App() {
         >
           <FolderOpen size={20} />
           <span className="font-medium hidden lg:block">Projects</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('test-subtitles')}
+          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'test-subtitles' ? 'bg-amber-500/10 text-amber-500' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
+        >
+          <Activity size={20} />
+          <span className="font-medium hidden lg:block">TEST UI</span>
         </button>
 
         {/* <button

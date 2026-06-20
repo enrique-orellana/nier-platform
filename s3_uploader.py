@@ -70,9 +70,19 @@ def upload_file_to_s3(file_path, bucket_name, s3_key):
 
     s3_client = _make_s3_client(access_key, secret_key, region, endpoint_url)
     try:
-        # Extra arguments for public read if needed, but the user didn't specify.
-        # Given the bucket name, it might be for a web app.
-        s3_client.upload_file(file_path, bucket_name, s3_key)
+        import mimetypes
+        content_type, _ = mimetypes.guess_type(file_path)
+        if not content_type and file_path.lower().endswith('.mp4'):
+            content_type = 'video/mp4'
+        elif not content_type:
+            content_type = 'application/octet-stream'
+            
+        s3_client.upload_file(
+            file_path, 
+            bucket_name, 
+            s3_key,
+            ExtraArgs={'ContentType': content_type}
+        )
         return True
     except ClientError:
         return False

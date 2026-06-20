@@ -1055,7 +1055,7 @@ def transcribe_audio_for_subs(audio_path: str) -> list:
     from faster_whisper import WhisperModel
 
     print(f"[SaaSShorts] 🎙️ Transcribing audio for subtitles...")
-    model = WhisperModel("base", device="cpu", compute_type="int8")
+    model = WhisperModel("large-v3", device="cpu", compute_type="int8")
     segments, info = model.transcribe(audio_path, word_timestamps=True)
 
     words = []
