@@ -13,7 +13,7 @@ WORKDIR /app
 
 # Copy render service source
 COPY render-service/package.json render-service/package-lock.json ./
-RUN npm ci --no-audit --no-fund
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
 COPY render-service/tsconfig.json ./
 COPY render-service/src/ ./src/
@@ -26,7 +26,7 @@ COPY remotion/src/ /app/remotion/src/
 COPY remotion/public/ /app/remotion/public/
 
 # Install remotion deps
-RUN cd /app/remotion && npm ci --no-audit --no-fund
+RUN --mount=type=cache,target=/root/.npm cd /app/remotion && npm ci --no-audit --no-fund
 
 # Build TypeScript
 RUN npm run build
