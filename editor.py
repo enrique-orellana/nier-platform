@@ -555,7 +555,7 @@ class VideoEditor:
 
     def apply_edits(self, input_path, output_path, filter_data):
         if not filter_data or "filter_string" not in filter_data:
-            subprocess.run(['ffmpeg', '-y', '-i', input_path, '-c', 'copy', output_path])
+            subprocess.run(['ffmpeg', '-y', '-i', input_path, '-c', 'copy', '-movflags', '+faststart', output_path])
             return
 
         filter_string = filter_data["filter_string"]
@@ -570,7 +570,7 @@ class VideoEditor:
         if w and h:
             sanitized = self._enforce_zoompan_output_size(sanitized, w, h)
 
-        subprocess.run(['ffmpeg', '-y', '-i', input_path, '-vf', sanitized, '-c:v', 'libx264', '-c:a', 'aac', output_path], check=True)
+        subprocess.run(['ffmpeg', '-y', '-i', input_path, '-vf', sanitized, '-c:v', 'libx264', '-c:a', 'aac', '-movflags', '+faststart', output_path], check=True)
 
 
 if __name__ == "__main__":

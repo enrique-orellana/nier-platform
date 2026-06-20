@@ -755,6 +755,33 @@ class ImproveClipQualityRequest(BaseModel):
     input_filename: Optional[str] = None
 
 
+def _build_quality_ffmpeg_command(input_path: str, output_path: str) -> list[str]:
+    """Build a higher-fidelity FFmpeg command for clip quality improvement."""
+    return [
+        "ffmpeg",
+        "-y",
+        "-i",
+        input_path,
+        "-vf",
+        "scale=iw:ih:flags=lanczos,unsharp=5:5:0.8:3:3:0.4",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "slower",
+        "-crf",
+        "16",
+        "-profile:v",
+        "high",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "copy",
+        "-movflags",
+        "+faststart",
+        output_path,
+    ]
+
+
 def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) -> None:
     """Update the in-memory job record and persisted metadata for a clip URL."""
     job = _get_job(job_id)
@@ -813,25 +840,7 @@ def _reencode_clip_for_quality(
     if os.path.exists(output_path):
         os.remove(output_path)
 
-    ffmpeg_cmd = [
-        "ffmpeg",
-        "-y",
-        "-i",
-        input_path,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "slow",
-        "-crf",
-        "18",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "copy",
-        "-movflags",
-        "+faststart",
-        output_path,
-    ]
+    ffmpeg_cmd = _build_quality_ffmpeg_command(input_path, output_path)
     subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     return f"/videos/{job_id}/{output_filename}"
 

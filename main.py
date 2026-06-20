@@ -390,9 +390,9 @@ def analyze_scenes_strategy(video_path, scenes):
     for start, end in tqdm(scenes, desc="   Analyzing Scenes"):
         # Sample 3 frames (start, middle, end)
         frames_to_check = [
-            start.get_frames() + 5,
-            int((start.get_frames() + end.get_frames()) / 2),
-            end.get_frames() - 5
+            start.frame_num + 5,
+            int((start.frame_num + end.frame_num) / 2),
+            end.frame_num - 5
         ]
         
         face_counts = []
@@ -646,7 +646,7 @@ def process_video_to_vertical(input_video, final_output_video):
     # Pre-calculate scene boundaries
     scene_boundaries = []
     for s_start, s_end in scenes:
-        scene_boundaries.append((s_start.get_frames(), s_end.get_frames()))
+        scene_boundaries.append((s_start.frame_num, s_end.frame_num))
 
     # Global tracker for single-person shots
     speaker_tracker = SpeakerTracker(cooldown_frames=30)
@@ -729,12 +729,12 @@ def process_video_to_vertical(input_video, final_output_video):
     if os.path.exists(temp_audio_output):
         merge_command = [
             'ffmpeg', '-y', '-i', temp_video_output, '-i', temp_audio_output,
-            '-c:v', 'copy', '-c:a', 'copy', final_output_video
+            '-c:v', 'copy', '-c:a', 'copy', '-movflags', '+faststart', final_output_video
         ]
     else:
          merge_command = [
             'ffmpeg', '-y', '-i', temp_video_output,
-            '-c:v', 'copy', final_output_video
+            '-c:v', 'copy', '-movflags', '+faststart', final_output_video
         ]
         
     try:

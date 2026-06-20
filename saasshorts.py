@@ -1186,6 +1186,7 @@ def composite_video(
             "-vf", sub_filter,
             "-c:v", "libx264", "-preset", "fast", "-crf", "22",
             "-c:a", "aac", "-b:a", "128k",
+            "-movflags", "+faststart",
             output_path,
         ]
         subprocess.run(cmd, check=True)
@@ -1276,6 +1277,7 @@ def composite_video(
         "-map", "[outa]",
         "-c:v", "libx264", "-preset", "fast", "-crf", "22",
         "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart",
         output_path,
     ]
 
