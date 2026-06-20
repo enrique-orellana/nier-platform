@@ -136,6 +136,37 @@ class AIClientLmStudioChatTests(unittest.TestCase):
             {"type": "json_object"},
         )
 
+    @patch("ai_client.discover_lmstudio_models")
+    @patch("ai_client.httpx.Client", RecordingChatClient)
+    def test_chat_completion_replaces_placeholder_lmstudio_model_with_discovered_default(self, discover_mock):
+        discover_mock.return_value = {
+            "textModels": [
+                {"id": "google/gemma-4-27b", "label": "Gemma 4 27B", "supportsText": True, "supportsVision": True, "isLoaded": False, "contextLength": 262144},
+                {"id": "meta/llama-3.3-70b-instruct", "label": "Llama 3.3 70B", "supportsText": True, "supportsVision": False, "isLoaded": True, "contextLength": 131072},
+            ],
+            "visionModels": [
+                {"id": "google/gemma-4-27b", "label": "Gemma 4 27B", "supportsText": True, "supportsVision": True, "isLoaded": False, "contextLength": 262144},
+            ],
+        }
+        config = ai_client.AIConfig(
+            provider="lmstudio",
+            api_key="token",
+            base_url="http://localhost:1234/",
+            text_model="auto",
+        )
+
+        ai_client.chat_completion(
+            config,
+            "Return JSON",
+            json_mode=True,
+            model="qwen3:latest",
+        )
+
+        self.assertEqual(
+            RecordingChatClient.last_json["model"],
+            "meta/llama-3.3-70b-instruct",
+        )
+
 
 class DummyAuthErrorResponse:
     def raise_for_status(self):
@@ -167,6 +198,20 @@ class AIClientLmStudioEdgeCaseTests(unittest.TestCase):
         with self.assertRaises(Exception) as context:
             ai_client.discover_lmstudio_models("http://localhost:1234/", api_key="bad")
         self.assertIn("Auth failed", str(context.exception))
+
+    def test_load_ai_config_clears_placeholder_models_for_lmstudio(self):
+        config = ai_client.load_ai_config(
+            {
+                "X-AI-Provider": "lmstudio",
+                "X-AI-Model": "auto",
+                "X-AI-Analyze-Model": "qwen3:latest",
+                "X-AI-Vision-Model": "default",
+            }
+        )
+
+        self.assertEqual(config.text_model, "")
+        self.assertEqual(config.analyze_model, "")
+        self.assertEqual(config.vision_model, "")
 
     def test_load_ai_config_does_not_alias_ollama_to_lmstudio(self):
         config = ai_client.load_ai_config({"X-AI-Provider": "ollama"})

@@ -2,21 +2,45 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildVisibleProviders,
+  pickLmStudioModel,
   pickProviderAfterDiscoveryFailure,
 } from './lmStudio';
 
 describe('lmStudio helpers', () => {
   it('shows lmstudio only when discovery is available', () => {
-    expect(buildVisibleProviders({ lmStudioAvailable: false })).toEqual(['gemini', 'ollama']);
-    expect(buildVisibleProviders({ lmStudioAvailable: true })).toEqual(['gemini', 'ollama', 'lmstudio']);
+    expect(buildVisibleProviders({ lmStudioAvailable: false })).toEqual(['gemini', 'lmstudio']);
+    expect(buildVisibleProviders({ lmStudioAvailable: true })).toEqual(['gemini', 'lmstudio']);
   });
 
-  it('falls back to ollama before gemini when lmstudio disappears', () => {
+  it('keeps the current provider when lmstudio disappears', () => {
     expect(
       pickProviderAfterDiscoveryFailure({
         currentProvider: 'lmstudio',
-        ollamaBaseUrl: 'http://localhost:11434',
       }),
-    ).toBe('ollama');
+    ).toBe('lmstudio');
+  });
+
+  it('uses the first discovered lmstudio model when current selection is auto', () => {
+    expect(
+      pickLmStudioModel({
+        currentModel: 'auto',
+        models: [
+          { id: 'google/gemma-4-27b', label: 'Gemma 4 27B' },
+          { id: 'meta/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
+        ],
+      }),
+    ).toBe('google/gemma-4-27b');
+  });
+
+  it('preserves a valid discovered lmstudio model selection', () => {
+    expect(
+      pickLmStudioModel({
+        currentModel: 'meta/llama-3.3-70b-instruct',
+        models: [
+          { id: 'google/gemma-4-27b', label: 'Gemma 4 27B' },
+          { id: 'meta/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
+        ],
+      }),
+    ).toBe('meta/llama-3.3-70b-instruct');
   });
 });

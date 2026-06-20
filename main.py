@@ -985,7 +985,7 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6):
     local_target_duration = 32.0 if is_lmstudio else None
 
     try:
-        model_name = ai_config.analyze_model or ai_config.text_model or ("gemini-2.5-flash" if ai_config.is_gemini() else "qwen3:latest")
+        model_name = ai_config.analyze_model or ai_config.text_model or ("gemini-2.5-flash" if ai_config.is_gemini() else "")
         text = chat_json(ai_config, prompt, model=model_name)
 
         result_json = text if isinstance(text, dict) else {}

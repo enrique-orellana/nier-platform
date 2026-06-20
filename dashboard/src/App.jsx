@@ -12,7 +12,7 @@ import UGCGallery from './components/UGCGallery';
 import ScheduleWeekModal from './components/ScheduleWeekModal';
 import AISettingsPanel from './components/AISettingsPanel';
 
-import { pickProviderAfterDiscoveryFailure } from './lib/lmStudio';
+import { pickLmStudioModel, pickProviderAfterDiscoveryFailure } from './lib/lmStudio';
 import { getApiUrl } from './config';
 
 // Enhanced "Encryption" using XOR + Base64 with a Salt
@@ -450,14 +450,28 @@ function App() {
 
   useEffect(() => {
     if (aiProvider === 'lmstudio') {
-      if (!aiTextModel && lmStudioModels.textModels.length > 0) {
-        setAiTextModel(lmStudioModels.textModels[0].id);
+      const nextTextModel = pickLmStudioModel({
+        currentModel: aiTextModel,
+        models: lmStudioModels.textModels,
+      });
+      if (nextTextModel && nextTextModel !== aiTextModel) {
+        setAiTextModel(nextTextModel);
       }
-      if (!aiAnalyzeModel && lmStudioModels.textModels.length > 0) {
-        setAiAnalyzeModel(lmStudioModels.textModels[0].id);
+
+      const nextAnalyzeModel = pickLmStudioModel({
+        currentModel: aiAnalyzeModel,
+        models: lmStudioModels.textModels,
+      });
+      if (nextAnalyzeModel && nextAnalyzeModel !== aiAnalyzeModel) {
+        setAiAnalyzeModel(nextAnalyzeModel);
       }
-      if (!aiVisionModel && lmStudioModels.visionModels.length > 0) {
-        setAiVisionModel(lmStudioModels.visionModels[0].id);
+
+      const nextVisionModel = pickLmStudioModel({
+        currentModel: aiVisionModel,
+        models: lmStudioModels.visionModels,
+      });
+      if (nextVisionModel !== aiVisionModel && (nextVisionModel || aiVisionModel)) {
+        setAiVisionModel(nextVisionModel);
       }
     }
   }, [aiProvider, aiTextModel, aiAnalyzeModel, aiVisionModel, lmStudioModels]);

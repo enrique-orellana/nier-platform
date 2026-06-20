@@ -11,6 +11,8 @@ import httpx
 
 GEMINI_TEXT_MODEL = "gemini-2.5-flash"
 GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview"
+AUTO_MODEL_VALUES = {"", "auto", "default"}
+LMSTUDIO_PLACEHOLDER_MODELS = {"qwen3:latest", "qwen2.5vl:latest"}
 
 
 @dataclass
@@ -50,14 +52,24 @@ class AIConfig:
         return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 
 
+def _is_placeholder_model(model: str, provider: str) -> bool:
+    cleaned = (model or "").strip().lower()
+    if cleaned in AUTO_MODEL_VALUES:
+        return True
+    if provider == "lmstudio" and cleaned in LMSTUDIO_PLACEHOLDER_MODELS:
+        return True
+    return False
+
+
 def _normalize_model_for_provider(model: str, provider: str, kind: str) -> str:
     cleaned = (model or "").strip()
-    auto_values = {"", "auto", "default"}
     if provider == "gemini":
-        if kind in {"text", "analysis"} and cleaned in auto_values:
+        if kind in {"text", "analysis"} and _is_placeholder_model(cleaned, provider):
             return GEMINI_TEXT_MODEL
-        if kind in {"vision", "image"} and cleaned in auto_values:
+        if kind in {"vision", "image"} and _is_placeholder_model(cleaned, provider):
             return GEMINI_VISION_MODEL
+    if provider == "lmstudio" and _is_placeholder_model(cleaned, provider):
+        return ""
     return cleaned
 
 
@@ -233,6 +245,41 @@ def discover_lmstudio_models(base_url: str, api_key: str = "", timeout: float = 
     }
 
 
+def resolve_lmstudio_model(
+    config: AIConfig,
+    model: Optional[str] = None,
+    *,
+    require_vision: bool = False,
+    timeout: float = 10.0,
+) -> str:
+    resolved = _normalize_model_for_provider(
+        model or config.text_model,
+        "lmstudio",
+        "vision" if require_vision else "text",
+    )
+    if resolved:
+        return resolved
+
+    discovered = discover_lmstudio_models(
+        config.resolved_base_url(),
+        api_key=config.api_key,
+        timeout=timeout,
+    )
+    pool = discovered["visionModels"] if require_vision else discovered["textModels"]
+    if not pool:
+        capability = "vision" if require_vision else "text"
+        raise RuntimeError(
+            f"No LM Studio {capability} models available. Detect LM Studio in Settings and select a model."
+        )
+
+    loaded = next((entry for entry in pool if entry.get("isLoaded")), None)
+    chosen = loaded or pool[0]
+    model_id = str(chosen.get("id") or "").strip()
+    if not model_id:
+        raise RuntimeError("LM Studio discovery returned a model without an id.")
+    return model_id
+
+
 
 def _gemini_chat(
     config: AIConfig,
@@ -292,13 +339,19 @@ def _lmstudio_chat(
     timeout: float = 300.0,
 ) -> str:
     url = f"{config.resolved_base_url()}/v1/chat/completions"
+    resolved_model = resolve_lmstudio_model(
+        config,
+        model=model or config.text_model,
+        require_vision=bool(images),
+        timeout=min(timeout, 10.0),
+    )
     messages: list[dict[str, Any]] = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append(_build_openai_message(prompt, images))
 
     payload: dict[str, Any] = {
-        "model": model or config.text_model,
+        "model": resolved_model,
         "messages": messages,
         "temperature": 0.2,
     }
