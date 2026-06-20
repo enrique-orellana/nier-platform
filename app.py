@@ -415,11 +415,34 @@ async def run_job_wrapper(job_id):
         job_queue.task_done()
         print(f"✅ Released slot for job: {job_id}")
 
+startup_lmstudio_discovery = None
+
+async def background_discover_lmstudio():
+    global startup_lmstudio_discovery
+    base_url = os.environ.get("VITE_AI_BASE_URL") or os.environ.get("AI_BASE_URL") or "http://host.docker.internal:1234"
+    try:
+        loop = asyncio.get_running_loop()
+        discovered = await loop.run_in_executor(None, discover_lmstudio_models, base_url, "")
+        if discovered and discovered.get("textModels"):
+            startup_lmstudio_discovery = {
+                "available": True,
+                "provider": "lmstudio",
+                "baseUrl": AIConfig(provider="lmstudio", base_url=base_url).resolved_base_url(),
+                "textModels": discovered["textModels"],
+                "visionModels": discovered["visionModels"],
+            }
+        else:
+            startup_lmstudio_discovery = _lmstudio_discovery_failure(base_url)
+    except Exception as e:
+        print(f"Startup LM Studio discovery failed: {e}")
+        startup_lmstudio_discovery = _lmstudio_discovery_failure(base_url)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Start worker and cleanup
     worker_task = asyncio.create_task(process_queue())
     cleanup_task = asyncio.create_task(cleanup_jobs())
+    discovery_task = asyncio.create_task(background_discover_lmstudio())
     yield
     # Cleanup (optional: cancel worker)
 
@@ -613,7 +636,10 @@ async def discover_lmstudio_endpoint(req: LmStudioDiscoveryRequest):
 
 @app.get("/api/config")
 async def get_config():
-    return {"youtubeUrlEnabled": not DISABLE_YOUTUBE_URL}
+    return {
+        "youtubeUrlEnabled": not DISABLE_YOUTUBE_URL,
+        "lmStudioConfig": startup_lmstudio_discovery
+    }
 
 @app.post("/api/process")
 async def process_endpoint(
@@ -1035,12 +1061,39 @@ async def get_clip_transcript(job_id: str, clip_index: int):
 
 # --- Remotion Render Proxy ---
 RENDER_SERVICE_URL = os.getenv("RENDER_SERVICE_URL", "http://renderer:3100")
+RENDER_BACKEND_PROXY_TARGET = os.getenv("VITE_BACKEND_PROXY_TARGET") or (
+    "http://openshorts-backend:8000"
+    if (os.getenv("KUBERNETES_SERVICE_HOST") or os.getenv("KUBERNETES_PORT"))
+    else "http://backend:8000"
+)
+
+
+def _resolve_render_video_url_for_renderer(video_url: str, request: Request) -> str:
+    if not isinstance(video_url, str) or not video_url:
+        return video_url
+
+    if video_url.startswith("/api/video-proxy"):
+        return f"{RENDER_BACKEND_PROXY_TARGET}{video_url}"
+
+    parsed = urlsplit(video_url)
+    request_base = str(request.base_url).rstrip("/")
+    request_netloc = urlsplit(request_base).netloc
+    if parsed.netloc == request_netloc and parsed.path.startswith("/api/video-proxy"):
+        suffix = parsed.path
+        if parsed.query:
+            suffix = f"{suffix}?{parsed.query}"
+        return f"{RENDER_BACKEND_PROXY_TARGET}{suffix}"
+
+    return video_url
 
 @app.post("/api/render")
 async def proxy_render(request: Request):
     """Proxy render requests to the Node.js Remotion render service."""
     import httpx
     body = await request.json()
+    props = body.get("props") if isinstance(body, dict) else None
+    if isinstance(props, dict) and isinstance(props.get("videoUrl"), str):
+        props["videoUrl"] = _resolve_render_video_url_for_renderer(props["videoUrl"], request)
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(f"{RENDER_SERVICE_URL}/render", json=body)
@@ -1058,6 +1111,67 @@ async def proxy_render_status(render_id: str):
             return resp.json()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Render service unavailable: {e}")
+
+
+# --- Video Proxy (solves MinIO CORS for Remotion Player) ---
+
+@app.get("/api/video-proxy")
+@app.get("/api/video-proxy/{filename:path}")
+async def video_proxy(request: Request, url: str = Query(...), filename: str | None = None):
+    """
+    Proxy a MinIO presigned video URL back to the browser with correct
+    CORS and Range headers so that Remotion's Player can decode it.
+
+    MinIO in this setup does not support PutBucketCors via the S3 API, so
+    the browser's cross-origin range requests get blocked.  Routing via this
+    same-origin endpoint eliminates the CORS constraint entirely.
+    """
+    import httpx
+    from fastapi.responses import StreamingResponse
+
+    # Basic safety: only allow requests to the configured MinIO endpoint
+    public_endpoint = os.environ.get("AWS_S3_PUBLIC_ENDPOINT_URL", "") or \
+                      os.environ.get("AWS_S3_PUBLIC_URL_BASE", "")
+    if public_endpoint:
+        parsed_target = urlsplit(url)
+        parsed_allowed = urlsplit(public_endpoint)
+        if parsed_target.netloc != parsed_allowed.netloc:
+            raise HTTPException(status_code=403, detail="Proxy only allowed for configured MinIO endpoint")
+
+    # Forward Range header if present (needed for video seeking)
+    upstream_headers = {}
+    range_header = request.headers.get("range")
+    if range_header:
+        upstream_headers["Range"] = range_header
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            upstream = await client.get(url, headers=upstream_headers)
+
+        status_code = upstream.status_code  # 200 or 206 (partial content)
+
+        response_headers = {
+            "Content-Type": upstream.headers.get("content-type", "video/mp4"),
+            "Accept-Ranges": "bytes",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Expose-Headers": "Accept-Ranges, Content-Length, Content-Range, Content-Type, ETag",
+        }
+        if "content-length" in upstream.headers:
+            response_headers["Content-Length"] = upstream.headers["content-length"]
+        if "content-range" in upstream.headers:
+            response_headers["Content-Range"] = upstream.headers["content-range"]
+        if "etag" in upstream.headers:
+            response_headers["ETag"] = upstream.headers["etag"]
+        if filename:
+            response_headers["Content-Disposition"] = f'inline; filename="{filename}"'
+
+        return StreamingResponse(
+            iter([upstream.content]),
+            status_code=status_code,
+            headers=response_headers,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Video proxy error: {e}")
 
 
 @app.post("/api/clip/{job_id}/{clip_index}/video-url")
