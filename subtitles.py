@@ -209,7 +209,7 @@ def burn_subtitles(video_path, srt_path, output_path, alignment=2, fontsize=16,
         '-i', video_path,
         '-vf', f"subtitles='{safe_srt_path}':force_style='{style_string}'",
         '-c:a', 'copy',
-        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+        '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'fast', '-crf', '23',
         '-movflags', '+faststart',
         output_path
     ]

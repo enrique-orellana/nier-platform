@@ -341,7 +341,7 @@ class VideoEditor:
             'ffmpeg', '-y',
             '-i', input_path,
             '-vf', filter_string,
-            '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
+            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'fast', '-crf', '22',
             '-c:a', 'copy',
             output_path
         ]
@@ -570,7 +570,7 @@ class VideoEditor:
         if w and h:
             sanitized = self._enforce_zoompan_output_size(sanitized, w, h)
 
-        subprocess.run(['ffmpeg', '-y', '-i', input_path, '-vf', sanitized, '-c:v', 'libx264', '-c:a', 'aac', '-movflags', '+faststart', output_path], check=True)
+        subprocess.run(['ffmpeg', '-y', '-i', input_path, '-vf', sanitized, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-movflags', '+faststart', output_path], check=True)
 
 
 if __name__ == "__main__":

@@ -631,7 +631,7 @@ def process_video_to_vertical(input_video, final_output_video):
     command = [
         'ffmpeg', '-y', '-f', 'rawvideo', '-vcodec', 'rawvideo',
         '-s', f'{OUTPUT_WIDTH}x{OUTPUT_HEIGHT}', '-pix_fmt', 'bgr24',
-        '-r', str(fps), '-i', '-', '-c:v', 'libx264',
+        '-r', str(fps), '-i', '-', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
         '-preset', 'fast', '-crf', '23', '-an', temp_video_output
     ]
 
@@ -1176,7 +1176,7 @@ if __name__ == '__main__':
                     '-ss', str(start), 
                     '-to', str(end), 
                     '-i', input_video,
-                    '-c:v', 'libx264', '-crf', '18', '-preset', 'fast',
+                    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18', '-preset', 'fast',
                     '-c:a', 'aac',
                     clip_temp_path
                 ]
