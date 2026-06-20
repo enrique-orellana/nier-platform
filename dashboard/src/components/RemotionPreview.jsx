@@ -55,6 +55,7 @@ export default function RemotionPreview({
                 controls
                 autoPlay
                 loop
+                acknowledgeRemotionLicense={true}
             />
         </div>
     );
