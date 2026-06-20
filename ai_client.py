@@ -205,6 +205,47 @@ def _encode_image_source(image: Any) -> str:
     raise TypeError(f"Unsupported image source type: {type(image)!r}")
 
 
+def _build_bearer_headers(api_key: str) -> dict[str, str]:
+    if not api_key:
+        return {}
+    return {"Authorization": f"Bearer {api_key}"}
+
+
+def _normalize_lmstudio_model(model: Mapping[str, Any]) -> Optional[dict[str, Any]]:
+    if model.get("type") != "llm":
+        return None
+
+    capabilities = model.get("capabilities") or {}
+    loaded_instances = model.get("loaded_instances") or []
+    return {
+        "id": str(model.get("key") or "").strip(),
+        "label": str(model.get("display_name") or model.get("key") or "").strip(),
+        "supportsText": True,
+        "supportsVision": bool(capabilities.get("vision")),
+        "isLoaded": bool(loaded_instances),
+        "contextLength": model.get("max_context_length") or 0,
+    }
+
+
+def discover_lmstudio_models(base_url: str, api_key: str = "", timeout: float = 10.0) -> dict[str, Any]:
+    origin = AIConfig(provider="lmstudio", base_url=base_url).resolved_base_url()
+    with httpx.Client(timeout=timeout) as client:
+        response = client.get(f"{origin}/api/v1/models", headers=_build_bearer_headers(api_key))
+    response.raise_for_status()
+    payload = response.json()
+
+    models = []
+    for raw_model in payload.get("models", []):
+        normalized = _normalize_lmstudio_model(raw_model)
+        if normalized and normalized["id"]:
+            models.append(normalized)
+
+    return {
+        "textModels": models,
+        "visionModels": [model for model in models if model["supportsVision"]],
+    }
+
+
 def _ollama_chat(
     config: AIConfig,
     prompt: str,
