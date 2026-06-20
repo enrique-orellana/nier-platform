@@ -10,6 +10,8 @@ import ProjectLibrary from './components/ProjectLibrary';
 import SaaShortsTab from './components/SaaShortsTab';
 import UGCGallery from './components/UGCGallery';
 import ScheduleWeekModal from './components/ScheduleWeekModal';
+import AISettingsPanel from './components/AISettingsPanel';
+import { pickProviderAfterDiscoveryFailure } from './lib/lmStudio';
 import { getApiUrl } from './config';
 
 // Enhanced "Encryption" using XOR + Base64 with a Salt
@@ -234,6 +236,57 @@ function App() {
 
   const [sessionRecovered, setSessionRecovered] = useState(false);
   const [showScheduleWeek, setShowScheduleWeek] = useState(false);
+  
+  const [lmStudioAvailable, setLmStudioAvailable] = useState(false);
+  const [lmStudioModels, setLmStudioModels] = useState({ textModels: [], visionModels: [] });
+  
+  const detectLmStudio = useCallback(async () => {
+    try {
+      const res = await fetch(getApiUrl('/api/ai/lmstudio/discover'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseUrl: aiBaseUrl, apiKey }),
+      });
+      const data = await res.json();
+
+      if (!data.available) {
+        setLmStudioAvailable(false);
+        setLmStudioModels({ textModels: [], visionModels: [] });
+        setAiProvider((current) => pickProviderAfterDiscoveryFailure({
+          currentProvider: current,
+          ollamaBaseUrl: CONFIGURED_OLLAMA_BASE_URL || aiBaseUrl,
+        }));
+        return data;
+      }
+
+      setLmStudioAvailable(true);
+      setLmStudioModels({
+        textModels: data.textModels,
+        visionModels: data.visionModels,
+      });
+      return data;
+    } catch (e) {
+      console.error('Failed to discover LM Studio', e);
+      setLmStudioAvailable(false);
+      setLmStudioModels({ textModels: [], visionModels: [] });
+      setAiProvider((current) => pickProviderAfterDiscoveryFailure({
+        currentProvider: current,
+        ollamaBaseUrl: CONFIGURED_OLLAMA_BASE_URL || aiBaseUrl,
+      }));
+    }
+  }, [aiBaseUrl, apiKey]);
+
+  useEffect(() => {
+    if (aiProvider === 'lmstudio' && !lmStudioAvailable) {
+      setAiProvider(
+        pickProviderAfterDiscoveryFailure({
+          currentProvider: 'lmstudio',
+          ollamaBaseUrl: CONFIGURED_OLLAMA_BASE_URL || aiBaseUrl,
+        }),
+      );
+    }
+  }, [aiProvider, aiBaseUrl, lmStudioAvailable]);
+
   const isLocalAi = aiProvider !== 'gemini';
   const lastProviderRef = useRef(aiProvider);
 
@@ -758,139 +811,27 @@ function App() {
                   <Shield size={12} /> Privacy: keys only live in your browser (sent to backend just to process)
                 </div>
               </div>
-              <div className="glass-panel p-6 mb-8">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold">AI Provider</h2>
-                  <span className="text-[10px] bg-white/5 border border-white/5 px-2 py-0.5 rounded text-zinc-500 uppercase tracking-wider">Optional</span>
-                </div>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <label className="block">
-                    <span className="block text-sm text-zinc-400 mb-2">Provider</span>
-                    <select value={aiProvider} onChange={(e) => setAiProvider(e.target.value)} className="input-field">
-                      <option value="gemini">Gemini (Cloud)</option>
-                      <option value="ollama">Ollama (Local)</option>
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="block text-sm text-zinc-400 mb-2">API / Access Key</span>
-                    <input
-                      type="password"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      className="input-field"
-                      placeholder={aiProvider === 'gemini' ? 'AIza...' : 'Optional'}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="block text-sm text-zinc-400 mb-2">Base URL</span>
-                    <input
-                      type="text"
-                      value={aiBaseUrl}
-                      onChange={(e) => setAiBaseUrl(e.target.value)}
-                      className="input-field"
-                      placeholder="http://ollama:11434"
-                    />
-                    <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
-                      Enter the reachable Ollama endpoint for your cluster or host. The app will not guess one for local mode.
-                    </p>
-                    {aiProvider === 'ollama' && !aiBaseUrl.trim() && (
-                      <p className="mt-2 text-xs text-amber-400">
-                        Base URL required for local models.
-                      </p>
-                    )}
-                  </label>
-                  <label className="block">
-                    <span className="block text-sm text-zinc-400 mb-2">Quality Preset</span>
-                    <select
-                      value={aiQualityPreset}
-                      onChange={(e) => setAiQualityPreset(normalizeQualityPreset(e.target.value))}
-                      className="input-field"
-                    >
-                      <option value="lite">Lite</option>
-                      <option value="balanced">Balanced</option>
-                      <option value="best">Best</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                    <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
-                      Lite uses the smallest practical local models, Balanced is the default, and Best prefers stronger local models for higher quality.
-                    </p>
-                  </label>
-                  <label className="block">
-                    <span className="block text-sm text-zinc-400 mb-2">Text Model</span>
-                    <select
-                      value={aiTextModel}
-                      onChange={(e) => {
-                        setAiQualityPreset('custom');
-                        setAiTextModel(e.target.value);
-                      }}
-                      className="input-field"
-                    >
-                      <option value="auto">Auto (recommended)</option>
-                      <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                      <option value="qwen3:latest">Qwen3 Latest</option>
-                      <option value="gemma3:1b">Gemma 3 1B</option>
-                      <option value="gemma3:4b">Gemma 3 4B</option>
-                      <option value="gemma3:12b">Gemma 3 12B</option>
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="block text-sm text-zinc-400 mb-2">Clip Analysis Model</span>
-                    <select
-                      value={aiAnalyzeModel}
-                      onChange={(e) => {
-                        setAiQualityPreset('custom');
-                        setAiAnalyzeModel(e.target.value);
-                      }}
-                      className="input-field"
-                    >
-                      <option value="auto">Auto (recommended)</option>
-                      <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                      <option value="qwen3:latest">Qwen3 Latest</option>
-                      <option value="gemma3:1b">Gemma 3 1B</option>
-                      <option value="gemma3:4b">Gemma 3 4B</option>
-                      <option value="gemma3:12b">Gemma 3 12B</option>
-                    </select>
-                    <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
-                      This model only drives viral clip detection. You can keep it separate from your main text model.
-                    </p>
-                  </label>
-                  <label className="block">
-                    <span className="block text-sm text-zinc-400 mb-2">Vision Model</span>
-                    <select
-                      value={aiVisionModel}
-                      onChange={(e) => {
-                        setAiQualityPreset('custom');
-                        setAiVisionModel(e.target.value);
-                      }}
-                      className="input-field"
-                    >
-                      <option value="auto">Auto (recommended)</option>
-                      <option value="gemini-3.1-flash-image-preview">Gemini 3.1 Flash Image Preview</option>
-                      <option value="qwen2.5vl:latest">Qwen2.5VL Latest</option>
-                      <option value="gemma3:4b">Gemma 3 4B</option>
-                      <option value="gemma3:12b">Gemma 3 12B</option>
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="block text-sm text-zinc-400 mb-2">Image Model</span>
-                    <input
-                      type="text"
-                      value={aiImageModel}
-                      onChange={(e) => {
-                        setAiQualityPreset('custom');
-                        setAiImageModel(e.target.value);
-                      }}
-                      className="input-field"
-                      placeholder="Optional"
-                    />
-                  </label>
-                </div>
-                <p className="text-xs text-zinc-500 mt-4 leading-relaxed">
-                  {aiProvider === 'gemini'
-                    ? 'Gemini mode keeps the cloud flow. Switch to Ollama for a fully local setup.'
-                    : 'Ollama mode uses your local model stack. Set the Base URL to the exact Ollama service you want to use.'}
-                </p>
-              </div>
+              <AISettingsPanel
+                aiProvider={aiProvider}
+                setAiProvider={setAiProvider}
+                apiKey={apiKey}
+                setApiKey={setApiKey}
+                aiBaseUrl={aiBaseUrl}
+                setAiBaseUrl={setAiBaseUrl}
+                aiQualityPreset={aiQualityPreset}
+                setAiQualityPreset={setAiQualityPreset}
+                aiTextModel={aiTextModel}
+                setAiTextModel={setAiTextModel}
+                aiAnalyzeModel={aiAnalyzeModel}
+                setAiAnalyzeModel={setAiAnalyzeModel}
+                aiVisionModel={aiVisionModel}
+                setAiVisionModel={setAiVisionModel}
+                aiImageModel={aiImageModel}
+                setAiImageModel={setAiImageModel}
+                lmStudioAvailable={lmStudioAvailable}
+                lmStudioModels={lmStudioModels}
+                onDetectLmStudio={detectLmStudio}
+              />
 
               {aiProvider === 'gemini' && <KeyInput onKeySet={(key) => { setApiKey(key); setAiProvider('gemini'); }} savedKey={apiKey} />}
 
