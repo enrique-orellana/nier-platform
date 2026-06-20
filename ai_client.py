@@ -37,6 +37,9 @@ class AIConfig:
     def is_ollama(self) -> bool:
         return self.normalized_provider() == "ollama"
 
+    def is_lmstudio(self) -> bool:
+        return self.normalized_provider() == "lmstudio"
+
     def resolved_base_url(self) -> str:
         if not self.base_url:
             return ""
@@ -326,6 +329,57 @@ def _gemini_chat(
     return response.text or ""
 
 
+def _build_openai_message(prompt: str, images: Optional[Sequence[Any]] = None) -> dict[str, Any]:
+    if not images:
+        return {"role": "user", "content": prompt}
+
+    content = [{"type": "text", "text": prompt}]
+    for image in images:
+        encoded = _encode_image_source(image)
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{encoded}"},
+            }
+        )
+    return {"role": "user", "content": content}
+
+
+def _lmstudio_chat(
+    config: AIConfig,
+    prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    json_mode: bool = False,
+    model: Optional[str] = None,
+    images: Optional[Sequence[Any]] = None,
+    timeout: float = 300.0,
+) -> str:
+    url = f"{config.resolved_base_url()}/v1/chat/completions"
+    messages: list[dict[str, Any]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append(_build_openai_message(prompt, images))
+
+    payload: dict[str, Any] = {
+        "model": model or config.text_model,
+        "messages": messages,
+        "temperature": 0.2,
+    }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+
+    with httpx.Client(timeout=timeout) as client:
+        response = client.post(
+            url,
+            headers=_build_bearer_headers(config.api_key),
+            json=payload,
+        )
+    response.raise_for_status()
+    data = response.json()
+    return ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+
+
 def chat_completion(
     config: AIConfig,
     prompt: str,
@@ -349,6 +403,17 @@ def chat_completion(
 
     if provider == "ollama":
         return _ollama_chat(
+            config,
+            prompt,
+            system_prompt=system_prompt,
+            json_mode=json_mode,
+            model=model or config.text_model,
+            images=images,
+            timeout=timeout,
+        )
+
+    if provider == "lmstudio":
+        return _lmstudio_chat(
             config,
             prompt,
             system_prompt=system_prompt,

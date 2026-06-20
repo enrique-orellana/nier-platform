@@ -69,3 +69,69 @@ class AIClientLmStudioDiscoveryTests(unittest.TestCase):
         )
         self.assertTrue(result["textModels"][0]["isLoaded"])
         self.assertEqual(result["textModels"][0]["label"], "Gemma 4 27B")
+
+
+class DummyChatResponse:
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": "{\"clips\":[]}"
+                    }
+                }
+            ]
+        }
+
+
+class RecordingChatClient:
+    last_url = None
+    last_headers = None
+    last_json = None
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def post(self, url, headers=None, json=None):
+        RecordingChatClient.last_url = url
+        RecordingChatClient.last_headers = headers
+        RecordingChatClient.last_json = json
+        return DummyChatResponse()
+
+
+class AIClientLmStudioChatTests(unittest.TestCase):
+    @patch("ai_client.httpx.Client", RecordingChatClient)
+    def test_chat_completion_uses_openai_compatible_endpoint_for_lmstudio(self):
+        config = ai_client.AIConfig(
+            provider="lmstudio",
+            api_key="token",
+            base_url="http://localhost:1234/",
+            text_model="google/gemma-4-27b",
+        )
+
+        text = ai_client.chat_completion(
+            config,
+            "Return JSON",
+            json_mode=True,
+            model="google/gemma-4-27b",
+        )
+
+        self.assertEqual(text, "{\"clips\":[]}")
+        self.assertEqual(RecordingChatClient.last_url, "http://localhost:1234/v1/chat/completions")
+        self.assertEqual(
+            RecordingChatClient.last_headers["Authorization"],
+            "Bearer token",
+        )
+        self.assertEqual(
+            RecordingChatClient.last_json["response_format"],
+            {"type": "json_object"},
+        )
