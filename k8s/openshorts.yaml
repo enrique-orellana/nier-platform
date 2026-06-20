@@ -223,7 +223,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: openshorts-frontend:proxyfix-20260510f
+          image: openshorts-frontend:local
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5173

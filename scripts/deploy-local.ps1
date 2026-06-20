@@ -14,12 +14,12 @@ function Write-Step {
 }
 
 function Invoke-Kubectl {
-    param([string[]]$Args)
+    param([string[]]$KubectlArgs)
 
     if ($KubeContext) {
-        & kubectl --context $KubeContext @Args
+        & kubectl --context $KubeContext @KubectlArgs
     } else {
-        & kubectl @Args
+        & kubectl @KubectlArgs
     }
 }
 
@@ -46,6 +46,21 @@ function Get-PreferredEnvValue {
     $primary = Get-EnvValue $PrimaryName
     if ($primary) { return $primary }
     return (Get-EnvValue $FallbackName)
+}
+
+function Add-NoProxyHost {
+    param([string]$HostName)
+
+    $current = [System.Environment]::GetEnvironmentVariable("NO_PROXY")
+    $entries = @()
+    if ($current) {
+        $entries = $current.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+    }
+
+    if ($entries -notcontains $HostName) {
+        $entries += $HostName
+        Set-Item -Path "Env:NO_PROXY" -Value (($entries | Select-Object -Unique) -join ",")
+    }
 }
 
 function Import-EnvFile {
@@ -118,6 +133,11 @@ Test-Command kubectl
 if (-not (Test-Path "k8s/openshorts.yaml")) {
     throw "Missing k8s/openshorts.yaml"
 }
+
+Add-NoProxyHost "localhost"
+Add-NoProxyHost "127.0.0.1"
+Add-NoProxyHost "::1"
+Add-NoProxyHost "kubernetes.docker.internal"
 
 $backendImage = "openshorts-backend:local"
 $frontendImage = "openshorts-frontend:local"
@@ -199,6 +219,11 @@ try {
 finally {
     Remove-Item $tempEnvFile -Force -ErrorAction SilentlyContinue
 }
+
+Write-Step "Updating deployment images"
+Invoke-Kubectl @("set", "image", "deployment/openshorts-backend", "backend=$backendImage", "-n", $Namespace)
+Invoke-Kubectl @("set", "image", "deployment/openshorts-frontend", "frontend=$frontendImage", "-n", $Namespace)
+Invoke-Kubectl @("set", "image", "deployment/openshorts-renderer", "renderer=$rendererImage", "-n", $Namespace)
 
 Write-Step "Restarting deployments"
 Invoke-Kubectl @("rollout", "restart", "deployment/openshorts-backend", "deployment/openshorts-frontend", "deployment/openshorts-renderer", "-n", $Namespace)

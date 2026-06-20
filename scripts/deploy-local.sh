@@ -49,6 +49,20 @@ load_env_file() {
   set +a
 }
 
+add_no_proxy_host() {
+  local host="$1"
+  local current="${NO_PROXY:-${no_proxy:-}}"
+  if [[ ",$current," != *",$host,"* ]]; then
+    if [[ -n "$current" ]]; then
+      current="${current},${host}"
+    else
+      current="$host"
+    fi
+  fi
+  export NO_PROXY="$current"
+  export no_proxy="$current"
+}
+
 if [[ -f ".env" ]]; then
   load_env_file ".env"
 elif [[ -f ".env.example" ]]; then
@@ -76,6 +90,7 @@ if [[ -n "$EXPLICIT_S3_PUBLIC_URL_BASE" ]]; then export OPENSHORTS_S3_PUBLIC_URL
 if [[ -n "$EXPLICIT_S3_PUBLIC_ENDPOINT_URL" ]]; then export OPENSHORTS_S3_PUBLIC_ENDPOINT_URL="$EXPLICIT_S3_PUBLIC_ENDPOINT_URL"; fi
 
 KUBE_CONTEXT="${OPENSHORTS_KUBE_CONTEXT:-}"
+NAMESPACE="${OPENSHORTS_NAMESPACE:-openshorts}"
 CONFIG_ENV_FILE="${OPENSHORTS_CONFIG_ENV_FILE:-k8s/openshorts.env.example}"
 AI_BASE_URL="${AI_BASE_URL:-${OPENSHORTS_AI_BASE_URL:-}}"
 VITE_AI_BASE_URL="${VITE_AI_BASE_URL:-${OPENSHORTS_VITE_AI_BASE_URL:-}}"
@@ -102,6 +117,11 @@ fi
 backend_image="openshorts-backend:local"
 frontend_image="openshorts-frontend:local"
 renderer_image="openshorts-renderer:local"
+
+add_no_proxy_host "localhost"
+add_no_proxy_host "127.0.0.1"
+add_no_proxy_host "::1"
+add_no_proxy_host "kubernetes.docker.internal"
 
 kubectl_cmd=(kubectl)
 if [[ -n "$KUBE_CONTEXT" ]]; then
@@ -165,17 +185,22 @@ path.write_text(text)
 PY
 
 apply_kubectl create configmap openshorts-config \
-  -n openshorts \
+  -n "$NAMESPACE" \
   --from-env-file="$temp_env_file" \
   --dry-run=client -o yaml | apply_kubectl apply -f -
 rm -f "$temp_env_file"
 
+log_step "Updating deployment images"
+apply_kubectl set image deployment/openshorts-backend backend="$backend_image" -n "$NAMESPACE"
+apply_kubectl set image deployment/openshorts-frontend frontend="$frontend_image" -n "$NAMESPACE"
+apply_kubectl set image deployment/openshorts-renderer renderer="$renderer_image" -n "$NAMESPACE"
+
 log_step "Restarting deployments"
-apply_kubectl rollout restart deployment/openshorts-backend deployment/openshorts-frontend deployment/openshorts-renderer -n openshorts
+apply_kubectl rollout restart deployment/openshorts-backend deployment/openshorts-frontend deployment/openshorts-renderer -n "$NAMESPACE"
 
 log_step "Waiting for rollouts"
-apply_kubectl rollout status deployment/openshorts-backend -n openshorts --timeout=180s
-apply_kubectl rollout status deployment/openshorts-frontend -n openshorts --timeout=180s
-apply_kubectl rollout status deployment/openshorts-renderer -n openshorts --timeout=180s
+apply_kubectl rollout status deployment/openshorts-backend -n "$NAMESPACE" --timeout=180s
+apply_kubectl rollout status deployment/openshorts-frontend -n "$NAMESPACE" --timeout=180s
+apply_kubectl rollout status deployment/openshorts-renderer -n "$NAMESPACE" --timeout=180s
 
 printf '\nLocal deploy completed successfully.\n'

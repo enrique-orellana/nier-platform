@@ -29,13 +29,13 @@ function Write-Step {
 }
 
 function Invoke-Kubectl {
-    param([string[]]$Args)
+    param([string[]]$KubectlArgs)
 
     if ($KubeContext) {
-        & kubectl --context $KubeContext @Args
+        & kubectl --context $KubeContext @KubectlArgs
     }
     else {
-        & kubectl @Args
+        & kubectl @KubectlArgs
     }
 }
 
