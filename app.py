@@ -8,7 +8,7 @@ import glob
 import time
 import asyncio
 from dotenv import load_dotenv
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Header, BackgroundTasks, Query
@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from s3_uploader import upload_job_artifacts, delete_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
-from ai_client import AIConfig, load_ai_config, ai_config_to_env
+from ai_client import AIConfig, load_ai_config, ai_config_to_env, discover_lmstudio_models
 
 load_dotenv()
 
@@ -570,6 +570,46 @@ async def run_job(job_id, job_data):
     except Exception as e:
         jobs[job_id]['status'] = 'failed'
         jobs[job_id]['logs'].append(f"Execution error: {str(e)}")
+
+class LmStudioDiscoveryRequest(BaseModel):
+    baseUrl: str
+    apiKey: Optional[str] = None
+
+
+def _lmstudio_discovery_failure(base_url: str) -> dict[str, Any]:
+    return {
+        "available": False,
+        "provider": "lmstudio",
+        "baseUrl": base_url,
+        "textModels": [],
+        "visionModels": [],
+        "error": "Unable to discover LM Studio models",
+    }
+
+
+@app.post("/api/ai/lmstudio/discover")
+async def discover_lmstudio_endpoint(req: LmStudioDiscoveryRequest):
+    base_url = (req.baseUrl or "").strip()
+    if not base_url:
+        return _lmstudio_discovery_failure(base_url)
+
+    try:
+        discovered = discover_lmstudio_models(base_url, api_key=(req.apiKey or "").strip())
+    except Exception as exc:
+        print(f"LM Studio discovery failed for {base_url}: {exc}")
+        return _lmstudio_discovery_failure(base_url)
+
+    if not discovered["textModels"]:
+        return _lmstudio_discovery_failure(base_url)
+
+    return {
+        "available": True,
+        "provider": "lmstudio",
+        "baseUrl": AIConfig(provider="lmstudio", base_url=base_url).resolved_base_url(),
+        "textModels": discovered["textModels"],
+        "visionModels": discovered["visionModels"],
+    }
+
 
 @app.get("/api/config")
 async def get_config():
