@@ -237,35 +237,86 @@ function App() {
   const [sessionRecovered, setSessionRecovered] = useState(false);
   const [showScheduleWeek, setShowScheduleWeek] = useState(false);
   
-  const [lmStudioAvailable, setLmStudioAvailable] = useState(false);
+  const [lmStudioAvailable, setLmStudioAvailable] = useState(null);
   const [lmStudioModels, setLmStudioModels] = useState({ textModels: [], visionModels: [] });
   
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadConfig = async () => {
+      for (let attempt = 0; attempt < 5 && !cancelled; attempt += 1) {
+        try {
+          const res = await fetch(getApiUrl('/api/config'));
+          const data = await res.json();
+          const lmStudioConfig = data.lmStudioConfig;
+
+          if (lmStudioConfig == null && attempt < 4) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            continue;
+          }
+
+          if (lmStudioConfig?.available) {
+            setLmStudioAvailable(true);
+            setLmStudioModels({
+              textModels: lmStudioConfig.textModels || [],
+              visionModels: lmStudioConfig.visionModels || []
+            });
+            setAiBaseUrl((current) => {
+              if ((current || '').trim()) return current;
+              return lmStudioConfig.baseUrl || current;
+            });
+          } else {
+            setLmStudioAvailable(false);
+            setLmStudioModels({ textModels: [], visionModels: [] });
+          }
+          return;
+        } catch (err) {
+          console.error("Error fetching config:", err);
+          if (!cancelled) {
+            setLmStudioAvailable(false);
+            setLmStudioModels({ textModels: [], visionModels: [] });
+          }
+          return;
+        }
+      }
+
+      if (!cancelled) {
+        setLmStudioAvailable(false);
+        setLmStudioModels({ textModels: [], visionModels: [] });
+      }
+    };
+
+    loadConfig();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  
   const detectLmStudio = useCallback(async () => {
+    if (!aiBaseUrl) return;
     try {
       const res = await fetch(getApiUrl('/api/ai/lmstudio/discover'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baseUrl: aiBaseUrl, apiKey }),
+        body: JSON.stringify({ baseUrl: aiBaseUrl, apiKey: apiKey })
       });
       const data = await res.json();
-
-      if (!data.available) {
+      
+      if (data.available) {
+        setLmStudioAvailable(true);
+        setLmStudioModels({
+          textModels: data.textModels || [],
+          visionModels: data.visionModels || []
+        });
+        setAiBaseUrl((current) => {
+          if ((current || '').trim()) return current;
+          return data.baseUrl || current;
+        });
+      } else {
         setLmStudioAvailable(false);
         setLmStudioModels({ textModels: [], visionModels: [] });
-        setAiProvider((current) => pickProviderAfterDiscoveryFailure({
-          currentProvider: current,
-          ollamaBaseUrl: CONFIGURED_OLLAMA_BASE_URL || aiBaseUrl,
-        }));
-        return data;
       }
-
-      setLmStudioAvailable(true);
-      setLmStudioModels({
-        textModels: data.textModels,
-        visionModels: data.visionModels,
-      });
-      setAiProvider('lmstudio');
-      return data;
     } catch (e) {
       console.error('Failed to discover LM Studio', e);
       setLmStudioAvailable(false);
@@ -278,7 +329,7 @@ function App() {
   }, [aiBaseUrl, apiKey]);
 
   useEffect(() => {
-    if (aiProvider === 'lmstudio' && !lmStudioAvailable) {
+    if (aiProvider === 'lmstudio' && lmStudioAvailable === false) {
       setAiProvider(
         pickProviderAfterDiscoveryFailure({
           currentProvider: 'lmstudio',
