@@ -25,7 +25,7 @@ class AIConfig:
 
     def normalized_provider(self) -> str:
         provider = (self.provider or "gemini").strip().lower()
-        if provider in {"local", "lmstudio-local", "ollama-local", "ollama"}:
+        if provider in {"local", "lmstudio-local"}:
             return "lmstudio"
         return provider
 
@@ -44,9 +44,9 @@ class AIConfig:
         if not parsed.scheme or not parsed.netloc:
             return cleaned
 
-        # Ollama chat endpoints are rooted at the service origin. Users often
-        # paste /api or /api/ into the field, which would otherwise create
-        # accidental /api/api/chat requests.
+        # LM Studio requests are rooted at the service origin. Users sometimes
+        # paste a nested path into the field, which would otherwise duplicate
+        # segments when the app appends endpoint paths.
         return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 
 
@@ -78,7 +78,7 @@ def _pick(source: Optional[Mapping[str, Any]], *keys: str, default: str = "") ->
 def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
     provider = _pick(source, "X-AI-Provider", "AI_PROVIDER", default="gemini")
     provider_normalized = provider.strip().lower()
-    if provider_normalized in {"local", "lmstudio-local", "ollama-local", "ollama"}:
+    if provider_normalized in {"local", "lmstudio-local"}:
         provider_normalized = "lmstudio"
 
     api_key = _pick(

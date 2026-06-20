@@ -168,6 +168,13 @@ class AIClientLmStudioEdgeCaseTests(unittest.TestCase):
             ai_client.discover_lmstudio_models("http://localhost:1234/", api_key="bad")
         self.assertIn("Auth failed", str(context.exception))
 
+    def test_load_ai_config_does_not_alias_ollama_to_lmstudio(self):
+        config = ai_client.load_ai_config({"X-AI-Provider": "ollama"})
+
+        self.assertEqual(config.provider, "ollama")
+        self.assertEqual(config.normalized_provider(), "ollama")
+        self.assertFalse(config.is_lmstudio())
+
     def test_lmstudio_config_normalizes_trailing_slash(self):
         config1 = ai_client.AIConfig(
             provider="lmstudio",

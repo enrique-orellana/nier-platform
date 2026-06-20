@@ -980,9 +980,9 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6):
         words_json=json.dumps(words)
     )
 
-    is_local_provider = ai_config.is_ollama()
-    local_min_duration = 24.0 if is_local_provider else 15.0
-    local_target_duration = 32.0 if is_local_provider else None
+    is_lmstudio = ai_config.is_lmstudio()
+    local_min_duration = 24.0 if is_lmstudio else 15.0
+    local_target_duration = 32.0 if is_lmstudio else None
 
     try:
         model_name = ai_config.analyze_model or ai_config.text_model or ("gemini-2.5-flash" if ai_config.is_gemini() else "qwen3:latest")
@@ -1018,7 +1018,7 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6):
                 target_duration=local_target_duration,
             )
 
-        if is_local_provider:
+        if is_lmstudio:
             adjusted_shorts = []
             for clip in shorts:
                 if not isinstance(clip, dict):

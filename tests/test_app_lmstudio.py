@@ -1,9 +1,20 @@
 import unittest
 from unittest.mock import patch
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import app
+
+
+class BuildAIConfigTests(unittest.TestCase):
+    @patch.dict("os.environ", {"AI_BASE_URL": ""}, clear=False)
+    def test_build_ai_config_requires_base_url_for_lmstudio(self):
+        with self.assertRaises(HTTPException) as context:
+            app.build_ai_config(provider="lmstudio")
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn("base URL", context.exception.detail)
 
 
 class LmStudioDiscoveryRouteTests(unittest.TestCase):
