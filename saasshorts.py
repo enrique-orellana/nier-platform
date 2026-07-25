@@ -22,7 +22,8 @@ from urllib.parse import urljoin
 from typing import Optional, List, Dict, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ai_client import AIConfig, load_ai_config, chat_json
-from master_policy import master_video_encode_args
+from master_policy import master_video_encode_args, choose_master_spec
+from media_probe import probe_media
 
 
 ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1"
@@ -1233,8 +1234,14 @@ def composite_video(
     filter_parts = []
     concat_parts = []
 
-    # Normalize all segments to same resolution and fps for concat
-    norm = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1"
+    # Normalize all segments to the primary source's honest master canvas and FPS.
+    primary_media = probe_media(talking_head_path)
+    primary_spec = choose_master_spec(primary_media, strategy="crop")
+    norm = (
+        f"scale={primary_spec.width}:{primary_spec.height}:force_original_aspect_ratio=decrease,"
+        f"pad={primary_spec.width}:{primary_spec.height}:(ow-iw)/2:(oh-ih)/2,"
+        f"fps={primary_spec.fps:g},setsar=1"
+    )
 
     for j, seg in enumerate(segments):
         if seg["type"] == "th":

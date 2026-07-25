@@ -17,12 +17,14 @@ import { ShortVideo } from '../remotion/compositions/ShortVideo';
 export default function RemotionPreview({
     videoUrl,
     durationInSeconds = 30,
+    fps = 30,
+    width = 1080,
+    height = 1920,
     subtitles = null,
     hook = null,
     effects = null,
     className = '',
 }) {
-    const fps = 30;
     const durationInFrames = Math.max(1, Math.round(durationInSeconds * fps));
 
     const inputProps = useMemo(
@@ -30,13 +32,13 @@ export default function RemotionPreview({
             videoUrl,
             durationInFrames,
             fps,
-            width: 1080,
-            height: 1920,
+            width,
+            height,
             subtitles,
             hook,
             effects,
         }),
-        [videoUrl, durationInFrames, subtitles, hook, effects]
+        [videoUrl, durationInFrames, fps, width, height, subtitles, hook, effects]
     );
 
     return (
@@ -46,8 +48,8 @@ export default function RemotionPreview({
                 inputProps={inputProps}
                 durationInFrames={durationInFrames}
                 fps={fps}
-                compositionWidth={1080}
-                compositionHeight={1920}
+                compositionWidth={width}
+                compositionHeight={height}
                 style={{
                     width: '100%',
                     height: '100%',
