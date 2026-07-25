@@ -4,6 +4,8 @@ import { selectComposition, renderMedia } from "@remotion/renderer";
 import { getBundleLocation } from "./bundle.js";
 import { renderJobs } from "./server.js";
 import { buildRenderOptions } from "./master-policy.js";
+import { loadMasterPolicy } from "./master-policy.js";
+import { validateOutputFile } from "./output-validation.js";
 
 export interface RenderParams {
   renderId: string;
@@ -80,6 +82,19 @@ export async function executeRender(params: RenderParams): Promise<void> {
         }
       },
     });
+
+    await validateOutputFile(
+      outputLocation,
+      {
+        width: props.width,
+        height: props.height,
+        fps: props.fps,
+        durationSeconds: props.durationInFrames / props.fps,
+        requireAudio: false,
+        toneMappedToSdr: false,
+      },
+      loadMasterPolicy(),
+    );
 
     // Success
     job.status = "done";

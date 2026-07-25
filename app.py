@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+from render_manifest import load_manifest, save_manifest_atomic, verify_manifest_assets, calculate_revision, master_is_current
 from s3_uploader import upload_job_artifacts, delete_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
 from ai_client import AIConfig, load_ai_config, ai_config_to_env, discover_lmstudio_models
 
@@ -778,6 +779,11 @@ class UpdateClipVideoUrlRequest(BaseModel):
     new_video_url: str
 
 
+class ManifestPatchRequest(BaseModel):
+    layers: Optional[dict] = None
+    audio: Optional[dict] = None
+
+
 class ImproveClipQualityRequest(BaseModel):
     input_filename: Optional[str] = None
 
@@ -1199,6 +1205,46 @@ async def update_clip_video_url(job_id: str, clip_index: int, req: UpdateClipVid
         "clip_index": clip_index,
         "video_url": req.new_video_url,
     }
+
+
+def _resolve_clip_manifest(job_id: str, clip_index: int):
+    job = _get_job(job_id)
+    if not job or not job.get("result"):
+        raise HTTPException(status_code=404, detail="Job not found")
+    clips = job["result"].get("clips", [])
+    if clip_index < 0 or clip_index >= len(clips):
+        raise HTTPException(status_code=404, detail="Clip not found")
+    relative = clips[clip_index].get("manifest_path")
+    if not relative:
+        raise HTTPException(status_code=404, detail="Clip has no render manifest")
+    root = os.path.abspath(os.path.join(OUTPUT_DIR, job_id))
+    manifest_path = os.path.abspath(os.path.join(root, relative))
+    if not manifest_path.startswith(root + os.sep) or not os.path.isfile(manifest_path):
+        raise HTTPException(status_code=400, detail="Invalid clip manifest path")
+    return job, clips[clip_index], manifest_path, root
+
+
+@app.get("/api/clip/{job_id}/{clip_index}/manifest")
+async def get_clip_manifest(job_id: str, clip_index: int):
+    _, _, manifest_path, root = _resolve_clip_manifest(job_id, clip_index)
+    manifest = load_manifest(Path(manifest_path))
+    verify_manifest_assets(manifest, Path(root))
+    return {"manifest": manifest, "revision": calculate_revision(manifest), "master_current": master_is_current(manifest)}
+
+
+@app.patch("/api/clip/{job_id}/{clip_index}/manifest")
+async def patch_clip_manifest(job_id: str, clip_index: int, req: ManifestPatchRequest):
+    _, _, manifest_path, root = _resolve_clip_manifest(job_id, clip_index)
+    manifest = load_manifest(Path(manifest_path))
+    verify_manifest_assets(manifest, Path(root))
+    if req.layers is not None:
+        manifest["layers"] = req.layers
+    if req.audio is not None:
+        manifest["layers"] = dict(manifest.get("layers") or {})
+        manifest["layers"]["audio"] = req.audio
+    manifest["master"] = None
+    revision = save_manifest_atomic(Path(manifest_path), manifest)
+    return {"success": True, "manifest": manifest, "revision": revision, "master_current": False}
 
 
 @app.post("/api/clip/{job_id}/{clip_index}/quality")
