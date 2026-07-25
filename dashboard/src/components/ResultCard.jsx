@@ -64,7 +64,6 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     const [isHooking, setIsHooking] = useState(false);
     const [isTranslating, setIsTranslating] = useState(false);
     const [isConvertingNativeShort, setIsConvertingNativeShort] = useState(false);
-    const [isQualityImproving, setIsQualityImproving] = useState(false);
     const [showHookModal, setShowHookModal] = useState(false);
     const [showTranslateModal, setShowTranslateModal] = useState(false);
     const [editError, setEditError] = useState(null);
@@ -292,40 +291,6 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             setTimeout(() => setEditError(null), 5000);
         } finally {
             setIsConvertingNativeShort(false);
-        }
-    };
-
-    const handleImproveQuality = async () => {
-        setIsQualityImproving(true);
-        setEditError(null);
-
-        try {
-            const res = await fetch(getApiUrl(`/api/clip/${jobId}/${index}/quality`), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    input_filename: getVideoFilename(),
-                }),
-            });
-
-            if (!res.ok) {
-                throw new Error(await res.text());
-            }
-
-            const data = await res.json();
-            if (data.video_url) {
-                const nextUrl = getApiUrl(data.video_url);
-                setPersistedVideoUrl(nextUrl);
-                setCurrentVideoUrl(nextUrl);
-                if (videoRef.current) {
-                    videoRef.current.load();
-                }
-            }
-        } catch (e) {
-            setEditError(e.message);
-            setTimeout(() => setEditError(null), 5000);
-        } finally {
-            setIsQualityImproving(false);
         }
     };
 
@@ -563,8 +528,6 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     isEditing={isEditing}
                     handleConvertNativeShort={handleConvertNativeShort}
                     isConvertingNativeShort={isConvertingNativeShort}
-                    handleImproveQuality={handleImproveQuality}
-                    isQualityImproving={isQualityImproving}
                     setShowSubtitleModal={setShowSubtitleModal}
                     isSubtitling={isSubtitling}
                     setShowHookModal={setShowHookModal}
