@@ -784,37 +784,6 @@ class ManifestPatchRequest(BaseModel):
     audio: Optional[dict] = None
 
 
-class ImproveClipQualityRequest(BaseModel):
-    input_filename: Optional[str] = None
-
-
-def _build_quality_ffmpeg_command(input_path: str, output_path: str) -> list[str]:
-    """Build a higher-fidelity FFmpeg command for clip quality improvement."""
-    return [
-        "ffmpeg",
-        "-y",
-        "-i",
-        input_path,
-        "-vf",
-        "scale=iw:ih:flags=lanczos,unsharp=5:5:0.8:3:3:0.4",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "slower",
-        "-crf",
-        "16",
-        "-profile:v",
-        "high",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "copy",
-        "-movflags",
-        "+faststart",
-        output_path,
-    ]
-
-
 def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) -> None:
     """Update the in-memory job record and persisted metadata for a clip URL."""
     job = _get_job(job_id)
@@ -848,34 +817,6 @@ def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) ->
     with open(metadata_path, "w") as f:
         json.dump(data, f, indent=4)
 
-
-def _reencode_clip_for_quality(
-    job_id: str,
-    job: Dict,
-    clip_index: int,
-    requested_input_filename: Optional[str] = None,
-) -> str:
-    """Re-encode a clip at its current size with a higher-quality FFmpeg pass."""
-    input_path, filename = _resolve_job_clip_input(
-        job_id,
-        job,
-        clip_index,
-        requested_input_filename,
-    )
-
-    output_dir = os.path.join(OUTPUT_DIR, job_id)
-    os.makedirs(output_dir, exist_ok=True)
-
-    base, ext = os.path.splitext(filename)
-    output_filename = f"quality_{base}{ext or '.mp4'}"
-    output_path = os.path.join(output_dir, output_filename)
-
-    if os.path.exists(output_path):
-        os.remove(output_path)
-
-    ffmpeg_cmd = _build_quality_ffmpeg_command(input_path, output_path)
-    subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    return f"/videos/{job_id}/{output_filename}"
 
 @app.post("/api/edit")
 async def edit_clip(
@@ -1245,31 +1186,6 @@ async def patch_clip_manifest(job_id: str, clip_index: int, req: ManifestPatchRe
     manifest["master"] = None
     revision = save_manifest_atomic(Path(manifest_path), manifest)
     return {"success": True, "manifest": manifest, "revision": revision, "master_current": False}
-
-
-@app.post("/api/clip/{job_id}/{clip_index}/quality")
-async def improve_clip_quality(job_id: str, clip_index: int, req: ImproveClipQualityRequest):
-    """Re-encode a clip in place with a higher-quality FFmpeg pass."""
-    job = _get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    try:
-        new_video_url = _reencode_clip_for_quality(job_id, job, clip_index, req.input_filename)
-        _persist_clip_video_url(job_id, clip_index, new_video_url)
-        return {
-            "success": True,
-            "job_id": job_id,
-            "clip_index": clip_index,
-            "video_url": new_video_url,
-        }
-    except subprocess.CalledProcessError as e:
-        stderr = e.stderr.decode() if e.stderr else "Unknown FFmpeg error"
-        raise HTTPException(status_code=500, detail=f"Quality re-encode failed: {stderr}")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 class EffectsGenerateRequest(BaseModel):
