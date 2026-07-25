@@ -100,3 +100,13 @@ def master_video_encode_args(include_audio: bool = True) -> list[str]:
     if policy.get("faststart"):
         args.extend(["-movflags", "+faststart"])
     return args
+
+
+def master_audio_encode_args() -> list[str]:
+    """Return the mandatory AAC audio contract for standalone audio stages."""
+    policy = load_master_policy()
+    return [
+        "-c:a", str(policy["audio_codec"]),
+        "-ar", str(policy["audio_sample_rate"]),
+        "-b:a", str(policy["audio_bitrate"]),
+    ]

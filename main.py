@@ -23,10 +23,11 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='google.protobuf')
 from ai_client import load_ai_config, chat_json
-from master_policy import master_video_encode_args, choose_master_spec
+from master_policy import master_video_encode_args, master_audio_encode_args, choose_master_spec
 from media_probe import probe_media
 from render_manifest import register_asset, save_manifest_atomic
 from crop_track import CropKeyframe, CropRect, CropScene, CropTrack
+from clip_timeline import build_audio_trim_filter, resolve_clip_frame_range
 
 # Load environment variables
 load_dotenv()
@@ -585,7 +586,7 @@ Technical Details: {str(e)}
     
     return downloaded_file, sanitized_title
 
-def process_video_to_vertical(input_video, final_output_video):
+def process_video_to_vertical(input_video, final_output_video, start_sec=None, end_sec=None):
     """
     Core logic to convert horizontal video to vertical using scene detection and Active Speaker Tracking (MediaPipe).
     """
@@ -594,7 +595,7 @@ def process_video_to_vertical(input_video, final_output_video):
     # Define temporary file paths based on the output name
     base_name = os.path.splitext(final_output_video)[0]
     temp_video_output = f"{base_name}_temp_video.mp4"
-    temp_audio_output = f"{base_name}_temp_audio.aac"
+    temp_audio_output = f"{base_name}_temp_audio.m4a"
     
     # Clean up previous temp files if they exist
     if os.path.exists(temp_video_output): os.remove(temp_video_output)
@@ -603,10 +604,24 @@ def process_video_to_vertical(input_video, final_output_video):
 
     print(f"🎬 Processing clip: {input_video}")
     print("   Step 1: Detecting scenes...")
-    scenes, fps = detect_scenes(input_video)
-    source_fps = float(fps)
+    scenes, detected_fps = detect_scenes(input_video)
+    source_fps = float(detected_fps)
     fps = min(source_fps, 60.0)
     frame_stride = max(1, round(source_fps / fps))
+
+    source_cap = cv2.VideoCapture(input_video)
+    total_frames = int(source_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    source_cap.release()
+    trim = resolve_clip_frame_range(
+        start_sec,
+        end_sec,
+        source_fps=source_fps,
+        total_frames=total_frames,
+    )
+    print(
+        f"   ⏱️ Source trim: frames {trim.start_frame}-{trim.end_frame} "
+        f"({trim.start_sec:.6f}s-{trim.end_sec:.6f}s)"
+    )
     
     if not scenes:
         print("   ❌ No scenes were detected. Using full video as one scene.")
@@ -615,7 +630,7 @@ def process_video_to_vertical(input_video, final_output_video):
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap.release()
         from scenedetect import FrameTimecode
-        scenes = [(FrameTimecode(0, fps), FrameTimecode(total_frames, fps))]
+        scenes = [(FrameTimecode(0, source_fps), FrameTimecode(total_frames, source_fps))]
 
     print(f"   ✅ Found {len(scenes)} scenes.")
 
@@ -647,8 +662,6 @@ def process_video_to_vertical(input_video, final_output_video):
     ffmpeg_process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
     cap = cv2.VideoCapture(input_video)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    
     frame_number = 0
     current_scene_index = 0
     
@@ -657,16 +670,29 @@ def process_video_to_vertical(input_video, final_output_video):
     for s_start, s_end in scenes:
         scene_boundaries.append((s_start.frame_num, s_end.frame_num))
 
+    while (
+        current_scene_index + 1 < len(scene_boundaries)
+        and trim.start_frame >= scene_boundaries[current_scene_index][1]
+    ):
+        current_scene_index += 1
+
     # Global tracker for single-person shots
     speaker_tracker = SpeakerTracker(cooldown_frames=30)
 
-    with tqdm(total=total_frames, desc="   Processing", file=sys.stdout) as pbar:
+    with tqdm(total=trim.frame_count, desc="   Processing", file=sys.stdout) as pbar:
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
 
-            if frame_number % frame_stride != 0:
+            if frame_number >= trim.end_frame:
+                break
+
+            if frame_number < trim.start_frame:
+                frame_number += 1
+                continue
+
+            if (frame_number - trim.start_frame) % frame_stride != 0:
                 frame_number += 1
                 pbar.update(1)
                 continue
@@ -674,8 +700,9 @@ def process_video_to_vertical(input_video, final_output_video):
             # Update Scene Index
             if current_scene_index < len(scene_boundaries):
                 start_f, end_f = scene_boundaries[current_scene_index]
-                if frame_number >= end_f and current_scene_index < len(scene_boundaries) - 1:
+                while frame_number >= end_f and current_scene_index < len(scene_boundaries) - 1:
                     current_scene_index += 1
+                    start_f, end_f = scene_boundaries[current_scene_index]
             
             # Determine Strategy for current frame based on scene
             current_strategy = scene_strategies[current_scene_index] if current_scene_index < len(scene_strategies) else 'TRACK'
@@ -704,7 +731,10 @@ def process_video_to_vertical(input_video, final_output_video):
                             cameraman.update_target(person_box)
 
                 # Snap camera on scene change to avoid panning from previous scene position
-                is_scene_start = (frame_number == scene_boundaries[current_scene_index][0])
+                is_scene_start = (
+                    frame_number == trim.start_frame
+                    or frame_number == scene_boundaries[current_scene_index][0]
+                )
                 
                 x1, y1, x2, y2 = cameraman.get_crop_box(force_snap=is_scene_start)
                 
@@ -731,7 +761,10 @@ def process_video_to_vertical(input_video, final_output_video):
 
     print("\n   🔊 Step 5: Extracting audio...")
     audio_extract_command = [
-        'ffmpeg', '-y', '-i', input_video, '-vn', '-acodec', 'copy', temp_audio_output
+        'ffmpeg', '-y', '-i', input_video, '-vn',
+        '-af', build_audio_trim_filter(trim),
+        *master_audio_encode_args(),
+        temp_audio_output,
     ]
     try:
         subprocess.run(audio_extract_command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -743,12 +776,14 @@ def process_video_to_vertical(input_video, final_output_video):
     if os.path.exists(temp_audio_output):
         merge_command = [
             'ffmpeg', '-y', '-i', temp_video_output, '-i', temp_audio_output,
-            '-c:v', 'copy', '-c:a', 'copy', '-movflags', '+faststart', final_output_video
+            '-map', '0:v:0', '-map', '1:a:0',
+            '-c:v', 'copy', '-c:a', 'copy', '-shortest',
+            '-movflags', '+faststart', final_output_video
         ]
     else:
          merge_command = [
             'ffmpeg', '-y', '-i', temp_video_output,
-            '-c:v', 'copy', '-movflags', '+faststart', final_output_video
+            '-map', '0:v:0', '-c:v', 'copy', '-movflags', '+faststart', final_output_video
         ]
         
     try:
@@ -1248,34 +1283,21 @@ if __name__ == '__main__':
                 clip["output_height"] = master_spec.height
                 clip["output_fps"] = master_spec.fps
                 
-                # Cut clip
                 clip_filename = f"{video_title}_clip_{i+1}.mp4"
-                clip_temp_path = os.path.join(output_dir, f"temp_{clip_filename}")
                 clip_final_path = os.path.join(output_dir, clip_filename)
-                
-                # Cut without a lossy video encode. The vertical master pass below
-                # is the only OpenShorts-controlled video generation for this clip.
-                cut_command = [
-                    'ffmpeg', '-y', 
-                    '-ss', str(start), 
-                    '-to', str(end), 
-                    '-i', input_video,
-                    '-c:v', 'copy', '-c:a', 'copy',
-                    '-avoid_negative_ts', 'make_zero',
-                    clip_temp_path
-                ]
-                subprocess.run(cut_command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-                
-                # Process vertical
-                success = process_video_to_vertical(clip_temp_path, clip_final_path)
+
+                # Decode the source timeline once, trimming video frames and
+                # audio from the same frame-aligned clock.
+                success = process_video_to_vertical(
+                    input_video,
+                    clip_final_path,
+                    start_sec=start,
+                    end_sec=end,
+                )
                 
                 if success:
                     print(f"   ✅ Clip {i+1} ready: {clip_final_path}")
                 
-                # Clean up temp cut
-                if os.path.exists(clip_temp_path):
-                    os.remove(clip_temp_path)
-
             with open(metadata_file, 'w', encoding='utf-8') as f:
                 json.dump(clips_data, f, indent=2)
 

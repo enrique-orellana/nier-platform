@@ -1,6 +1,6 @@
 import unittest
 
-from master_policy import choose_master_spec, master_video_encode_args
+from master_policy import choose_master_spec, master_audio_encode_args, master_video_encode_args
 from media_probe import MediaProbe
 
 
@@ -45,6 +45,12 @@ class MasterPolicyTests(unittest.TestCase):
         args = master_video_encode_args()
         self.assertEqual(args[args.index("-crf") + 1], "14")
         self.assertEqual(args[args.index("-preset") + 1], "veryslow")
+        self.assertEqual(args[args.index("-b:a") + 1], "320k")
+
+    def test_standalone_audio_contract_is_centralized(self):
+        args = master_audio_encode_args()
+        self.assertEqual(args[args.index("-c:a") + 1], "aac")
+        self.assertEqual(args[args.index("-ar") + 1], "48000")
         self.assertEqual(args[args.index("-b:a") + 1], "320k")
 
 
