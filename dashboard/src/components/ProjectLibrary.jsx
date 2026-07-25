@@ -119,6 +119,14 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
     }
   };
 
+  const handleProjectCardKeyDown = (event, project) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleViewProject(project);
+    }
+  };
+
   const handleDeleteProject = async (e, project) => {
     e.stopPropagation();
     if (!window.confirm(`Are you sure you want to delete project "${project.title || project.job_id}"?`)) {
@@ -348,9 +356,12 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
               const previewVideoUrl = project.clips?.[0]?.url || project.clips?.[0]?.video_url || '';
 
               return (
-                <button
+                <div
                   key={project.job_id}
                   onClick={() => handleViewProject(project)}
+                  onKeyDown={(event) => handleProjectCardKeyDown(event, project)}
+                  role="button"
+                  tabIndex={0}
                   className="group glass-panel p-3 cursor-pointer hover:border-cyan-500/30 transition-all active:scale-[0.98] text-left"
                 >
                   <div className="aspect-[9/16] rounded-lg overflow-hidden bg-white/5 mb-3 border border-white/5 relative">
@@ -392,7 +403,7 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
                     </div>
                     <p className="text-[10px] text-zinc-600 mt-2 truncate">{project.job_id}</p>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
