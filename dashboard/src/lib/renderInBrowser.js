@@ -18,13 +18,15 @@ import { ShortVideo } from '../remotion/compositions/ShortVideo';
 export async function renderInBrowser({
     videoUrl,
     durationInSeconds = 30,
+    fps = 30,
+    width = 1080,
+    height = 1920,
     subtitles = null,
     hook = null,
     effects = null,
     onProgress,
     signal,
 }) {
-    const fps = 30;
     const durationInFrames = Math.max(1, Math.round(durationInSeconds * fps));
 
     const { getBlob } = await renderMediaOnWeb({
@@ -32,8 +34,8 @@ export async function renderInBrowser({
             component: ShortVideo,
             durationInFrames,
             fps,
-            width: 1080,
-            height: 1920,
+            width,
+            height,
             id: 'ShortVideo',
             calculateMetadata: null,
         },
@@ -41,8 +43,8 @@ export async function renderInBrowser({
             videoUrl,
             durationInFrames,
             fps,
-            width: 1080,
-            height: 1920,
+            width,
+            height,
             subtitles,
             hook,
             effects,
