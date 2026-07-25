@@ -79,3 +79,24 @@ def choose_master_spec(media: MediaProbe, strategy: str = "crop") -> MasterSpec:
         faststart=bool(policy["faststart"]),
         tone_map_to_sdr=transfer in {"smpte2084", "arib-std-b67", "hlg"},
     )
+
+
+def master_video_encode_args(include_audio: bool = True) -> list[str]:
+    """Return the single mandatory H.264/MP4 encode contract for FFmpeg paths."""
+    policy = load_master_policy()
+    args = [
+        "-c:v", "libx264",
+        "-profile:v", str(policy["profile"]),
+        "-preset", str(policy["preset"]),
+        "-crf", str(policy["crf"]),
+        "-pix_fmt", str(policy["pixel_format"]),
+    ]
+    if include_audio:
+        args.extend([
+            "-c:a", str(policy["audio_codec"]),
+            "-ar", str(policy["audio_sample_rate"]),
+            "-b:a", str(policy["audio_bitrate"]),
+        ])
+    if policy.get("faststart"):
+        args.extend(["-movflags", "+faststart"])
+    return args

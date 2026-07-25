@@ -22,6 +22,7 @@ from urllib.parse import urljoin
 from typing import Optional, List, Dict, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ai_client import AIConfig, load_ai_config, chat_json
+from master_policy import master_video_encode_args
 
 
 ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1"
@@ -999,9 +1000,7 @@ def generate_broll(
         "-vf", zoompan_filter,
         "-t", str(dur_secs),
         "-map", "0:v", "-map", "1:a",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "22",
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "128k",
+        *master_video_encode_args(include_audio=True),
         "-shortest",
         output_path,
     ]
@@ -1184,9 +1183,7 @@ def composite_video(
             "ffmpeg", "-y",
             "-i", talking_head_path,
             "-vf", sub_filter,
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "22",
-            "-c:a", "aac", "-b:a", "128k",
-            "-movflags", "+faststart",
+            *master_video_encode_args(include_audio=True),
             output_path,
         ]
         subprocess.run(cmd, check=True)
@@ -1275,9 +1272,7 @@ def composite_video(
         "-filter_complex", filter_str,
         "-map", "[finalv]",
         "-map", "[outa]",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "22",
-        "-c:a", "aac", "-b:a", "128k",
-        "-movflags", "+faststart",
+        *master_video_encode_args(include_audio=True),
         output_path,
     ]
 

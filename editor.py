@@ -6,6 +6,7 @@ import time
 from google import genai
 from google.genai import types
 from ai_client import AIConfig, load_ai_config, chat_json
+from master_policy import master_video_encode_args
 
 class VideoEditor:
     def __init__(self, api_key):
@@ -341,7 +342,7 @@ class VideoEditor:
             'ffmpeg', '-y',
             '-i', input_path,
             '-vf', filter_string,
-            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'fast', '-crf', '22',
+            *master_video_encode_args(include_audio=False),
             '-c:a', 'copy',
             output_path
         ]
@@ -570,7 +571,7 @@ class VideoEditor:
         if w and h:
             sanitized = self._enforce_zoompan_output_size(sanitized, w, h)
 
-        subprocess.run(['ffmpeg', '-y', '-i', input_path, '-vf', sanitized, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-movflags', '+faststart', output_path], check=True)
+        subprocess.run(['ffmpeg', '-y', '-i', input_path, '-vf', sanitized, *master_video_encode_args(include_audio=True), output_path], check=True)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import unittest
 
-from master_policy import choose_master_spec
+from master_policy import choose_master_spec, master_video_encode_args
 from media_probe import MediaProbe
 
 
@@ -40,6 +40,12 @@ class MasterPolicyTests(unittest.TestCase):
         self.assertEqual(spec.preset, "veryslow")
         self.assertEqual(spec.pixel_format, "yuv420p")
         self.assertEqual(spec.audio_bitrate, "320k")
+
+    def test_ffmpeg_contract_is_centralized(self):
+        args = master_video_encode_args()
+        self.assertEqual(args[args.index("-crf") + 1], "14")
+        self.assertEqual(args[args.index("-preset") + 1], "veryslow")
+        self.assertEqual(args[args.index("-b:a") + 1], "320k")
 
 
 if __name__ == "__main__":

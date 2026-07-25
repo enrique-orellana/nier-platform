@@ -69,7 +69,11 @@ export async function executeRender(params: RenderParams): Promise<void> {
       composition,
       serveUrl: bundleLocation,
       codec: "h264",
-      crf: 18,
+      crf: 14,
+      x264Preset: "veryslow",
+      pixelFormat: "yuv420p",
+      audioCodec: "aac",
+      audioBitrate: "320k",
       outputLocation,
       onProgress: ({ progress }) => {
         const percent = Math.round(progress * 100);

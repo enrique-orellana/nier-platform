@@ -21,6 +21,7 @@ import json
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='google.protobuf')
 from ai_client import load_ai_config, chat_json
+from master_policy import master_video_encode_args
 
 # Load environment variables
 load_dotenv()
@@ -631,8 +632,8 @@ def process_video_to_vertical(input_video, final_output_video):
     command = [
         'ffmpeg', '-y', '-f', 'rawvideo', '-vcodec', 'rawvideo',
         '-s', f'{OUTPUT_WIDTH}x{OUTPUT_HEIGHT}', '-pix_fmt', 'bgr24',
-        '-r', str(fps), '-i', '-', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-        '-preset', 'fast', '-crf', '23', '-an', temp_video_output
+        '-r', str(fps), '-i', '-', *master_video_encode_args(include_audio=False),
+        '-an', temp_video_output
     ]
 
     ffmpeg_process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -1176,8 +1177,7 @@ if __name__ == '__main__':
                     '-ss', str(start), 
                     '-to', str(end), 
                     '-i', input_video,
-                    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18', '-preset', 'fast',
-                    '-c:a', 'aac',
+                    *master_video_encode_args(include_audio=True),
                     clip_temp_path
                 ]
                 subprocess.run(cut_command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
