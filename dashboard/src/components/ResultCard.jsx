@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { getApiUrl } from '../config';
-import { renderInBrowser } from '../lib/renderInBrowser';
 import HookModal from './HookModal';
 import SubtitleModal from './SubtitleModal';
 import TranslateModal from './TranslateModal';
@@ -21,7 +20,7 @@ const getUrlFilename = (url) => {
     }
 };
 
-const toProxiedVideoUrl = (url, forRenderer = false) => {
+const toProxiedVideoUrl = (url) => {
     if (!url) return url;
     // Blob URLs and relative paths are already local — no proxy needed
     if (url.startsWith('blob:') || !url.startsWith('http')) return url;
@@ -95,8 +94,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
 
     const getSourceVideoUrl = () => persistedVideoUrl || originalVideoUrl;
     const getVideoFilename = () => getUrlFilename(getSourceVideoUrl());
-    const getBackendSourceUrl = () => toProxiedVideoUrl(getSourceVideoUrl());
-    const getRendererSourceUrl = () => toProxiedVideoUrl(getSourceVideoUrl(), true);
+    const getRendererSourceUrl = () => toProxiedVideoUrl(getSourceVideoUrl());
 
     const applyRenderedVideoUrl = (nextUrl, { persist = false } = {}) => {
         if (persist) {
@@ -514,7 +512,6 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 index={index}
                 isEditing={isEditing}
                 isConvertingNativeShort={isConvertingNativeShort}
-                isQualityImproving={isQualityImproving}
                 onPlay={onPlay}
                 onPause={onPause}
                 clip={clip}
