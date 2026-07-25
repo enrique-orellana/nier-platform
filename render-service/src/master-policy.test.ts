@@ -8,6 +8,7 @@ describe("master policy", () => {
       crf: 14,
       x264Preset: "veryslow",
       pixelFormat: "yuv420p",
+      colorSpace: "bt709",
       audioCodec: "aac",
       audioBitrate: "320k",
     });

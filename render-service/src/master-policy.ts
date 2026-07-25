@@ -42,6 +42,7 @@ export function buildRenderOptions(policy = loadMasterPolicy()) {
     crf: policy.crf,
     x264Preset: policy.preset,
     pixelFormat: policy.pixel_format,
+    colorSpace: "bt709" as const,
     audioCodec: policy.audio_codec,
     audioBitrate: policy.audio_bitrate as `${number}k`,
   } as const;
