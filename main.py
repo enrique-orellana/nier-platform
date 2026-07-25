@@ -604,6 +604,9 @@ def process_video_to_vertical(input_video, final_output_video):
     print(f"🎬 Processing clip: {input_video}")
     print("   Step 1: Detecting scenes...")
     scenes, fps = detect_scenes(input_video)
+    source_fps = float(fps)
+    fps = min(source_fps, 60.0)
+    frame_stride = max(1, round(source_fps / fps))
     
     if not scenes:
         print("   ❌ No scenes were detected. Using full video as one scene.")
@@ -662,6 +665,11 @@ def process_video_to_vertical(input_video, final_output_video):
             ret, frame = cap.read()
             if not ret:
                 break
+
+            if frame_number % frame_stride != 0:
+                frame_number += 1
+                pbar.update(1)
+                continue
 
             # Update Scene Index
             if current_scene_index < len(scene_boundaries):
