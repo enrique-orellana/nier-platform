@@ -6,6 +6,7 @@ import { renderJobs } from "./server.js";
 import { buildRenderOptions } from "./master-policy.js";
 import { loadMasterPolicy } from "./master-policy.js";
 import { validateOutputFile } from "./output-validation.js";
+import { applyRequestedCompositionMetadata } from "./composition.js";
 
 export interface RenderParams {
   renderId: string;
@@ -47,11 +48,12 @@ export async function executeRender(params: RenderParams): Promise<void> {
     const bundleLocation = getBundleLocation();
 
     // Select the composition with the provided input props
-    const composition = await selectComposition({
+    const selectedComposition = await selectComposition({
       serveUrl: bundleLocation,
       id: "ShortVideo",
       inputProps: props,
     });
+    const composition = applyRequestedCompositionMetadata(selectedComposition, props);
 
     // Determine output directory and file path
     const outputDir = process.env.OUTPUT_DIR
