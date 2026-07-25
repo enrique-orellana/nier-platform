@@ -23,7 +23,7 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='google.protobuf')
 from ai_client import load_ai_config, chat_json
-from master_policy import master_video_encode_args
+from master_policy import master_video_encode_args, choose_master_spec
 from media_probe import probe_media
 from render_manifest import register_asset, save_manifest_atomic
 from crop_track import CropKeyframe, CropRect, CropScene, CropTrack
@@ -1235,6 +1235,10 @@ if __name__ == '__main__':
                 clip["manifest_path"] = manifest_path
                 clip["source_video_filename"] = os.path.relpath(manifest_source_path, output_dir).replace(os.sep, "/")
                 clip["source_video_url"] = f"/videos/{os.path.basename(output_dir)}/{clip['source_video_filename']}"
+                master_spec = choose_master_spec(source_media, strategy="crop")
+                clip["output_width"] = master_spec.width
+                clip["output_height"] = master_spec.height
+                clip["output_fps"] = master_spec.fps
                 
                 # Cut clip
                 clip_filename = f"{video_title}_clip_{i+1}.mp4"

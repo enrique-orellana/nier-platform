@@ -51,7 +51,7 @@ export default function VideoPreview({
                     </span>
                     <span className="text-[10px] text-zinc-400 mt-1">
                         {isConvertingNativeShort
-                            ? 'Re-rendering to 1080x1920'
+                            ? 'Rendering master quality'
                             : isQualityImproving
                                 ? 'Re-encoding without changing framing'
                                 : 'Applying viral edits & zooms'}
