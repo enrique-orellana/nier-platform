@@ -7,7 +7,7 @@ except ImportError:
 
 def verify():
     print("🧪 Verifying Hook Customization...")
-    test_text = "Custom Position\n& Size Test"
+    test_text = "Custom Position 🌟\n& Size Test 😊"
     
     # Test 1: Small + Top
     print("   Testing Small + Top...")

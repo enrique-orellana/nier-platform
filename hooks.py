@@ -3,7 +3,11 @@ import textwrap
 import subprocess
 import urllib.request
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
-
+try:
+    from pilmoji import Pilmoji
+except ImportError:
+    Pilmoji = None
+    
 FONT_URL = "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSerif/NotoSerif-Bold.ttf"
 FONT_DIR = "fonts"
 FONT_PATH = os.path.join(FONT_DIR, "NotoSerif-Bold.ttf")
@@ -54,6 +58,10 @@ def create_hook_image(text, target_width, output_image_path="hook_overlay.png", 
     # Wrap text logic (Pixel-based)
     dummy_img = Image.new('RGBA', (1, 1))
     draw = ImageDraw.Draw(dummy_img)
+    if Pilmoji:
+        pilmoji_dummy = Pilmoji(dummy_img)
+    else:
+        pilmoji_dummy = None
     
     max_text_width = target_width - (2 * padding_x)
     
@@ -72,8 +80,11 @@ def create_hook_image(text, target_width, output_image_path="hook_overlay.png", 
         for word in words:
             # Test if adding word fits
             test_line = ' '.join(current_line + [word])
-            bbox = draw.textbbox((0, 0), test_line, font=font)
-            w = bbox[2] - bbox[0]
+            if pilmoji_dummy:
+                w, _ = pilmoji_dummy.getsize(test_line, font=font)
+            else:
+                bbox = draw.textbbox((0, 0), test_line, font=font)
+                w = bbox[2] - bbox[0]
             
             if w <= max_text_width:
                 current_line.append(word)
@@ -99,9 +110,12 @@ def create_hook_image(text, target_width, output_image_path="hook_overlay.png", 
             text_heights.append(font_size) # Use font size for empty line height
             continue
             
-        bbox = draw.textbbox((0, 0), line, font=font)
-        w = bbox[2] - bbox[0]
-        h = bbox[3] - bbox[1]
+        if pilmoji_dummy:
+            w, h = pilmoji_dummy.getsize(line, font=font)
+        else:
+            bbox = draw.textbbox((0, 0), line, font=font)
+            w = bbox[2] - bbox[0]
+            h = bbox[3] - bbox[1]
         max_line_width = max(max_line_width, w)
         text_heights.append(h)
     
@@ -138,6 +152,10 @@ def create_hook_image(text, target_width, output_image_path="hook_overlay.png", 
     
     # 4. Draw White Box (sharper, on top of blurred shadow)
     draw_final = ImageDraw.Draw(img)
+    if Pilmoji:
+        pilmoji_final = Pilmoji(img)
+    else:
+        pilmoji_final = None
     
     main_box = [
         (20, 20),
@@ -153,15 +171,23 @@ def create_hook_image(text, target_width, output_image_path="hook_overlay.png", 
             current_y += font_size + line_spacing 
             continue
             
-        bbox = draw_final.textbbox((0, 0), line, font=font)
-        line_w = bbox[2] - bbox[0]
-        line_h = text_heights[i] if i < len(text_heights) else bbox[3] - bbox[1]
+        if pilmoji_dummy:
+            line_w, line_h_bbox = pilmoji_dummy.getsize(line, font=font)
+        else:
+            bbox = draw_final.textbbox((0, 0), line, font=font)
+            line_w = bbox[2] - bbox[0]
+            line_h_bbox = bbox[3] - bbox[1]
+        
+        line_h = text_heights[i] if i < len(text_heights) else line_h_bbox
         
         # Center X
         x = 20 + (box_width - line_w) // 2
         
         # Draw Black Text
-        draw_final.text((x, current_y), line, font=font, fill="black")
+        if pilmoji_final:
+            pilmoji_final.text((x, current_y), line, font=font, fill="black")
+        else:
+            draw_final.text((x, current_y), line, font=font, fill="black")
         
         current_y += line_h + line_spacing
         

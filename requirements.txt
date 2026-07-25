@@ -16,3 +16,5 @@ python-multipart==0.0.27
 httpx==0.28.1
 Pillow==12.2.0
 beautifulsoup4==4.14.3
+pilmoji==2.0.5
+emoji==2.15.0
