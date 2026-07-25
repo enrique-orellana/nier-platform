@@ -10,6 +10,7 @@ from scenedetect.detectors import ContentDetector
 from ultralytics import YOLO
 import torch
 import os
+import shutil
 import numpy as np
 from tqdm import tqdm
 import yt_dlp
@@ -17,11 +18,15 @@ import mediapipe as mp
 # import whisper (replaced by faster_whisper inside function)
 from dotenv import load_dotenv
 import json
+from pathlib import Path
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='google.protobuf')
 from ai_client import load_ai_config, chat_json
 from master_policy import master_video_encode_args
+from media_probe import probe_media
+from render_manifest import register_asset, save_manifest_atomic
+from crop_track import CropKeyframe, CropRect, CropScene, CropTrack
 
 # Load environment variables
 load_dotenv()
@@ -752,6 +757,63 @@ def process_video_to_vertical(input_video, final_output_video):
     
     return True
 
+
+def _prepare_manifest_source(input_video: str, output_dir: str) -> tuple[str, dict, object]:
+    """Keep a source inside the job directory so future masters can rerender it."""
+    os.makedirs(output_dir, exist_ok=True)
+    source_path = os.path.abspath(input_video)
+    job_root = os.path.abspath(output_dir)
+    try:
+        inside_job = os.path.commonpath([source_path, job_root]) == job_root
+    except ValueError:
+        inside_job = False
+    if not inside_job:
+        source_name = os.path.basename(source_path)
+        destination = os.path.join(output_dir, f"source_{source_name}")
+        if os.path.abspath(destination) != source_path:
+            shutil.copy2(source_path, destination)
+        source_path = destination
+    media = probe_media(source_path)
+    asset = register_asset(Path(source_path), Path(output_dir), media)
+    return source_path, asset, media
+
+
+def _write_clip_manifest(
+    output_dir: str,
+    video_title: str,
+    clip_index: int,
+    clip: dict,
+    source_asset: dict,
+    source_media,
+    transcript: dict,
+) -> str:
+    width = source_media.display_width
+    height = source_media.display_height
+    crop_width = min(1.0, (height * (9 / 16)) / max(width, 1))
+    crop = CropRect((1.0 - crop_width) / 2.0, 0.0, crop_width, 1.0)
+    track = CropTrack((CropScene(
+        float(clip["start"]), float(clip["end"]), "TRACK",
+        (CropKeyframe(float(clip["start"]), crop), CropKeyframe(float(clip["end"]), crop)),
+    ),))
+    manifest = {
+        "schema_version": 1,
+        "project_id": os.path.basename(output_dir),
+        "workflow": "long_video",
+        "assets": {source_asset["asset_id"]: source_asset},
+        "timeline": {
+            "source_asset_id": source_asset["asset_id"],
+            "trim": {"start_sec": float(clip["start"]), "end_sec": float(clip["end"])},
+            "crop_track": track.to_dict(),
+            "transcript": transcript,
+        },
+        "layers": {"subtitles": None, "hook": None, "effects": None, "audio": None},
+        "export_policy": {"aspect_ratio": "9:16", "max_fps": 60},
+        "master": None,
+    }
+    manifest_path = os.path.join(output_dir, "manifests", f"clip_{clip_index}.json")
+    save_manifest_atomic(Path(manifest_path), manifest)
+    return os.path.relpath(manifest_path, output_dir).replace(os.sep, "/")
+
 def transcribe_video(video_path):
     print("🎙️  Transcribing video with Faster-Whisper (CPU Optimized)...")
     from faster_whisper import WhisperModel
@@ -1125,6 +1187,8 @@ if __name__ == '__main__':
         print(f"❌ Input file not found: {input_video}")
         exit(1)
 
+    manifest_source_path, source_asset, source_media = _prepare_manifest_source(input_video, output_dir)
+
     # 2. Decision: Analyze clips or process whole?
     if args.skip_analysis:
         print("⏩ Skipping analysis, processing entire video...")
@@ -1164,6 +1228,13 @@ if __name__ == '__main__':
                 end = clip['end']
                 print(f"\n🎬 Processing Clip {i+1}: {start}s - {end}s")
                 print(f"   Title: {clip.get('video_title_for_youtube_short', 'No Title')}")
+
+                manifest_path = _write_clip_manifest(
+                    output_dir, video_title, i + 1, clip, source_asset, source_media, transcript
+                )
+                clip["manifest_path"] = manifest_path
+                clip["source_video_filename"] = os.path.relpath(manifest_source_path, output_dir).replace(os.sep, "/")
+                clip["source_video_url"] = f"/videos/{os.path.basename(output_dir)}/{clip['source_video_filename']}"
                 
                 # Cut clip
                 clip_filename = f"{video_title}_clip_{i+1}.mp4"
@@ -1191,6 +1262,9 @@ if __name__ == '__main__':
                 # Clean up temp cut
                 if os.path.exists(clip_temp_path):
                     os.remove(clip_temp_path)
+
+            with open(metadata_file, 'w', encoding='utf-8') as f:
+                json.dump(clips_data, f, indent=2)
 
     # Clean up original if requested
     if args.url and not args.keep_original and os.path.exists(input_video):

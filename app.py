@@ -729,7 +729,8 @@ async def process_endpoint(
 
         cmd.extend(["-i", input_path])
 
-    cmd.extend(["--target-clips", str(clip_count)])
+    # Keep source media available for manifest-driven rerenders and master exports.
+    cmd.extend(["--target-clips", str(clip_count), "--keep-original"])
     cmd.extend(["-o", job_output_dir])
 
     print(f"[attestation] job={job_id} ip={attestation['ip']} source={attestation['source']} ack=true")
