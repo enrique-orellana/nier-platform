@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "container": "mp4",
+  "codec": "h264",
+  "profile": "high",
+  "crf": 14,
+  "preset": "veryslow",
+  "pixel_format": "yuv420p",
+  "max_width": 2160,
+  "max_height": 3840,
+  "max_fps": 60,
+  "audio_codec": "aac",
+  "audio_sample_rate": 48000,
+  "audio_bitrate": "320k",
+  "faststart": true
+}
