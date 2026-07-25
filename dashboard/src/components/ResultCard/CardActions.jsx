@@ -1,13 +1,11 @@
 import React from 'react';
-import { Loader2, Wand2, Crop, Sparkles, Type, Languages, Share2, Download, AlertCircle } from 'lucide-react';
+import { Loader2, Wand2, Crop, Type, Languages, Share2, Download, AlertCircle } from 'lucide-react';
 
 export default function CardActions({
     handleAutoEdit,
     isEditing,
     handleConvertNativeShort,
     isConvertingNativeShort,
-    handleImproveQuality,
-    isQualityImproving,
     setShowSubtitleModal,
     isSubtitling,
     setShowHookModal,
@@ -47,15 +45,6 @@ export default function CardActions({
                 >
                     {isConvertingNativeShort ? <Loader2 size={14} className="animate-spin" /> : <Crop size={14} />}
                     {isConvertingNativeShort ? 'Converting...' : 'Convert to Native Short'}
-                </button>
-
-                <button
-                    onClick={handleImproveQuality}
-                    disabled={isQualityImproving}
-                    className="col-span-1 py-2 bg-gradient-to-r from-sky-500 to-cyan-600 hover:from-sky-400 hover:to-cyan-500 text-white rounded-lg text-xs font-bold shadow-lg shadow-cyan-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 mb-1 truncate px-1"
-                >
-                    {isQualityImproving ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                    {isQualityImproving ? 'Improving...' : 'Improve Quality'}
                 </button>
 
                 <button

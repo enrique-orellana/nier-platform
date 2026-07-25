@@ -131,10 +131,7 @@ class AIClientLmStudioChatTests(unittest.TestCase):
             RecordingChatClient.last_headers["Authorization"],
             "Bearer token",
         )
-        self.assertEqual(
-            RecordingChatClient.last_json["response_format"],
-            {"type": "json_object"},
-        )
+        self.assertNotIn("response_format", RecordingChatClient.last_json)
 
     @patch("ai_client.discover_lmstudio_models")
     @patch("ai_client.httpx.Client", RecordingChatClient)

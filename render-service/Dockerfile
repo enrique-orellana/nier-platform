@@ -11,6 +11,9 @@ ENV OUTPUT_DIR=/output
 
 WORKDIR /app
 
+# Shared master export policy used by Python and the renderer
+COPY master-export-policy.json /app/master-export-policy.json
+
 # Copy render service source
 COPY render-service/package.json render-service/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { getApiUrl } from '../config';
-import { renderInBrowser } from '../lib/renderInBrowser';
 import HookModal from './HookModal';
 import SubtitleModal from './SubtitleModal';
 import TranslateModal from './TranslateModal';
@@ -21,7 +20,7 @@ const getUrlFilename = (url) => {
     }
 };
 
-const toProxiedVideoUrl = (url, forRenderer = false) => {
+const toProxiedVideoUrl = (url) => {
     if (!url) return url;
     // Blob URLs and relative paths are already local — no proxy needed
     if (url.startsWith('blob:') || !url.startsWith('http')) return url;
@@ -64,7 +63,6 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     const [isHooking, setIsHooking] = useState(false);
     const [isTranslating, setIsTranslating] = useState(false);
     const [isConvertingNativeShort, setIsConvertingNativeShort] = useState(false);
-    const [isQualityImproving, setIsQualityImproving] = useState(false);
     const [showHookModal, setShowHookModal] = useState(false);
     const [showTranslateModal, setShowTranslateModal] = useState(false);
     const [editError, setEditError] = useState(null);
@@ -96,8 +94,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
 
     const getSourceVideoUrl = () => persistedVideoUrl || originalVideoUrl;
     const getVideoFilename = () => getUrlFilename(getSourceVideoUrl());
-    const getBackendSourceUrl = () => toProxiedVideoUrl(getSourceVideoUrl());
-    const getRendererSourceUrl = () => toProxiedVideoUrl(getSourceVideoUrl(), true);
+    const getRendererSourceUrl = () => toProxiedVideoUrl(getSourceVideoUrl());
 
     const applyRenderedVideoUrl = (nextUrl, { persist = false } = {}) => {
         if (persist) {
@@ -118,10 +115,10 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 clipIndex: index,
                 props: {
                     videoUrl: getRendererSourceUrl(),
-                    durationInFrames: Math.max(1, Math.round(clipDuration * 30)),
-                    fps: 30,
-                    width: 1080,
-                    height: 1920,
+                    durationInFrames: Math.max(1, Math.round(clipDuration * (clip.output_fps || 30))),
+                    fps: clip.output_fps || 30,
+                    width: clip.output_width || 1080,
+                    height: clip.output_height || 1920,
                     subtitles: renderLayers?.subtitles || null,
                     hook: renderLayers?.hook || null,
                     effects: renderLayers?.effects || null,
@@ -292,40 +289,6 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             setTimeout(() => setEditError(null), 5000);
         } finally {
             setIsConvertingNativeShort(false);
-        }
-    };
-
-    const handleImproveQuality = async () => {
-        setIsQualityImproving(true);
-        setEditError(null);
-
-        try {
-            const res = await fetch(getApiUrl(`/api/clip/${jobId}/${index}/quality`), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    input_filename: getVideoFilename(),
-                }),
-            });
-
-            if (!res.ok) {
-                throw new Error(await res.text());
-            }
-
-            const data = await res.json();
-            if (data.video_url) {
-                const nextUrl = getApiUrl(data.video_url);
-                setPersistedVideoUrl(nextUrl);
-                setCurrentVideoUrl(nextUrl);
-                if (videoRef.current) {
-                    videoRef.current.load();
-                }
-            }
-        } catch (e) {
-            setEditError(e.message);
-            setTimeout(() => setEditError(null), 5000);
-        } finally {
-            setIsQualityImproving(false);
         }
     };
 
@@ -549,7 +512,6 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 index={index}
                 isEditing={isEditing}
                 isConvertingNativeShort={isConvertingNativeShort}
-                isQualityImproving={isQualityImproving}
                 onPlay={onPlay}
                 onPause={onPause}
                 clip={clip}
@@ -563,8 +525,6 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     isEditing={isEditing}
                     handleConvertNativeShort={handleConvertNativeShort}
                     isConvertingNativeShort={isConvertingNativeShort}
-                    handleImproveQuality={handleImproveQuality}
-                    isQualityImproving={isQualityImproving}
                     setShowSubtitleModal={setShowSubtitleModal}
                     isSubtitling={isSubtitling}
                     setShowHookModal={setShowHookModal}

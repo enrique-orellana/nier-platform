@@ -3,6 +3,9 @@ import path from "node:path";
 import { selectComposition, renderMedia } from "@remotion/renderer";
 import { getBundleLocation } from "./bundle.js";
 import { renderJobs } from "./server.js";
+import { buildRenderOptions } from "./master-policy.js";
+import { loadMasterPolicy } from "./master-policy.js";
+import { validateOutputFile } from "./output-validation.js";
 
 export interface RenderParams {
   renderId: string;
@@ -68,8 +71,7 @@ export async function executeRender(params: RenderParams): Promise<void> {
     await renderMedia({
       composition,
       serveUrl: bundleLocation,
-      codec: "h264",
-      crf: 18,
+      ...buildRenderOptions(),
       outputLocation,
       onProgress: ({ progress }) => {
         const percent = Math.round(progress * 100);
@@ -80,6 +82,19 @@ export async function executeRender(params: RenderParams): Promise<void> {
         }
       },
     });
+
+    await validateOutputFile(
+      outputLocation,
+      {
+        width: props.width,
+        height: props.height,
+        fps: props.fps,
+        durationSeconds: props.durationInFrames / props.fps,
+        requireAudio: false,
+        toneMappedToSdr: false,
+      },
+      loadMasterPolicy(),
+    );
 
     // Success
     job.status = "done";

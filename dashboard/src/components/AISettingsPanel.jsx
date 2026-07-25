@@ -21,7 +21,6 @@ export default function AISettingsPanel({
   setAiImageModel,
   lmStudioAvailable,
   lmStudioModels,
-  onDetectLmStudio,
 }) {
   const providerOptions = buildVisibleProviders({ lmStudioAvailable });
   const textOptions = aiProvider === 'lmstudio' ? lmStudioModels.textModels : null;

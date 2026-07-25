@@ -5,6 +5,7 @@ import threading
 import json
 import shutil
 import glob
+from pathlib import Path
 import time
 import asyncio
 from dotenv import load_dotenv
@@ -16,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+from render_manifest import load_manifest, save_manifest_atomic, verify_manifest_assets, calculate_revision, master_is_current
 from s3_uploader import upload_job_artifacts, delete_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
 from ai_client import AIConfig, load_ai_config, ai_config_to_env, discover_lmstudio_models
 
@@ -729,7 +731,8 @@ async def process_endpoint(
 
         cmd.extend(["-i", input_path])
 
-    cmd.extend(["--target-clips", str(clip_count)])
+    # Keep source media available for manifest-driven rerenders and master exports.
+    cmd.extend(["--target-clips", str(clip_count), "--keep-original"])
     cmd.extend(["-o", job_output_dir])
 
     print(f"[attestation] job={job_id} ip={attestation['ip']} source={attestation['source']} ack=true")
@@ -777,35 +780,9 @@ class UpdateClipVideoUrlRequest(BaseModel):
     new_video_url: str
 
 
-class ImproveClipQualityRequest(BaseModel):
-    input_filename: Optional[str] = None
-
-
-def _build_quality_ffmpeg_command(input_path: str, output_path: str) -> list[str]:
-    """Build a higher-fidelity FFmpeg command for clip quality improvement."""
-    return [
-        "ffmpeg",
-        "-y",
-        "-i",
-        input_path,
-        "-vf",
-        "scale=iw:ih:flags=lanczos,unsharp=5:5:0.8:3:3:0.4",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "slower",
-        "-crf",
-        "16",
-        "-profile:v",
-        "high",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "copy",
-        "-movflags",
-        "+faststart",
-        output_path,
-    ]
+class ManifestPatchRequest(BaseModel):
+    layers: Optional[dict] = None
+    audio: Optional[dict] = None
 
 
 def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) -> None:
@@ -841,34 +818,6 @@ def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) ->
     with open(metadata_path, "w") as f:
         json.dump(data, f, indent=4)
 
-
-def _reencode_clip_for_quality(
-    job_id: str,
-    job: Dict,
-    clip_index: int,
-    requested_input_filename: Optional[str] = None,
-) -> str:
-    """Re-encode a clip at its current size with a higher-quality FFmpeg pass."""
-    input_path, filename = _resolve_job_clip_input(
-        job_id,
-        job,
-        clip_index,
-        requested_input_filename,
-    )
-
-    output_dir = os.path.join(OUTPUT_DIR, job_id)
-    os.makedirs(output_dir, exist_ok=True)
-
-    base, ext = os.path.splitext(filename)
-    output_filename = f"quality_{base}{ext or '.mp4'}"
-    output_path = os.path.join(output_dir, output_filename)
-
-    if os.path.exists(output_path):
-        os.remove(output_path)
-
-    ffmpeg_cmd = _build_quality_ffmpeg_command(input_path, output_path)
-    subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    return f"/videos/{job_id}/{output_filename}"
 
 @app.post("/api/edit")
 async def edit_clip(
@@ -1200,29 +1149,44 @@ async def update_clip_video_url(job_id: str, clip_index: int, req: UpdateClipVid
     }
 
 
-@app.post("/api/clip/{job_id}/{clip_index}/quality")
-async def improve_clip_quality(job_id: str, clip_index: int, req: ImproveClipQualityRequest):
-    """Re-encode a clip in place with a higher-quality FFmpeg pass."""
+def _resolve_clip_manifest(job_id: str, clip_index: int):
     job = _get_job(job_id)
-    if not job:
+    if not job or not job.get("result"):
         raise HTTPException(status_code=404, detail="Job not found")
+    clips = job["result"].get("clips", [])
+    if clip_index < 0 or clip_index >= len(clips):
+        raise HTTPException(status_code=404, detail="Clip not found")
+    relative = clips[clip_index].get("manifest_path")
+    if not relative:
+        raise HTTPException(status_code=404, detail="Clip has no render manifest")
+    root = os.path.abspath(os.path.join(OUTPUT_DIR, job_id))
+    manifest_path = os.path.abspath(os.path.join(root, relative))
+    if not manifest_path.startswith(root + os.sep) or not os.path.isfile(manifest_path):
+        raise HTTPException(status_code=400, detail="Invalid clip manifest path")
+    return job, clips[clip_index], manifest_path, root
 
-    try:
-        new_video_url = _reencode_clip_for_quality(job_id, job, clip_index, req.input_filename)
-        _persist_clip_video_url(job_id, clip_index, new_video_url)
-        return {
-            "success": True,
-            "job_id": job_id,
-            "clip_index": clip_index,
-            "video_url": new_video_url,
-        }
-    except subprocess.CalledProcessError as e:
-        stderr = e.stderr.decode() if e.stderr else "Unknown FFmpeg error"
-        raise HTTPException(status_code=500, detail=f"Quality re-encode failed: {stderr}")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/clip/{job_id}/{clip_index}/manifest")
+async def get_clip_manifest(job_id: str, clip_index: int):
+    _, _, manifest_path, root = _resolve_clip_manifest(job_id, clip_index)
+    manifest = load_manifest(Path(manifest_path))
+    verify_manifest_assets(manifest, Path(root))
+    return {"manifest": manifest, "revision": calculate_revision(manifest), "master_current": master_is_current(manifest)}
+
+
+@app.patch("/api/clip/{job_id}/{clip_index}/manifest")
+async def patch_clip_manifest(job_id: str, clip_index: int, req: ManifestPatchRequest):
+    _, _, manifest_path, root = _resolve_clip_manifest(job_id, clip_index)
+    manifest = load_manifest(Path(manifest_path))
+    verify_manifest_assets(manifest, Path(root))
+    if req.layers is not None:
+        manifest["layers"] = req.layers
+    if req.audio is not None:
+        manifest["layers"] = dict(manifest.get("layers") or {})
+        manifest["layers"]["audio"] = req.audio
+    manifest["master"] = None
+    revision = save_manifest_atomic(Path(manifest_path), manifest)
+    return {"success": True, "manifest": manifest, "revision": revision, "master_current": False}
 
 
 class EffectsGenerateRequest(BaseModel):
