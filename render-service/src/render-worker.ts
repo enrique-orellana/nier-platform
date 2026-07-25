@@ -3,6 +3,7 @@ import path from "node:path";
 import { selectComposition, renderMedia } from "@remotion/renderer";
 import { getBundleLocation } from "./bundle.js";
 import { renderJobs } from "./server.js";
+import { buildRenderOptions } from "./master-policy.js";
 
 export interface RenderParams {
   renderId: string;
@@ -68,12 +69,7 @@ export async function executeRender(params: RenderParams): Promise<void> {
     await renderMedia({
       composition,
       serveUrl: bundleLocation,
-      codec: "h264",
-      crf: 14,
-      x264Preset: "veryslow",
-      pixelFormat: "yuv420p",
-      audioCodec: "aac",
-      audioBitrate: "320k",
+      ...buildRenderOptions(),
       outputLocation,
       onProgress: ({ progress }) => {
         const percent = Math.round(progress * 100);
