@@ -1245,14 +1245,15 @@ if __name__ == '__main__':
                 clip_temp_path = os.path.join(output_dir, f"temp_{clip_filename}")
                 clip_final_path = os.path.join(output_dir, clip_filename)
                 
-                # ffmpeg cut
-                # Using re-encoding for precision as requested by strict seconds
+                # Cut without a lossy video encode. The vertical master pass below
+                # is the only OpenShorts-controlled video generation for this clip.
                 cut_command = [
                     'ffmpeg', '-y', 
                     '-ss', str(start), 
                     '-to', str(end), 
                     '-i', input_video,
-                    *master_video_encode_args(include_audio=True),
+                    '-c:v', 'copy', '-c:a', 'copy',
+                    '-avoid_negative_ts', 'make_zero',
                     clip_temp_path
                 ]
                 subprocess.run(cut_command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
