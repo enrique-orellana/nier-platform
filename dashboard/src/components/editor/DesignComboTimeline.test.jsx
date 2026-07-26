@@ -12,6 +12,12 @@ const state = {
     ],
 };
 
+const subtitleState = {
+    durationSec: 10,
+    fps: 30,
+    tracks: [{ id: 'subtitles-original', name: 'Original', type: 'subtitle', muted: false, locked: false, visible: true, items: [{ id: 'cue-1', type: 'subtitle', label: 'Hola', text: 'Hola', start: 1, end: 2 }] }],
+};
+
 describe('DesignComboTimeline', () => {
     it('renders tracks and selects an item', () => {
         const onSelectItem = vi.fn();
@@ -35,5 +41,26 @@ describe('DesignComboTimeline', () => {
         fireEvent(window, new Event('pointerup'));
         expect(onStateChange).toHaveBeenCalledWith(expect.objectContaining({ tracks: expect.any(Array) }));
         expect(onStateChange.mock.calls.at(-1)[0].tracks[1].items[0].start).toBeGreaterThan(1);
+    });
+
+    it('edits a subtitle label inline and commits on Enter', () => {
+        const onStateChange = vi.fn();
+        render(<DesignComboTimeline state={subtitleState} onStateChange={onStateChange} />);
+        fireEvent.doubleClick(screen.getByRole('button', { name: 'Hola clip' }));
+        const input = screen.getByRole('textbox', { name: 'Edit subtitle Hola' });
+        fireEvent.change(input, { target: { value: 'Hello' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+        expect(onStateChange).toHaveBeenLastCalledWith(expect.objectContaining({ tracks: expect.arrayContaining([expect.objectContaining({ items: expect.arrayContaining([expect.objectContaining({ text: 'Hello', label: 'Hello' })]) })]) }));
+    });
+
+    it('cancels inline subtitle edits with Escape', () => {
+        const onStateChange = vi.fn();
+        render(<DesignComboTimeline state={subtitleState} onStateChange={onStateChange} />);
+        fireEvent.doubleClick(screen.getByRole('button', { name: 'Hola clip' }));
+        const input = screen.getByRole('textbox', { name: 'Edit subtitle Hola' });
+        fireEvent.change(input, { target: { value: 'Discarded' } });
+        fireEvent.keyDown(input, { key: 'Escape' });
+        expect(screen.queryByRole('textbox', { name: 'Edit subtitle Hola' })).not.toBeInTheDocument();
+        expect(onStateChange).not.toHaveBeenCalled();
     });
 });
