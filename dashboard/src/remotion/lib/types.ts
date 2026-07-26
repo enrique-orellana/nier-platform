@@ -29,6 +29,16 @@ export interface SubtitleConfig {
   style: SubtitleStyle;
 }
 
+export interface SubtitleTrack {
+  id: string;
+  language: string;
+  label: string;
+  sourceTrackId?: string;
+  origin: "original" | "translation" | "manual";
+  captions: CaptionWord[];
+  style?: SubtitleStyle;
+}
+
 // --- Hook config ---
 export type HookPosition = "top" | "center" | "bottom";
 export type HookSize = "S" | "M" | "L";
@@ -66,6 +76,8 @@ export interface ShortVideoProps {
   width: number;
   height: number;
   subtitles: SubtitleConfig | null;
+  subtitleTracks?: SubtitleTrack[];
+  activeSubtitleTrackId?: string | null;
   hook: HookConfig | null;
   effects: EffectsConfig | null;
 }
@@ -93,6 +105,16 @@ export const subtitleConfigSchema = z.object({
   captions: z.array(captionWordSchema),
   position: z.enum(["top", "middle", "bottom"]),
   style: subtitleStyleSchema,
+});
+
+export const subtitleTrackSchema = z.object({
+  id: z.string(),
+  language: z.string(),
+  label: z.string(),
+  sourceTrackId: z.string().optional(),
+  origin: z.enum(["original", "translation", "manual"]),
+  captions: z.array(captionWordSchema),
+  style: subtitleStyleSchema.optional(),
 });
 
 export const hookConfigSchema = z.object({
@@ -125,6 +147,8 @@ export const shortVideoPropsSchema = z.object({
   width: z.number().int().positive(),
   height: z.number().int().positive(),
   subtitles: subtitleConfigSchema.nullable(),
+  subtitleTracks: z.array(subtitleTrackSchema).optional(),
+  activeSubtitleTrackId: z.string().nullable().optional(),
   hook: hookConfigSchema.nullable(),
   effects: effectsConfigSchema.nullable(),
 });

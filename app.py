@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from render_manifest import load_manifest, save_manifest_atomic, verify_manifest_assets, calculate_revision, master_is_current
 from version_store import VersionStore
 from s3_uploader import upload_job_artifacts, delete_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
-from ai_client import AIConfig, load_ai_config, ai_config_to_env, discover_lmstudio_models
+from ai_client import AIConfig, load_ai_config, ai_config_to_env, discover_lmstudio_models, chat_json
 
 load_dotenv()
 
@@ -805,6 +805,11 @@ class VersionRenderCompletionRequest(BaseModel):
     error: Optional[str] = None
 
 
+class SubtitleTrackTranslationRequest(BaseModel):
+    target_language: str
+    source_track_id: str = "original"
+
+
 def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) -> None:
     """Update the in-memory job record and persisted metadata for a clip URL."""
     job = _get_job(job_id)
@@ -1341,6 +1346,82 @@ async def complete_clip_version(job_id: str, clip_index: int, version_id: str, r
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"version": asdict(promoted), "current_version_id": promoted.version_id}
+
+
+@app.post("/api/clip/{job_id}/{clip_index}/versions/{version_id}/subtitle-tracks/translate")
+async def translate_subtitle_track(
+    job_id: str,
+    clip_index: int,
+    version_id: str,
+    req: SubtitleTrackTranslationRequest,
+    x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
+    x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
+    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key"),
+    x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
+):
+    store = _ensure_clip_versions(job_id, clip_index)
+    try:
+        version = store.load_version(version_id)
+        manifest = store.load_manifest(version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    target_language = req.target_language.strip().lower()
+    tracks = list(manifest.get("subtitle_tracks") or [])
+    source_track = next((track for track in tracks if track.get("id") == req.source_track_id), None)
+    if source_track is None:
+        raise HTTPException(status_code=404, detail="Source subtitle track not found")
+    source_language = str(source_track.get("language") or "").strip().lower()
+    if not target_language or target_language == source_language:
+        raise HTTPException(status_code=400, detail="Target language must differ from source language")
+    if any(str(track.get("language")).lower() == target_language for track in tracks):
+        raise HTTPException(status_code=409, detail="Subtitle track for target language already exists")
+
+    source_cues = source_track.get("cues") or source_track.get("captions") or []
+    if not source_cues:
+        raise HTTPException(status_code=400, detail="Source subtitle track has no cues")
+
+    ai_config = build_ai_config(
+        provider=x_ai_provider,
+        api_key=x_ai_api_key or x_gemini_key,
+        model=x_ai_model,
+    )
+    if ai_config.is_gemini() and not ai_config.api_key:
+        raise HTTPException(status_code=400, detail="Missing AI API key for subtitle translation")
+
+    prompt = (
+        "Translate each subtitle cue into the target language. Preserve array order and return only JSON "
+        "with a translations array containing exactly one string per cue. "
+        f"Source language: {source_language}. Target language: {target_language}. "
+        f"Cues: {json.dumps([cue.get('text', '') for cue in source_cues], ensure_ascii=False)}"
+    )
+    try:
+        payload = chat_json(ai_config, prompt, model=ai_config.text_model)
+        translated_texts = payload.get("translations") if isinstance(payload, dict) else None
+        if not isinstance(translated_texts, list):
+            raise ValueError("translation response did not contain a translations array")
+        from subtitle_translation import translate_cue_texts
+
+        translated_track = translate_cue_texts(
+            source_cues,
+            source_language,
+            target_language,
+            lambda _texts, _source, _target: translated_texts,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Subtitle translation failed: {exc}") from exc
+
+    translated_track["id"] = target_language
+    translated_track["label"] = target_language.upper()
+    translated_track["sourceTrackId"] = req.source_track_id
+    manifest["subtitle_tracks"] = tracks + [translated_track]
+    manifest["active_subtitle_track_id"] = target_language
+    manifest["master"] = None
+    return {
+        "version": asdict(version),
+        "track": translated_track,
+        "manifest": manifest,
+    }
 
 
 @app.post("/api/clip/{job_id}/{clip_index}/versions/{version_id}/activate")
