@@ -43,7 +43,12 @@ export function validateProbePayload(
     throw new Error("master output frame rate does not match the source policy");
   }
   if (expected.requireAudio && !audio) throw new Error("master output has no audio stream");
-  const duration = number(payload.format?.duration);
+  // The container duration follows the longest stream. AAC frame padding can
+  // extend it by a few milliseconds beyond the requested video frame clock,
+  // so validate against the video stream whenever ffprobe provides it.
+  const duration = video.duration !== undefined
+    ? number(video.duration)
+    : number(payload.format?.duration);
   if (Math.abs(duration - expected.durationSeconds) > (1 / expected.fps) + 0.01) {
     throw new Error("master output duration is outside the one-frame tolerance");
   }
