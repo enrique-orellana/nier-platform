@@ -1,0 +1,29 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import SubtitleTranslationPanel from './SubtitleTranslationPanel';
+
+describe('SubtitleTranslationPanel', () => {
+    it('keeps original and adds a translated track', async () => {
+        const onTrackAdded = vi.fn();
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ track: { id: 'es', label: 'ES' }, manifest: { subtitle_tracks: [] } }),
+        }));
+        render(
+            <SubtitleTranslationPanel
+                jobId="job"
+                clipIndex={0}
+                versionId="v1"
+                tracks={[{ id: 'original', language: 'en', label: 'Original' }]}
+                activeTrackId="original"
+                aiHeaders={{ 'X-AI-Api-Key': 'test' }}
+                onTrackAdded={onTrackAdded}
+                onSelectTrack={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /translate/i }));
+        await waitFor(() => expect(onTrackAdded).toHaveBeenCalled());
+        expect(screen.getByRole('option', { name: 'Original' })).toBeInTheDocument();
+    });
+});

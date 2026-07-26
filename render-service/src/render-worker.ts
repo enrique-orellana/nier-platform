@@ -7,6 +7,7 @@ import { buildRenderOptions } from "./master-policy.js";
 import { loadMasterPolicy } from "./master-policy.js";
 import { validateOutputFile } from "./output-validation.js";
 import { applyRequestedCompositionMetadata } from "./composition.js";
+import { outputFileNameForVersion } from "./version-render.js";
 
 export interface RenderParams {
   renderId: string;
@@ -21,6 +22,9 @@ export interface RenderParams {
     subtitles: unknown;
     hook: unknown;
     effects: unknown;
+    versionId?: string;
+    manifestPath?: string;
+    manifestRevision?: string;
   };
 }
 
@@ -64,7 +68,7 @@ export async function executeRender(params: RenderParams): Promise<void> {
     fs.mkdirSync(jobOutputDir, { recursive: true });
 
     const timestamp = Date.now();
-    const outputFileName = `remotion_${clipIndex}_${timestamp}.mp4`;
+    const outputFileName = outputFileNameForVersion(clipIndex, props.versionId, timestamp);
     const outputLocation = path.join(jobOutputDir, outputFileName);
 
     console.log(`[render-worker] Output: ${outputLocation}`);

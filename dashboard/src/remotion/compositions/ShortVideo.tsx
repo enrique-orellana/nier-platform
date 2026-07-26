@@ -11,8 +11,14 @@ import { VideoEffects } from "./VideoEffects";
  * Uses @remotion/media Video for browser-side rendering compatibility.
  */
 export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
-  const { videoUrl, subtitles, hook, effects } =
+  const { videoUrl, subtitles, subtitleTracks, activeSubtitleTrackId, hook, effects } =
     rawProps as unknown as ShortVideoProps;
+  const activeTrack = subtitleTracks?.find(
+    (track) => track.id === (activeSubtitleTrackId || subtitleTracks[0]?.id)
+  );
+  const activeSubtitles = activeTrack && subtitles
+    ? { ...subtitles, captions: activeTrack.captions, style: activeTrack.style || subtitles.style }
+    : subtitles;
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
       {/* Layer 1: Base video with optional zoom/color effects */}
@@ -25,7 +31,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
       </VideoEffects>
 
       {/* Layer 2: Animated subtitles */}
-      {subtitles && <Subtitles config={subtitles} />}
+      {activeSubtitles && <Subtitles config={activeSubtitles} />}
 
       {/* Layer 3: Hook text overlay */}
       {hook && <HookOverlay config={hook} />}

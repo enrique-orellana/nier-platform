@@ -3,6 +3,7 @@ import { getApiUrl } from '../config';
 import HookModal from './HookModal';
 import SubtitleModal from './SubtitleModal';
 import TranslateModal from './TranslateModal';
+import ClipEditor from './ClipEditor';
 
 // Route MinIO presigned URLs through the backend proxy to fix CORS/loopback issues.
 // Both browser-side and server-side Remotion flows use same-origin proxy URLs.
@@ -66,6 +67,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     const [isConvertingNativeShort, setIsConvertingNativeShort] = useState(false);
     const [showHookModal, setShowHookModal] = useState(false);
     const [showTranslateModal, setShowTranslateModal] = useState(false);
+    const [showClipEditor, setShowClipEditor] = useState(false);
     const [editError, setEditError] = useState(null);
 
     const [clipDuration, setClipDuration] = useState(clip.end && clip.start ? clip.end - clip.start : 30);
@@ -537,6 +539,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     currentVideoUrl={currentVideoUrl}
                     index={index}
                     editError={editError}
+                    setShowClipEditor={setShowClipEditor}
                 />
             </div>
 
@@ -588,6 +591,15 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 isProcessing={isTranslating}
                 videoUrl={currentVideoUrl}
                 hasApiKey={!!elevenLabsKey}
+            />
+            <ClipEditor
+                isOpen={showClipEditor}
+                onClose={() => setShowClipEditor(false)}
+                clip={clip}
+                jobId={jobId}
+                clipIndex={index}
+                aiHeaders={getAiHeaders ? getAiHeaders('json') : {}}
+                onRendered={(url) => applyRenderedVideoUrl(url, { persist: true })}
             />
         </div>
     );

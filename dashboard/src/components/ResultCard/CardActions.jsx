@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Wand2, Crop, Type, Languages, Share2, Download, AlertCircle } from 'lucide-react';
+import { Loader2, Wand2, Crop, Type, Languages, Share2, Download, AlertCircle, Clock3 } from 'lucide-react';
 
 export default function CardActions({
     handleAutoEdit,
@@ -15,7 +15,8 @@ export default function CardActions({
     setShowModal,
     currentVideoUrl,
     index,
-    editError
+    editError,
+    setShowClipEditor
 }) {
     return (
         <>
@@ -29,6 +30,7 @@ export default function CardActions({
 
             {/* Actions Footer */}
             <div className="grid grid-cols-2 gap-3 mt-auto pt-4 border-t border-white/5">
+                <button onClick={() => setShowClipEditor(true)} className="col-span-2 py-2 bg-white/10 hover:bg-white/15 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2"><Clock3 size={14} /> Edit Timeline</button>
                 <button
                     onClick={handleAutoEdit}
                     disabled={isEditing}

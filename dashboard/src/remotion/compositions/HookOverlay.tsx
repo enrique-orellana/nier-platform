@@ -28,12 +28,13 @@ const POSITION_STYLE: Record<string, React.CSSProperties> = {
 
 export const HookOverlay: React.FC<HookOverlayProps> = ({ config }) => {
   const { fps } = useVideoConfig();
-  const displayFrames = Math.round(config.displayDurationSec * fps);
+  const fromFrames = Math.max(0, Math.round(((config.startMs || 0) / 1000) * fps));
+  const displayFrames = Math.max(1, Math.round((((config.endMs ?? ((config.startMs || 0) + config.displayDurationSec * 1000)) - (config.startMs || 0)) / 1000) * fps));
 
   return (
     <AbsoluteFill>
       <style>{notoSerifFontFace}</style>
-      <Sequence from={0} durationInFrames={displayFrames} layout="none">
+      <Sequence from={fromFrames} durationInFrames={displayFrames} layout="none">
         <HookBox config={config} displayFrames={displayFrames} />
       </Sequence>
     </AbsoluteFill>

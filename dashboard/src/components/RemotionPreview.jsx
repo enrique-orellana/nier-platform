@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Player } from '@remotion/player';
 import { ShortVideo } from '../remotion/compositions/ShortVideo';
 
@@ -21,11 +21,19 @@ export default function RemotionPreview({
     width = 1080,
     height = 1920,
     subtitles = null,
+    subtitleTracks = [],
+    activeSubtitleTrackId = null,
     hook = null,
     effects = null,
+    currentFrame = 0,
     className = '',
 }) {
     const durationInFrames = Math.max(1, Math.round(durationInSeconds * fps));
+    const playerRef = useRef(null);
+
+    useEffect(() => {
+        playerRef.current?.seekTo?.(Math.max(0, Math.min(durationInFrames - 1, Math.round(currentFrame))));
+    }, [currentFrame, durationInFrames]);
 
     const inputProps = useMemo(
         () => ({
@@ -35,15 +43,18 @@ export default function RemotionPreview({
             width,
             height,
             subtitles,
+            subtitleTracks,
+            activeSubtitleTrackId,
             hook,
             effects,
         }),
-        [videoUrl, durationInFrames, fps, width, height, subtitles, hook, effects]
+        [videoUrl, durationInFrames, fps, width, height, subtitles, subtitleTracks, activeSubtitleTrackId, hook, effects]
     );
 
     return (
         <div className={`w-full h-full ${className}`}>
             <Player
+                ref={playerRef}
                 component={ShortVideo}
                 inputProps={inputProps}
                 durationInFrames={durationInFrames}
