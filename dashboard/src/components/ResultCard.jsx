@@ -3,7 +3,7 @@ import { getApiUrl } from '../config';
 import HookModal from './HookModal';
 import SubtitleModal from './SubtitleModal';
 import TranslateModal from './TranslateModal';
-import ClipEditor from './ClipEditor';
+import FullScreenEditor from './editor/FullScreenEditor';
 
 // Route MinIO presigned URLs through the backend proxy to fix CORS/loopback issues.
 // Both browser-side and server-side Remotion flows use same-origin proxy URLs.
@@ -592,7 +592,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 videoUrl={currentVideoUrl}
                 hasApiKey={!!elevenLabsKey}
             />
-            <ClipEditor
+            <FullScreenEditor
                 isOpen={showClipEditor}
                 onClose={() => setShowClipEditor(false)}
                 clip={clip}

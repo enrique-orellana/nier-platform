@@ -26,6 +26,9 @@ export default function RemotionPreview({
     hook = null,
     effects = null,
     currentFrame = 0,
+    playing = true,
+    onFrameChange,
+    onPlayingChange,
     className = '',
 }) {
     const durationInFrames = Math.max(1, Math.round(durationInSeconds * fps));
@@ -34,6 +37,11 @@ export default function RemotionPreview({
     useEffect(() => {
         playerRef.current?.seekTo?.(Math.max(0, Math.min(durationInFrames - 1, Math.round(currentFrame))));
     }, [currentFrame, durationInFrames]);
+
+    useEffect(() => {
+        if (playing) playerRef.current?.play?.();
+        else playerRef.current?.pause?.();
+    }, [playing]);
 
     const inputProps = useMemo(
         () => ({
@@ -66,8 +74,11 @@ export default function RemotionPreview({
                     height: '100%',
                 }}
                 controls
-                autoPlay
+                autoPlay={playing}
                 loop
+                onFrameUpdate={onFrameChange}
+                onPlay={() => onPlayingChange?.(true)}
+                onPause={() => onPlayingChange?.(false)}
                 acknowledgeRemotionLicense={true}
             />
         </div>
