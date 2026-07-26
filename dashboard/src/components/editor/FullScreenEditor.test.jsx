@@ -19,6 +19,9 @@ describe('FullScreenEditor', () => {
         expect(screen.getByRole('heading', { name: /media pool/i })).toBeInTheDocument();
         expect(screen.getByRole('region', { name: /timeline/i })).toBeInTheDocument();
         expect(screen.getByLabelText('Subtitle translation')).toBeInTheDocument();
+        expect(screen.getByText(/starts at the current playhead/i)).toBeInTheDocument();
+        expect(screen.getByText(/nothing selected/i)).toBeInTheDocument();
+        expect(screen.getByText(/select a clip or cue in the timeline/i)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /next frame/i }));
         expect(screen.getByTestId('remotion-player-frame')).toHaveTextContent('1');
     });

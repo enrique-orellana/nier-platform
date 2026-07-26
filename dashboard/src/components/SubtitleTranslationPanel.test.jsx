@@ -23,6 +23,8 @@ describe('SubtitleTranslationPanel', () => {
         );
 
         expect(screen.getByText(/Translates all 2 cues in the selected track/)).toBeInTheDocument();
+        expect(screen.getByText(/source track/i)).toBeInTheDocument();
+        expect(screen.getByText(/translate all 2 cues in this track/i)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Translate entire track' }));
         await waitFor(() => expect(onTrackAdded).toHaveBeenCalled());
         expect(screen.getByRole('option', { name: 'Original' })).toBeInTheDocument();
