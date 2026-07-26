@@ -11,6 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@designcombo/events": "^1.0.2",
+    "@designcombo/state": "^5.5.8",
+    "@designcombo/timeline": "^5.5.8",
+    "@designcombo/types": "^5.5.8",
     "@remotion/media": "^4.0.447",
     "@remotion/media-utils": "^4.0.447",
     "@remotion/player": "^4.0.447",
@@ -22,6 +26,8 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "@vitejs/plugin-react": "^4.2.1",
@@ -30,12 +36,10 @@
     "eslint-plugin-react": "^7.34.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
+    "jsdom": "^26.1.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
     "vite": "^4.5.3",
-    "@testing-library/jest-dom": "^6.8.0",
-    "@testing-library/react": "^16.3.0",
-    "jsdom": "^26.1.0",
     "vitest": "^2.1.9"
   }
 }
