@@ -8,7 +8,7 @@ import {
   interpolate,
 } from "remotion";
 import type { HookConfig } from "../lib/types";
-import { notoSerifFontFace, NOTO_SERIF_FONT_FAMILY } from "../lib/fonts";
+import { notoSerifFontFace, getHookFontStack } from "../lib/fonts";
 
 interface HookOverlayProps {
   config: HookConfig;
@@ -128,7 +128,7 @@ const HookBox: React.FC<HookBoxProps> = ({ config, displayFrames }) => {
       >
         <span
           style={{
-            fontFamily: `'${NOTO_SERIF_FONT_FAMILY}', 'Noto Serif', Georgia, serif`,
+            fontFamily: getHookFontStack(),
             fontSize,
             fontWeight: 700,
             color: "#000000",

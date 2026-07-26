@@ -2,7 +2,7 @@ FROM node:18-bookworm-slim
 
 # Install Chromium and FFmpeg for Remotion rendering
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends chromium ffmpeg && \
+    apt-get install -y --no-install-recommends chromium ffmpeg fonts-noto-color-emoji && \
     rm -rf /var/lib/apt/lists/*
 
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium

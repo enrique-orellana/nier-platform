@@ -5,6 +5,14 @@ import { staticFile } from "remotion";
  * Use in components via: <style>{notoSerifFontFace}</style>
  */
 export const NOTO_SERIF_FONT_FAMILY = "NotoSerif-Bold";
+export const COLOR_EMOJI_FONT_FAMILY = "Noto Color Emoji";
+
+/**
+ * Keep emoji fallback explicit so the browser preview matches server renders.
+ */
+export function getHookFontStack(): string {
+  return `'${NOTO_SERIF_FONT_FAMILY}', 'Noto Serif', '${COLOR_EMOJI_FONT_FAMILY}', Georgia, serif`;
+}
 
 export const notoSerifFontFace = `
 @font-face {
@@ -29,5 +37,6 @@ export const SUBTITLE_FONTS: Record<string, string> = {
 };
 
 export function getFontStack(fontFamily: string): string {
-  return SUBTITLE_FONTS[fontFamily] ?? fontFamily;
+  const stack = SUBTITLE_FONTS[fontFamily] ?? fontFamily;
+  return stack.replace(/,\s*(sans-serif|serif)\s*$/, `, '${COLOR_EMOJI_FONT_FAMILY}', $1`);
 }
