@@ -1,0 +1,49 @@
+import { getApiUrl } from '../config';
+
+const jsonRequest = async (url, options = {}) => {
+    const response = await fetch(getApiUrl(url), { headers: { 'Content-Type': 'application/json' }, ...options });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.detail || payload.error || `Request failed (${response.status})`);
+    return payload;
+};
+
+const defaultApi = {
+    createVersion: ({ jobId, clipIndex, manifest, parent_version_id }) => jsonRequest(`/api/clip/${jobId}/${clipIndex}/versions`, { method: 'POST', body: JSON.stringify({ manifest, parent_version_id }) }),
+    startRender: ({ jobId, clipIndex, versionId, props }) => jsonRequest(`/api/clip/${jobId}/${clipIndex}/versions/${versionId}/render`, { method: 'POST', body: JSON.stringify({ props }) }),
+    getRenderStatus: ({ renderId }) => jsonRequest(`/api/render/${renderId}`),
+    completeVersion: ({ jobId, clipIndex, versionId, output_url, error }) => jsonRequest(`/api/clip/${jobId}/${clipIndex}/versions/${versionId}/complete`, { method: 'POST', body: JSON.stringify(error ? { error } : { output_url }) }),
+};
+
+export async function createDraftVersion({ api = defaultApi, jobId, clipIndex, manifest, parentVersionId }) {
+    return api.createVersion({ jobId, clipIndex, manifest, parent_version_id: parentVersionId });
+}
+
+export async function renderDraftVersion({ api = defaultApi, jobId, clipIndex, versionId, props, pollMs = 1200 }) {
+    const started = await api.startRender({ jobId, clipIndex, versionId, props });
+    if (!started?.renderId) throw new Error('Render did not return an id.');
+    let status;
+    do {
+        if (pollMs > 0) await new Promise((resolve) => setTimeout(resolve, pollMs));
+        status = await api.getRenderStatus({ renderId: started.renderId });
+        if (status.status === 'error' || status.status === 'failed') throw new Error(status.error || 'Render failed.');
+    } while (!['done', 'completed'].includes(status.status));
+    if (!status.outputUrl) throw new Error('Render completed without an output file.');
+    return status;
+}
+
+export async function saveAndRenderVersion({ api = defaultApi, jobId, clipIndex, manifest, parentVersionId, props, pollMs = 1200 }) {
+    let versionId;
+    try {
+        const created = await createDraftVersion({ api, jobId, clipIndex, manifest, parentVersionId });
+        versionId = created?.version?.version_id;
+        if (!versionId) throw new Error('Version creation did not return an id.');
+        const rendered = await renderDraftVersion({ api, jobId, clipIndex, versionId, props, pollMs });
+        const completed = await api.completeVersion({ jobId, clipIndex, versionId, output_url: rendered.outputUrl });
+        return { status: 'done', versionId, outputUrl: rendered.outputUrl, version: completed?.version, response: completed };
+    } catch (error) {
+        if (versionId) {
+            try { await api.completeVersion({ jobId, clipIndex, versionId, error: error.message }); } catch { /* preserve original render error */ }
+        }
+        return { status: 'failed', versionId, error: error.message };
+    }
+}
