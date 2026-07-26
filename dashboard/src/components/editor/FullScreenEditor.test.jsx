@@ -58,6 +58,12 @@ describe('FullScreenEditor', () => {
         expect(screen.getByRole('button', { name: 'Manual cue clip' })).toBeInTheDocument();
     });
 
+    it('keeps cue creation available while another editor item is selected', () => {
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Original hook clip' }));
+        expect(screen.getByRole('button', { name: 'Add subtitle cue' })).toBeInTheDocument();
+    });
+
     it('shows and edits subtitles from the legacy layer shape', () => {
         const legacyManifest = {
             timeline: { source_video_url: 'https://example.test/video.mp4', trim: { start_sec: 0, end_sec: 4 } },
