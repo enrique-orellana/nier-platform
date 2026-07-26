@@ -29,19 +29,58 @@ export default function RemotionPreview({
     playing = true,
     onFrameChange,
     onPlayingChange,
+    onPlayerReady,
     className = '',
 }) {
     const durationInFrames = Math.max(1, Math.round(durationInSeconds * fps));
     const playerRef = useRef(null);
+    const playerFrameRef = useRef(null);
 
     useEffect(() => {
-        playerRef.current?.seekTo?.(Math.max(0, Math.min(durationInFrames - 1, Math.round(currentFrame))));
+        const player = playerRef.current;
+        if (!player) return;
+        const targetFrame = Math.max(0, Math.min(durationInFrames - 1, Math.round(currentFrame)));
+        if (playerFrameRef.current === targetFrame) {
+            playerFrameRef.current = null;
+            return;
+        }
+        player.seekTo?.(targetFrame);
     }, [currentFrame, durationInFrames]);
 
     useEffect(() => {
         if (playing) playerRef.current?.play?.();
         else playerRef.current?.pause?.();
     }, [playing]);
+
+    useEffect(() => {
+        const onPlaybackRequest = (event) => {
+            if (event.detail === true) playerRef.current?.play?.();
+            if (event.detail === false) playerRef.current?.pause?.();
+        };
+        window.addEventListener('openshorts:playback-request', onPlaybackRequest);
+        return () => window.removeEventListener('openshorts:playback-request', onPlaybackRequest);
+    }, []);
+
+    useEffect(() => {
+        const player = playerRef.current;
+        if (!player) return undefined;
+        onPlayerReady?.(player);
+        const onFrameUpdate = (event) => {
+            playerFrameRef.current = event.detail.frame;
+            onFrameChange?.(event.detail.frame);
+        };
+        const onPlay = () => onPlayingChange?.(true);
+        const onPause = () => onPlayingChange?.(false);
+        player.addEventListener('frameupdate', onFrameUpdate);
+        player.addEventListener('play', onPlay);
+        player.addEventListener('pause', onPause);
+        return () => {
+            player.removeEventListener('frameupdate', onFrameUpdate);
+            player.removeEventListener('play', onPlay);
+            player.removeEventListener('pause', onPause);
+            onPlayerReady?.(null);
+        };
+    }, [onFrameChange, onPlayingChange, onPlayerReady]);
 
     const inputProps = useMemo(
         () => ({
@@ -76,9 +115,6 @@ export default function RemotionPreview({
                 controls
                 autoPlay={playing}
                 loop
-                onFrameUpdate={onFrameChange}
-                onPlay={() => onPlayingChange?.(true)}
-                onPause={() => onPlayingChange?.(false)}
                 acknowledgeRemotionLicense={true}
             />
         </div>

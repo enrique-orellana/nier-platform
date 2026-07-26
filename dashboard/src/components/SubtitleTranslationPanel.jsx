@@ -26,6 +26,7 @@ export default function SubtitleTranslationPanel({
     const [error, setError] = useState(null);
     const source = tracks.find((track) => track.id === activeTrackId) || tracks[0];
     const sourceLanguage = source?.language?.toLowerCase();
+    const sourceCueCount = (source?.cues || source?.captions || []).length;
 
     useEffect(() => {
         setTargetLanguage(sourceLanguage === 'en' ? 'es' : 'en');
@@ -58,24 +59,33 @@ export default function SubtitleTranslationPanel({
                 <Languages size={16} className="text-cyan-400" />
                 <div>
                     <h3 className="text-sm font-semibold text-white">Subtitle languages</h3>
-                    <p className="text-[11px] text-zinc-500">Translates text only. Audio stays unchanged.</p>
+                    <p className="text-[11px] text-zinc-500">Translates all {sourceCueCount} cues in the selected track. Audio stays unchanged.</p>
                 </div>
             </div>
             <SubtitleTrackPicker tracks={tracks} activeTrackId={activeTrackId} onSelect={onSelectTrack} />
-            <div className="flex gap-2">
+            <div className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2 text-xs">
+                <span className="text-zinc-500">Source track</span>
+                <span className="ml-2 font-semibold text-zinc-200">{(sourceLanguage || 'unknown').toUpperCase()}</span>
+            </div>
+            <p className="text-[11px] leading-4 text-zinc-500">Translate all {sourceCueCount} cues in this track. Timings and audio stay unchanged.</p>
+            <div className="space-y-2">
+                <label htmlFor="target-language" className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Translate to</label>
+                <div className="flex flex-col gap-2 sm:flex-row">
                 <select
+                    id="target-language"
                     value={targetLanguage}
                     onChange={(event) => setTargetLanguage(event.target.value)}
-                    className="input-field flex-1"
+                    className="input-field min-w-0 flex-1"
                     disabled={isTranslating}
                     aria-label="Target language"
                 >
                     {Object.entries(LANGUAGES).map(([code, name]) => <option key={code} value={code} disabled={code === sourceLanguage}>{name}{code === sourceLanguage ? ' (source)' : ''}</option>)}
                 </select>
-                <button type="button" onClick={translate} disabled={isTranslating || !versionId || targetLanguage === sourceLanguage} className="btn-primary px-3 flex items-center gap-2">
+                <button type="button" onClick={translate} disabled={isTranslating || !versionId || !sourceCueCount || targetLanguage === sourceLanguage} className="btn-primary flex items-center justify-center gap-2 px-3 sm:min-w-[180px]" aria-label="Translate entire track">
                     {isTranslating ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
-                    Translate
+                    Translate entire track
                 </button>
+                </div>
             </div>
             {error && <p className="text-xs text-red-300" role="alert">{error}</p>}
         </section>

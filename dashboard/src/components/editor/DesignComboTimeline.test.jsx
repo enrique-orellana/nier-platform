@@ -19,6 +19,13 @@ const subtitleState = {
 };
 
 describe('DesignComboTimeline', () => {
+    it('extends the timeline canvas by duration and zoom for horizontal cue editing', () => {
+        render(<DesignComboTimeline state={state} onStateChange={vi.fn()} zoom={1} />);
+        expect(screen.getByTestId('timeline-canvas')).toHaveStyle({ width: '960px' });
+        expect(screen.getByTestId('timeline-ruler')).toHaveStyle({ width: '800px' });
+        expect(screen.getByTestId('timeline-scroll')).toHaveClass('timeline-scroll');
+    });
+
     it('renders tracks and selects an item', () => {
         const onSelectItem = vi.fn();
         render(<DesignComboTimeline state={state} onStateChange={vi.fn()} onSelectItem={onSelectItem} />);
@@ -26,6 +33,23 @@ describe('DesignComboTimeline', () => {
         expect(screen.getAllByText('Hook').length).toBeGreaterThan(0);
         fireEvent.click(screen.getByRole('button', { name: 'Hook clip' }));
         expect(onSelectItem.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'hook-1' }));
+    });
+
+    it('selects a subtitle cue after a normal pointer interaction', () => {
+        const onSelectItem = vi.fn();
+        render(<DesignComboTimeline state={subtitleState} onStateChange={vi.fn()} onSelectItem={onSelectItem} />);
+        const cue = screen.getByRole('button', { name: 'Hola clip' });
+        fireEvent.pointerDown(cue, { clientX: 100 });
+        fireEvent.click(cue);
+        expect(onSelectItem).toHaveBeenCalledWith(expect.objectContaining({ id: 'cue-1', type: 'subtitle' }), expect.objectContaining({ type: 'subtitle' }));
+    });
+
+    it('keeps the playhead visible while the player advances', () => {
+        const { rerender } = render(<DesignComboTimeline state={state} onStateChange={vi.fn()} playheadFrame={0} zoom={2} />);
+        const scroll = screen.getByTestId('timeline-scroll');
+        Object.defineProperty(scroll, 'clientWidth', { configurable: true, value: 400 });
+        rerender(<DesignComboTimeline state={state} onStateChange={vi.fn()} playheadFrame={270} zoom={2} />);
+        expect(scroll.scrollLeft).toBeGreaterThan(0);
     });
 
     it('moves an item through pointer interaction and snaps to frames', () => {

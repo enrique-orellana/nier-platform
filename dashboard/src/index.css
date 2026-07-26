@@ -5,12 +5,12 @@
 
 @layer base {
   body {
-    @apply bg-background text-white antialiased;
+    @apply bg-background text-white antialiased font-sans;
   }
 }
 
 .glass-panel {
-  @apply bg-surface/50 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl;
+  @apply bg-glass-gradient backdrop-blur-2xl border border-white/[0.05] border-t-white/[0.15] rounded-2xl shadow-glass;
 }
 
 .input-field {
@@ -54,6 +54,28 @@ select.input-field option {
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* The timeline remains scrollable, but scrollbar chrome is hidden to keep the editor clean. */
+.timeline-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.timeline-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Full-screen editor's timeline shell must not become a second scroll container. */
+section[aria-label="Timeline"] > div {
+  overflow: hidden;
+}
+
+/* The ruler lives inside the zoomed timeline canvas; hide the old fixed viewport labels. */
+section[aria-label="Timeline"] > div > div.mb-2 {
+  display: none;
 }
 
 /* Custom Animations */

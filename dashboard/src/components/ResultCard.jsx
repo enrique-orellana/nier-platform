@@ -69,6 +69,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     const [showTranslateModal, setShowTranslateModal] = useState(false);
     const [showClipEditor, setShowClipEditor] = useState(false);
     const [editError, setEditError] = useState(null);
+    const editorSessionRef = React.useRef(null);
 
     const [clipDuration, setClipDuration] = useState(clip.end && clip.start ? clip.end - clip.start : 30);
 
@@ -239,6 +240,10 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 if (data.effects && data.effects.segments) {
                     const newLayers = { ...activeLayers, effects: data.effects };
                     setActiveLayers(newLayers);
+                    if (editorSessionRef.current) {
+                        editorSessionRef.current.applyLayer('effects', data.effects);
+                        return;
+                    }
                     await renderRemotionLayers(newLayers);
                     return;
                 }
@@ -268,7 +273,8 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             const data = await res.json();
             if (data.new_video_url) {
                 const nextUrl = getApiUrl(data.new_video_url);
-                applyRenderedVideoUrl(nextUrl, { persist: true });
+                if (editorSessionRef.current) editorSessionRef.current.setSourceVideo(nextUrl);
+                else applyRenderedVideoUrl(nextUrl, { persist: true });
             }
 
         } catch (e) {
@@ -284,6 +290,10 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
         setEditError(null);
 
         try {
+            if (editorSessionRef.current) {
+                await editorSessionRef.current.save();
+                return;
+            }
             const renderLayers = activeLayers;
             const nextUrl = await renderNativeShortAndPersist(renderLayers);
             applyRenderedVideoUrl(nextUrl, { persist: true });
@@ -303,6 +313,11 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 // Accumulate layer and render all layers together
                 const newLayers = { ...activeLayers, subtitles: options.remotion };
                 setActiveLayers(newLayers);
+                if (editorSessionRef.current) {
+                    editorSessionRef.current.applyLayer('subtitles', options.remotion);
+                    setShowSubtitleModal(false);
+                    return;
+                }
                 await renderRemotionLayers(newLayers);
                 setShowSubtitleModal(false);
                 return;
@@ -331,7 +346,8 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             const data = await res.json();
             if (data.new_video_url) {
                 const nextUrl = getApiUrl(data.new_video_url);
-                applyRenderedVideoUrl(nextUrl, { persist: true });
+                if (editorSessionRef.current) editorSessionRef.current.setSourceVideo(nextUrl);
+                else applyRenderedVideoUrl(nextUrl, { persist: true });
                 setShowSubtitleModal(false);
             }
         } catch (e) {
@@ -350,6 +366,11 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 // Accumulate layer and render all layers together
                 const newLayers = { ...activeLayers, hook: hookData.remotion };
                 setActiveLayers(newLayers);
+                if (editorSessionRef.current) {
+                    editorSessionRef.current.applyLayer('hook', hookData.remotion);
+                    setShowHookModal(false);
+                    return;
+                }
                 await renderRemotionLayers(newLayers);
                 setShowHookModal(false);
                 return;
@@ -377,7 +398,8 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             const data = await res.json();
             if (data.new_video_url) {
                 const nextUrl = getApiUrl(data.new_video_url);
-                applyRenderedVideoUrl(nextUrl, { persist: true });
+                if (editorSessionRef.current) editorSessionRef.current.setSourceVideo(nextUrl);
+                else applyRenderedVideoUrl(nextUrl, { persist: true });
                 setShowHookModal(false);
             }
         } catch (e) {
@@ -427,7 +449,8 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             const data = await res.json();
             if (data.new_video_url) {
                 const nextUrl = getApiUrl(data.new_video_url);
-                applyRenderedVideoUrl(nextUrl, { persist: true });
+                if (editorSessionRef.current) editorSessionRef.current.setSourceVideo(nextUrl);
+                else applyRenderedVideoUrl(nextUrl, { persist: true });
                 setShowTranslateModal(false);
             }
 
@@ -507,6 +530,27 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
         }
     };
 
+    const handleDownload = async (event) => {
+        event?.preventDefault?.();
+        try {
+            const response = await fetch(currentVideoUrl);
+            if (!response.ok) throw new Error('Download failed');
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.style.display = 'none';
+            anchor.href = url;
+            anchor.download = `clip-${index + 1}.mp4`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(anchor);
+        } catch (error) {
+            console.error('Download error:', error);
+            window.open(currentVideoUrl, '_blank');
+        }
+    };
+
     return (
         <div className="bg-surface border border-white/5 rounded-2xl overflow-hidden flex flex-col group hover:border-white/10 transition-all animate-[fadeIn_0.5s_ease-out] h-full" style={{ animationDelay: `${index * 0.1}s` }}>
             <VideoPreview
@@ -536,10 +580,9 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     setShowTranslateModal={setShowTranslateModal}
                     isTranslating={isTranslating}
                     setShowModal={setShowModal}
-                    currentVideoUrl={currentVideoUrl}
-                    index={index}
                     editError={editError}
                     setShowClipEditor={setShowClipEditor}
+                    handleDownload={handleDownload}
                 />
             </div>
 
@@ -600,6 +643,22 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 clipIndex={index}
                 aiHeaders={getAiHeaders ? getAiHeaders('json') : {}}
                 onRendered={(url) => applyRenderedVideoUrl(url, { persist: true })}
+                onSessionReady={(session) => { editorSessionRef.current = session; }}
+                editorActions={{
+                    onAutoEdit: handleAutoEdit,
+                    isEditing,
+                    onConvertNativeShort: handleConvertNativeShort,
+                    isConvertingNativeShort,
+                    onSubtitles: () => setShowSubtitleModal(true),
+                    isSubtitling,
+                    onViralHook: () => setShowHookModal(true),
+                    isHooking,
+                    onDubVoice: () => setShowTranslateModal(true),
+                    isTranslating,
+                    onPost: () => setShowModal(true),
+                    onDownload: handleDownload,
+                    editError,
+                }}
             />
         </div>
     );

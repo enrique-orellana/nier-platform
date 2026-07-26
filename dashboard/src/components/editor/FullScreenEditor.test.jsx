@@ -1,6 +1,6 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import FullScreenEditor from './FullScreenEditor';
 
 vi.mock('../../components/RemotionPreview', () => ({ default: ({ currentFrame = 0 }) => <div data-testid="remotion-player-frame">{currentFrame}</div> }));
@@ -12,10 +12,16 @@ const manifest = {
 };
 
 describe('FullScreenEditor', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
     it('renders the editor workspace and advances the preview one frame', () => {
         render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
         expect(screen.getByRole('heading', { name: /media pool/i })).toBeInTheDocument();
         expect(screen.getByRole('region', { name: /timeline/i })).toBeInTheDocument();
+        expect(screen.getByLabelText('Subtitle translation')).toBeInTheDocument();
+        expect(screen.getByText(/starts at the current playhead/i)).toBeInTheDocument();
+        expect(screen.getByText(/nothing selected/i)).toBeInTheDocument();
+        expect(screen.getByText(/select a clip or cue in the timeline/i)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /next frame/i }));
         expect(screen.getByTestId('remotion-player-frame')).toHaveTextContent('1');
     });
@@ -27,6 +33,70 @@ describe('FullScreenEditor', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Hola clip' }));
         expect(screen.getByRole('option', { name: 'English' })).toBeInTheDocument();
         expect(screen.getByLabelText('Subtitle translation')).toBeInTheDocument();
+    });
+
+    it('keeps inspector subtitle text edits in the selected cue', () => {
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Hola clip' }));
+        const text = screen.getByLabelText('Text');
+        fireEvent.change(text, { target: { value: 'Piano corrected' } });
+        expect(text).toHaveValue('Piano corrected');
+        expect(screen.getByRole('button', { name: 'Piano corrected clip' })).toBeInTheDocument();
+    });
+
+    it('deletes the selected subtitle cue from the timeline', () => {
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Hola clip' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delete subtitle cue' }));
+        expect(screen.queryByRole('button', { name: 'Hola clip' })).not.toBeInTheDocument();
+    });
+
+    it('adds a subtitle cue at the current playhead and selects it', () => {
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: /next frame/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add subtitle cue' }));
+        const text = screen.getByLabelText('Text');
+        expect(text).toHaveValue('');
+        fireEvent.change(text, { target: { value: 'Manual cue' } });
+        expect(screen.getByRole('button', { name: 'Manual cue clip' })).toBeInTheDocument();
+    });
+
+    it('keeps cue creation available while another editor item is selected', () => {
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Original hook clip' }));
+        expect(screen.getByRole('button', { name: 'Add subtitle cue' })).toBeInTheDocument();
+    });
+
+    it('renders the complete action toolbar when opened from a result card', () => {
+        const editorActions = Object.fromEntries(['onAutoEdit', 'onConvertNativeShort', 'onSubtitles', 'onViralHook', 'onDubVoice', 'onPost', 'onDownload'].map((name) => [name, vi.fn()]));
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} editorActions={editorActions} onClose={vi.fn()} />);
+        expect(screen.getByRole('region', { name: 'Editor actions' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Auto Edit' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
+    });
+
+    it('exposes a draft session that accumulates effects and optional subtitle tracks', async () => {
+        let session;
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }} initialManifest={{ ...manifest, subtitle_tracks: [], layers: { hook: manifest.layers.hook, effects: null, subtitles: null } }} initialVersion={{ version_id: 'v1', status: 'done', output_url: '/videos/job/v1.mp4' }} onSessionReady={(api) => { session = api; }} onClose={vi.fn()} />);
+        await waitFor(() => expect(session).toBeTruthy());
+        session.applyLayer('effects', { segments: [{ startSec: 0, endSec: 2, zoom: 1.1 }] });
+        session.applyLayer('subtitles', { captions: [{ text: 'Hello', startMs: 500, endMs: 1200 }], style: { animation: 'pop' } });
+        expect(session.getManifest()).toMatchObject({ layers: { hook: { text: 'Original hook' }, effects: { segments: [{ startSec: 0, endSec: 2, zoom: 1.1 }] }, subtitles: { style: { animation: 'pop' } } }, subtitle_tracks: [{ id: 'original', cues: [{ text: 'Hello', startMs: 500, endMs: 1200 }] }], active_subtitle_track_id: 'original' });
+    });
+
+    it('downloads the exact completed version output', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(['video']) });
+        vi.stubGlobal('fetch', fetchMock);
+        Object.defineProperty(window.URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:download') });
+        Object.defineProperty(window.URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+        const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+        const appendChild = vi.spyOn(document.body, 'appendChild');
+        render(<FullScreenEditor jobId="job" clipIndex={2} clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'version-123456', status: 'done', output_url: '/videos/job/version-123456.mp4' }} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: /download saved version/i }));
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/videos/job/version-123456.mp4'));
+        expect(appendChild.mock.calls.some(([node]) => node?.download === 'clip-3-version-.mp4')).toBe(true);
+        anchorClick.mockRestore();
+        appendChild.mockRestore();
     });
 
     it('shows and edits subtitles from the legacy layer shape', () => {
@@ -41,5 +111,33 @@ describe('FullScreenEditor', () => {
         fireEvent.keyDown(input, { key: 'Enter' });
         expect(screen.getByRole('button', { name: 'Hello clip' })).toBeInTheDocument();
         expect(legacyManifest.layers.subtitles.cues[0].text).toBe('Hola');
+    });
+
+    it('shows subtitle cues from the transcript manifest shape used by generated clips', () => {
+        const transcriptManifest = {
+            timeline: { source_video_url: 'https://example.test/video.mp4', trim: { start_sec: 0, end_sec: 4 }, transcript: { language: 'it', segments: [{ start: 0.5, end: 1.5, text: 'Ciao' }] } },
+            layers: {},
+        };
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, video_url: transcriptManifest.timeline.source_video_url }} initialManifest={transcriptManifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Ciao clip' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Original it' })).toBeInTheDocument();
+    });
+
+    it('hydrates subtitles from the clip transcript endpoint when a legacy version has no subtitle track', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (url) => {
+            if (String(url).endsWith('/versions')) {
+                return { ok: true, json: async () => ({ current_version_id: 'v3', versions: [{ version_id: 'v3', status: 'done' }] }) };
+            }
+            if (String(url).endsWith('/versions/v3')) {
+                return { ok: true, json: async () => ({ version: { version_id: 'v3', status: 'done' }, manifest: { timeline: { source_video_url: '/videos/clip.mp4', trim: { start_sec: 0, end_sec: 4 } }, subtitle_tracks: [], layers: {} } }) };
+            }
+            if (String(url).endsWith('/transcript')) {
+                return { ok: true, json: async () => ({ language: 'it', durationSec: 4, captions: [{ text: 'Ciao', startMs: 500, endMs: 1500 }] }) };
+            }
+            throw new Error(`Unexpected request: ${url}`);
+        }));
+        render(<FullScreenEditor jobId="job" clipIndex={1} clip={{ output_fps: 30, video_url: '/videos/clip.mp4' }} onClose={vi.fn()} />);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Ciao clip' })).toBeInTheDocument());
+        expect(screen.getByRole('button', { name: 'Original it' })).toBeInTheDocument();
     });
 });

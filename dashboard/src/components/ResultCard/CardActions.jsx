@@ -13,10 +13,9 @@ export default function CardActions({
     setShowTranslateModal,
     isTranslating,
     setShowModal,
-    currentVideoUrl,
-    index,
     editError,
-    setShowClipEditor
+    setShowClipEditor,
+    handleDownload,
 }) {
     return (
         <>
@@ -83,26 +82,7 @@ export default function CardActions({
                     <Share2 size={14} className="shrink-0" /> Post
                 </button>
                 <button
-                    onClick={async (e) => {
-                        e.preventDefault();
-                        try {
-                            const response = await fetch(currentVideoUrl);
-                            if (!response.ok) throw new Error('Download failed');
-                            const blob = await response.blob();
-                            const url = window.URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.style.display = 'none';
-                            a.href = url;
-                            a.download = `clip-${index + 1}.mp4`;
-                            document.body.appendChild(a);
-                            a.click();
-                            window.URL.revokeObjectURL(url);
-                            document.body.removeChild(a);
-                        } catch (err) {
-                            console.error('Download error:', err);
-                            window.open(currentVideoUrl, '_blank');
-                        }
-                    }}
+                    onClick={handleDownload}
                     className="col-span-1 py-2 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2 border border-white/5 truncate px-2"
                 >
                     <Download size={14} className="shrink-0" /> Download

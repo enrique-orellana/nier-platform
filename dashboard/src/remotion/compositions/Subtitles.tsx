@@ -21,9 +21,30 @@ const POSITION_MAP: Record<string, React.CSSProperties> = {
   bottom: { bottom: "10%", top: "auto" },
 };
 
+const DEFAULT_SUBTITLE_STYLE: SubtitleConfig["style"] = {
+  fontFamily: "Arial",
+  fontSize: 52,
+  fontColor: "#FFFFFF",
+  highlightColor: "#FFDD00",
+  borderColor: "#000000",
+  borderWidth: 3,
+  bgColor: "#000000",
+  bgOpacity: 0,
+  animation: "none",
+};
+
+export function normalizeSubtitleConfig(config: Partial<SubtitleConfig> | null | undefined): SubtitleConfig {
+  return {
+    captions: Array.isArray(config?.captions) ? config.captions : [],
+    position: config?.position || "bottom",
+    style: { ...DEFAULT_SUBTITLE_STYLE, ...(config?.style || {}) },
+  };
+}
+
 export const Subtitles: React.FC<SubtitlesProps> = ({ config }) => {
   const { fps } = useVideoConfig();
-  const blocks = groupCaptionsIntoBlocks(config.captions);
+  const normalizedConfig = normalizeSubtitleConfig(config);
+  const blocks = groupCaptionsIntoBlocks(normalizedConfig.captions);
 
   return (
     <AbsoluteFill>
@@ -43,7 +64,7 @@ export const Subtitles: React.FC<SubtitlesProps> = ({ config }) => {
           >
             <SubtitleBlock
               block={block}
-              config={config}
+              config={normalizedConfig}
               blockStartMs={block.startMs}
             />
           </Sequence>

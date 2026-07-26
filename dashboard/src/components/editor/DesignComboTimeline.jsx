@@ -4,6 +4,17 @@ import { moveCue, resizeCue } from '../../editor/timelineModel';
 import TrackControls from './TrackControls';
 
 const colors = { video: '#2563eb', audio: '#16a34a', hook: '#f59e0b', subtitle: '#8b5cf6', effects: '#ec4899' };
+const TRACK_CONTROLS_WIDTH = 160;
+const BASE_PIXELS_PER_SECOND = 80;
+
+const formatTimecode = (seconds, fps) => {
+    const frame = Math.max(0, Math.round(seconds * fps));
+    const totalSeconds = Math.floor(frame / fps);
+    const minutes = Math.floor(totalSeconds / 60);
+    const remainingSeconds = totalSeconds % 60;
+    const frames = frame % fps;
+    return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}:${String(frames).padStart(2, '0')}`;
+};
 
 const toDesignComboState = (editorState) => {
     const trackItemsMap = {};
@@ -48,8 +59,23 @@ export default function DesignComboTimeline({ state, onStateChange, onSelectItem
     const stateManagerRef = useRef(null);
     const [editingItemId, setEditingItemId] = useState(null);
     const [draftText, setDraftText] = useState('');
+    const [collapsedTracks, setCollapsedTracks] = useState({});
+    
+    const toggleCollapse = (trackId) => setCollapsedTracks(prev => ({ ...prev, [trackId]: !prev[trackId] }));
     const duration = Math.max(0.001, state.durationSec || 1);
-    const width = `${Math.max(1, zoom * 100)}%`;
+    const pixelsPerSecond = BASE_PIXELS_PER_SECOND * Math.max(0.25, zoom);
+    const laneWidth = Math.max(1, duration * pixelsPerSecond);
+    const canvasWidth = Math.max(760, TRACK_CONTROLS_WIDTH + laneWidth);
+    useEffect(() => {
+        const container = timelineRef.current;
+        if (!container?.clientWidth) return;
+        const playheadX = TRACK_CONTROLS_WIDTH + (Math.max(0, Math.min(duration, playheadFrame / (state.fps || 30))) * pixelsPerSecond);
+        const visibleStart = container.scrollLeft + TRACK_CONTROLS_WIDTH;
+        const visibleEnd = container.scrollLeft + container.clientWidth - 24;
+        if (playheadX < visibleStart || playheadX > visibleEnd) {
+            container.scrollLeft = Math.max(0, playheadX - container.clientWidth * 0.5);
+        }
+    }, [duration, pixelsPerSecond, playheadFrame, state.fps]);
     useEffect(() => {
         if (!stateManagerRef.current) {
             stateManagerRef.current = new StateManager(toDesignComboState(state));
@@ -81,8 +107,11 @@ export default function DesignComboTimeline({ state, onStateChange, onSelectItem
     const renderItem = (track, item) => {
         const label = item.label || item.text || track.name;
         const isEditing = editingItemId === item.id;
-        return <div key={item.id} role="button" tabIndex={0} aria-label={`${label} clip`} onClick={() => onSelectItem?.(item, track)} onDoubleClick={(event) => beginInlineEdit(event, item)} onPointerDown={(event) => beginDrag(event, track, item)} className="absolute top-2 bottom-2 overflow-hidden rounded border border-white/20 px-2 py-2 text-[10px] text-white shadow" style={{ left: `${(item.start / duration) * 100}%`, width: `${Math.max(0.5, ((item.end - item.start) / duration) * 100)}%`, minWidth: 28, backgroundColor: colors[track.type] || '#52525b', opacity: track.visible === false ? 0.35 : 1 }}>
-            {isEditing ? <input autoFocus aria-label={`Edit subtitle ${label}`} value={draftText} onChange={(event) => setDraftText(event.target.value)} onBlur={() => commitInlineEdit(item)} onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Enter') commitInlineEdit(item); if (event.key === 'Escape') setEditingItemId(null); }} onPointerDown={(event) => event.stopPropagation()} className="w-full min-w-0 rounded bg-black/30 px-1 text-[10px] text-white outline-none" /> : <span className="truncate">{label}</span>}
+        const isCollapsed = collapsedTracks[track.id];
+        const positionClasses = isCollapsed ? 'top-[2px] bottom-[2px]' : 'top-2 bottom-2';
+        
+        return <div key={item.id} role="button" tabIndex={0} aria-label={`${label} clip`} title={label} onClick={() => onSelectItem?.(item, track)} onDoubleClick={(event) => beginInlineEdit(event, item)} onPointerDown={(event) => beginDrag(event, track, item)} className={`absolute ${positionClasses} overflow-hidden rounded border border-white/20 px-1 py-1 text-[10px] text-white shadow transition-all`} style={{ left: `${(item.start / duration) * 100}%`, width: `${Math.max(0.25, ((item.end - item.start) / duration) * 100)}%`, minWidth: 10, backgroundColor: colors[track.type] || '#52525b', opacity: track.visible === false ? 0.35 : 1 }}>
+            {isEditing ? <input autoFocus aria-label={`Edit subtitle ${label}`} value={draftText} onChange={(event) => setDraftText(event.target.value)} onBlur={() => commitInlineEdit(item)} onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Enter') commitInlineEdit(item); if (event.key === 'Escape') setEditingItemId(null); }} onPointerDown={(event) => event.stopPropagation()} className="w-full min-w-0 rounded bg-black/30 px-1 text-[10px] text-white outline-none" /> : <span className={`truncate block ${isCollapsed ? 'hidden' : 'leading-[14px]'}`}>{label}</span>}
             <span role="button" tabIndex={0} aria-label={`${label} resize start`} onPointerDown={(event) => beginDrag(event, track, item, 'start')} className="absolute left-0 top-0 h-full w-1 cursor-ew-resize opacity-0 hover:opacity-100" />
             <span role="button" tabIndex={0} aria-label={`${label} resize end`} onPointerDown={(event) => beginDrag(event, track, item, 'end')} className="absolute right-0 top-0 h-full w-1 cursor-ew-resize opacity-0 hover:opacity-100" />
         </div>;
@@ -92,9 +121,8 @@ export default function DesignComboTimeline({ state, onStateChange, onSelectItem
         event.preventDefault(); event.stopPropagation();
         const originX = event.clientX;
         const original = { startMs: item.start * 1000, endMs: item.end * 1000 };
-        const rectWidth = timelineRef.current?.getBoundingClientRect().width || 1000;
         const update = (moveEvent) => {
-            const deltaMs = ((moveEvent.clientX - originX) / rectWidth) * duration * 1000;
+            const deltaMs = ((moveEvent.clientX - originX) / laneWidth) * duration * 1000;
             const next = edge === 'move' ? moveCue(original, deltaMs, duration * 1000) : resizeCue(original, edge, deltaMs, duration * 1000, 1000 / (state.fps || 30));
             const nextItem = { ...item, start: next.startMs / 1000, end: next.endMs / 1000 };
             const tracks = state.tracks.map((candidate) => candidate.id === track.id ? { ...candidate, items: candidate.items.map((candidateItem) => candidateItem.id === item.id ? nextItem : candidateItem) } : candidate);
@@ -104,10 +132,14 @@ export default function DesignComboTimeline({ state, onStateChange, onSelectItem
         window.addEventListener('pointermove', update); window.addEventListener('pointerup', stop);
     };
     const playheadLeft = `${Math.max(0, Math.min(duration, playheadFrame / (state.fps || 30))) / duration * 100}%`;
-    return <div className="h-full overflow-auto rounded-lg border border-white/10 bg-[#101014]" ref={timelineRef}>
-        <div className="flex min-w-[760px] flex-col" style={{ width }}>
-            <div className="relative ml-40 h-8 border-b border-white/10 bg-[#151519]" onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); onSeek?.(Math.max(0, Math.min(duration, ((event.clientX - rect.left) / rect.width) * duration))); }}><div className="absolute top-0 bottom-0 w-px bg-red-400" style={{ left: playheadLeft }} /></div>
-            {state.tracks.map((track) => <div key={track.id} className="flex h-14 border-b border-white/10"><TrackControls track={track} onChange={changeTrack} /><div className="relative flex-1 bg-[#111115]">{track.items.map((item) => renderItem(track, item))}</div></div>)}
+    return <div data-testid="timeline-scroll" className="timeline-scroll h-full overflow-auto rounded-lg border border-white/10 bg-[#101014]" ref={timelineRef}>
+        <div data-testid="timeline-canvas" className="flex flex-col relative" style={{ width: `${canvasWidth}px` }}>
+            <div data-testid="timeline-ruler" className="relative ml-40 h-8 border-b border-white/10 bg-[#151519]" style={{ width: `${laneWidth}px` }} onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); onSeek?.(Math.max(0, Math.min(duration, ((event.clientX - rect.left) / rect.width) * duration))); }}><span className="absolute left-1 top-1 text-[10px] text-zinc-600">{formatTimecode(0, state.fps || 30)}</span><span className="absolute right-1 top-1 text-[10px] text-zinc-600">{formatTimecode(duration, state.fps || 30)}</span></div>
+            {state.tracks.map((track) => {
+                const isCollapsed = collapsedTracks[track.id];
+                return <div key={track.id} className={`flex ${isCollapsed ? 'h-6' : 'h-14'} border-b border-white/10 transition-all overflow-hidden`}><TrackControls track={track} isCollapsed={isCollapsed} onToggleCollapse={() => toggleCollapse(track.id)} onChange={changeTrack} /><div className="relative shrink-0 bg-[#111115] transition-all" style={{ width: `${laneWidth}px` }}>{track.items.map((item) => renderItem(track, item))}</div></div>
+            })}
+            <div className="absolute top-0 bottom-0 pointer-events-none ml-40" style={{ width: `${laneWidth}px` }}><div className="absolute top-0 bottom-0 w-px bg-red-500 z-50 shadow-[0_0_8px_rgba(239,68,68,0.5)]" style={{ left: playheadLeft }} /></div>
         </div>
     </div>;
 }
