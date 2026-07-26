@@ -1,6 +1,7 @@
 import { ChevronLeft, FolderOpen, Loader2, Play, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { getApiUrl } from '../config';
+import { toProxiedVideoUrl } from '../lib/videoUrls';
 import ResultCard from './ResultCard';
 
 function formatDate(value) {
@@ -43,7 +44,7 @@ function normalizeClipForResultCard(clip, index, fallbackJobId) {
 
   return {
     ...clip,
-    video_url: videoUrl,
+    video_url: toProxiedVideoUrl(videoUrl),
     video_title_for_youtube_short: title,
     video_description_for_tiktok: descriptionTiktok,
     video_description_for_instagram: descriptionInstagram,
@@ -353,7 +354,7 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredProjects.map((project) => {
-              const previewVideoUrl = project.clips?.[0]?.url || project.clips?.[0]?.video_url || '';
+              const previewVideoUrl = toProxiedVideoUrl(project.clips?.[0]?.url || project.clips?.[0]?.video_url || '');
 
               return (
                 <div

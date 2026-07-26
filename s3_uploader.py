@@ -2,6 +2,7 @@ import os
 import re
 import tempfile
 import zipfile
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 load_dotenv()
 import boto3
@@ -148,6 +149,20 @@ def generate_presigned_url(bucket_name, object_key, expiration=3600):
         logger.error(e)
         return None
 
+
+def resolve_clip_video_url(bucket_name, job_id, base_name, clip, clip_index):
+    """Generate a fresh URL instead of reusing an expired metadata signature."""
+    stored_url = str(clip.get("video_url") or clip.get("url") or "").strip()
+    if stored_url.startswith(("http://", "https://")):
+        clip_filename = os.path.basename(urlparse(stored_url).path)
+    else:
+        clip_filename = os.path.basename(stored_url.split("?")[0].split("#")[0])
+    if not clip_filename:
+        clip_filename = f"{base_name}_clip_{clip_index + 1}.mp4"
+
+    clip_key = f"{job_id}/{clip_filename}"
+    return generate_presigned_url(bucket_name, clip_key, expiration=7200) or stored_url
+
 def list_all_clips(bucket_name=None, limit=50, force_refresh=False):
     """
     List recent clips from the S3 bucket by finding metadata files.
@@ -214,13 +229,13 @@ def list_all_clips(bucket_name=None, limit=50, force_refresh=False):
                 clips_data = data.get('shorts', [])
                 
                 for i, clip in enumerate(clips_data):
-                    stored_video_url = (clip.get("video_url") or clip.get("url") or "").strip()
-                    if stored_video_url.startswith(("http://", "https://")):
-                        resolved_url = stored_video_url
-                    else:
-                        clip_filename = os.path.basename(stored_video_url.split("?")[0].split("#")[0]) if stored_video_url else f"{base_name}_clip_{i+1}.mp4"
-                        clip_key = f"{job_id}/{clip_filename}"
-                        resolved_url = generate_presigned_url(bucket_name, clip_key, expiration=7200)  # 2 hours
+                    resolved_url = resolve_clip_video_url(
+                        bucket_name,
+                        job_id,
+                        base_name,
+                        clip,
+                        i,
+                    )
                     
                     if resolved_url:
                         clip_entry = {
