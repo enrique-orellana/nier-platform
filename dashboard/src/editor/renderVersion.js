@@ -7,6 +7,14 @@ const jsonRequest = async (url, options = {}) => {
     return payload;
 };
 
+export function normalizeRenderedOutputUrl(outputUrl, jobId) {
+    if (!outputUrl || !jobId) return outputUrl;
+    const normalized = String(outputUrl).replace(/\\/g, '/');
+    if (normalized.startsWith('/videos/')) return normalized;
+    const outputMatch = normalized.match(/(?:^|\/)output\/[^/]+\/([^/?#]+)$/);
+    return outputMatch ? `/videos/${jobId}/${outputMatch[1]}` : outputUrl;
+}
+
 const defaultApi = {
     createVersion: ({ jobId, clipIndex, manifest, parent_version_id }) => jsonRequest(`/api/clip/${jobId}/${clipIndex}/versions`, { method: 'POST', body: JSON.stringify({ manifest, parent_version_id }) }),
     startRender: ({ jobId, clipIndex, versionId, props }) => jsonRequest(`/api/clip/${jobId}/${clipIndex}/versions/${versionId}/render`, { method: 'POST', body: JSON.stringify({ props }) }),
@@ -27,7 +35,7 @@ export async function renderDraftVersion({ api = defaultApi, jobId, clipIndex, v
         status = await api.getRenderStatus({ renderId: started.renderId });
         if (status.status === 'error' || status.status === 'failed') throw new Error(status.error || 'Render failed.');
     } while (!['done', 'completed'].includes(status.status));
-    if (!status.outputUrl) throw new Error('Render completed without an output file.');
+        if (!status.outputUrl) throw new Error('Render completed without an output file.');
     return status;
 }
 
@@ -38,8 +46,9 @@ export async function saveAndRenderVersion({ api = defaultApi, jobId, clipIndex,
         versionId = created?.version?.version_id;
         if (!versionId) throw new Error('Version creation did not return an id.');
         const rendered = await renderDraftVersion({ api, jobId, clipIndex, versionId, props, pollMs });
-        const completed = await api.completeVersion({ jobId, clipIndex, versionId, output_url: rendered.outputUrl });
-        return { status: 'done', versionId, outputUrl: rendered.outputUrl, version: completed?.version, response: completed };
+        const outputUrl = normalizeRenderedOutputUrl(rendered.outputUrl, jobId);
+        const completed = await api.completeVersion({ jobId, clipIndex, versionId, output_url: outputUrl });
+        return { status: 'done', versionId, outputUrl, version: completed?.version, response: completed };
     } catch (error) {
         if (versionId) {
             try { await api.completeVersion({ jobId, clipIndex, versionId, error: error.message }); } catch { /* preserve original render error */ }

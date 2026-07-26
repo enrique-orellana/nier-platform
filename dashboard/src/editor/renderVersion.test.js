@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { saveAndRenderVersion } from './renderVersion';
+import { normalizeRenderedOutputUrl, saveAndRenderVersion } from './renderVersion';
 
 describe('saveAndRenderVersion', () => {
+    it('normalizes renderer filesystem output paths to the public videos route', () => {
+        expect(normalizeRenderedOutputUrl('/output/job/master_0_v4_123.mp4', 'job')).toBe('/videos/job/master_0_v4_123.mp4');
+        expect(normalizeRenderedOutputUrl('/videos/job/master_0_v4_123.mp4', 'job')).toBe('/videos/job/master_0_v4_123.mp4');
+    });
+
     it('creates, renders, polls, and completes an immutable child version', async () => {
         const api = {
             createVersion: vi.fn().mockResolvedValue({ version: { version_id: 'v4' } }),

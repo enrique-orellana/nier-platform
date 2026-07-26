@@ -293,6 +293,13 @@ spec:
                 name: openshorts-backend
                 port:
                   number: 8000
+          - path: /output
+            pathType: Prefix
+            backend:
+              service:
+                name: openshorts-renderer
+                port:
+                  number: 3100
           - path: /thumbnails
             pathType: Prefix
             backend:
