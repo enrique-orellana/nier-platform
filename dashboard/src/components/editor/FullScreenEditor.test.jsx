@@ -48,6 +48,16 @@ describe('FullScreenEditor', () => {
         expect(screen.queryByRole('button', { name: 'Hola clip' })).not.toBeInTheDocument();
     });
 
+    it('adds a subtitle cue at the current playhead and selects it', () => {
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: /next frame/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add subtitle cue' }));
+        const text = screen.getByLabelText('Text');
+        expect(text).toHaveValue('');
+        fireEvent.change(text, { target: { value: 'Manual cue' } });
+        expect(screen.getByRole('button', { name: 'Manual cue clip' })).toBeInTheDocument();
+    });
+
     it('shows and edits subtitles from the legacy layer shape', () => {
         const legacyManifest = {
             timeline: { source_video_url: 'https://example.test/video.mp4', trim: { start_sec: 0, end_sec: 4 } },
