@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Languages, Loader2 } from 'lucide-react';
 import { getApiUrl } from '../config';
 import SubtitleTrackPicker from './SubtitleTrackPicker';
@@ -27,6 +27,10 @@ export default function SubtitleTranslationPanel({
     const source = tracks.find((track) => track.id === activeTrackId) || tracks[0];
     const sourceLanguage = source?.language?.toLowerCase();
 
+    useEffect(() => {
+        setTargetLanguage(sourceLanguage === 'en' ? 'es' : 'en');
+    }, [sourceLanguage]);
+
     const translate = async () => {
         setIsTranslating(true);
         setError(null);
@@ -38,7 +42,9 @@ export default function SubtitleTranslationPanel({
             });
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.detail || 'Subtitle translation failed.');
-            onTrackAdded(payload.track, payload.manifest);
+            const mergedTracks = [...tracks.filter((track) => track.id !== payload.track?.id), payload.track].filter(Boolean);
+            const mergedManifest = payload.manifest ? { ...payload.manifest, subtitle_tracks: [...(payload.manifest.subtitle_tracks || []).filter((track) => track.id !== payload.track?.id), payload.track].filter(Boolean) } : undefined;
+            onTrackAdded(payload.track, mergedManifest, mergedTracks);
         } catch (translationError) {
             setError(translationError.message);
         } finally {
