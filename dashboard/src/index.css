@@ -73,6 +73,11 @@ section[aria-label="Timeline"] > div {
   overflow: hidden;
 }
 
+/* The ruler lives inside the zoomed timeline canvas; hide the old fixed viewport labels. */
+section[aria-label="Timeline"] > div > div.mb-2 {
+  display: none;
+}
+
 /* Custom Animations */
 @keyframes scan {
   0% {

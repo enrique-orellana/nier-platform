@@ -22,6 +22,7 @@ describe('DesignComboTimeline', () => {
     it('extends the timeline canvas by duration and zoom for horizontal cue editing', () => {
         render(<DesignComboTimeline state={state} onStateChange={vi.fn()} zoom={1} />);
         expect(screen.getByTestId('timeline-canvas')).toHaveStyle({ width: '960px' });
+        expect(screen.getByTestId('timeline-ruler')).toHaveStyle({ width: '800px' });
         expect(screen.getByTestId('timeline-scroll')).toHaveClass('timeline-scroll');
     });
 
