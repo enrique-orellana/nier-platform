@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { editorStateToManifest, manifestToEditorState } from './designcomboAdapter';
+import { createSubtitleCue } from './timelineModel';
 
 const manifest = {
     timeline: { source_video_url: 'https://example.test/source.mp4', trim: { start_sec: 0, end_sec: 12.5 } },
@@ -63,5 +64,16 @@ describe('designcomboAdapter', () => {
         const next = editorStateToManifest(state, source);
         expect(next.timeline.transcript.segments[0]).toMatchObject({ text: 'Hello', start: 0.5, end: 1.5 });
         expect(source.timeline.transcript.segments[0].text).toBe('Ciao');
+    });
+
+    it('serializes a newly created cue into cues and captions', () => {
+        const source = { timeline: { trim: { start_sec: 0, end_sec: 10 } }, subtitle_tracks: [{ id: 'original', language: 'en', label: 'Original', cues: [] }], layers: {} };
+        const state = manifestToEditorState(source);
+        const cue = createSubtitleCue({ playheadMs: 3000, durationMs: 10000, fps: 30, existingIds: [] });
+        const original = state.tracks.find((track) => track.id === 'subtitles-original');
+        original.items.push({ ...cue, trackId: original.id });
+        const next = editorStateToManifest(state, source);
+        expect(next.subtitle_tracks[0].cues.at(-1)).toMatchObject({ text: '', startMs: 3000, endMs: 5000 });
+        expect(next.subtitle_tracks[0].captions.at(-1)).toMatchObject({ text: '', startMs: 3000, endMs: 5000 });
     });
 });
