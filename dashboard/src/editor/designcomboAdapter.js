@@ -21,11 +21,24 @@ const subtitleItems = (track) => (track?.cues || track?.captions || []).map((cue
     trackIdRef: track.id,
 }));
 
+const transcriptCues = (transcript) => (transcript?.segments || []).map((segment) => ({
+    text: segment.text || '',
+    startMs: Math.round(Number(segment.start || 0) * 1000),
+    endMs: Math.round(Number(segment.end || segment.start || 0) * 1000),
+    captions: (segment.words || []).map((word) => ({
+        text: word.word || word.text || '',
+        startMs: Math.round(Number(word.start || 0) * 1000),
+        endMs: Math.round(Number(word.end || word.start || 0) * 1000),
+    })),
+}));
+
 const subtitleTracksFromManifest = (manifest) => {
     if (Array.isArray(manifest?.subtitle_tracks) && manifest.subtitle_tracks.length) return manifest.subtitle_tracks;
     const legacy = manifest?.layers?.subtitles;
-    if (!legacy) return [];
-    return [{ id: 'original', language: legacy.language || 'und', label: legacy.label || 'Original', origin: 'original', cues: legacy.cues || legacy.captions || [] }];
+    if (legacy) return [{ id: 'original', language: legacy.language || 'und', label: legacy.label || 'Original', origin: 'original', cues: legacy.cues || legacy.captions || [] }];
+    const transcript = manifest?.timeline?.transcript;
+    if (transcript?.segments?.length) return [{ id: 'original', language: transcript.language || 'und', label: 'Original', origin: 'original', cues: transcriptCues(transcript) }];
+    return [];
 };
 
 export function manifestToEditorState(manifest, { fps = 30 } = {}) {
@@ -65,6 +78,17 @@ export function editorStateToManifest(state, sourceManifest) {
             const legacy = clone(manifest.layers?.subtitles || {});
             const legacyCues = original.items.map((item) => ({ text: item.text || item.label || '', startMs: Math.round(item.start * 1000), endMs: Math.round(item.end * 1000), captions: [{ text: item.text || item.label || '', startMs: Math.round(item.start * 1000), endMs: Math.round(item.end * 1000) }] }));
             manifest.layers = { ...(manifest.layers || {}), subtitles: { ...legacy, cues: legacyCues, captions: legacyCues.flatMap((cue) => cue.captions) } };
+            const transcript = manifest.timeline?.transcript;
+            if (transcript?.segments?.length) {
+                const existingSegments = transcript.segments;
+                const segments = original.items.map((item, index) => ({
+                    ...(existingSegments[index] || {}),
+                    text: item.text || item.label || '',
+                    start: item.start,
+                    end: item.end,
+                }));
+                manifest.timeline = { ...(manifest.timeline || {}), transcript: { ...transcript, segments } };
+            }
         }
     }
     const effects = state.tracks.find((track) => track.id === 'effects');

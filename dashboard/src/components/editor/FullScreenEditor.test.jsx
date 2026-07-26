@@ -42,4 +42,14 @@ describe('FullScreenEditor', () => {
         expect(screen.getByRole('button', { name: 'Hello clip' })).toBeInTheDocument();
         expect(legacyManifest.layers.subtitles.cues[0].text).toBe('Hola');
     });
+
+    it('shows subtitle cues from the transcript manifest shape used by generated clips', () => {
+        const transcriptManifest = {
+            timeline: { source_video_url: 'https://example.test/video.mp4', trim: { start_sec: 0, end_sec: 4 }, transcript: { language: 'it', segments: [{ start: 0.5, end: 1.5, text: 'Ciao' }] } },
+            layers: {},
+        };
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, video_url: transcriptManifest.timeline.source_video_url }} initialManifest={transcriptManifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Ciao clip' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Original it' })).toBeInTheDocument();
+    });
 });

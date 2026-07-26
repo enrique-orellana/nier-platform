@@ -18,6 +18,8 @@ const proxyUrl = (url) => {
     return getApiUrl(`/api/video-proxy/${encodeURIComponent(name)}?url=${encodeURIComponent(url)}`);
 };
 
+const defaultSubtitleTrackId = (nextManifest) => nextManifest?.active_subtitle_track_id || nextManifest?.subtitle_tracks?.[0]?.id || (nextManifest?.timeline?.transcript?.segments?.length ? 'original' : null);
+
 export default function FullScreenEditor({ isOpen = true, jobId, clipIndex, clip = {}, initialVersion = null, initialManifest = null, onClose, onRendered }) {
     const [version, setVersion] = useState(initialVersion);
     const [manifest, setManifest] = useState(initialManifest);
@@ -27,7 +29,7 @@ export default function FullScreenEditor({ isOpen = true, jobId, clipIndex, clip
     const [playing, setPlaying] = useState(false);
     const [zoom, setZoom] = useState(1);
     const [selectedItem, setSelectedItem] = useState(null);
-    const [activeTrackId, setActiveTrackId] = useState(initialManifest?.active_subtitle_track_id || initialManifest?.subtitle_tracks?.[0]?.id || null);
+    const [activeTrackId, setActiveTrackId] = useState(defaultSubtitleTrackId(initialManifest));
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(null);
     const durationSeconds = editorState.durationSec || 30;
@@ -44,7 +46,7 @@ export default function FullScreenEditor({ isOpen = true, jobId, clipIndex, clip
             const versionResponse = await fetch(getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions/${currentId}`));
             const payload = await versionResponse.json();
             if (cancelled) return;
-            setVersions(history.versions || []); setVersion(payload.version); setManifest(payload.manifest); setEditorState(manifestToEditorState(payload.manifest, { fps: clip.output_fps || 30 }));
+            setVersions(history.versions || []); setVersion(payload.version); setManifest(payload.manifest); setEditorState(manifestToEditorState(payload.manifest, { fps: clip.output_fps || 30 })); setActiveTrackId(defaultSubtitleTrackId(payload.manifest));
         };
         load().catch(() => {});
         return () => { cancelled = true; };
@@ -67,6 +69,7 @@ export default function FullScreenEditor({ isOpen = true, jobId, clipIndex, clip
             setVersion(payload.version || nextVersion);
             setManifest(payload.manifest);
             setEditorState(manifestToEditorState(payload.manifest, { fps: clip.output_fps || 30 }));
+            setActiveTrackId(defaultSubtitleTrackId(payload.manifest));
             setSelectedItem(null);
         } catch { /* keep the current draft active when a historical version cannot be loaded */ }
     };
@@ -82,7 +85,7 @@ export default function FullScreenEditor({ isOpen = true, jobId, clipIndex, clip
             const response = await fetch(getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions/branch`), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version_id: versionId }) });
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.detail || 'Branch failed.');
-            setVersion(payload.version); setManifest(payload.manifest); setEditorState(manifestToEditorState(payload.manifest, { fps })); setSelectedItem(null);
+            setVersion(payload.version); setManifest(payload.manifest); setEditorState(manifestToEditorState(payload.manifest, { fps })); setActiveTrackId(defaultSubtitleTrackId(payload.manifest)); setSelectedItem(null);
         } catch (branchError) { setError(branchError.message); } finally { setBusy(false); }
     };
     const saveVersion = async () => {

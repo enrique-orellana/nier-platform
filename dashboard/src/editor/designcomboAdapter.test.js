@@ -48,4 +48,20 @@ describe('designcomboAdapter', () => {
         expect(next.layers.subtitles.cues[0]).toMatchObject({ text: 'Hello', startMs: 500, endMs: 1500 });
         expect(source.layers.subtitles.cues[0].text).toBe('Hola');
     });
+
+    it('normalizes transcript segments into the editable original subtitle track', () => {
+        const source = {
+            timeline: {
+                trim: { start_sec: 0, end_sec: 4 },
+                transcript: { language: 'it', segments: [{ start: 0.5, end: 1.5, text: 'Ciao', words: [{ start: 0.5, end: 1.5, word: 'Ciao' }] }] },
+            },
+            layers: {},
+        };
+        const state = manifestToEditorState(source);
+        expect(state.tracks.find((track) => track.id === 'subtitles-original').items[0]).toMatchObject({ text: 'Ciao', start: 0.5, end: 1.5 });
+        state.tracks.find((track) => track.id === 'subtitles-original').items[0].text = 'Hello';
+        const next = editorStateToManifest(state, source);
+        expect(next.timeline.transcript.segments[0]).toMatchObject({ text: 'Hello', start: 0.5, end: 1.5 });
+        expect(source.timeline.transcript.segments[0].text).toBe('Ciao');
+    });
 });
