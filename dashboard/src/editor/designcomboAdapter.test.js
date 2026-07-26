@@ -31,4 +31,21 @@ describe('designcomboAdapter', () => {
         const state = manifestToEditorState(manifest, { fps: 29.97 });
         expect(state.durationFrames).toBe(Math.round(12.5 * 29.97));
     });
+
+    it('normalizes legacy layer subtitles into a visible original track', () => {
+        const state = manifestToEditorState({
+            timeline: { trim: { start_sec: 0, end_sec: 4 } },
+            layers: { subtitles: { cues: [{ text: 'Hola', startMs: 500, endMs: 1500 }] } },
+        });
+        expect(state.tracks.find((track) => track.id === 'subtitles-original').items[0]).toMatchObject({ text: 'Hola', start: 0.5, end: 1.5 });
+    });
+
+    it('round-trips legacy cue edits without mutating the source manifest', () => {
+        const source = { timeline: { trim: { start_sec: 0, end_sec: 4 } }, layers: { subtitles: { cues: [{ text: 'Hola', startMs: 500, endMs: 1500 }] } } };
+        const state = manifestToEditorState(source);
+        state.tracks.find((track) => track.id === 'subtitles-original').items[0].text = 'Hello';
+        const next = editorStateToManifest(state, source);
+        expect(next.layers.subtitles.cues[0]).toMatchObject({ text: 'Hello', startMs: 500, endMs: 1500 });
+        expect(source.layers.subtitles.cues[0].text).toBe('Hola');
+    });
 });
