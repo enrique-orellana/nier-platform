@@ -19,6 +19,11 @@ const subtitleState = {
 };
 
 describe('DesignComboTimeline', () => {
+    it('extends the timeline canvas by duration and zoom for horizontal cue editing', () => {
+        render(<DesignComboTimeline state={state} onStateChange={vi.fn()} zoom={1} />);
+        expect(screen.getByTestId('timeline-canvas')).toHaveStyle({ width: '960px' });
+    });
+
     it('renders tracks and selects an item', () => {
         const onSelectItem = vi.fn();
         render(<DesignComboTimeline state={state} onStateChange={vi.fn()} onSelectItem={onSelectItem} />);
