@@ -1,4 +1,5 @@
 import os
+from dataclasses import asdict
 import uuid
 import subprocess
 import threading
@@ -18,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from render_manifest import load_manifest, save_manifest_atomic, verify_manifest_assets, calculate_revision, master_is_current
+from version_store import VersionStore
 from s3_uploader import upload_job_artifacts, delete_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
 from ai_client import AIConfig, load_ai_config, ai_config_to_env, discover_lmstudio_models
 
@@ -785,6 +787,10 @@ class ManifestPatchRequest(BaseModel):
     audio: Optional[dict] = None
 
 
+class VersionBranchRequest(BaseModel):
+    version_id: str
+
+
 def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) -> None:
     """Update the in-memory job record and persisted metadata for a clip URL."""
     job = _get_job(job_id)
@@ -823,6 +829,81 @@ def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) ->
 
     with open(metadata_path, "w") as f:
         json.dump(data, f, indent=4)
+
+
+def _clip_version_store(job_id: str, clip_index: int) -> VersionStore:
+    root = Path(OUTPUT_DIR).resolve() / job_id / "versions" / f"clip_{clip_index}"
+    return VersionStore(root)
+
+
+def _sync_clip_version_pointer(job_id: str, clip_index: int, version_id: str, output_url: str) -> None:
+    job = _get_job(job_id)
+    if not job or "result" not in job or "clips" not in job["result"]:
+        raise HTTPException(status_code=404, detail="Job not found")
+    clips = job["result"]["clips"]
+    if clip_index < 0 or clip_index >= len(clips):
+        raise HTTPException(status_code=404, detail="Clip not found")
+    clips[clip_index]["current_version_id"] = version_id
+    clips[clip_index]["video_url"] = output_url
+    clips[clip_index]["url"] = output_url
+
+    metadata_files = glob.glob(os.path.join(OUTPUT_DIR, job_id, "*_metadata.json"))
+    if not metadata_files:
+        return
+    metadata_path = metadata_files[0]
+    with open(metadata_path, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    metadata_clips = data.get("shorts", [])
+    if clip_index >= len(metadata_clips):
+        return
+    metadata_clips[clip_index]["current_version_id"] = version_id
+    metadata_clips[clip_index]["video_url"] = output_url
+    metadata_clips[clip_index]["url"] = output_url
+    data["shorts"] = metadata_clips
+    with open(metadata_path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=4)
+
+
+def _ensure_clip_versions(job_id: str, clip_index: int) -> VersionStore:
+    job = _get_job(job_id)
+    if not job or "result" not in job or "clips" not in job["result"]:
+        raise HTTPException(status_code=404, detail="Job not found")
+    clips = job["result"]["clips"]
+    if clip_index < 0 or clip_index >= len(clips):
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    store = _clip_version_store(job_id, clip_index)
+    if store.list_versions():
+        return store
+
+    clip = clips[clip_index]
+    current_url = clip.get("video_url") or clip.get("url")
+    original_url = clip.get("original_video_url") or current_url
+    manifest = {
+        "schema_version": 1,
+        "project_id": job_id,
+        "clip_index": clip_index,
+        "workflow": "long_video",
+        "assets": {},
+        "timeline": {
+            "source_video_url": original_url,
+            "trim": {
+                "start_sec": clip.get("start", 0),
+                "end_sec": clip.get("end", clip.get("duration", 0)),
+            },
+        },
+        "subtitle_tracks": clip.get("subtitle_tracks") or [],
+        "active_subtitle_track_id": clip.get("active_subtitle_track_id"),
+        "layers": clip.get("layers") or {"hook": None, "subtitles": None, "effects": None},
+        "export_policy": {"codec": "h264", "container": "mp4"},
+        "legacy": True,
+    }
+    version = store.create_version(manifest, parent_version_id=None)
+    store.update_render(version.version_id, status="done")
+    if current_url:
+        store.promote_version(version.version_id, current_url)
+        _sync_clip_version_pointer(job_id, clip_index, version.version_id, current_url)
+    return store
 
 
 @app.post("/api/edit")
@@ -1153,6 +1234,52 @@ async def update_clip_video_url(job_id: str, clip_index: int, req: UpdateClipVid
         "clip_index": clip_index,
         "video_url": req.new_video_url,
     }
+
+
+@app.get("/api/clip/{job_id}/{clip_index}/versions")
+async def list_clip_versions(job_id: str, clip_index: int):
+    store = _ensure_clip_versions(job_id, clip_index)
+    return {
+        "current_version_id": store.current_version_id,
+        "versions": [asdict(version) for version in store.list_versions()],
+    }
+
+
+@app.get("/api/clip/{job_id}/{clip_index}/versions/{version_id}")
+async def get_clip_version(job_id: str, clip_index: int, version_id: str):
+    store = _ensure_clip_versions(job_id, clip_index)
+    try:
+        version = store.load_version(version_id)
+        manifest = store.load_manifest(version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"version": asdict(version), "manifest": manifest}
+
+
+@app.post("/api/clip/{job_id}/{clip_index}/versions/branch")
+async def branch_clip_version(job_id: str, clip_index: int, req: VersionBranchRequest):
+    store = _ensure_clip_versions(job_id, clip_index)
+    try:
+        source_manifest = store.load_manifest(req.version_id)
+        version = store.create_version(source_manifest, parent_version_id=req.version_id)
+        manifest = store.load_manifest(version.version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"version": asdict(version), "manifest": manifest}
+
+
+@app.post("/api/clip/{job_id}/{clip_index}/versions/{version_id}/activate")
+async def activate_clip_version(job_id: str, clip_index: int, version_id: str):
+    store = _ensure_clip_versions(job_id, clip_index)
+    try:
+        version = store.load_version(version_id)
+        if not version.output_url:
+            raise ValueError("version has no rendered output")
+        promoted = store.promote_version(version_id, version.output_url)
+        _sync_clip_version_pointer(job_id, clip_index, version_id, version.output_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"version": asdict(promoted), "current_version_id": promoted.version_id}
 
 
 def _resolve_clip_manifest(job_id: str, clip_index: int):

@@ -1,0 +1,44 @@
+import json
+
+from fastapi.testclient import TestClient
+
+import app as app_module
+
+
+def setup_job(tmp_path, monkeypatch):
+    monkeypatch.setattr(app_module, "OUTPUT_DIR", str(tmp_path))
+    job_id = "job"
+    output_dir = tmp_path / job_id
+    output_dir.mkdir()
+    metadata = {"shorts": [{"video_url": "/videos/job/clip.mp4", "start": 0, "end": 2}]}
+    (output_dir / "job_metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+    app_module.jobs.clear()
+    app_module.jobs[job_id] = {"result": {"clips": [dict(metadata["shorts"][0])]}}
+    return job_id
+
+
+def test_get_versions_returns_migrated_legacy_version(tmp_path, monkeypatch):
+    job_id = setup_job(tmp_path, monkeypatch)
+    client = TestClient(app_module.app)
+
+    response = client.get(f"/api/clip/{job_id}/0/versions")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["versions"]) == 1
+    assert payload["current_version_id"] == payload["versions"][0]["version_id"]
+    assert payload["versions"][0]["status"] == "done"
+
+
+def test_branch_from_historical_version_creates_child(tmp_path, monkeypatch):
+    job_id = setup_job(tmp_path, monkeypatch)
+    client = TestClient(app_module.app)
+    initial = client.get(f"/api/clip/{job_id}/0/versions").json()["versions"][0]
+
+    response = client.post(
+        f"/api/clip/{job_id}/0/versions/branch",
+        json={"version_id": initial["version_id"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["version"]["parent_version_id"] == initial["version_id"]
