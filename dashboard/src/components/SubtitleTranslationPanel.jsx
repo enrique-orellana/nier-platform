@@ -4,6 +4,7 @@ import { getApiUrl } from '../config';
 import SubtitleTrackPicker from './SubtitleTrackPicker';
 
 const LANGUAGES = {
+    en: 'English',
     es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese',
     pl: 'Polish', hi: 'Hindi', ja: 'Japanese', ko: 'Korean', zh: 'Chinese',
     ar: 'Arabic', ru: 'Russian', tr: 'Turkish', nl: 'Dutch', sv: 'Swedish',
@@ -23,12 +24,13 @@ export default function SubtitleTranslationPanel({
     const [targetLanguage, setTargetLanguage] = useState('es');
     const [isTranslating, setIsTranslating] = useState(false);
     const [error, setError] = useState(null);
+    const source = tracks.find((track) => track.id === activeTrackId) || tracks[0];
+    const sourceLanguage = source?.language?.toLowerCase();
 
     const translate = async () => {
         setIsTranslating(true);
         setError(null);
         try {
-            const source = tracks.find((track) => track.id === activeTrackId) || tracks[0];
             const response = await fetch(getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions/${versionId}/subtitle-tracks/translate`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...aiHeaders },
@@ -62,9 +64,9 @@ export default function SubtitleTranslationPanel({
                     disabled={isTranslating}
                     aria-label="Target language"
                 >
-                    {Object.entries(LANGUAGES).map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+                    {Object.entries(LANGUAGES).map(([code, name]) => <option key={code} value={code} disabled={code === sourceLanguage}>{name}{code === sourceLanguage ? ' (source)' : ''}</option>)}
                 </select>
-                <button type="button" onClick={translate} disabled={isTranslating || !versionId} className="btn-primary px-3 flex items-center gap-2">
+                <button type="button" onClick={translate} disabled={isTranslating || !versionId || targetLanguage === sourceLanguage} className="btn-primary px-3 flex items-center gap-2">
                     {isTranslating ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
                     Translate
                 </button>

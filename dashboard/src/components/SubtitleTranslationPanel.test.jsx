@@ -26,4 +26,20 @@ describe('SubtitleTranslationPanel', () => {
         await waitFor(() => expect(onTrackAdded).toHaveBeenCalled());
         expect(screen.getByRole('option', { name: 'Original' })).toBeInTheDocument();
     });
+
+    it('offers English as a translation target for non-English source tracks', () => {
+        render(
+            <SubtitleTranslationPanel
+                jobId="job"
+                clipIndex={0}
+                versionId="v1"
+                tracks={[{ id: 'original', language: 'es', label: 'Original' }]}
+                activeTrackId="original"
+                onTrackAdded={vi.fn()}
+                onSelectTrack={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByRole('option', { name: 'English' })).toBeInTheDocument();
+    });
 });
