@@ -7,8 +7,8 @@ vi.mock('../../components/RemotionPreview', () => ({ default: ({ currentFrame = 
 
 const manifest = {
     timeline: { source_video_url: 'https://example.test/video.mp4', trim: { start_sec: 0, end_sec: 10 } },
-    layers: { hook: null, subtitles: null, effects: null },
-    subtitle_tracks: [],
+    layers: { hook: { text: 'Original hook', startMs: 1000, endMs: 3000 }, subtitles: null, effects: null },
+    subtitle_tracks: [{ id: 'original', label: 'Original', language: 'es', cues: [{ text: 'Hola', startMs: 1000, endMs: 2000 }] }],
 };
 
 describe('FullScreenEditor', () => {
@@ -18,5 +18,14 @@ describe('FullScreenEditor', () => {
         expect(screen.getByRole('region', { name: /timeline/i })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /next frame/i }));
         expect(screen.getByTestId('remotion-player-frame')).toHaveTextContent('1');
+    });
+
+    it('connects timeline selection to hook and subtitle inspectors', () => {
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Original hook clip' }));
+        expect(screen.getByLabelText('Text')).toHaveValue('Original hook');
+        fireEvent.click(screen.getByRole('button', { name: 'Hola clip' }));
+        expect(screen.getByRole('option', { name: 'English' })).toBeInTheDocument();
+        expect(screen.getByLabelText('Subtitle translation')).toBeInTheDocument();
     });
 });
