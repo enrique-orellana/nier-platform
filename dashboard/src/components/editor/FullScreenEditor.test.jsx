@@ -28,4 +28,18 @@ describe('FullScreenEditor', () => {
         expect(screen.getByRole('option', { name: 'English' })).toBeInTheDocument();
         expect(screen.getByLabelText('Subtitle translation')).toBeInTheDocument();
     });
+
+    it('shows and edits subtitles from the legacy layer shape', () => {
+        const legacyManifest = {
+            timeline: { source_video_url: 'https://example.test/video.mp4', trim: { start_sec: 0, end_sec: 4 } },
+            layers: { subtitles: { cues: [{ text: 'Hola', startMs: 500, endMs: 1500 }] } },
+        };
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, video_url: legacyManifest.timeline.source_video_url }} initialManifest={legacyManifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        fireEvent.doubleClick(screen.getByRole('button', { name: 'Hola clip' }));
+        const input = screen.getByRole('textbox', { name: 'Edit subtitle Hola' });
+        fireEvent.change(input, { target: { value: 'Hello' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+        expect(screen.getByRole('button', { name: 'Hello clip' })).toBeInTheDocument();
+        expect(legacyManifest.layers.subtitles.cues[0].text).toBe('Hola');
+    });
 });
