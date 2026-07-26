@@ -107,7 +107,7 @@ export default function DesignComboTimeline({ state, onStateChange, onSelectItem
         window.addEventListener('pointermove', update); window.addEventListener('pointerup', stop);
     };
     const playheadLeft = `${Math.max(0, Math.min(duration, playheadFrame / (state.fps || 30))) / duration * 100}%`;
-    return <div className="h-full overflow-auto rounded-lg border border-white/10 bg-[#101014]" ref={timelineRef}>
+    return <div data-testid="timeline-scroll" className="timeline-scroll h-full overflow-auto rounded-lg border border-white/10 bg-[#101014]" ref={timelineRef}>
         <div data-testid="timeline-canvas" className="flex flex-col" style={{ width: `${canvasWidth}px` }}>
             <div className="relative ml-40 h-8 border-b border-white/10 bg-[#151519]" style={{ width: `${laneWidth}px` }} onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); onSeek?.(Math.max(0, Math.min(duration, ((event.clientX - rect.left) / rect.width) * duration))); }}><div className="absolute top-0 bottom-0 w-px bg-red-400" style={{ left: playheadLeft }} /></div>
             {state.tracks.map((track) => <div key={track.id} className="flex h-14 border-b border-white/10"><TrackControls track={track} onChange={changeTrack} /><div className="relative shrink-0 bg-[#111115]" style={{ width: `${laneWidth}px` }}>{track.items.map((item) => renderItem(track, item))}</div></div>)}

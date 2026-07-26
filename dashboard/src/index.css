@@ -56,6 +56,23 @@ select.input-field option {
   background: rgba(255, 255, 255, 0.2);
 }
 
+/* The timeline remains scrollable, but scrollbar chrome is hidden to keep the editor clean. */
+.timeline-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.timeline-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Full-screen editor's timeline shell must not become a second scroll container. */
+section[aria-label="Timeline"] > div {
+  overflow: hidden;
+}
+
 /* Custom Animations */
 @keyframes scan {
   0% {
