@@ -43,3 +43,4 @@ output/
 skills/
 skills-lock.json
 .playwright-mcp
+.superpowers/
