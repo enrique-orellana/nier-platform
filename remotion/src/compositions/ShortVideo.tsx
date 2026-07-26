@@ -19,7 +19,8 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
       <VideoEffects config={effects}>
         <Video
           src={videoUrl}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          style={{ width: "100%", height: "100%" }}
+          objectFit="cover"
         />
       </VideoEffects>
 
