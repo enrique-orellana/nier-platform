@@ -18,6 +18,7 @@ describe('FullScreenEditor', () => {
         render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
         expect(screen.getByRole('heading', { name: /media pool/i })).toBeInTheDocument();
         expect(screen.getByRole('region', { name: /timeline/i })).toBeInTheDocument();
+        expect(screen.getByLabelText('Subtitle translation')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /next frame/i }));
         expect(screen.getByTestId('remotion-player-frame')).toHaveTextContent('1');
     });

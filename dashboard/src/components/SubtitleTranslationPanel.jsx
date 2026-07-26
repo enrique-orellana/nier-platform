@@ -26,6 +26,7 @@ export default function SubtitleTranslationPanel({
     const [error, setError] = useState(null);
     const source = tracks.find((track) => track.id === activeTrackId) || tracks[0];
     const sourceLanguage = source?.language?.toLowerCase();
+    const sourceCueCount = (source?.cues || source?.captions || []).length;
 
     useEffect(() => {
         setTargetLanguage(sourceLanguage === 'en' ? 'es' : 'en');
@@ -58,7 +59,7 @@ export default function SubtitleTranslationPanel({
                 <Languages size={16} className="text-cyan-400" />
                 <div>
                     <h3 className="text-sm font-semibold text-white">Subtitle languages</h3>
-                    <p className="text-[11px] text-zinc-500">Translates text only. Audio stays unchanged.</p>
+                    <p className="text-[11px] text-zinc-500">Translates all {sourceCueCount} cues in the selected track. Audio stays unchanged.</p>
                 </div>
             </div>
             <SubtitleTrackPicker tracks={tracks} activeTrackId={activeTrackId} onSelect={onSelectTrack} />
@@ -72,9 +73,9 @@ export default function SubtitleTranslationPanel({
                 >
                     {Object.entries(LANGUAGES).map(([code, name]) => <option key={code} value={code} disabled={code === sourceLanguage}>{name}{code === sourceLanguage ? ' (source)' : ''}</option>)}
                 </select>
-                <button type="button" onClick={translate} disabled={isTranslating || !versionId || targetLanguage === sourceLanguage} className="btn-primary px-3 flex items-center gap-2">
+                <button type="button" onClick={translate} disabled={isTranslating || !versionId || !sourceCueCount || targetLanguage === sourceLanguage} className="btn-primary px-3 flex items-center gap-2" aria-label="Translate entire track">
                     {isTranslating ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
-                    Translate
+                    Translate entire track
                 </button>
             </div>
             {error && <p className="text-xs text-red-300" role="alert">{error}</p>}

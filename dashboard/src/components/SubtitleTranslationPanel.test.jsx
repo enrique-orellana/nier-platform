@@ -14,7 +14,7 @@ describe('SubtitleTranslationPanel', () => {
                 jobId="job"
                 clipIndex={0}
                 versionId="v1"
-                tracks={[{ id: 'original', language: 'en', label: 'Original' }]}
+                tracks={[{ id: 'original', language: 'en', label: 'Original', cues: [{ text: 'One' }, { text: 'Two' }] }]}
                 activeTrackId="original"
                 aiHeaders={{ 'X-AI-Api-Key': 'test' }}
                 onTrackAdded={onTrackAdded}
@@ -22,7 +22,8 @@ describe('SubtitleTranslationPanel', () => {
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: /translate/i }));
+        expect(screen.getByText(/Translates all 2 cues in the selected track/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Translate entire track' }));
         await waitFor(() => expect(onTrackAdded).toHaveBeenCalled());
         expect(screen.getByRole('option', { name: 'Original' })).toBeInTheDocument();
     });
