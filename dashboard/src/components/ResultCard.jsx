@@ -507,6 +507,27 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
         }
     };
 
+    const handleDownload = async (event) => {
+        event?.preventDefault?.();
+        try {
+            const response = await fetch(currentVideoUrl);
+            if (!response.ok) throw new Error('Download failed');
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.style.display = 'none';
+            anchor.href = url;
+            anchor.download = `clip-${index + 1}.mp4`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(anchor);
+        } catch (error) {
+            console.error('Download error:', error);
+            window.open(currentVideoUrl, '_blank');
+        }
+    };
+
     return (
         <div className="bg-surface border border-white/5 rounded-2xl overflow-hidden flex flex-col group hover:border-white/10 transition-all animate-[fadeIn_0.5s_ease-out] h-full" style={{ animationDelay: `${index * 0.1}s` }}>
             <VideoPreview
@@ -536,10 +557,9 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     setShowTranslateModal={setShowTranslateModal}
                     isTranslating={isTranslating}
                     setShowModal={setShowModal}
-                    currentVideoUrl={currentVideoUrl}
-                    index={index}
                     editError={editError}
                     setShowClipEditor={setShowClipEditor}
+                    handleDownload={handleDownload}
                 />
             </div>
 
@@ -600,6 +620,21 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 clipIndex={index}
                 aiHeaders={getAiHeaders ? getAiHeaders('json') : {}}
                 onRendered={(url) => applyRenderedVideoUrl(url, { persist: true })}
+                editorActions={{
+                    onAutoEdit: handleAutoEdit,
+                    isEditing,
+                    onConvertNativeShort: handleConvertNativeShort,
+                    isConvertingNativeShort,
+                    onSubtitles: () => setShowSubtitleModal(true),
+                    isSubtitling,
+                    onViralHook: () => setShowHookModal(true),
+                    isHooking,
+                    onDubVoice: () => setShowTranslateModal(true),
+                    isTranslating,
+                    onPost: () => setShowModal(true),
+                    onDownload: handleDownload,
+                    editError,
+                }}
             />
         </div>
     );

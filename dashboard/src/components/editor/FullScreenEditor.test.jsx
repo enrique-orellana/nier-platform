@@ -64,6 +64,14 @@ describe('FullScreenEditor', () => {
         expect(screen.getByRole('button', { name: 'Add subtitle cue' })).toBeInTheDocument();
     });
 
+    it('renders the complete action toolbar when opened from a result card', () => {
+        const editorActions = Object.fromEntries(['onAutoEdit', 'onConvertNativeShort', 'onSubtitles', 'onViralHook', 'onDubVoice', 'onPost', 'onDownload'].map((name) => [name, vi.fn()]));
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} editorActions={editorActions} onClose={vi.fn()} />);
+        expect(screen.getByRole('region', { name: 'Editor actions' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Auto Edit' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
+    });
+
     it('shows and edits subtitles from the legacy layer shape', () => {
         const legacyManifest = {
             timeline: { source_video_url: 'https://example.test/video.mp4', trim: { start_sec: 0, end_sec: 4 } },
