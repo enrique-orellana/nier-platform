@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { X, Save } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Download, X, Save } from "lucide-react";
 import { getApiUrl } from "../../config";
 import RemotionPreview from "../RemotionPreview";
 import {
   manifestToEditorState,
   editorStateToManifest,
   manifestWithTranscriptCaptions,
+  manifestToRenderProps,
 } from "../../editor/designcomboAdapter";
 import { createSubtitleCue } from "../../editor/timelineModel";
 import TransportControls from "./TransportControls";
@@ -43,6 +44,7 @@ export default function FullScreenEditor({
   onClose,
   onRendered,
   editorActions = null,
+  onSessionReady,
 }) {
   const [version, setVersion] = useState(initialVersion);
   const [manifest, setManifest] = useState(initialManifest);
@@ -139,23 +141,42 @@ export default function FullScreenEditor({
       editorState,
       manifest || initialManifest || {},
     );
-    return {
-      videoUrl: proxyUrl(
-        nextManifest.timeline?.source_video_url || clip.video_url,
-      ),
-      subtitles: nextManifest.layers?.subtitles || null,
-      subtitleTracks: nextManifest.subtitle_tracks || [],
-      activeSubtitleTrackId: nextManifest.active_subtitle_track_id || null,
-      hook: nextManifest.layers?.hook || null,
-      effects: nextManifest.layers?.effects || null,
-    };
-  }, [clip.video_url, editorState, initialManifest, manifest]);
+    return { ...manifestToRenderProps(nextManifest, { activeSubtitleTrackId: activeTrackId }), videoUrl: proxyUrl(nextManifest.timeline?.source_video_url || clip.video_url) };
+  }, [activeTrackId, clip.video_url, editorState, initialManifest, manifest]);
 
   const currentManifest = useMemo(
-    () => editorStateToManifest(editorState, manifest || initialManifest || {}),
-    [editorState, initialManifest, manifest],
+    () => ({ ...editorStateToManifest(editorState, manifest || initialManifest || {}), active_subtitle_track_id: activeTrackId || null }),
+    [activeTrackId, editorState, initialManifest, manifest],
   );
-  const subtitleTracks = currentManifest.subtitle_tracks || [];
+  const currentManifestRef = useRef(currentManifest);
+  useEffect(() => {
+    currentManifestRef.current = currentManifest;
+  }, [currentManifest]);
+  const subtitleTracks = useMemo(() => currentManifest.subtitle_tracks || [], [currentManifest]);
+  const applyLayer = useCallback((type, value) => {
+    const base = currentManifestRef.current;
+    const next = { ...base, layers: { ...(base.layers || {}), [type]: value } };
+    if (type === "subtitles" && value) {
+      const trackId = activeTrackId || subtitleTracks[0]?.id || "original";
+      const existingTracks = base.subtitle_tracks || [];
+      const existing = existingTracks.find((track) => track.id === trackId) || { id: trackId, language: "und", label: "Original", origin: "manual" };
+      const cues = (value.captions || []).map((caption) => ({ text: caption.text || "", startMs: Number(caption.startMs || 0), endMs: Number(caption.endMs || caption.startMs || 0), captions: [{ ...caption }] }));
+      next.subtitle_tracks = [...existingTracks.filter((track) => track.id !== trackId), { ...existing, cues, captions: cues.flatMap((cue) => cue.captions), style: value.style || existing.style }];
+      next.active_subtitle_track_id = trackId;
+    }
+    currentManifestRef.current = next;
+    setManifest(next);
+    setEditorState(manifestToEditorState(next, { fps }));
+    if (type === "subtitles") setActiveTrackId(next.active_subtitle_track_id);
+  }, [activeTrackId, fps, subtitleTracks]);
+  const setSourceVideo = useCallback((url) => {
+    if (!url) return;
+    const base = currentManifestRef.current;
+    const next = { ...base, timeline: { ...(base.timeline || {}), source_video_url: url } };
+    currentManifestRef.current = next;
+    setManifest(next);
+    setEditorState(manifestToEditorState(next, { fps }));
+  }, [fps]);
   const updateSelectedItem = (nextItem) => {
     if (nextItem.__delete) {
       deleteSelectedItem(nextItem);
@@ -288,7 +309,7 @@ export default function FullScreenEditor({
       setBusy(false);
     }
   };
-  const saveVersion = async () => {
+  const saveVersion = useCallback(async () => {
     if (!version?.version_id || busy) return;
     setBusy(true);
     setError(null);
@@ -317,7 +338,33 @@ export default function FullScreenEditor({
         result.error || "Render failed. The previous version is still active.",
       );
     setBusy(false);
+  }, [activeTrackId, busy, clip.output_height, clip.output_width, clipIndex, currentManifest, editorState.durationFrames, fps, inputProps, jobId, onRendered, version]);
+
+  const downloadVersion = async () => {
+    if (!version?.output_url || version.status !== "done") return;
+    const outputUrl = getApiUrl(version.output_url);
+    try {
+      const response = await fetch(outputUrl);
+      if (!response.ok) throw new Error("Download failed");
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `clip-${Number(clipIndex) + 1}-${version.version_id.slice(0, 8)}.mp4`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.URL.revokeObjectURL(objectUrl);
+    } catch {
+      window.open(outputUrl, "_blank");
+    }
   };
+
+  useEffect(() => {
+    if (!isOpen || !onSessionReady) return undefined;
+    onSessionReady({ applyLayer, setSourceVideo, save: saveVersion, getManifest: () => currentManifestRef.current });
+    return () => onSessionReady(null);
+  }, [applyLayer, currentManifest, isOpen, onSessionReady, saveVersion, setSourceVideo]);
 
   if (!isOpen) return null;
   return (
@@ -457,6 +504,15 @@ export default function FullScreenEditor({
         >
           {error}
         </span>
+        <button
+          type="button"
+          onClick={downloadVersion}
+          disabled={!version?.output_url || version.status !== "done" || busy}
+          aria-label="Download saved version"
+          className="rounded-xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-zinc-300 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Download size={16} className="mr-2 inline" /> Download version
+        </button>
         <button
           type="button"
           onClick={onClose}

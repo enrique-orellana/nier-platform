@@ -1,5 +1,28 @@
 const clone = (value) => JSON.parse(JSON.stringify(value ?? {}));
 
+const trackCaptions = (track) => (track?.captions || track?.cues || []).map((cue) => ({
+    text: cue.text || cue.word || '',
+    startMs: Number(cue.startMs || 0),
+    endMs: Number(cue.endMs || cue.startMs || 0),
+}));
+
+export function manifestToRenderProps(manifest = {}, { activeSubtitleTrackId = manifest.active_subtitle_track_id || null } = {}) {
+    const subtitleTracks = Array.isArray(manifest.subtitle_tracks) ? manifest.subtitle_tracks : [];
+    const activeTrack = subtitleTracks.find((track) => track.id === activeSubtitleTrackId) || null;
+    const subtitles = activeTrack
+        ? { ...(clone(manifest.layers?.subtitles) || {}), captions: trackCaptions(activeTrack), style: activeTrack.style || manifest.layers?.subtitles?.style }
+        : null;
+    return {
+        videoUrl: manifest.timeline?.source_video_url || '',
+        subtitles,
+        subtitleTracks,
+        activeSubtitleTrackId: activeTrack?.id || null,
+        hook: manifest.layers?.hook || null,
+        effects: manifest.layers?.effects || null,
+        audio: manifest.layers?.audio || null,
+    };
+}
+
 export function manifestWithTranscriptCaptions(manifest, transcript) {
     if (!transcript?.captions?.length || manifest?.timeline?.transcript?.segments?.length) return manifest;
     if (Array.isArray(manifest?.subtitle_tracks) && manifest.subtitle_tracks.length) return manifest;

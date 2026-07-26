@@ -75,6 +75,30 @@ describe('FullScreenEditor', () => {
         expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
     });
 
+    it('exposes a draft session that accumulates effects and optional subtitle tracks', async () => {
+        let session;
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }} initialManifest={{ ...manifest, subtitle_tracks: [], layers: { hook: manifest.layers.hook, effects: null, subtitles: null } }} initialVersion={{ version_id: 'v1', status: 'done', output_url: '/videos/job/v1.mp4' }} onSessionReady={(api) => { session = api; }} onClose={vi.fn()} />);
+        await waitFor(() => expect(session).toBeTruthy());
+        session.applyLayer('effects', { segments: [{ startSec: 0, endSec: 2, zoom: 1.1 }] });
+        session.applyLayer('subtitles', { captions: [{ text: 'Hello', startMs: 500, endMs: 1200 }], style: { animation: 'pop' } });
+        expect(session.getManifest()).toMatchObject({ layers: { hook: { text: 'Original hook' }, effects: { segments: [{ startSec: 0, endSec: 2, zoom: 1.1 }] }, subtitles: { style: { animation: 'pop' } } }, subtitle_tracks: [{ id: 'original', cues: [{ text: 'Hello', startMs: 500, endMs: 1200 }] }], active_subtitle_track_id: 'original' });
+    });
+
+    it('downloads the exact completed version output', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(['video']) });
+        vi.stubGlobal('fetch', fetchMock);
+        Object.defineProperty(window.URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:download') });
+        Object.defineProperty(window.URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+        const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+        const appendChild = vi.spyOn(document.body, 'appendChild');
+        render(<FullScreenEditor jobId="job" clipIndex={2} clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'version-123456', status: 'done', output_url: '/videos/job/version-123456.mp4' }} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: /download saved version/i }));
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/videos/job/version-123456.mp4'));
+        expect(appendChild.mock.calls.some(([node]) => node?.download === 'clip-3-version-.mp4')).toBe(true);
+        anchorClick.mockRestore();
+        appendChild.mockRestore();
+    });
+
     it('shows and edits subtitles from the legacy layer shape', () => {
         const legacyManifest = {
             timeline: { source_video_url: 'https://example.test/video.mp4', trim: { start_sec: 0, end_sec: 4 } },

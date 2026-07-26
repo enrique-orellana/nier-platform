@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { editorStateToManifest, manifestToEditorState } from './designcomboAdapter';
+import { editorStateToManifest, manifestToEditorState, manifestToRenderProps } from './designcomboAdapter';
 import { createSubtitleCue } from './timelineModel';
 
 const manifest = {
@@ -75,5 +75,16 @@ describe('designcomboAdapter', () => {
         const next = editorStateToManifest(state, source);
         expect(next.subtitle_tracks[0].cues.at(-1)).toMatchObject({ text: '', startMs: 3000, endMs: 5000 });
         expect(next.subtitle_tracks[0].captions.at(-1)).toMatchObject({ text: '', startMs: 3000, endMs: 5000 });
+    });
+
+    it('renders no subtitles when no track is selected', () => {
+        const source = { timeline: { source_video_url: '/videos/source.mp4' }, layers: { subtitles: null }, subtitle_tracks: [] };
+        expect(manifestToRenderProps(source).subtitles).toBeNull();
+    });
+
+    it('renders captions from only the selected subtitle track', () => {
+        const props = manifestToRenderProps({ ...manifest, active_subtitle_track_id: 'es' });
+        expect(props.activeSubtitleTrackId).toBe('es');
+        expect(props.subtitles.captions).toEqual([{ text: 'Hola', startMs: 1200, endMs: 2400 }]);
     });
 });
