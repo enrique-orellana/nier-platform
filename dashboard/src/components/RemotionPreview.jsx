@@ -43,6 +43,22 @@ export default function RemotionPreview({
         else playerRef.current?.pause?.();
     }, [playing]);
 
+    useEffect(() => {
+        const player = playerRef.current;
+        if (!player) return undefined;
+        const onFrameUpdate = (event) => onFrameChange?.(event.detail.frame);
+        const onPlay = () => onPlayingChange?.(true);
+        const onPause = () => onPlayingChange?.(false);
+        player.addEventListener('frameupdate', onFrameUpdate);
+        player.addEventListener('play', onPlay);
+        player.addEventListener('pause', onPause);
+        return () => {
+            player.removeEventListener('frameupdate', onFrameUpdate);
+            player.removeEventListener('play', onPlay);
+            player.removeEventListener('pause', onPause);
+        };
+    }, [onFrameChange, onPlayingChange]);
+
     const inputProps = useMemo(
         () => ({
             videoUrl,
@@ -76,9 +92,6 @@ export default function RemotionPreview({
                 controls
                 autoPlay={playing}
                 loop
-                onFrameUpdate={onFrameChange}
-                onPlay={() => onPlayingChange?.(true)}
-                onPause={() => onPlayingChange?.(false)}
                 acknowledgeRemotionLicense={true}
             />
         </div>

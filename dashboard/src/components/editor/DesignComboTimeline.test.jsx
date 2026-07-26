@@ -44,6 +44,14 @@ describe('DesignComboTimeline', () => {
         expect(onSelectItem).toHaveBeenCalledWith(expect.objectContaining({ id: 'cue-1', type: 'subtitle' }), expect.objectContaining({ type: 'subtitle' }));
     });
 
+    it('keeps the playhead visible while the player advances', () => {
+        const { rerender } = render(<DesignComboTimeline state={state} onStateChange={vi.fn()} playheadFrame={0} zoom={2} />);
+        const scroll = screen.getByTestId('timeline-scroll');
+        Object.defineProperty(scroll, 'clientWidth', { configurable: true, value: 400 });
+        rerender(<DesignComboTimeline state={state} onStateChange={vi.fn()} playheadFrame={270} zoom={2} />);
+        expect(scroll.scrollLeft).toBeGreaterThan(0);
+    });
+
     it('moves an item through pointer interaction and snaps to frames', () => {
         const onStateChange = vi.fn();
         render(<DesignComboTimeline state={state} onStateChange={onStateChange} onSelectItem={vi.fn()} />);

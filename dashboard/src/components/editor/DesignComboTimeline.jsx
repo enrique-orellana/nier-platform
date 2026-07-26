@@ -64,6 +64,16 @@ export default function DesignComboTimeline({ state, onStateChange, onSelectItem
     const laneWidth = Math.max(1, duration * pixelsPerSecond);
     const canvasWidth = Math.max(760, TRACK_CONTROLS_WIDTH + laneWidth);
     useEffect(() => {
+        const container = timelineRef.current;
+        if (!container?.clientWidth) return;
+        const playheadX = TRACK_CONTROLS_WIDTH + (Math.max(0, Math.min(duration, playheadFrame / (state.fps || 30))) * pixelsPerSecond);
+        const visibleStart = container.scrollLeft + TRACK_CONTROLS_WIDTH;
+        const visibleEnd = container.scrollLeft + container.clientWidth - 24;
+        if (playheadX < visibleStart || playheadX > visibleEnd) {
+            container.scrollLeft = Math.max(0, playheadX - container.clientWidth * 0.5);
+        }
+    }, [duration, pixelsPerSecond, playheadFrame, state.fps]);
+    useEffect(() => {
         if (!stateManagerRef.current) {
             stateManagerRef.current = new StateManager(toDesignComboState(state));
         } else {
