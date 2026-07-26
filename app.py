@@ -795,6 +795,9 @@ def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) ->
     if clip_index < 0 or clip_index >= len(clips):
         raise HTTPException(status_code=404, detail="Clip not found")
 
+    if "original_video_url" not in clips[clip_index]:
+        clips[clip_index]["original_video_url"] = clips[clip_index].get("video_url")
+
     clips[clip_index]["video_url"] = new_video_url
     clips[clip_index]["url"] = new_video_url
 
@@ -810,6 +813,9 @@ def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) ->
     metadata_clips = data.get("shorts", [])
     if clip_index < 0 or clip_index >= len(metadata_clips):
         raise HTTPException(status_code=404, detail="Clip not found")
+
+    if "original_video_url" not in metadata_clips[clip_index]:
+        metadata_clips[clip_index]["original_video_url"] = metadata_clips[clip_index].get("video_url")
 
     metadata_clips[clip_index]["video_url"] = new_video_url
     metadata_clips[clip_index]["url"] = new_video_url

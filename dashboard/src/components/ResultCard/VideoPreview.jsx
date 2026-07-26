@@ -1,9 +1,10 @@
-import React from 'react';
-import { Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Loader2, ArrowLeftRight } from 'lucide-react';
 
 export default function VideoPreview({ 
     videoRef, 
     currentVideoUrl, 
+    trueOriginalUrl,
     index, 
     isEditing, 
     isConvertingNativeShort, 
@@ -12,11 +13,23 @@ export default function VideoPreview({
     onPause, 
     clip 
 }) {
+    const hasEdits = trueOriginalUrl && currentVideoUrl && trueOriginalUrl !== currentVideoUrl;
+    const [viewOriginal, setViewOriginal] = useState(false);
+
+    // Automatically switch to the edited view if the video URL changes (e.g., after an edit finishes)
+    useEffect(() => {
+        if (currentVideoUrl) {
+            setViewOriginal(false);
+        }
+    }, [currentVideoUrl]);
+
+    const displayUrl = (hasEdits && viewOriginal) ? trueOriginalUrl : currentVideoUrl;
+
     return (
         <div className="w-full bg-black relative shrink-0 aspect-[9/16] group/video">
             <video
                 ref={videoRef}
-                src={currentVideoUrl}
+                src={displayUrl}
                 controls
                 className="w-full h-full object-cover"
                 playsInline
@@ -37,6 +50,23 @@ export default function VideoPreview({
                     Clip {index + 1}
                 </span>
             </div>
+            
+            {hasEdits && (
+                <div className="absolute top-3 right-3">
+                    <button
+                        onClick={() => setViewOriginal(!viewOriginal)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide border transition-all backdrop-blur-md ${
+                            viewOriginal 
+                                ? 'bg-zinc-800/80 text-zinc-300 border-zinc-700/50 hover:bg-zinc-700/80' 
+                                : 'bg-primary/80 text-white border-primary/50 hover:bg-primary/90'
+                        }`}
+                        title="Toggle before/after"
+                    >
+                        <ArrowLeftRight size={12} />
+                        {viewOriginal ? 'Original' : 'Edited'}
+                    </button>
+                </div>
+            )}
 
             {/* Auto Edit Overlay if Processing */}
             {(isEditing || isConvertingNativeShort || isQualityImproving) && (

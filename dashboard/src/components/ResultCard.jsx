@@ -40,7 +40,8 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     const [showModal, setShowModal] = useState(false);
     const [showSubtitleModal, setShowSubtitleModal] = useState(false);
     const videoRef = React.useRef(null);
-    const originalVideoUrl = getApiUrl(clip.video_url); // Never changes — used for Remotion previews
+    const trueOriginalUrl = toProxiedVideoUrl(getApiUrl(clip.original_video_url || clip.video_url)); // The absolute, unedited original
+    const originalVideoUrl = toProxiedVideoUrl(getApiUrl(clip.video_url)); // Never changes — used for Remotion previews
     const [currentVideoUrl, setCurrentVideoUrl] = useState(originalVideoUrl);
     const [persistedVideoUrl, setPersistedVideoUrl] = useState(originalVideoUrl);
     const lastObjectUrlRef = React.useRef(null);
@@ -509,6 +510,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             <VideoPreview
                 videoRef={videoRef}
                 currentVideoUrl={currentVideoUrl}
+                trueOriginalUrl={trueOriginalUrl}
                 index={index}
                 isEditing={isEditing}
                 isConvertingNativeShort={isConvertingNativeShort}
