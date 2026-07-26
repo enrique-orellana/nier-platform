@@ -73,8 +73,16 @@ export default function FullScreenEditor({ isOpen = true, jobId, clipIndex, clip
     const currentManifest = useMemo(() => editorStateToManifest(editorState, manifest || initialManifest || {}), [editorState, initialManifest, manifest]);
     const subtitleTracks = currentManifest.subtitle_tracks || [];
     const updateSelectedItem = (nextItem) => {
+        if (nextItem.__delete) {
+            deleteSelectedItem(nextItem);
+            return;
+        }
         setSelectedItem(nextItem);
         setEditorState((previous) => ({ ...previous, tracks: previous.tracks.map((track) => ({ ...track, items: track.items.map((item) => item.id === nextItem.id ? nextItem : item) })) }));
+    };
+    const deleteSelectedItem = (item) => {
+        setEditorState((previous) => ({ ...previous, tracks: previous.tracks.map((track) => ({ ...track, items: track.items.filter((candidate) => candidate.id !== item.id) })) }));
+        setSelectedItem(null);
     };
     const loadVersion = async (nextVersion) => {
         if (!nextVersion?.version_id) return;

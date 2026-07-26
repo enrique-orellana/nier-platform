@@ -38,6 +38,14 @@ describe('FullScreenEditor', () => {
         const text = screen.getByLabelText('Text');
         fireEvent.change(text, { target: { value: 'Piano corrected' } });
         expect(text).toHaveValue('Piano corrected');
+        expect(screen.getByRole('button', { name: 'Piano corrected clip' })).toBeInTheDocument();
+    });
+
+    it('deletes the selected subtitle cue from the timeline', () => {
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Hola clip' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delete subtitle cue' }));
+        expect(screen.queryByRole('button', { name: 'Hola clip' })).not.toBeInTheDocument();
     });
 
     it('shows and edits subtitles from the legacy layer shape', () => {

@@ -68,10 +68,11 @@ export default function ClipEditor({ isOpen, onClose, clip, jobId, clipIndex, ai
         setSelectedCue((previous) => previous ? { ...previous, ...cue } : cue);
         const nextTracks = tracks.map((track) => {
             if (track.id !== activeTrack.id) return track;
-            const nextCues = (track.cues || track.captions).map((item, i) => (item.id === cue.id || i === selectedCue?.index) ? { ...item, ...cue } : item);
+            const nextCues = (track.cues || track.captions).filter((item, i) => !(cue.__delete && (item.id === cue.id || i === selectedCue?.index))).map((item, i) => (item.id === cue.id || i === selectedCue?.index) ? { ...item, ...cue } : item);
             return { ...track, cues: nextCues, captions: nextCues.flatMap((item) => item.captions?.length ? item.captions : [{ text: item.text || '', startMs: item.startMs, endMs: item.endMs }]) };
         });
         updateDraft({ subtitle_tracks: nextTracks, active_subtitle_track_id: activeTrack.id });
+        if (cue.__delete) setSelectedCue(null);
     };
     const handleCueChange = (next, index) => {
         const track = tracks.find((item) => item.id === activeTrackId) || tracks[0];
