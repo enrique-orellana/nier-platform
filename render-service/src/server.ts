@@ -35,6 +35,9 @@ const renderRequestSchema = z.object({
     subtitles: z.any().nullable().optional(),
     hook: z.any().nullable().optional(),
     effects: z.any().nullable().optional(),
+    versionId: z.string().min(1).optional(),
+    manifestPath: z.string().min(1).optional(),
+    manifestRevision: z.string().min(1).optional(),
   }),
 });
 
@@ -106,6 +109,9 @@ app.post("/render", (req, res) => {
       subtitles: props.subtitles ?? null,
       hook: props.hook ?? null,
       effects: props.effects ?? null,
+      versionId: props.versionId,
+      manifestPath: props.manifestPath,
+      manifestRevision: props.manifestRevision,
     },
   }).catch((err) => {
     console.error(`[render] Unhandled error for ${renderId}:`, err);

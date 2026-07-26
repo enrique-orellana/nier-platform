@@ -791,6 +791,20 @@ class VersionBranchRequest(BaseModel):
     version_id: str
 
 
+class VersionCreateRequest(BaseModel):
+    manifest: dict
+    parent_version_id: Optional[str] = None
+
+
+class VersionRenderRequest(BaseModel):
+    props: dict
+
+
+class VersionRenderCompletionRequest(BaseModel):
+    output_url: Optional[str] = None
+    error: Optional[str] = None
+
+
 def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) -> None:
     """Update the in-memory job record and persisted metadata for a clip URL."""
     job = _get_job(job_id)
@@ -1266,6 +1280,67 @@ async def branch_clip_version(job_id: str, clip_index: int, req: VersionBranchRe
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"version": asdict(version), "manifest": manifest}
+
+
+@app.post("/api/clip/{job_id}/{clip_index}/versions")
+async def create_clip_version(job_id: str, clip_index: int, req: VersionCreateRequest):
+    store = _ensure_clip_versions(job_id, clip_index)
+    try:
+        version = store.create_version(req.manifest, parent_version_id=req.parent_version_id)
+        manifest = store.load_manifest(version.version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"version": asdict(version), "manifest": manifest}
+
+
+@app.post("/api/clip/{job_id}/{clip_index}/versions/{version_id}/render")
+async def render_clip_version(job_id: str, clip_index: int, version_id: str, req: VersionRenderRequest):
+    store = _ensure_clip_versions(job_id, clip_index)
+    try:
+        version = store.load_version(version_id)
+        manifest = store.load_manifest(version_id)
+        if manifest.get("manifest_revision") != version.manifest_revision:
+            raise ValueError("manifest revision mismatch")
+        store.update_render(version_id, status="rendering")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    import httpx
+
+    props = dict(req.props)
+    props["versionId"] = version_id
+    props["manifestRevision"] = version.manifest_revision
+    body = {
+        "jobId": job_id,
+        "clipIndex": clip_index,
+        "props": props,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(f"{RENDER_SERVICE_URL}/render", json=body)
+            response.raise_for_status()
+            return response.json()
+    except Exception as exc:
+        store.update_render(version_id, status="failed", error=str(exc))
+        raise HTTPException(status_code=502, detail=f"Render service unavailable: {exc}") from exc
+
+
+@app.post("/api/clip/{job_id}/{clip_index}/versions/{version_id}/complete")
+async def complete_clip_version(job_id: str, clip_index: int, version_id: str, req: VersionRenderCompletionRequest):
+    store = _ensure_clip_versions(job_id, clip_index)
+    try:
+        store.load_version(version_id)
+        if req.error:
+            failed = store.update_render(version_id, status="failed", error=req.error)
+            return {"version": asdict(failed), "current_version_id": store.current_version_id}
+        if not req.output_url:
+            raise ValueError("output URL is required")
+        store.update_render(version_id, status="done")
+        promoted = store.promote_version(version_id, req.output_url)
+        _sync_clip_version_pointer(job_id, clip_index, version_id, req.output_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"version": asdict(promoted), "current_version_id": promoted.version_id}
 
 
 @app.post("/api/clip/{job_id}/{clip_index}/versions/{version_id}/activate")

@@ -42,3 +42,26 @@ def test_branch_from_historical_version_creates_child(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["version"]["parent_version_id"] == initial["version_id"]
+
+
+def test_completed_version_becomes_current_without_deleting_parent(tmp_path, monkeypatch):
+    job_id = setup_job(tmp_path, monkeypatch)
+    client = TestClient(app_module.app)
+    initial = client.get(f"/api/clip/{job_id}/0/versions").json()["versions"][0]
+    manifest = client.get(
+        f"/api/clip/{job_id}/0/versions/{initial['version_id']}"
+    ).json()["manifest"]
+
+    created = client.post(
+        f"/api/clip/{job_id}/0/versions",
+        json={"manifest": manifest, "parent_version_id": initial["version_id"]},
+    ).json()["version"]
+    completed = client.post(
+        f"/api/clip/{job_id}/0/versions/{created['version_id']}/complete",
+        json={"output_url": "/videos/job/master-child.mp4"},
+    )
+
+    assert completed.status_code == 200
+    assert completed.json()["current_version_id"] == created["version_id"]
+    versions = client.get(f"/api/clip/{job_id}/0/versions").json()["versions"]
+    assert {item["version_id"] for item in versions} == {initial["version_id"], created["version_id"]}
