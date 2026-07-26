@@ -37,8 +37,17 @@ class VersionStore:
     def current_version_id(self) -> str | None:
         return self._read_index()["current_version_id"]
 
+    @staticmethod
+    def _validate_id(version_id: str) -> str:
+        try:
+            return str(uuid.UUID(str(version_id)))
+        except (ValueError, AttributeError, TypeError) as exc:
+            raise ValueError("invalid version id") from exc
+
     def create_version(self, manifest: dict[str, Any], parent_version_id: str | None) -> VersionRecord:
         index = self._read_index()
+        if parent_version_id is not None:
+            parent_version_id = self._validate_id(parent_version_id)
         if parent_version_id is not None and parent_version_id not in index["versions"]:
             raise ValueError("parent version does not exist")
 
@@ -66,12 +75,14 @@ class VersionStore:
         return record
 
     def load_version(self, version_id: str) -> VersionRecord:
+        version_id = self._validate_id(version_id)
         record = self._read_index()["versions"].get(version_id)
         if record is None:
             raise ValueError("version does not exist")
         return self._record_from_dict(record)
 
     def load_manifest(self, version_id: str) -> dict[str, Any]:
+        version_id = self._validate_id(version_id)
         self.load_version(version_id)
         path = self.versions_dir / f"{version_id}.json"
         if not path.is_file():
@@ -85,6 +96,7 @@ class VersionStore:
     def update_render(self, version_id: str, status: str, error: str | None = None) -> VersionRecord:
         if status not in {"pending", "rendering", "done", "failed"}:
             raise ValueError("invalid render status")
+        version_id = self._validate_id(version_id)
         index = self._read_index()
         record = index["versions"].get(version_id)
         if record is None:
@@ -97,6 +109,7 @@ class VersionStore:
     def promote_version(self, version_id: str, output_url: str) -> VersionRecord:
         if not output_url:
             raise ValueError("successful version requires an output URL")
+        version_id = self._validate_id(version_id)
         index = self._read_index()
         record = index["versions"].get(version_id)
         if record is None:

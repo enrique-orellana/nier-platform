@@ -32,7 +32,7 @@ export default function SubtitleTranslationPanel({
             const response = await fetch(getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions/${versionId}/subtitle-tracks/translate`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...aiHeaders },
-                body: JSON.stringify({ target_language: targetLanguage, source_track_id: source?.id || 'original' }),
+                body: JSON.stringify({ target_language: targetLanguage, source_track_id: source?.id || 'original', tracks }),
             });
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.detail || 'Subtitle translation failed.');

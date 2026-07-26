@@ -808,6 +808,7 @@ class VersionRenderCompletionRequest(BaseModel):
 class SubtitleTrackTranslationRequest(BaseModel):
     target_language: str
     source_track_id: str = "original"
+    tracks: Optional[list[dict]] = None
 
 
 def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) -> None:
@@ -1367,7 +1368,7 @@ async def translate_subtitle_track(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     target_language = req.target_language.strip().lower()
-    tracks = list(manifest.get("subtitle_tracks") or [])
+    tracks = list(req.tracks or manifest.get("subtitle_tracks") or [])
     source_track = next((track for track in tracks if track.get("id") == req.source_track_id), None)
     if source_track is None:
         raise HTTPException(status_code=404, detail="Source subtitle track not found")

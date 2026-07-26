@@ -50,6 +50,8 @@ export interface HookConfig {
   size: HookSize;
   entranceAnimation: HookEntrance;
   displayDurationSec: number;
+  startMs?: number;
+  endMs?: number;
 }
 
 // --- Effects config ---
@@ -123,6 +125,8 @@ export const hookConfigSchema = z.object({
   size: z.enum(["S", "M", "L"]),
   entranceAnimation: z.enum(["spring", "fade", "slide-up", "none"]),
   displayDurationSec: z.number().positive(),
+  startMs: z.number().min(0).optional(),
+  endMs: z.number().positive().optional(),
 });
 
 export const effectSegmentSchema = z.object({
