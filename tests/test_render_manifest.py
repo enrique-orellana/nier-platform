@@ -82,6 +82,24 @@ class ManifestTests(unittest.TestCase):
             self.assertEqual(load_manifest(path)["schema_version"], 1)
             self.assertFalse(path.with_name(".manifest.json.tmp").exists())
 
+    def test_revision_ignores_version_bookkeeping(self):
+        manifest = fixture_manifest()
+        manifest["version_id"] = "version-1"
+        manifest["parent_version_id"] = None
+        manifest["manifest_revision"] = "old-revision"
+        before = calculate_revision(manifest)
+        manifest["manifest_revision"] = "new-revision"
+        manifest["render_status"] = "done"
+        manifest["updated_at"] = "2026-07-26T00:00:00+00:00"
+        self.assertEqual(calculate_revision(manifest), before)
+
+    def test_manifest_revision_mismatch_is_rejected(self):
+        manifest = fixture_manifest()
+        manifest["version_id"] = "version-1"
+        manifest["manifest_revision"] = "wrong"
+        with self.assertRaisesRegex(ValueError, "revision"):
+            save_manifest_atomic(Path(tempfile.mkdtemp()) / "manifest.json", manifest)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,7 +13,7 @@ from media_probe import MediaProbe
 
 
 MANIFEST_SCHEMA_VERSION = 1
-_TRANSIENT_KEYS = {"master", "updated_at", "render_status"}
+_TRANSIENT_KEYS = {"master", "updated_at", "render_status", "manifest_revision"}
 
 
 def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
@@ -97,12 +97,18 @@ def load_manifest(path: Path) -> dict:
         manifest = json.load(handle)
     if manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION:
         raise ValueError("unsupported manifest schema version")
+    declared_revision = manifest.get("manifest_revision")
+    if declared_revision and declared_revision != calculate_revision(manifest):
+        raise ValueError("manifest revision mismatch")
     return manifest
 
 
 def save_manifest_atomic(path: Path, manifest: dict) -> str:
     manifest = dict(manifest)
     manifest["schema_version"] = MANIFEST_SCHEMA_VERSION
+    declared_revision = manifest.get("manifest_revision")
+    if declared_revision and declared_revision != calculate_revision(manifest):
+        raise ValueError("manifest revision mismatch")
     manifest["updated_at"] = datetime.now(timezone.utc).isoformat()
     manifest.setdefault("master", None)
     path.parent.mkdir(parents=True, exist_ok=True)
