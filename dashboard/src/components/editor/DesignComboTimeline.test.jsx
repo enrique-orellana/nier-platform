@@ -35,6 +35,15 @@ describe('DesignComboTimeline', () => {
         expect(onSelectItem.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'hook-1' }));
     });
 
+    it('selects a subtitle cue after a normal pointer interaction', () => {
+        const onSelectItem = vi.fn();
+        render(<DesignComboTimeline state={subtitleState} onStateChange={vi.fn()} onSelectItem={onSelectItem} />);
+        const cue = screen.getByRole('button', { name: 'Hola clip' });
+        fireEvent.pointerDown(cue, { clientX: 100 });
+        fireEvent.click(cue);
+        expect(onSelectItem).toHaveBeenCalledWith(expect.objectContaining({ id: 'cue-1', type: 'subtitle' }), expect.objectContaining({ type: 'subtitle' }));
+    });
+
     it('moves an item through pointer interaction and snaps to frames', () => {
         const onStateChange = vi.fn();
         render(<DesignComboTimeline state={state} onStateChange={onStateChange} onSelectItem={vi.fn()} />);

@@ -32,6 +32,14 @@ describe('FullScreenEditor', () => {
         expect(screen.getByLabelText('Subtitle translation')).toBeInTheDocument();
     });
 
+    it('keeps inspector subtitle text edits in the selected cue', () => {
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Hola clip' }));
+        const text = screen.getByLabelText('Text');
+        fireEvent.change(text, { target: { value: 'Piano corrected' } });
+        expect(text).toHaveValue('Piano corrected');
+    });
+
     it('shows and edits subtitles from the legacy layer shape', () => {
         const legacyManifest = {
             timeline: { source_video_url: 'https://example.test/video.mp4', trim: { start_sec: 0, end_sec: 4 } },

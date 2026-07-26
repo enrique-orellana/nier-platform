@@ -65,6 +65,7 @@ export default function ClipEditor({ isOpen, onClose, clip, jobId, clipIndex, ai
     const updateHook = (hook) => updateDraft({ layers: { ...(draft.layers || {}), hook } });
     const updateCue = (cue) => {
         if (!activeTrack) return;
+        setSelectedCue((previous) => previous ? { ...previous, ...cue } : cue);
         const nextTracks = tracks.map((track) => {
             if (track.id !== activeTrack.id) return track;
             const nextCues = (track.cues || track.captions).map((item, i) => (item.id === cue.id || i === selectedCue?.index) ? { ...item, ...cue } : item);
