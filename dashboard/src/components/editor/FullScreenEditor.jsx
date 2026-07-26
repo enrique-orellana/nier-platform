@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Save } from 'lucide-react';
 import { getApiUrl } from '../../config';
 import RemotionPreview from '../RemotionPreview';
-import { manifestToEditorState, editorStateToManifest } from '../../editor/designcomboAdapter';
+import { manifestToEditorState, editorStateToManifest, manifestWithTranscriptCaptions } from '../../editor/designcomboAdapter';
 import TransportControls from './TransportControls';
 import VersionHistory from './VersionHistory';
 import DesignComboTimeline from './DesignComboTimeline';
@@ -35,6 +35,17 @@ export default function FullScreenEditor({ isOpen = true, jobId, clipIndex, clip
     const durationSeconds = editorState.durationSec || 30;
     const fps = editorState.fps || clip.output_fps || 30;
 
+    const hydrateManifest = useCallback(async (baseManifest) => {
+        if (baseManifest?.timeline?.transcript?.segments?.length || baseManifest?.subtitle_tracks?.length || !jobId) return baseManifest;
+        try {
+            const response = await fetch(getApiUrl(`/api/clip/${jobId}/${clipIndex}/transcript`));
+            if (!response.ok) return baseManifest;
+            return manifestWithTranscriptCaptions(baseManifest, await response.json());
+        } catch {
+            return baseManifest;
+        }
+    }, [clipIndex, jobId]);
+
     useEffect(() => {
         if (!isOpen || initialManifest) return;
         let cancelled = false;
@@ -46,11 +57,13 @@ export default function FullScreenEditor({ isOpen = true, jobId, clipIndex, clip
             const versionResponse = await fetch(getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions/${currentId}`));
             const payload = await versionResponse.json();
             if (cancelled) return;
-            setVersions(history.versions || []); setVersion(payload.version); setManifest(payload.manifest); setEditorState(manifestToEditorState(payload.manifest, { fps: clip.output_fps || 30 })); setActiveTrackId(defaultSubtitleTrackId(payload.manifest));
+            const hydratedManifest = await hydrateManifest(payload.manifest);
+            if (cancelled) return;
+            setVersions(history.versions || []); setVersion(payload.version); setManifest(hydratedManifest); setEditorState(manifestToEditorState(hydratedManifest, { fps: clip.output_fps || 30 })); setActiveTrackId(defaultSubtitleTrackId(hydratedManifest));
         };
         load().catch(() => {});
         return () => { cancelled = true; };
-    }, [clip.output_fps, clipIndex, initialManifest, isOpen, jobId]);
+    }, [clip.output_fps, clipIndex, hydrateManifest, initialManifest, isOpen, jobId]);
 
     const inputProps = useMemo(() => {
         const nextManifest = editorStateToManifest(editorState, manifest || initialManifest || {});
@@ -66,10 +79,11 @@ export default function FullScreenEditor({ isOpen = true, jobId, clipIndex, clip
             const response = await fetch(getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions/${nextVersion.version_id}`));
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.detail || 'Unable to load version');
+            const hydratedManifest = await hydrateManifest(payload.manifest);
             setVersion(payload.version || nextVersion);
-            setManifest(payload.manifest);
-            setEditorState(manifestToEditorState(payload.manifest, { fps: clip.output_fps || 30 }));
-            setActiveTrackId(defaultSubtitleTrackId(payload.manifest));
+            setManifest(hydratedManifest);
+            setEditorState(manifestToEditorState(hydratedManifest, { fps: clip.output_fps || 30 }));
+            setActiveTrackId(defaultSubtitleTrackId(hydratedManifest));
             setSelectedItem(null);
         } catch { /* keep the current draft active when a historical version cannot be loaded */ }
     };
@@ -85,7 +99,8 @@ export default function FullScreenEditor({ isOpen = true, jobId, clipIndex, clip
             const response = await fetch(getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions/branch`), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version_id: versionId }) });
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.detail || 'Branch failed.');
-            setVersion(payload.version); setManifest(payload.manifest); setEditorState(manifestToEditorState(payload.manifest, { fps })); setActiveTrackId(defaultSubtitleTrackId(payload.manifest)); setSelectedItem(null);
+            const hydratedManifest = await hydrateManifest(payload.manifest);
+            setVersion(payload.version); setManifest(hydratedManifest); setEditorState(manifestToEditorState(hydratedManifest, { fps })); setActiveTrackId(defaultSubtitleTrackId(hydratedManifest)); setSelectedItem(null);
         } catch (branchError) { setError(branchError.message); } finally { setBusy(false); }
     };
     const saveVersion = async () => {

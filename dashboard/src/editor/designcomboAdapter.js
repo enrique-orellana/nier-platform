@@ -1,5 +1,27 @@
 const clone = (value) => JSON.parse(JSON.stringify(value ?? {}));
 
+export function manifestWithTranscriptCaptions(manifest, transcript) {
+    if (!transcript?.captions?.length || manifest?.timeline?.transcript?.segments?.length) return manifest;
+    if (Array.isArray(manifest?.subtitle_tracks) && manifest.subtitle_tracks.length) return manifest;
+    const segments = transcript.captions.map((caption) => ({
+        start: Number(caption.startMs || 0) / 1000,
+        end: Number(caption.endMs || caption.startMs || 0) / 1000,
+        text: caption.text || '',
+        words: [{
+            start: Number(caption.startMs || 0) / 1000,
+            end: Number(caption.endMs || caption.startMs || 0) / 1000,
+            word: caption.text || '',
+        }],
+    }));
+    return {
+        ...manifest,
+        timeline: {
+            ...(manifest?.timeline || {}),
+            transcript: { language: transcript.language || 'und', segments },
+        },
+    };
+}
+
 const durationFromManifest = (manifest) => {
     const trim = manifest?.timeline?.trim || {};
     const end = Number(trim.end_sec ?? manifest?.duration_sec ?? 0);

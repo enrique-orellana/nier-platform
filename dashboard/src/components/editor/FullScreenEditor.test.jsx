@@ -1,6 +1,6 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import FullScreenEditor from './FullScreenEditor';
 
 vi.mock('../../components/RemotionPreview', () => ({ default: ({ currentFrame = 0 }) => <div data-testid="remotion-player-frame">{currentFrame}</div> }));
@@ -12,6 +12,8 @@ const manifest = {
 };
 
 describe('FullScreenEditor', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
     it('renders the editor workspace and advances the preview one frame', () => {
         render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
         expect(screen.getByRole('heading', { name: /media pool/i })).toBeInTheDocument();
@@ -50,6 +52,24 @@ describe('FullScreenEditor', () => {
         };
         render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, video_url: transcriptManifest.timeline.source_video_url }} initialManifest={transcriptManifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
         expect(screen.getByRole('button', { name: 'Ciao clip' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Original it' })).toBeInTheDocument();
+    });
+
+    it('hydrates subtitles from the clip transcript endpoint when a legacy version has no subtitle track', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (url) => {
+            if (String(url).endsWith('/versions')) {
+                return { ok: true, json: async () => ({ current_version_id: 'v3', versions: [{ version_id: 'v3', status: 'done' }] }) };
+            }
+            if (String(url).endsWith('/versions/v3')) {
+                return { ok: true, json: async () => ({ version: { version_id: 'v3', status: 'done' }, manifest: { timeline: { source_video_url: '/videos/clip.mp4', trim: { start_sec: 0, end_sec: 4 } }, subtitle_tracks: [], layers: {} } }) };
+            }
+            if (String(url).endsWith('/transcript')) {
+                return { ok: true, json: async () => ({ language: 'it', durationSec: 4, captions: [{ text: 'Ciao', startMs: 500, endMs: 1500 }] }) };
+            }
+            throw new Error(`Unexpected request: ${url}`);
+        }));
+        render(<FullScreenEditor jobId="job" clipIndex={1} clip={{ output_fps: 30, video_url: '/videos/clip.mp4' }} onClose={vi.fn()} />);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Ciao clip' })).toBeInTheDocument());
         expect(screen.getByRole('button', { name: 'Original it' })).toBeInTheDocument();
     });
 });
