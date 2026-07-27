@@ -4,13 +4,16 @@ import './index.css'
 import App from './App.jsx'
 import Landing from './Landing.jsx'
 import Legal from './Legal.jsx'
+import { getPathForTab, getTabFromPath } from './routing'
 
 // eslint-disable-next-line react-refresh/only-export-components
 function Root() {
   const resolveView = () => {
     const hash = window.location.hash;
+    const pathname = window.location.pathname.replace(/\/$/, '') || '/';
+    const isAppRoute = pathname !== '/' && getPathForTab(getTabFromPath(pathname)) === pathname;
     if (hash === '#legal') return 'legal';
-    if (hash === '#app' || localStorage.getItem('openshorts_skip_landing') === '1') return 'app';
+    if (isAppRoute || hash === '#app' || localStorage.getItem('openshorts_skip_landing') === '1') return 'app';
     return 'landing';
   };
 

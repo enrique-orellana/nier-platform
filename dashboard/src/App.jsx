@@ -14,6 +14,7 @@ import AISettingsPanel from './components/AISettingsPanel';
 
 import { pickLmStudioModel, pickProviderAfterDiscoveryFailure } from './lib/lmStudio';
 import { getApiUrl } from './config';
+import { getPathForTab, getTabFromPath } from './routing';
 
 // Enhanced "Encryption" using XOR + Base64 with a Salt
 // This is better than plain Base64 but still client-side.
@@ -207,7 +208,7 @@ function App() {
   const [logs, setLogs] = useState([]);
   const [logsVisible, setLogsVisible] = useState(true);
   const [processingMedia, setProcessingMedia] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, settings, projects
+  const [activeTab, setActiveTab] = useState(() => getTabFromPath(window.location.pathname)); // dashboard, settings, projects
   const [clipCount, setClipCount] = useState(() => {
     const stored = Number(localStorage.getItem('clip_count_v1'));
     return Number.isFinite(stored) && stored >= 3 && stored <= 15 ? stored : 6;
@@ -333,6 +334,20 @@ function App() {
   const [isSyncedPlaying, setIsSyncedPlaying] = useState(false);
   const [syncTrigger, setSyncTrigger] = useState(0);
 
+  const navigateToTab = useCallback((tab) => {
+    const nextPath = getPathForTab(tab);
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', `${nextPath}${window.location.hash}`);
+    }
+    setActiveTab(tab);
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => setActiveTab(getTabFromPath(window.location.pathname));
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   const handleClipPlay = (startTime) => {
     setSyncedTime(startTime);
     setIsSyncedPlaying(true);
@@ -362,7 +377,6 @@ function App() {
         setJobId(session.jobId);
         setResults(session.results || null);
         if (session.processingMedia) setProcessingMedia(session.processingMedia);
-        if (session.activeTab) setActiveTab(session.activeTab);
         // If was processing, resume polling; if complete/error, just show results
         setStatus(session.status === 'processing' ? 'processing' : session.status);
         setSessionRecovered(true);
@@ -606,7 +620,7 @@ function App() {
       return;
     }
     if (aiProvider === 'lmstudio' && !aiBaseUrl.trim()) {
-      setActiveTab('settings');
+      navigateToTab('settings');
       setLogs(["LM Studio mode needs a Base URL. Set it in Settings first."]);
       setStatus('error');
       return;
@@ -670,7 +684,7 @@ function App() {
 
       <nav className="flex-1 px-4 py-4 space-y-2">
         <button
-          onClick={() => setActiveTab('dashboard')}
+          onClick={() => navigateToTab('dashboard')}
           className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'dashboard' ? 'bg-primary/10 text-primary' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
         >
           <LayoutDashboard size={20} />
@@ -678,7 +692,7 @@ function App() {
         </button>
 
         <button
-          onClick={() => setActiveTab('saasshorts')}
+          onClick={() => navigateToTab('saasshorts')}
           className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'saasshorts' ? 'bg-violet-500/10 text-violet-400' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
         >
           <Sparkles size={20} />
@@ -686,7 +700,7 @@ function App() {
         </button>
 
         <button
-          onClick={() => setActiveTab('ai-agent')}
+          onClick={() => navigateToTab('ai-agent')}
           className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'ai-agent' ? 'bg-emerald-500/10 text-emerald-400' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
         >
           <Bot size={20} />
@@ -694,7 +708,7 @@ function App() {
         </button>
 
         <button
-          onClick={() => setActiveTab('ugc-gallery')}
+          onClick={() => navigateToTab('ugc-gallery')}
           className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'ugc-gallery' ? 'bg-violet-500/10 text-violet-400' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
         >
           <LayoutGrid size={20} />
@@ -702,7 +716,7 @@ function App() {
         </button>
 
         <button
-          onClick={() => setActiveTab('thumbnails')}
+          onClick={() => navigateToTab('thumbnails')}
           className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'thumbnails' ? 'bg-primary/10 text-primary' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
         >
           <ImageIcon size={20} />
@@ -710,7 +724,7 @@ function App() {
         </button>
 
         <button
-          onClick={() => setActiveTab('projects')}
+          onClick={() => navigateToTab('projects')}
           className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'projects' ? 'bg-cyan-500/10 text-cyan-400' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
         >
           <FolderOpen size={20} />
@@ -718,7 +732,7 @@ function App() {
         </button>
 
         <button
-          onClick={() => setActiveTab('settings')}
+          onClick={() => navigateToTab('settings')}
           className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'settings' ? 'bg-primary/10 text-primary' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
         >
           <Settings size={20} />
@@ -793,7 +807,7 @@ function App() {
 
             {!isLocalAi && !apiKey && (
               <button
-                onClick={() => setActiveTab('settings')}
+                onClick={() => navigateToTab('settings')}
                 className="text-xs text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1 rounded-full border border-amber-500/30 transition-colors flex items-center gap-1.5"
                 title="Click to configure your API keys"
               >
@@ -817,7 +831,7 @@ function App() {
               </div>
             </div>
             <button
-              onClick={() => setActiveTab('settings')}
+              onClick={() => navigateToTab('settings')}
               className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black transition-colors"
             >
               Go to Settings
@@ -1401,7 +1415,7 @@ function App() {
                 Close
               </button>
               <button
-                onClick={() => { setShowKeyModal(false); setActiveTab('settings'); }}
+                onClick={() => { setShowKeyModal(false); navigateToTab('settings'); }}
                 className="flex-1 text-sm text-white py-2 rounded-lg bg-blue-600 hover:bg-blue-500 transition-colors font-medium"
               >
                 Open Settings
