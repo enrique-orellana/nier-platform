@@ -37,7 +37,7 @@ import CardContent from './ResultCard/CardContent';
 import CardActions from './ResultCard/CardActions';
 import PostModal from './ResultCard/PostModal';
 
-export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause }) {
+export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange }) {
     const [showModal, setShowModal] = useState(false);
     const [showSubtitleModal, setShowSubtitleModal] = useState(false);
     const videoRef = React.useRef(null);
@@ -581,7 +581,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     isTranslating={isTranslating}
                     setShowModal={setShowModal}
                     editError={editError}
-                    setShowClipEditor={setShowClipEditor}
+                    setShowClipEditor={onEditorOpen || setShowClipEditor}
                     handleDownload={handleDownload}
                 />
             </div>
@@ -636,8 +636,10 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 hasApiKey={!!elevenLabsKey}
             />
             <FullScreenEditor
-                isOpen={showClipEditor}
-                onClose={() => setShowClipEditor(false)}
+                isOpen={editorOpen || showClipEditor}
+                initialVersionId={editorVersionId}
+                onClose={onEditorClose || (() => setShowClipEditor(false))}
+                onVersionChange={onEditorVersionChange}
                 clip={clip}
                 jobId={jobId}
                 clipIndex={index}

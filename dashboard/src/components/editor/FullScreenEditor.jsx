@@ -40,9 +40,11 @@ export default function FullScreenEditor({
   clipIndex,
   clip = {},
   initialVersion = null,
+  initialVersionId = null,
   initialManifest = null,
   onClose,
   onRendered,
+  onVersionChange,
   editorActions = null,
   onSessionReady,
 }) {
@@ -106,7 +108,7 @@ export default function FullScreenEditor({
       );
       const history = await historyResponse.json();
       const currentId =
-        history.current_version_id || history.versions?.at(-1)?.version_id;
+        initialVersionId || history.current_version_id || history.versions?.at(-1)?.version_id;
       if (!currentId) return;
       const versionResponse = await fetch(
         getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions/${currentId}`),
@@ -133,6 +135,7 @@ export default function FullScreenEditor({
     hydrateManifest,
     initialManifest,
     isOpen,
+    initialVersionId,
     jobId,
   ]);
 
@@ -254,6 +257,7 @@ export default function FullScreenEditor({
         throw new Error(payload.detail || "Unable to load version");
       const hydratedManifest = await hydrateManifest(payload.manifest);
       setVersion(payload.version || nextVersion);
+      onVersionChange?.(payload.version?.version_id || nextVersion.version_id);
       setManifest(hydratedManifest);
       setEditorState(
         manifestToEditorState(hydratedManifest, { fps: clip.output_fps || 30 }),
@@ -299,6 +303,7 @@ export default function FullScreenEditor({
       if (!response.ok) throw new Error(payload.detail || "Branch failed.");
       const hydratedManifest = await hydrateManifest(payload.manifest);
       setVersion(payload.version);
+      onVersionChange?.(payload.version?.version_id);
       setManifest(hydratedManifest);
       setEditorState(manifestToEditorState(hydratedManifest, { fps }));
       setActiveTrackId(defaultSubtitleTrackId(hydratedManifest));
@@ -332,13 +337,15 @@ export default function FullScreenEditor({
         ? result.outputUrl
         : getApiUrl(result.outputUrl);
       onRendered?.(outputUrl);
-      setVersion(result.version || version);
+      const nextVersion = result.version || version;
+      setVersion(nextVersion);
+      onVersionChange?.(nextVersion.version_id);
     } else
       setError(
         result.error || "Render failed. The previous version is still active.",
       );
     setBusy(false);
-  }, [activeTrackId, busy, clip.output_height, clip.output_width, clipIndex, currentManifest, editorState.durationFrames, fps, inputProps, jobId, onRendered, version]);
+  }, [activeTrackId, busy, clip.output_height, clip.output_width, clipIndex, currentManifest, editorState.durationFrames, fps, inputProps, jobId, onRendered, onVersionChange, version]);
 
   const downloadVersion = async () => {
     if (!version?.output_url || version.status !== "done") return;

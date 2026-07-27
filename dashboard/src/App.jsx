@@ -14,7 +14,12 @@ import AISettingsPanel from './components/AISettingsPanel';
 
 import { pickLmStudioModel, pickProviderAfterDiscoveryFailure } from './lib/lmStudio';
 import { getApiUrl } from './config';
-import { getPathForTab, getTabFromPath } from './routing';
+import {
+  buildEditorPath,
+  buildProjectPath,
+  getPathForTab,
+  parseRoute,
+} from './routing';
 
 // Enhanced "Encryption" using XOR + Base64 with a Salt
 // This is better than plain Base64 but still client-side.
@@ -208,7 +213,8 @@ function App() {
   const [logs, setLogs] = useState([]);
   const [logsVisible, setLogsVisible] = useState(true);
   const [processingMedia, setProcessingMedia] = useState(null);
-  const [activeTab, setActiveTab] = useState(() => getTabFromPath(window.location.pathname)); // dashboard, settings, projects
+  const [route, setRoute] = useState(() => parseRoute());
+  const activeTab = route.tab; // dashboard, settings, projects
   const [clipCount, setClipCount] = useState(() => {
     const stored = Number(localStorage.getItem('clip_count_v1'));
     return Number.isFinite(stored) && stored >= 3 && stored <= 15 ? stored : 6;
@@ -339,11 +345,21 @@ function App() {
     if (window.location.pathname !== nextPath) {
       window.history.pushState({}, '', `${nextPath}${window.location.hash}`);
     }
-    setActiveTab(tab);
+    setRoute(parseRoute());
+  }, []);
+
+  const navigateToProject = useCallback((projectId) => {
+    window.history.pushState({}, '', `${buildProjectPath(projectId)}${window.location.hash}`);
+    setRoute(parseRoute());
+  }, []);
+
+  const navigateToEditor = useCallback((projectId, clipIndex, versionId = null) => {
+    window.history.pushState({}, '', `${buildEditorPath(projectId, clipIndex, versionId)}${window.location.hash}`);
+    setRoute(parseRoute());
   }, []);
 
   useEffect(() => {
-    const handlePopState = () => setActiveTab(getTabFromPath(window.location.pathname));
+    const handlePopState = () => setRoute(parseRoute());
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
@@ -1172,7 +1188,20 @@ function App() {
           )}
 
           {activeTab === 'projects' && (
-            <ProjectLibrary aiProvider={aiProvider} aiApiKey={apiKey} getAiHeaders={getAiHeaders} />
+            <ProjectLibrary
+              aiProvider={aiProvider}
+              aiApiKey={apiKey}
+              getAiHeaders={getAiHeaders}
+              projectId={route.projectId}
+              editorClipIndex={route.clipIndex}
+              editorOpen={route.editor}
+              versionId={route.versionId}
+              onOpenProject={navigateToProject}
+              onBackToProjects={() => navigateToTab('projects')}
+              onOpenEditor={navigateToEditor}
+              onCloseEditor={() => navigateToProject(route.projectId)}
+              onVersionChange={(versionId) => navigateToEditor(route.projectId, route.clipIndex, versionId)}
+            />
           )}
 
           {/* View: Gallery */}

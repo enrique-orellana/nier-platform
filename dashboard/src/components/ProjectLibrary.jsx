@@ -56,7 +56,20 @@ function normalizeClipForResultCard(clip, index, fallbackJobId) {
   };
 }
 
-export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiHeaders }) {
+export default function ProjectLibrary({
+  aiProvider = 'gemini',
+  aiApiKey,
+  getAiHeaders,
+  projectId = null,
+  editorClipIndex = null,
+  editorOpen = false,
+  versionId = null,
+  onOpenProject,
+  onBackToProjects,
+  onOpenEditor,
+  onCloseEditor,
+  onVersionChange,
+}) {
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -87,8 +100,6 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
     loadProjects().catch(() => {});
   }, [loadProjects]);
 
-
-
   const loadProjectClips = useCallback(async (project) => {
     const jobId = project?.job_id || project?.session_id || project?.id;
     if (!jobId) {
@@ -112,7 +123,26 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
     }
   }, []);
 
+  useEffect(() => {
+    if (!projectId) {
+      setSelectedProject(null);
+      setProjectClips([]);
+      return;
+    }
+
+    const matchingProject = projects.find((project) =>
+      (project.job_id || project.session_id || project.id) === projectId
+    );
+    if (!matchingProject) return;
+
+    setSelectedProject(matchingProject);
+    setProjectClips(Array.isArray(matchingProject.clips) ? matchingProject.clips : []);
+    if (!matchingProject.clips?.length) loadProjectClips(matchingProject);
+  }, [loadProjectClips, projectId, projects]);
+
   const handleViewProject = (project) => {
+    const id = project?.job_id || project?.session_id || project?.id;
+    onOpenProject?.(id);
     setSelectedProject(project);
     setProjectClips(Array.isArray(project?.clips) ? project.clips : []);
     if (!project?.clips?.length) {
@@ -144,6 +174,7 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
       setProjects((prev) => prev.filter((p) => p.job_id !== project.job_id));
       if (selectedProject?.job_id === project.job_id) {
         setSelectedProject(null);
+        onBackToProjects?.();
       }
     } catch (err) {
       console.error('Delete error:', err);
@@ -176,7 +207,7 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
           {/* Header Navigation */}
           <div className="flex items-center justify-between">
             <button
-              onClick={() => setSelectedProject(null)}
+              onClick={() => onBackToProjects?.()}
               className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group"
             >
               <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
@@ -284,6 +315,11 @@ export default function ProjectLibrary({ aiProvider = 'gemini', aiApiKey, getAiH
                     aiApiKey={aiApiKey}
                     getAiHeaders={getAiHeaders}
                     onPlay={() => {}}
+                    editorOpen={editorOpen && (clip.index ?? index) === editorClipIndex}
+                    editorVersionId={versionId}
+                    onEditorOpen={() => onOpenEditor?.(selectedProject.job_id || selectedProject.session_id || selectedProject.id, clip.index ?? index, versionId)}
+                    onEditorClose={onCloseEditor}
+                    onEditorVersionChange={onVersionChange}
                   />
                 ))}
               </div>
