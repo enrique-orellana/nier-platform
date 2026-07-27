@@ -5,6 +5,30 @@ from fastapi.testclient import TestClient
 import app as app_module
 
 
+class FakeResponse:
+    status_code = 202
+
+    def json(self):
+        return {"translationId": "translation-1", "status": "queued"}
+
+
+class FakeAsyncClient:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def post(self, url, **kwargs):
+        assert url.endswith("/translate")
+        assert kwargs["json"]["target_language"] == "es"
+        assert kwargs["headers"]["X-AI-Api-Key"] == "test-key"
+        return FakeResponse()
+
+
 def setup_version(tmp_path, monkeypatch):
     monkeypatch.setattr(app_module, "OUTPUT_DIR", str(tmp_path))
     job_id = "job"
@@ -38,12 +62,9 @@ def setup_version(tmp_path, monkeypatch):
 
 def test_translate_subtitles_adds_track_without_mutating_original(tmp_path, monkeypatch):
     client, job_id, version_id = setup_version(tmp_path, monkeypatch)
-    monkeypatch.setattr(
-        app_module,
-        "chat_json",
-        lambda *args, **kwargs: {"translations": ["Hola", "mundo"]},
-        raising=False,
-    )
+    import httpx
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeAsyncClient)
 
     response = client.post(
         f"/api/clip/{job_id}/0/versions/{version_id}/subtitle-tracks/translate",
@@ -51,8 +72,6 @@ def test_translate_subtitles_adds_track_without_mutating_original(tmp_path, monk
         headers={"X-AI-Api-Key": "test-key"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     payload = response.json()
-    assert payload["track"]["language"] == "es"
-    assert payload["manifest"]["subtitle_tracks"][0]["language"] == "en"
-    assert len(payload["manifest"]["subtitle_tracks"]) == 2
+    assert payload == {"translationId": "translation-1", "status": "queued"}

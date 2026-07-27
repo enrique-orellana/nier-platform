@@ -1117,6 +1117,7 @@ async def get_clip_transcript(job_id: str, clip_index: int):
 
 # --- Remotion Render Proxy ---
 RENDER_SERVICE_URL = os.getenv("RENDER_SERVICE_URL", "http://renderer:3100")
+TRANSLATION_SERVICE_URL = os.getenv("TRANSLATION_SERVICE_URL", "http://translation-service:3200")
 RENDER_BACKEND_PROXY_TARGET = os.getenv("VITE_BACKEND_PROXY_TARGET") or (
     "http://openshorts-backend:8000"
     if (os.getenv("KUBERNETES_SERVICE_HOST") or os.getenv("KUBERNETES_PORT"))
@@ -1167,6 +1168,40 @@ async def proxy_render_status(render_id: str):
             return resp.json()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Render service unavailable: {e}")
+
+
+def _translation_headers(request: Request) -> dict[str, str]:
+    allowed = {
+        "x-ai-provider": "X-AI-Provider",
+        "x-ai-api-key": "X-AI-Api-Key",
+        "x-gemini-key": "X-Gemini-Key",
+        "x-ai-base-url": "X-AI-Base-Url",
+        "x-ai-model": "X-AI-Model",
+        "x-ai-analyze-model": "X-AI-Analyze-Model",
+        "x-ai-vision-model": "X-AI-Vision-Model",
+        "x-ai-image-model": "X-AI-Image-Model",
+    }
+    return {
+        allowed[key.lower()]: value
+        for key, value in request.headers.items()
+        if key.lower() in allowed and value
+    }
+
+
+@app.get("/api/translation/{translation_id}")
+async def proxy_translation_status(translation_id: str):
+    """Proxy translation status polling to the dedicated worker service."""
+    import httpx
+    from fastapi.responses import JSONResponse
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{TRANSLATION_SERVICE_URL}/translate/{translation_id}"
+            )
+        return JSONResponse(status_code=response.status_code, content=response.json())
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Translation service unavailable: {exc}") from exc
 
 
 # --- Video Proxy (solves MinIO CORS for Remotion Player) ---
@@ -1355,74 +1390,23 @@ async def translate_subtitle_track(
     clip_index: int,
     version_id: str,
     req: SubtitleTrackTranslationRequest,
-    x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
-    x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
-    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key"),
-    x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
+    request: Request,
 ):
-    store = _ensure_clip_versions(job_id, clip_index)
+    import httpx
+    from fastapi.responses import JSONResponse
+
+    body = req.model_dump(exclude_none=True)
+    body.update({"job_id": job_id, "clip_index": clip_index, "version_id": version_id})
     try:
-        version = store.load_version(version_id)
-        manifest = store.load_manifest(version_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    target_language = req.target_language.strip().lower()
-    tracks = list(req.tracks or manifest.get("subtitle_tracks") or [])
-    source_track = next((track for track in tracks if track.get("id") == req.source_track_id), None)
-    if source_track is None:
-        raise HTTPException(status_code=404, detail="Source subtitle track not found")
-    source_language = str(source_track.get("language") or "").strip().lower()
-    if not target_language or target_language == source_language:
-        raise HTTPException(status_code=400, detail="Target language must differ from source language")
-    if any(str(track.get("language")).lower() == target_language for track in tracks):
-        raise HTTPException(status_code=409, detail="Subtitle track for target language already exists")
-
-    source_cues = source_track.get("cues") or source_track.get("captions") or []
-    if not source_cues:
-        raise HTTPException(status_code=400, detail="Source subtitle track has no cues")
-
-    ai_config = build_ai_config(
-        provider=x_ai_provider,
-        api_key=x_ai_api_key or x_gemini_key,
-        model=x_ai_model,
-    )
-    if ai_config.is_gemini() and not ai_config.api_key:
-        raise HTTPException(status_code=400, detail="Missing AI API key for subtitle translation")
-
-    prompt = (
-        "Translate each subtitle cue into the target language. Preserve array order and return only JSON "
-        "with a translations array containing exactly one string per cue. "
-        f"Source language: {source_language}. Target language: {target_language}. "
-        f"Cues: {json.dumps([cue.get('text', '') for cue in source_cues], ensure_ascii=False)}"
-    )
-    try:
-        payload = chat_json(ai_config, prompt, model=ai_config.text_model)
-        translated_texts = payload.get("translations") if isinstance(payload, dict) else None
-        if not isinstance(translated_texts, list):
-            raise ValueError("translation response did not contain a translations array")
-        from subtitle_translation import translate_cue_texts
-
-        translated_track = translate_cue_texts(
-            source_cues,
-            source_language,
-            target_language,
-            lambda _texts, _source, _target: translated_texts,
-        )
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{TRANSLATION_SERVICE_URL}/translate",
+                json=body,
+                headers=_translation_headers(request),
+            )
+        return JSONResponse(status_code=response.status_code, content=response.json())
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Subtitle translation failed: {exc}") from exc
-
-    translated_track["id"] = target_language
-    translated_track["label"] = target_language.upper()
-    translated_track["sourceTrackId"] = req.source_track_id
-    manifest["subtitle_tracks"] = tracks + [translated_track]
-    manifest["active_subtitle_track_id"] = target_language
-    manifest["master"] = None
-    return {
-        "version": asdict(version),
-        "track": translated_track,
-        "manifest": manifest,
-    }
+        raise HTTPException(status_code=502, detail=f"Translation service unavailable: {exc}") from exc
 
 
 @app.post("/api/clip/{job_id}/{clip_index}/versions/{version_id}/activate")

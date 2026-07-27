@@ -5,10 +5,20 @@ import SubtitleTranslationPanel from './SubtitleTranslationPanel';
 describe('SubtitleTranslationPanel', () => {
     it('keeps original and adds a translated track', async () => {
         const onTrackAdded = vi.fn();
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-            ok: true,
-            json: async () => ({ track: { id: 'es', label: 'ES' }, manifest: { subtitle_tracks: [] } }),
-        }));
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ translationId: 'translation-1', status: 'queued' }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    translationId: 'translation-1',
+                    status: 'done',
+                    track: { id: 'es', label: 'ES', language: 'es' },
+                }),
+            });
+        vi.stubGlobal('fetch', fetchMock);
         render(
             <SubtitleTranslationPanel
                 jobId="job"
@@ -22,12 +32,13 @@ describe('SubtitleTranslationPanel', () => {
             />,
         );
 
-        expect(screen.getByText(/Translates all 2 cues in the selected track/)).toBeInTheDocument();
+        expect(screen.getByText(/2 cues/)).toBeInTheDocument();
         expect(screen.getByText(/source track/i)).toBeInTheDocument();
-        expect(screen.getByText(/translate all 2 cues in this track/i)).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Translate Track' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Translate entire track' }));
         await waitFor(() => expect(onTrackAdded).toHaveBeenCalled());
         expect(screen.getByRole('option', { name: 'Original' })).toBeInTheDocument();
+        expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
     it('offers English as a translation target for non-English source tracks', () => {

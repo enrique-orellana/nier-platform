@@ -142,6 +142,7 @@ Add-NoProxyHost "kubernetes.docker.internal"
 $backendImage = "openshorts-backend:local"
 $frontendImage = "openshorts-frontend:local"
 $rendererImage = "openshorts-renderer:local"
+$translationImage = $backendImage
 
 Write-Step "Building local images"
 docker build -t $backendImage .
@@ -189,6 +190,7 @@ try {
         "AWS_S3_PUBLIC_ENDPOINT_URL" = (Get-PreferredEnvValue "AWS_S3_PUBLIC_ENDPOINT_URL" "OPENSHORTS_S3_PUBLIC_ENDPOINT_URL")
         "AWS_S3_FORCE_PATH_STYLE" = (Get-EnvValue "AWS_S3_FORCE_PATH_STYLE")
         "RENDER_SERVICE_URL" = (Get-EnvValue "RENDER_SERVICE_URL")
+        "TRANSLATION_SERVICE_URL" = (Get-EnvValue "TRANSLATION_SERVICE_URL")
     }
 
     foreach ($entry in $overrides.GetEnumerator()) {
@@ -224,14 +226,16 @@ Write-Step "Updating deployment images"
 Invoke-Kubectl @("set", "image", "deployment/openshorts-backend", "backend=$backendImage", "-n", $Namespace)
 Invoke-Kubectl @("set", "image", "deployment/openshorts-frontend", "frontend=$frontendImage", "-n", $Namespace)
 Invoke-Kubectl @("set", "image", "deployment/openshorts-renderer", "renderer=$rendererImage", "-n", $Namespace)
+Invoke-Kubectl @("set", "image", "deployment/openshorts-translation", "translation=$translationImage", "-n", $Namespace)
 
 Write-Step "Restarting deployments"
-Invoke-Kubectl @("rollout", "restart", "deployment/openshorts-backend", "deployment/openshorts-frontend", "deployment/openshorts-renderer", "-n", $Namespace)
+Invoke-Kubectl @("rollout", "restart", "deployment/openshorts-backend", "deployment/openshorts-frontend", "deployment/openshorts-renderer", "deployment/openshorts-translation", "-n", $Namespace)
 
 Write-Step "Waiting for rollouts"
 Invoke-Kubectl @("rollout", "status", "deployment/openshorts-backend", "-n", $Namespace, "--timeout=180s")
 Invoke-Kubectl @("rollout", "status", "deployment/openshorts-frontend", "-n", $Namespace, "--timeout=180s")
 Invoke-Kubectl @("rollout", "status", "deployment/openshorts-renderer", "-n", $Namespace, "--timeout=180s")
+Invoke-Kubectl @("rollout", "status", "deployment/openshorts-translation", "-n", $Namespace, "--timeout=180s")
 
 Write-Host ""
 Write-Host "Local deploy completed successfully." -ForegroundColor Green

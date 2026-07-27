@@ -117,6 +117,7 @@ fi
 backend_image="openshorts-backend:local"
 frontend_image="openshorts-frontend:local"
 renderer_image="openshorts-renderer:local"
+translation_image="$backend_image"
 
 add_no_proxy_host "localhost"
 add_no_proxy_host "127.0.0.1"
@@ -194,13 +195,15 @@ log_step "Updating deployment images"
 apply_kubectl set image deployment/openshorts-backend backend="$backend_image" -n "$NAMESPACE"
 apply_kubectl set image deployment/openshorts-frontend frontend="$frontend_image" -n "$NAMESPACE"
 apply_kubectl set image deployment/openshorts-renderer renderer="$renderer_image" -n "$NAMESPACE"
+apply_kubectl set image deployment/openshorts-translation translation="$translation_image" -n "$NAMESPACE"
 
 log_step "Restarting deployments"
-apply_kubectl rollout restart deployment/openshorts-backend deployment/openshorts-frontend deployment/openshorts-renderer -n "$NAMESPACE"
+apply_kubectl rollout restart deployment/openshorts-backend deployment/openshorts-frontend deployment/openshorts-renderer deployment/openshorts-translation -n "$NAMESPACE"
 
 log_step "Waiting for rollouts"
 apply_kubectl rollout status deployment/openshorts-backend -n "$NAMESPACE" --timeout=180s
 apply_kubectl rollout status deployment/openshorts-frontend -n "$NAMESPACE" --timeout=180s
 apply_kubectl rollout status deployment/openshorts-renderer -n "$NAMESPACE" --timeout=180s
+apply_kubectl rollout status deployment/openshorts-translation -n "$NAMESPACE" --timeout=180s
 
 printf '\nLocal deploy completed successfully.\n'

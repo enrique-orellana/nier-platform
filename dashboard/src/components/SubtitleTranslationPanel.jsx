@@ -11,6 +11,8 @@ const LANGUAGES = {
     id: 'Indonesian', vi: 'Vietnamese', th: 'Thai', uk: 'Ukrainian', el: 'Greek',
 };
 
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
 export default function SubtitleTranslationPanel({
     jobId,
     clipIndex,
@@ -43,9 +45,21 @@ export default function SubtitleTranslationPanel({
             });
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.detail || 'Subtitle translation failed.');
-            const mergedTracks = [...tracks.filter((track) => track.id !== payload.track?.id), payload.track].filter(Boolean);
-            const mergedManifest = payload.manifest ? { ...payload.manifest, subtitle_tracks: [...(payload.manifest.subtitle_tracks || []).filter((track) => track.id !== payload.track?.id), payload.track].filter(Boolean) } : undefined;
-            onTrackAdded(payload.track, mergedManifest, mergedTracks);
+
+            const translationId = payload.translationId;
+            if (!translationId) throw new Error('Translation service did not return a job id.');
+
+            let statusPayload = payload;
+            while (!['done', 'error', 'failed'].includes(statusPayload.status)) {
+                const statusResponse = await fetch(getApiUrl(`/api/translation/${translationId}`));
+                statusPayload = await statusResponse.json();
+                if (!statusResponse.ok) throw new Error(statusPayload.detail || 'Unable to read translation status.');
+                if (!['done', 'error', 'failed'].includes(statusPayload.status)) await sleep(1000);
+            }
+            if (statusPayload.status !== 'done') throw new Error(statusPayload.error || 'Subtitle translation failed.');
+
+            const mergedTracks = [...tracks.filter((track) => track.id !== statusPayload.track?.id), statusPayload.track].filter(Boolean);
+            onTrackAdded(statusPayload.track, undefined, mergedTracks);
         } catch (translationError) {
             setError(translationError.message);
         } finally {
