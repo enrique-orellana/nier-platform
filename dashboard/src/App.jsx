@@ -808,40 +808,42 @@ function App() {
         </div>
 
         {/* Top Header */}
-        <header className="h-16 border-b border-white/5 bg-background/50 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-10">
-          <div className="flex items-center gap-4">
-            {status !== 'idle' && (
-              <button
-                onClick={handleReset}
-                className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
-              >
-                <PlusCircle size={16} />
-                <span className="hidden sm:inline">New Project</span>
-              </button>
-            )}
-          </div>
+        {activeTab !== 'editor' && (
+          <header className="h-16 border-b border-white/5 bg-background/50 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-10">
+            <div className="flex items-center gap-4">
+              {status !== 'idle' && (
+                <button
+                  onClick={handleReset}
+                  className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
+                >
+                  <PlusCircle size={16} />
+                  <span className="hidden sm:inline">New Project</span>
+                </button>
+              )}
+            </div>
 
-          <div className="flex items-center gap-4">
-            {userProfiles.length > 0 && (
-              <UserProfileSelector
-                profiles={userProfiles}
-                selectedUserId={uploadUserId}
-                onSelect={setUploadUserId}
-              />
-            )}
+            <div className="flex items-center gap-4">
+              {userProfiles.length > 0 && (
+                <UserProfileSelector
+                  profiles={userProfiles}
+                  selectedUserId={uploadUserId}
+                  onSelect={setUploadUserId}
+                />
+              )}
 
-            {!isLocalAi && !apiKey && (
-              <button
-                onClick={() => navigateToTab('settings')}
-                className="text-xs text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1 rounded-full border border-amber-500/30 transition-colors flex items-center gap-1.5"
-                title="Click to configure your API keys"
-              >
-                <AlertTriangle size={12} />
-                Gemini API Key Missing
-              </button>
-            )}
-          </div>
-        </header>
+              {!isLocalAi && !apiKey && (
+                <button
+                  onClick={() => navigateToTab('settings')}
+                  className="text-xs text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1 rounded-full border border-amber-500/30 transition-colors flex items-center gap-1.5"
+                  title="Click to configure your API keys"
+                >
+                  <AlertTriangle size={12} />
+                  Gemini API Key Missing
+                </button>
+              )}
+            </div>
+          </header>
+        )}
 
         {/* Persistent Missing Keys Banner — visible on every screen */}
         {!isLocalAi && !apiKey && activeTab !== 'settings' && (
