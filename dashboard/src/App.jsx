@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Upload, FileVideo, Sparkles, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image as ImageIcon, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2, FolderOpen } from 'lucide-react';
+import { Upload, FileVideo, Sparkles, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image as ImageIcon, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2, FolderOpen, Scissors } from 'lucide-react';
 import KeyInput from './components/KeyInput';
 import MediaInput from './components/MediaInput';
 import ResultCard from './components/ResultCard';
@@ -11,6 +11,7 @@ import SaaShortsTab from './components/SaaShortsTab';
 import UGCGallery from './components/UGCGallery';
 import ScheduleWeekModal from './components/ScheduleWeekModal';
 import AISettingsPanel from './components/AISettingsPanel';
+import LocalEditorTab from './components/local-editor/LocalEditorTab';
 
 import { pickLmStudioModel, pickProviderAfterDiscoveryFailure } from './lib/lmStudio';
 import { getApiUrl } from './config';
@@ -708,6 +709,14 @@ function App() {
         </button>
 
         <button
+          onClick={() => navigateToTab('editor')}
+          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'editor' ? 'bg-fuchsia-500/10 text-fuchsia-400' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
+        >
+          <Scissors size={20} />
+          <span className="font-medium hidden lg:block">Local Editor</span>
+        </button>
+
+        <button
           onClick={() => navigateToTab('saasshorts')}
           className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'saasshorts' ? 'bg-violet-500/10 text-violet-400' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
         >
@@ -1054,6 +1063,10 @@ function App() {
                 </div>
               </div>
             </div>
+          )}
+
+          {activeTab === 'editor' && (
+            <LocalEditorTab />
           )}
 
           {/* View: SaaS Shorts */}
