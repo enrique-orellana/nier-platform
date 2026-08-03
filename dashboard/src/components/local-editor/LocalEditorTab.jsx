@@ -188,8 +188,8 @@ export default function LocalEditorTab() {
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLooping, setIsLooping] = useState(false);
-    const [subtitlesOpen, setSubtitlesOpen] = useState(true);
-    const [hookOpen, setHookOpen] = useState(true);
+    const [subtitlesOpen, setSubtitlesOpen] = useState(false);
+    const [hookOpen, setHookOpen] = useState(false);
 
     useEffect(() => () => {
         if (objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrlRef.current);
