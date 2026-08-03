@@ -48,6 +48,18 @@ function Get-PreferredEnvValue {
     return (Get-EnvValue $FallbackName)
 }
 
+function Invoke-CheckedCommand {
+    param(
+        [string]$Command,
+        [string[]]$Arguments
+    )
+
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Command failed with exit code $LASTEXITCODE."
+    }
+}
+
 function Add-NoProxyHost {
     param([string]$HostName)
 
@@ -145,9 +157,9 @@ $rendererImage = "openshorts-renderer:local"
 $translationImage = $backendImage
 
 Write-Step "Building local images"
-docker build -t $backendImage .
-docker build -t $frontendImage -f dashboard/Dockerfile dashboard
-docker build -t $rendererImage -f render-service/Dockerfile .
+Invoke-CheckedCommand "docker" @("build", "-t", $backendImage, ".")
+Invoke-CheckedCommand "docker" @("build", "-t", $frontendImage, "-f", "dashboard/Dockerfile", "dashboard")
+Invoke-CheckedCommand "docker" @("build", "-t", $rendererImage, "-f", "render-service/Dockerfile", ".")
 
 Write-Step "Applying bundle"
 if ($KubeContext) {
