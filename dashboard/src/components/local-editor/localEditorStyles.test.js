@@ -5,6 +5,7 @@ import {
     HOOK_SIZE_OPTIONS,
     SUBTITLE_COLOR_PRESETS,
     SUBTITLE_HIGHLIGHT_PRESETS,
+    hookPositionClass,
     normalizeSubtitleStyle,
     subtitlePositionClass,
 } from './localEditorStyles';
@@ -45,5 +46,12 @@ describe('local editor overlay styles', () => {
             { color: '#00BBFF', label: 'Blue' },
             { color: '#FF69B4', label: 'Pink' },
         ]);
+    });
+
+    it('maps hook positions without sharing the animation transform', () => {
+        expect(hookPositionClass('top')).toContain('top-[8%]');
+        expect(hookPositionClass('center')).toContain('top-1/2');
+        expect(hookPositionClass('center')).toContain('-translate-y-1/2');
+        expect(hookPositionClass('bottom')).toContain('bottom-[18%]');
     });
 });

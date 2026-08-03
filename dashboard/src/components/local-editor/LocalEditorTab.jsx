@@ -13,6 +13,7 @@ import {
     SUBTITLE_FONT_OPTIONS,
     SUBTITLE_HIGHLIGHT_PRESETS,
     hexToRgba,
+    hookPositionClass,
     normalizeSubtitleStyle,
     subtitlePositionClass,
 } from './localEditorStyles';
@@ -323,7 +324,7 @@ export default function LocalEditorTab() {
     };
 
     if (!videoFile) {
-        return <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white"><div className="border-b border-white/10 px-6 py-5"><h1 className="text-2xl font-bold">Local Editor</h1><p className="mt-1 text-sm text-zinc-500">Edit local videos, subtitles, and viral hooks in your browser.</p></div><UploadState onFile={loadVideo} error={error} /></div>;
+        return <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white"><div className="border-b border-white/10 px-4 py-3"><h1 className="text-lg font-bold">Local Editor</h1><p className="mt-0.5 text-xs text-zinc-500">Edit local videos, subtitles, and viral hooks in your browser.</p></div><UploadState onFile={loadVideo} error={error} /></div>;
     }
 
     const activeSubtitle = activeCueAt(subtitleCues, playheadMs);
@@ -342,11 +343,11 @@ export default function LocalEditorTab() {
     return (
         <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-6 py-5">
-                <div><h1 className="text-2xl font-bold">Local Editor</h1><p className="mt-1 text-sm text-zinc-500">{videoFile.name} · local-only editing</p></div>
+                <div><h1 className="text-lg font-bold">Local Editor</h1><p className="mt-0.5 text-xs text-zinc-500">{videoFile.name} · local-only editing</p></div>
                 <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={exportVideo} disabled={busy} className="flex items-center gap-2 rounded-lg bg-fuchsia-500 px-3 py-2 text-xs font-semibold hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"><Film size={14} />{busy ? `Exporting ${Math.round(progress * 100)}%` : 'Export Video'}</button>
-                    <button type="button" onClick={exportSubtitles} disabled={busy || !subtitleCues.length} className="flex items-center gap-2 rounded-lg bg-violet-500 px-3 py-2 text-xs font-semibold hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50"><Download size={14} />Export Subtitles</button>
-                    <button type="button" onClick={reset} disabled={busy} aria-label="Reset" className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300 hover:bg-white/5 disabled:opacity-50"><RotateCcw size={14} />Reset</button>
+                    <button type="button" onClick={exportVideo} disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-fuchsia-500 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"><Film size={13} />{busy ? `Exporting ${Math.round(progress * 100)}%` : 'Export Video'}</button>
+                    <button type="button" onClick={exportSubtitles} disabled={busy || !subtitleCues.length} className="flex items-center gap-1.5 rounded-lg bg-violet-500 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50"><Download size={13} />Export Subtitles</button>
+                    <button type="button" onClick={reset} disabled={busy} aria-label="Reset" className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:opacity-50"><RotateCcw size={13} />Reset</button>
                 </div>
             </div>
             {error && <div className="mx-6 mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div>}
@@ -357,7 +358,7 @@ export default function LocalEditorTab() {
                             <video ref={videoRef} src={videoUrl} controls className="h-full w-full object-contain" onLoadedMetadata={handleMetadata} onTimeUpdate={(event) => setPlayheadMs(event.currentTarget.currentTime * 1000)} />
                             <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className="absolute right-3 top-3 z-20 rounded-lg border border-white/20 bg-black/60 p-2 text-white shadow-lg backdrop-blur hover:bg-black/80">{isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
                             <div className="pointer-events-none absolute inset-0">
-                                {activeHook && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 rounded-lg px-3 py-2 text-center font-bold shadow-lg ${activeHook.position === 'top' ? 'top-[8%]' : activeHook.position === 'bottom' ? 'bottom-[18%]' : 'top-1/2 -translate-y-1/2'}`} style={{ color: activeHook.color, backgroundColor: activeHook.background, fontSize: `${Math.max(14, (activeHook.fontSize / 2.6) * hookSizeScale)}px`, ...hookEntranceStyle }}>{activeHook.text}</div>}
+                                {activeHook && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 ${hookPositionClass(activeHook.position)}`}><div className="rounded-lg px-3 py-2 text-center font-bold shadow-lg" style={{ color: activeHook.color, backgroundColor: activeHook.background, fontSize: `${Math.max(14, (activeHook.fontSize / 2.6) * hookSizeScale)}px`, ...hookEntranceStyle }}>{activeHook.text}</div></div>}
                                 {activeSubtitle && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`} style={{ fontFamily: previewSubtitleStyle.fontFamily, color: previewSubtitleStyle.animation === 'karaoke' ? previewSubtitleStyle.highlightColor : previewSubtitleStyle.fontColor, fontSize: `${Math.max(12, previewSubtitleStyle.fontSize / 1.6)}px`, textShadow: outlineTextShadow(previewSubtitleStyle.borderWidth, previewSubtitleStyle.borderColor), backgroundColor: previewSubtitleStyle.bgOpacity > 0 ? hexToRgba(previewSubtitleStyle.bgColor, previewSubtitleStyle.bgOpacity) : 'transparent' }}>{activeSubtitle.text}</div>}
                             </div>
                         </div>

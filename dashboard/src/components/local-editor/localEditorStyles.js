@@ -55,6 +55,10 @@ export const subtitlePositionClass = (position) => (
     position === 'top' ? 'top-[8%]' : position === 'middle' ? 'top-1/2 -translate-y-1/2' : 'bottom-[8%]'
 );
 
+export const hookPositionClass = (position) => (
+    position === 'top' ? 'top-[8%]' : position === 'center' ? 'top-1/2 -translate-y-1/2' : 'bottom-[18%]'
+);
+
 export const hexToRgba = (hex, opacity) => {
     const value = String(hex || '#000000').replace('#', '');
     const normalized = value.length === 3 ? value.split('').map((part) => `${part}${part}`).join('') : value;
