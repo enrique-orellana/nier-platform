@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, FileText, Film, Maximize2, Minimize2, Plus, RotateCcw, Upload, X } from 'lucide-react';
+import { ChevronDown, Download, FastForward, FileText, Film, Maximize2, Minimize2, Pause, Play, Plus, Repeat, Rewind, RotateCcw, SkipBack, SkipForward, Square, Upload, X } from 'lucide-react';
 import LocalEditorTimeline from './LocalEditorTimeline';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock, renderLocalVideo } from './localEditorExport';
@@ -186,6 +186,10 @@ export default function LocalEditorTab() {
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState(0);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isLooping, setIsLooping] = useState(false);
+    const [subtitlesOpen, setSubtitlesOpen] = useState(true);
+    const [hookOpen, setHookOpen] = useState(true);
 
     useEffect(() => () => {
         if (objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrlRef.current);
@@ -215,6 +219,9 @@ export default function LocalEditorTab() {
         setVideoUrl(nextUrl);
         setDurationMs(DEFAULT_DURATION_MS);
         setPlayheadMs(0);
+        setIsPlaying(false);
+        setIsLooping(false);
+        if (videoRef.current) videoRef.current.loop = false;
         setError('');
     };
 
@@ -258,6 +265,7 @@ export default function LocalEditorTab() {
         const nextHook = { id: 'hook', text: 'Your viral hook', startMs: 0, endMs: Math.min(2500, durationMs), position: 'top', size: 'M', entranceAnimation: 'spring', color: '#ffffff', fontSize: 48, background: '#111111' };
         setHook(nextHook);
         setSelected({ id: 'hook', type: 'hook' });
+        setHookOpen(true);
     };
 
     const removeHook = () => {
@@ -273,8 +281,45 @@ export default function LocalEditorTab() {
     };
 
     const handleSeek = (nextMs) => {
-        setPlayheadMs(nextMs);
-        if (videoRef.current) videoRef.current.currentTime = nextMs / 1000;
+        const clampedMs = clamp(nextMs, 0, durationMs);
+        setPlayheadMs(clampedMs);
+        if (videoRef.current) videoRef.current.currentTime = clampedMs / 1000;
+    };
+
+    const seekBy = (deltaMs) => {
+        const currentMs = videoRef.current ? videoRef.current.currentTime * 1000 : playheadMs;
+        handleSeek(currentMs + deltaMs);
+    };
+
+    const togglePlayback = async () => {
+        const video = videoRef.current;
+        if (!video) return;
+        if (video.paused) {
+            try {
+                await video.play();
+                setIsPlaying(true);
+            } catch (playError) {
+                setError(playError.message || 'Could not play local video.');
+            }
+        } else {
+            video.pause();
+            setIsPlaying(false);
+        }
+    };
+
+    const stopVideo = () => {
+        const video = videoRef.current;
+        if (!video) return;
+        video.pause();
+        video.currentTime = 0;
+        setPlayheadMs(0);
+        setIsPlaying(false);
+    };
+
+    const toggleLoop = () => {
+        const nextLooping = !isLooping;
+        setIsLooping(nextLooping);
+        if (videoRef.current) videoRef.current.loop = nextLooping;
     };
 
     const toggleFullscreen = async () => {
@@ -309,6 +354,7 @@ export default function LocalEditorTab() {
 
     const reset = () => {
         videoRef.current?.pause();
+        if (videoRef.current) videoRef.current.loop = false;
         if (objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrlRef.current);
         objectUrlRef.current = '';
         setVideoFile(null);
@@ -320,6 +366,8 @@ export default function LocalEditorTab() {
         setPendingSubtitle(null);
         setPlayheadMs(0);
         setProgress(0);
+        setIsPlaying(false);
+        setIsLooping(false);
         setError('');
     };
 
@@ -355,11 +403,21 @@ export default function LocalEditorTab() {
                 <main className="min-w-0 space-y-5">
                     <div ref={playerRef} data-testid="local-editor-player" className={isFullscreen ? 'fixed inset-0 z-50 flex items-center justify-center bg-black p-4' : 'mx-auto flex h-[calc(100vh-180px)] max-h-[72vh] w-full max-w-[360px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl'}>
                         <div className="relative h-full max-h-full w-auto max-w-full aspect-[9/16]">
-                            <video ref={videoRef} src={videoUrl} controls className="h-full w-full object-contain" onLoadedMetadata={handleMetadata} onTimeUpdate={(event) => setPlayheadMs(event.currentTarget.currentTime * 1000)} />
+                            <video ref={videoRef} src={videoUrl} controls={false} className="h-full w-full object-contain" onLoadedMetadata={handleMetadata} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onTimeUpdate={(event) => setPlayheadMs(event.currentTarget.currentTime * 1000)} />
                             <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className="absolute right-3 top-3 z-20 rounded-lg border border-white/20 bg-black/60 p-2 text-white shadow-lg backdrop-blur hover:bg-black/80">{isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
                             <div className="pointer-events-none absolute inset-0">
                                 {activeHook && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 ${hookPositionClass(activeHook.position)}`}><div className="rounded-lg px-3 py-2 text-center font-bold shadow-lg" style={{ color: activeHook.color, backgroundColor: activeHook.background, fontSize: `${Math.max(14, (activeHook.fontSize / 2.6) * hookSizeScale)}px`, ...hookEntranceStyle }}>{activeHook.text}</div></div>}
                                 {activeSubtitle && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`} style={{ fontFamily: previewSubtitleStyle.fontFamily, color: previewSubtitleStyle.animation === 'karaoke' ? previewSubtitleStyle.highlightColor : previewSubtitleStyle.fontColor, fontSize: `${Math.max(12, previewSubtitleStyle.fontSize / 1.6)}px`, textShadow: outlineTextShadow(previewSubtitleStyle.borderWidth, previewSubtitleStyle.borderColor), backgroundColor: previewSubtitleStyle.bgOpacity > 0 ? hexToRgba(previewSubtitleStyle.bgColor, previewSubtitleStyle.bgOpacity) : 'transparent' }}>{activeSubtitle.text}</div>}
+                            </div>
+                            <div data-testid="local-editor-video-controls" className="absolute bottom-0 left-0 right-0 z-30 flex items-center justify-center gap-1 border-t border-white/10 bg-[#202126]/95 px-2 py-1.5 text-zinc-300 shadow-lg backdrop-blur">
+                                <button type="button" aria-label="Go to beginning" title="Go to beginning" onClick={() => handleSeek(0)} className="rounded p-1.5 hover:bg-white/10 hover:text-white"><SkipBack size={16} /></button>
+                                <button type="button" aria-label="Rewind 5 seconds" title="Rewind 5 seconds" onClick={() => seekBy(-5000)} className="rounded p-1.5 hover:bg-white/10 hover:text-white"><Rewind size={16} /></button>
+                                <button type="button" aria-label={isPlaying ? 'Pause video' : 'Play video'} title={isPlaying ? 'Pause video' : 'Play video'} onClick={togglePlayback} className="rounded p-1.5 hover:bg-white/10 hover:text-white">{isPlaying ? <Pause size={16} /> : <Play size={16} />}</button>
+                                <button type="button" aria-label="Stop video" title="Stop video" onClick={stopVideo} className="rounded p-1.5 hover:bg-white/10 hover:text-white"><Square size={15} /></button>
+                                <button type="button" aria-label="Fast forward 5 seconds" title="Fast forward 5 seconds" onClick={() => seekBy(5000)} className="rounded p-1.5 hover:bg-white/10 hover:text-white"><FastForward size={16} /></button>
+                                <button type="button" aria-label="Go to end" title="Go to end" onClick={() => handleSeek(durationMs)} className="rounded p-1.5 hover:bg-white/10 hover:text-white"><SkipForward size={16} /></button>
+                                <button type="button" aria-label={isLooping ? 'Disable loop' : 'Enable loop'} title={isLooping ? 'Disable loop' : 'Enable loop'} onClick={toggleLoop} className={`rounded p-1.5 hover:bg-white/10 hover:text-white ${isLooping ? 'text-fuchsia-300' : ''}`}><Repeat size={16} /></button>
+                                <span className="ml-1 min-w-[74px] text-center font-mono text-[10px] text-zinc-400">{formatClock(playheadMs)} / {formatClock(durationMs)}</span>
                             </div>
                         </div>
                     </div>
@@ -367,16 +425,18 @@ export default function LocalEditorTab() {
                 </main>
                 <aside className="space-y-4">
                     <section className="rounded-xl border border-white/10 bg-white/[.02] p-4">
-                        <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold text-white">Subtitles</h2><FileText size={16} className="text-violet-300" /></div>
-                        <input ref={subtitleInputRef} type="file" accept=".srt,.vtt,text/vtt,application/x-subrip" aria-label="Subtitle file" className="hidden" onChange={(event) => { const file = event.target.files?.[0] || null; setPendingSubtitle(file); importSubtitleFile(file); }} />
-                        <button type="button" onClick={handleImport} className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-200 hover:bg-violet-500/20"><Upload size={14} />Import subtitles</button>
-                        <p className="mt-2 text-[11px] leading-5 text-zinc-500">Import timed .srt or .vtt files, then edit every cue directly on the timeline.</p>
-                        {pendingSubtitle && <p className="mt-2 truncate text-xs text-violet-300">Ready: {pendingSubtitle.name}</p>}
-                        <SubtitleStyleInspector style={subtitleStyle} onChange={setSubtitleStyle} onRemove={removeSubtitles} hasCues={subtitleCues.length > 0} />
+                        <div className="flex items-center justify-between"><button type="button" aria-label="Toggle Subtitles settings" aria-expanded={subtitlesOpen} aria-controls="subtitle-settings-panel" onClick={() => setSubtitlesOpen((open) => !open)} className="flex items-center gap-2 text-sm font-semibold text-white"><ChevronDown size={16} className={`text-violet-300 transition-transform ${subtitlesOpen ? '' : '-rotate-90'}`} />Subtitles</button><FileText size={16} className="text-violet-300" /></div>
+                        {subtitlesOpen && <div id="subtitle-settings-panel" className="mt-3">
+                            <input ref={subtitleInputRef} type="file" accept=".srt,.vtt,text/vtt,application/x-subrip" aria-label="Subtitle file" className="hidden" onChange={(event) => { const file = event.target.files?.[0] || null; setPendingSubtitle(file); importSubtitleFile(file); }} />
+                            <button type="button" onClick={handleImport} className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-200 hover:bg-violet-500/20"><Upload size={14} />Import subtitles</button>
+                            <p className="mt-2 text-[11px] leading-5 text-zinc-500">Import timed .srt or .vtt files, then edit every cue directly on the timeline.</p>
+                            {pendingSubtitle && <p className="mt-2 truncate text-xs text-violet-300">Ready: {pendingSubtitle.name}</p>}
+                            <SubtitleStyleInspector style={subtitleStyle} onChange={setSubtitleStyle} onRemove={removeSubtitles} hasCues={subtitleCues.length > 0} />
+                        </div>}
                     </section>
                     <section className="rounded-xl border border-white/10 bg-white/[.02] p-4">
-                        <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold text-white">Viral Hook</h2><button type="button" onClick={addHook} className="flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-1 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/25"><Plus size={12} />{hook ? 'Reset hook' : 'Add Viral Hook'}</button></div>
-                        {selected?.type === 'hook' ? <HookInspector hook={selectedCue} onChange={updateHook} onRemove={removeHook} /> : <HookInspector hook={null} onChange={updateHook} onRemove={removeHook} />}
+                        <div className="flex items-center justify-between"><button type="button" aria-label="Toggle Viral Hook settings" aria-expanded={hookOpen} aria-controls="viral-hook-settings-panel" onClick={() => setHookOpen((open) => !open)} className="flex items-center gap-2 text-sm font-semibold text-white"><ChevronDown size={16} className={`text-amber-300 transition-transform ${hookOpen ? '' : '-rotate-90'}`} />Viral Hook</button><button type="button" onClick={addHook} className="flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-1 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/25"><Plus size={12} />{hook ? 'Reset hook' : 'Add Viral Hook'}</button></div>
+                        {hookOpen && <div id="viral-hook-settings-panel" className="mt-3">{selected?.type === 'hook' ? <HookInspector hook={selectedCue} onChange={updateHook} onRemove={removeHook} /> : <HookInspector hook={null} onChange={updateHook} onRemove={removeHook} />}</div>}
                     </section>
                     <section className="rounded-xl border border-white/10 bg-white/[.02] p-4">
                         {selected?.type === 'subtitle' ? <SubtitleInspector cue={selectedCue} onChange={updateSubtitle} onDelete={(id) => { setSubtitleCues((current) => current.filter((cue) => cue.id !== id)); setSelected(null); }} /> : <p className="text-xs text-zinc-500">Select a subtitle cue or the hook track to edit its properties.</p>}

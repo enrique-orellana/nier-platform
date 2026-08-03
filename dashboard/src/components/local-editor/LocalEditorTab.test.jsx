@@ -36,6 +36,22 @@ describe('LocalEditorTab', () => {
         expect(requestFullscreen).toHaveBeenCalledTimes(1);
     });
 
+    it('collapses overlay settings and exposes custom video controls', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        expect(screen.getByRole('button', { name: /play video/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /stop video/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /rewind 5 seconds/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /fast forward 5 seconds/i })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
+        expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('button', { name: /import subtitles/i })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /toggle viral hook settings/i }));
+        expect(screen.getByRole('button', { name: /toggle viral hook settings/i })).toHaveAttribute('aria-expanded', 'false');
+    });
+
     it('imports an SRT file', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
         render(<LocalEditorTab />);
