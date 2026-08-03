@@ -11,6 +11,7 @@ import {
     SUBTITLE_ANIMATION_OPTIONS,
     SUBTITLE_COLOR_PRESETS,
     SUBTITLE_FONT_OPTIONS,
+    SUBTITLE_HIGHLIGHT_PRESETS,
     hexToRgba,
     normalizeSubtitleStyle,
     subtitlePositionClass,
@@ -120,7 +121,8 @@ function SubtitleStyleInspector({ style, onChange, onRemove, hasCues }) {
                 <label className="text-xs text-zinc-400">Subtitle text color<input aria-label="Subtitle text color" type="color" value={current.fontColor} onChange={(event) => update('fontColor', event.target.value)} className="mt-1 h-9 w-full rounded border border-white/10 bg-black/30" /></label>
                 <label className="text-xs text-zinc-400">Subtitle highlight color<input aria-label="Subtitle highlight color" type="color" value={current.highlightColor} onChange={(event) => update('highlightColor', event.target.value)} className="mt-1 h-9 w-full rounded border border-white/10 bg-black/30" /></label>
             </div>
-            <div className="flex flex-wrap gap-1.5" aria-label="Subtitle text color presets">{SUBTITLE_COLOR_PRESETS.map((color) => <button key={color} type="button" aria-label={`Use subtitle color ${color}`} onClick={() => update('fontColor', color)} className={`h-6 w-6 rounded-full border-2 ${current.fontColor.toUpperCase() === color ? 'border-white' : 'border-white/20'}`} style={{ backgroundColor: color }} />)}</div>
+            <div className="flex flex-wrap gap-1.5" aria-label="Subtitle text color presets">{SUBTITLE_COLOR_PRESETS.map((preset) => <button key={preset.color} type="button" aria-label={`Use subtitle color ${preset.label}`} title={preset.label} onClick={() => update('fontColor', preset.color)} className={`h-6 w-6 rounded-full border-2 ${current.fontColor.toUpperCase() === preset.color ? 'border-white' : 'border-white/20'}`} style={{ backgroundColor: preset.color }} />)}</div>
+            <div><span className="text-xs text-zinc-400">Highlight color presets</span><div className="mt-1 flex flex-wrap gap-1.5" aria-label="Subtitle highlight color presets">{SUBTITLE_HIGHLIGHT_PRESETS.map((preset) => <button key={preset.color} type="button" aria-label={`Use subtitle highlight color ${preset.label}`} title={preset.label} onClick={() => update('highlightColor', preset.color)} className={`h-6 w-6 rounded-full border-2 ${current.highlightColor.toUpperCase() === preset.color ? 'border-white' : 'border-white/20'}`} style={{ backgroundColor: preset.color }} />)}</div></div>
             <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs text-zinc-400">Subtitle outline color<input aria-label="Subtitle outline color" type="color" value={current.borderColor} onChange={(event) => update('borderColor', event.target.value)} className="mt-1 h-9 w-full rounded border border-white/10 bg-black/30" /></label>
                 <label className="text-xs text-zinc-400">Subtitle background color<input aria-label="Subtitle background color" type="color" value={current.bgColor} onChange={(event) => update('bgColor', event.target.value)} className="mt-1 h-9 w-full rounded border border-white/10 bg-black/30" /></label>

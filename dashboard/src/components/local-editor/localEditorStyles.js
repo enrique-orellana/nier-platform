@@ -14,7 +14,21 @@ export const HOOK_ENTRANCE_OPTIONS = [
 export const HOOK_SIZE_SCALE = { S: 0.8, M: 1, L: 1.3 };
 
 export const SUBTITLE_FONT_OPTIONS = ['Verdana', 'Arial', 'Impact', 'Helvetica', 'Georgia', 'Courier New'];
-export const SUBTITLE_COLOR_PRESETS = ['#FFFFFF', '#FFDD00', '#00FFFF', '#00FF66', '#FF3333', '#FF66CC'];
+export const SUBTITLE_COLOR_PRESETS = [
+    { color: '#FFFFFF', label: 'White' },
+    { color: '#FFFF00', label: 'Yellow' },
+    { color: '#00FFFF', label: 'Cyan' },
+    { color: '#00FF00', label: 'Green' },
+    { color: '#FF0000', label: 'Red' },
+    { color: '#FF69B4', label: 'Pink' },
+];
+export const SUBTITLE_HIGHLIGHT_PRESETS = [
+    { color: '#FFDD00', label: 'Gold' },
+    { color: '#FF4444', label: 'Red' },
+    { color: '#00FF88', label: 'Green' },
+    { color: '#00BBFF', label: 'Blue' },
+    { color: '#FF69B4', label: 'Pink' },
+];
 export const SUBTITLE_ANIMATION_OPTIONS = [
     { value: 'pop', label: 'Pop' },
     { value: 'word-highlight', label: 'Glow' },
