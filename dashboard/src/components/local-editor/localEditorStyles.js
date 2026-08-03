@@ -1,0 +1,49 @@
+export const HOOK_SIZE_OPTIONS = [
+    { value: 'S', label: 'Small' },
+    { value: 'M', label: 'Medium' },
+    { value: 'L', label: 'Large' },
+];
+
+export const HOOK_ENTRANCE_OPTIONS = [
+    { value: 'spring', label: 'Bounce' },
+    { value: 'fade', label: 'Fade' },
+    { value: 'slide-up', label: 'Slide Up' },
+    { value: 'none', label: 'None' },
+];
+
+export const SUBTITLE_FONT_OPTIONS = ['Verdana', 'Arial', 'Impact', 'Helvetica', 'Georgia', 'Courier New'];
+export const SUBTITLE_COLOR_PRESETS = ['#FFFFFF', '#FFDD00', '#00FFFF', '#00FF66', '#FF3333', '#FF66CC'];
+export const SUBTITLE_ANIMATION_OPTIONS = [
+    { value: 'pop', label: 'Pop' },
+    { value: 'word-highlight', label: 'Glow' },
+    { value: 'karaoke', label: 'Karaoke' },
+    { value: 'none', label: 'None' },
+];
+
+export const DEFAULT_SUBTITLE_STYLE = {
+    position: 'bottom',
+    fontFamily: 'Verdana',
+    fontSize: 24,
+    fontColor: '#FFFFFF',
+    highlightColor: '#FFDD00',
+    borderColor: '#000000',
+    borderWidth: 2,
+    bgColor: '#000000',
+    bgOpacity: 0,
+    animation: 'pop',
+};
+
+export const normalizeSubtitleStyle = (style = {}) => ({ ...DEFAULT_SUBTITLE_STYLE, ...style });
+
+export const subtitlePositionClass = (position) => (
+    position === 'top' ? 'top-[8%]' : position === 'middle' ? 'top-1/2 -translate-y-1/2' : 'bottom-[8%]'
+);
+
+export const hexToRgba = (hex, opacity) => {
+    const value = String(hex || '#000000').replace('#', '');
+    const normalized = value.length === 3 ? value.split('').map((part) => `${part}${part}`).join('') : value;
+    const red = parseInt(normalized.slice(0, 2), 16) || 0;
+    const green = parseInt(normalized.slice(2, 4), 16) || 0;
+    const blue = parseInt(normalized.slice(4, 6), 16) || 0;
+    return `rgba(${red}, ${green}, ${blue}, ${Math.max(0, Math.min(1, Number(opacity) || 0))})`;
+};
