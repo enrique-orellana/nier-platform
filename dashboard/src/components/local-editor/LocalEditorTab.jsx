@@ -3,6 +3,17 @@ import { Download, FileText, Film, Plus, RotateCcw, Upload, X } from 'lucide-rea
 import LocalEditorTimeline from './LocalEditorTimeline';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock, renderLocalVideo } from './localEditorExport';
+import {
+    DEFAULT_SUBTITLE_STYLE,
+    HOOK_ENTRANCE_OPTIONS,
+    HOOK_SIZE_OPTIONS,
+    HOOK_SIZE_SCALE,
+    SUBTITLE_ANIMATION_OPTIONS,
+    SUBTITLE_COLOR_PRESETS,
+    SUBTITLE_FONT_OPTIONS,
+    normalizeSubtitleStyle,
+    subtitlePositionClass,
+} from './localEditorStyles';
 
 const DEFAULT_DURATION_MS = 30000;
 
@@ -14,6 +25,19 @@ const clampCue = (cue, durationMs) => {
     const endMs = clamp(cue.endMs, startMs + 80, duration);
     return { ...cue, startMs, endMs };
 };
+
+const outlineTextShadow = (width, color) => {
+    const borderWidth = Math.max(0, Number(width) || 0);
+    if (!borderWidth) return 'none';
+    return [
+        `${borderWidth}px 0 0 ${color}`,
+        `-${borderWidth}px 0 0 ${color}`,
+        `0 ${borderWidth}px 0 ${color}`,
+        `0 -${borderWidth}px 0 ${color}`,
+    ].join(', ');
+};
+
+const buttonChoiceClass = (selected) => `rounded-lg border px-2 py-2 text-xs font-semibold transition-colors ${selected ? 'border-white bg-white text-black' : 'border-white/10 bg-white/[.06] text-zinc-400 hover:bg-white/10 hover:text-white'}`;
 
 const downloadBlob = (blob, fileName) => {
     const url = URL.createObjectURL(blob);
@@ -76,7 +100,42 @@ function SubtitleInspector({ cue, onChange, onDelete }) {
     );
 }
 
-function HookInspector({ hook, onChange }) {
+function SubtitleStyleInspector({ style, onChange, onRemove, hasCues }) {
+    const current = normalizeSubtitleStyle(style);
+    const update = (key, value) => onChange({ ...current, [key]: value });
+    return (
+        <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
+            <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-300">Subtitle style</h3>
+                {hasCues && <button type="button" onClick={onRemove} className="text-xs text-red-300 hover:text-red-200">Remove Subtitles</button>}
+            </div>
+            <label className="block text-xs text-zinc-400">Subtitle font<select aria-label="Subtitle font" value={current.fontFamily} onChange={(event) => update('fontFamily', event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white">{SUBTITLE_FONT_OPTIONS.map((font) => <option key={font} value={font} style={{ fontFamily: font }}>{font}</option>)}</select></label>
+            <label className="block text-xs text-zinc-400">Subtitle position<select aria-label="Subtitle position" value={current.position} onChange={(event) => update('position', event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white"><option value="top">Top</option><option value="middle">Middle</option><option value="bottom">Bottom</option></select></label>
+            <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-zinc-400">Subtitle font size<input aria-label="Subtitle font size" type="number" min="12" max="120" value={current.fontSize} onChange={(event) => update('fontSize', Math.max(12, Number(event.target.value) || 12))} className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white" /></label>
+                <label className="text-xs text-zinc-400">Subtitle outline width<input aria-label="Subtitle outline width" type="range" min="0" max="5" step="1" value={current.borderWidth} onChange={(event) => update('borderWidth', Number(event.target.value))} className="mt-3 w-full accent-violet-400" /><span className="block text-right text-[10px] text-zinc-500">{current.borderWidth}px</span></label>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-zinc-400">Subtitle text color<input aria-label="Subtitle text color" type="color" value={current.fontColor} onChange={(event) => update('fontColor', event.target.value)} className="mt-1 h-9 w-full rounded border border-white/10 bg-black/30" /></label>
+                <label className="text-xs text-zinc-400">Subtitle highlight color<input aria-label="Subtitle highlight color" type="color" value={current.highlightColor} onChange={(event) => update('highlightColor', event.target.value)} className="mt-1 h-9 w-full rounded border border-white/10 bg-black/30" /></label>
+            </div>
+            <div className="flex flex-wrap gap-1.5" aria-label="Subtitle text color presets">{SUBTITLE_COLOR_PRESETS.map((color) => <button key={color} type="button" aria-label={`Use subtitle color ${color}`} onClick={() => update('fontColor', color)} className={`h-6 w-6 rounded-full border-2 ${current.fontColor.toUpperCase() === color ? 'border-white' : 'border-white/20'}`} style={{ backgroundColor: color }} />)}</div>
+            <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-zinc-400">Subtitle outline color<input aria-label="Subtitle outline color" type="color" value={current.borderColor} onChange={(event) => update('borderColor', event.target.value)} className="mt-1 h-9 w-full rounded border border-white/10 bg-black/30" /></label>
+                <label className="text-xs text-zinc-400">Subtitle background color<input aria-label="Subtitle background color" type="color" value={current.bgColor} onChange={(event) => update('bgColor', event.target.value)} className="mt-1 h-9 w-full rounded border border-white/10 bg-black/30" /></label>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" aria-label="Subtitle background" checked={current.bgOpacity > 0} onChange={(event) => update('bgOpacity', event.target.checked ? 0.5 : 0)} className="accent-violet-400" />Background box</label>
+            <label className="block text-xs text-zinc-400">Subtitle background opacity<input aria-label="Subtitle background opacity" type="range" min="0" max="1" step="0.05" value={current.bgOpacity} onChange={(event) => update('bgOpacity', Number(event.target.value))} className="mt-2 w-full accent-violet-400" /><span className="block text-right text-[10px] text-zinc-500">{Math.round(current.bgOpacity * 100)}%</span></label>
+            <div>
+                <span className="text-xs text-zinc-400">Subtitle animation</span>
+                <div className="mt-1 grid grid-cols-2 gap-2">{SUBTITLE_ANIMATION_OPTIONS.map((option) => <button key={option.value} type="button" onClick={() => update('animation', option.value)} className={buttonChoiceClass(current.animation === option.value)}>{option.label}</button>)}</div>
+            </div>
+            {!hasCues && <p className="text-[11px] text-zinc-500">Import subtitles to enable this style.</p>}
+        </div>
+    );
+}
+
+function HookInspector({ hook, onChange, onRemove }) {
     if (!hook) return <p className="text-xs text-zinc-500">Add a hook to place a bold opening message over the video.</p>;
     return (
         <div className="space-y-3">
@@ -87,11 +146,20 @@ function HookInspector({ hook, onChange }) {
                 <label className="text-xs text-zinc-400">End (ms)<input aria-label="Hook end" type="number" value={hook.endMs} onChange={(event) => onChange({ ...hook, endMs: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white" /></label>
             </div>
             <label className="block text-xs text-zinc-400">Position<select aria-label="Hook position" value={hook.position} onChange={(event) => onChange({ ...hook, position: event.target.value })} className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white"><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label>
+            <div>
+                <span className="text-xs text-zinc-400">Size</span>
+                <div className="mt-1 grid grid-cols-3 gap-2">{HOOK_SIZE_OPTIONS.map((option) => <button key={option.value} type="button" onClick={() => onChange({ ...hook, size: option.value })} className={buttonChoiceClass((hook.size || 'M') === option.value)}>{option.label}</button>)}</div>
+            </div>
+            <div>
+                <span className="text-xs text-zinc-400">Entrance</span>
+                <div className="mt-1 grid grid-cols-2 gap-2">{HOOK_ENTRANCE_OPTIONS.map((option) => <button key={option.value} type="button" onClick={() => onChange({ ...hook, entranceAnimation: option.value })} className={buttonChoiceClass((hook.entranceAnimation || 'spring') === option.value)}>{option.label}</button>)}</div>
+            </div>
             <div className="grid grid-cols-3 gap-2">
                 <label className="text-xs text-zinc-400">Text color<input aria-label="Hook text color" type="color" value={hook.color} onChange={(event) => onChange({ ...hook, color: event.target.value })} className="mt-1 h-9 w-full rounded border border-white/10 bg-black/30" /></label>
                 <label className="text-xs text-zinc-400">Size<input aria-label="Hook font size" type="number" min="12" max="160" value={hook.fontSize} onChange={(event) => onChange({ ...hook, fontSize: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white" /></label>
                 <label className="text-xs text-zinc-400">Background<input aria-label="Hook background" type="color" value={hook.background} onChange={(event) => onChange({ ...hook, background: event.target.value })} className="mt-1 h-9 w-full rounded border border-white/10 bg-black/30" /></label>
             </div>
+            <button type="button" onClick={onRemove} className="w-full rounded-lg border border-red-400/30 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-400/10">Remove Hook</button>
         </div>
     );
 }
@@ -105,6 +173,7 @@ export default function LocalEditorTab() {
     const [durationMs, setDurationMs] = useState(DEFAULT_DURATION_MS);
     const [playheadMs, setPlayheadMs] = useState(0);
     const [subtitleCues, setSubtitleCues] = useState([]);
+    const [subtitleStyle, setSubtitleStyle] = useState(DEFAULT_SUBTITLE_STYLE);
     const [hook, setHook] = useState(null);
     const [selected, setSelected] = useState(null);
     const [pendingSubtitle, setPendingSubtitle] = useState(null);
@@ -174,9 +243,21 @@ export default function LocalEditorTab() {
     };
 
     const addHook = () => {
-        const nextHook = { id: 'hook', text: 'Your viral hook', startMs: 0, endMs: Math.min(2500, durationMs), position: 'top', color: '#ffffff', fontSize: 48, background: '#111111' };
+        const nextHook = { id: 'hook', text: 'Your viral hook', startMs: 0, endMs: Math.min(2500, durationMs), position: 'top', size: 'M', entranceAnimation: 'spring', color: '#ffffff', fontSize: 48, background: '#111111' };
         setHook(nextHook);
         setSelected({ id: 'hook', type: 'hook' });
+    };
+
+    const removeHook = () => {
+        setHook(null);
+        setSelected((current) => current?.type === 'hook' ? null : current);
+    };
+
+    const removeSubtitles = () => {
+        if (!window.confirm('Remove all subtitles?')) return;
+        setSubtitleCues([]);
+        setSubtitleStyle(DEFAULT_SUBTITLE_STYLE);
+        setSelected((current) => current?.type === 'subtitle' ? null : current);
     };
 
     const handleSeek = (nextMs) => {
@@ -191,7 +272,7 @@ export default function LocalEditorTab() {
         setProgress(0);
         setError('');
         try {
-            const blob = await renderLocalVideo({ video: videoRef.current, subtitleCues, hook, onProgress: setProgress });
+            const blob = await renderLocalVideo({ video: videoRef.current, subtitleCues, subtitleStyle, hook, onProgress: setProgress });
             downloadBlob(blob, 'openshorts-local-editor.webm');
         } catch (exportError) {
             setError(exportError.message || 'Could not export this video locally.');
@@ -207,6 +288,7 @@ export default function LocalEditorTab() {
         setVideoFile(null);
         setVideoUrl('');
         setSubtitleCues([]);
+        setSubtitleStyle(DEFAULT_SUBTITLE_STYLE);
         setHook(null);
         setSelected(null);
         setPendingSubtitle(null);
@@ -221,6 +303,16 @@ export default function LocalEditorTab() {
 
     const activeSubtitle = activeCueAt(subtitleCues, playheadMs);
     const activeHook = hook && playheadMs >= hook.startMs && playheadMs < hook.endMs ? hook : null;
+    const previewSubtitleStyle = normalizeSubtitleStyle(subtitleStyle);
+    const hookElapsedMs = activeHook ? Math.max(0, playheadMs - activeHook.startMs) : 0;
+    const hookSizeScale = activeHook ? (HOOK_SIZE_SCALE[activeHook.size] || HOOK_SIZE_SCALE.M) : 1;
+    const hookEntranceStyle = activeHook?.entranceAnimation === 'fade'
+        ? { opacity: Math.min(1, hookElapsedMs / 500) }
+        : activeHook?.entranceAnimation === 'slide-up'
+            ? { opacity: Math.min(1, hookElapsedMs / 500), transform: `translateY(${Math.max(0, 24 - hookElapsedMs / 20)}px)` }
+            : activeHook?.entranceAnimation === 'spring'
+                ? { opacity: Math.min(1, hookElapsedMs / 250), transform: `scale(${0.82 + Math.min(1, hookElapsedMs / 350) * 0.18})` }
+                : {};
 
     return (
         <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white">
@@ -239,8 +331,8 @@ export default function LocalEditorTab() {
                         <div className="relative aspect-[9/16]">
                             <video ref={videoRef} src={videoUrl} controls className="h-full w-full object-contain" onLoadedMetadata={handleMetadata} onTimeUpdate={(event) => setPlayheadMs(event.currentTarget.currentTime * 1000)} />
                             <div className="pointer-events-none absolute inset-0">
-                                {activeHook && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 rounded-lg px-3 py-2 text-center font-bold shadow-lg ${activeHook.position === 'top' ? 'top-[8%]' : activeHook.position === 'bottom' ? 'bottom-[18%]' : 'top-1/2 -translate-y-1/2'}`} style={{ color: activeHook.color, backgroundColor: activeHook.background, fontSize: `${Math.max(14, activeHook.fontSize / 2.6)}px` }}>{activeHook.text}</div>}
-                                {activeSubtitle && <div className="absolute bottom-[8%] left-1/2 w-[88%] -translate-x-1/2 rounded-lg bg-black/75 px-3 py-2 text-center text-sm font-semibold text-white shadow-lg">{activeSubtitle.text}</div>}
+                                {activeHook && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 rounded-lg px-3 py-2 text-center font-bold shadow-lg ${activeHook.position === 'top' ? 'top-[8%]' : activeHook.position === 'bottom' ? 'bottom-[18%]' : 'top-1/2 -translate-y-1/2'}`} style={{ color: activeHook.color, backgroundColor: activeHook.background, fontSize: `${Math.max(14, (activeHook.fontSize / 2.6) * hookSizeScale)}px`, ...hookEntranceStyle }}>{activeHook.text}</div>}
+                                {activeSubtitle && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`} style={{ fontFamily: previewSubtitleStyle.fontFamily, color: previewSubtitleStyle.fontColor, fontSize: `${Math.max(12, previewSubtitleStyle.fontSize / 1.6)}px`, textShadow: outlineTextShadow(previewSubtitleStyle.borderWidth, previewSubtitleStyle.borderColor), backgroundColor: previewSubtitleStyle.bgOpacity > 0 ? `rgba(0, 0, 0, ${previewSubtitleStyle.bgOpacity})` : 'transparent' }}>{activeSubtitle.text}</div>}
                             </div>
                         </div>
                     </div>
@@ -253,10 +345,11 @@ export default function LocalEditorTab() {
                         <button type="button" onClick={handleImport} className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-200 hover:bg-violet-500/20"><Upload size={14} />Import subtitles</button>
                         <p className="mt-2 text-[11px] leading-5 text-zinc-500">Import timed .srt or .vtt files, then edit every cue directly on the timeline.</p>
                         {pendingSubtitle && <p className="mt-2 truncate text-xs text-violet-300">Ready: {pendingSubtitle.name}</p>}
+                        <SubtitleStyleInspector style={subtitleStyle} onChange={setSubtitleStyle} onRemove={removeSubtitles} hasCues={subtitleCues.length > 0} />
                     </section>
                     <section className="rounded-xl border border-white/10 bg-white/[.02] p-4">
                         <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold text-white">Viral Hook</h2><button type="button" onClick={addHook} className="flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-1 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/25"><Plus size={12} />{hook ? 'Reset hook' : 'Add Viral Hook'}</button></div>
-                        {selected?.type === 'hook' ? <HookInspector hook={selectedCue} onChange={updateHook} /> : <HookInspector hook={null} onChange={updateHook} />}
+                        {selected?.type === 'hook' ? <HookInspector hook={selectedCue} onChange={updateHook} onRemove={removeHook} /> : <HookInspector hook={null} onChange={updateHook} onRemove={removeHook} />}
                     </section>
                     <section className="rounded-xl border border-white/10 bg-white/[.02] p-4">
                         {selected?.type === 'subtitle' ? <SubtitleInspector cue={selectedCue} onChange={updateSubtitle} onDelete={(id) => { setSubtitleCues((current) => current.filter((cue) => cue.id !== id)); setSelected(null); }} /> : <p className="text-xs text-zinc-500">Select a subtitle cue or the hook track to edit its properties.</p>}

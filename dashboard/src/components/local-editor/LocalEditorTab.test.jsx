@@ -43,7 +43,34 @@ describe('LocalEditorTab', () => {
         fireEvent.click(screen.getByRole('button', { name: /add viral hook/i }));
         fireEvent.change(screen.getByLabelText('Hook text', { exact: true }), { target: { value: 'Watch this' } });
         expect(screen.getByLabelText('Hook text', { exact: true })).toHaveValue('Watch this');
+        expect(screen.getByRole('button', { name: 'Small' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Bounce' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /remove hook/i }));
+        expect(screen.getByText(/add a hook/i)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
         await waitFor(() => expect(screen.queryByText('Viral Hook')).not.toBeInTheDocument());
+    });
+
+    it('exposes subtitle styling and removes the whole subtitle track', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        const subtitleFile = new File(['subtitle'], 'captions.srt', { type: 'application/x-subrip' });
+        subtitleFile.text = async () => '1\n00:00:00,000 --> 00:00:01,000\nHello';
+        fireEvent.change(screen.getByLabelText(/subtitle file/i), { target: { files: [subtitleFile] } });
+        await waitFor(() => expect(screen.getAllByText('Hello').length).toBeGreaterThan(0));
+        fireEvent.click(screen.getAllByRole('button', { name: 'Hello' })[0]);
+        expect(screen.getByLabelText('Subtitle font')).toBeInTheDocument();
+        expect(screen.getByLabelText('Subtitle position')).toBeInTheDocument();
+        expect(screen.getByLabelText('Subtitle font size')).toBeInTheDocument();
+        expect(screen.getByLabelText('Subtitle text color')).toBeInTheDocument();
+        expect(screen.getByLabelText('Subtitle highlight color')).toBeInTheDocument();
+        expect(screen.getByLabelText('Subtitle outline width')).toBeInTheDocument();
+        expect(screen.getByLabelText('Subtitle background opacity')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Pop' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /remove subtitles/i }));
+        expect(screen.queryByText('Hello')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /export subtitles/i })).toBeDisabled();
     });
 });

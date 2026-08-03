@@ -11,6 +11,8 @@ export const HOOK_ENTRANCE_OPTIONS = [
     { value: 'none', label: 'None' },
 ];
 
+export const HOOK_SIZE_SCALE = { S: 0.8, M: 1, L: 1.3 };
+
 export const SUBTITLE_FONT_OPTIONS = ['Verdana', 'Arial', 'Impact', 'Helvetica', 'Georgia', 'Courier New'];
 export const SUBTITLE_COLOR_PRESETS = ['#FFFFFF', '#FFDD00', '#00FFFF', '#00FF66', '#FF3333', '#FF66CC'];
 export const SUBTITLE_ANIMATION_OPTIONS = [
