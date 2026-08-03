@@ -14,6 +14,12 @@ describe('subtitle formats', () => {
     ]);
   });
 
+  it('normalizes zero-duration VTT word cues', () => {
+    expect(parseVtt('WEBVTT\n\n00:00:01.360 --> 00:00:01.360\npuke')).toEqual([
+      { id: 'subtitle-1', text: 'puke', startMs: 1360, endMs: 1361 },
+    ]);
+  });
+
   it('rejects TXT and malformed input', () => {
     expect(() => parseSubtitleFile('a.txt', 'Hi')).toThrow('Only .srt and .vtt');
     expect(() => parseSrt('')).toThrow('No subtitle cues found');

@@ -20,10 +20,13 @@ const formatTimestamp = (value) => {
 const finalize = (cues) => {
     const parsed = cues.filter(Boolean);
     if (!parsed.length) throw new Error('No subtitle cues found');
-    if (parsed.some((cue) => cue.endMs <= cue.startMs)) {
+    const normalized = parsed.map((cue) => cue.endMs === cue.startMs
+        ? { ...cue, endMs: cue.startMs + 1 }
+        : cue);
+    if (normalized.some((cue) => cue.endMs < cue.startMs)) {
         throw new Error('Subtitle cue end must be after start');
     }
-    return parsed.map((cue, index) => ({ ...cue, id: cue.id || `subtitle-${index + 1}` }));
+    return normalized.map((cue, index) => ({ ...cue, id: cue.id || `subtitle-${index + 1}` }));
 };
 
 const parseCueBlock = (block, index, preserveId = false) => {
