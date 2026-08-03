@@ -57,6 +57,28 @@ describe('LocalEditorTab', () => {
         expect(screen.getByRole('button', { name: /toggle viral hook settings/i })).toHaveAttribute('aria-expanded', 'true');
     });
 
+    it('supports standard video keyboard controls', async () => {
+        const requestFullscreen = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', { configurable: true, writable: true, value: requestFullscreen });
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByTestId('local-editor-player')).toBeInTheDocument());
+        const player = screen.getByTestId('local-editor-player');
+        const video = player.querySelector('video');
+        fireEvent.keyDown(player, { key: 'ArrowRight' });
+        expect(video.currentTime).toBe(5);
+        fireEvent.keyDown(player, { key: 'Home' });
+        expect(video.currentTime).toBe(0);
+        fireEvent.keyDown(player, { key: 'm' });
+        expect(video.muted).toBe(true);
+        fireEvent.keyDown(player, { key: 'f' });
+        expect(requestFullscreen).toHaveBeenCalledTimes(1);
+        fireEvent.keyDown(player, { key: ' ' });
+        await waitFor(() => expect(video.play).toHaveBeenCalled());
+    });
+
     it('imports an SRT file', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
         render(<LocalEditorTab />);

@@ -188,6 +188,7 @@ export default function LocalEditorTab() {
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLooping, setIsLooping] = useState(false);
+    const [isMuted, setIsMuted] = useState(false);
     const [subtitlesOpen, setSubtitlesOpen] = useState(false);
     const [hookOpen, setHookOpen] = useState(false);
 
@@ -221,7 +222,9 @@ export default function LocalEditorTab() {
         setPlayheadMs(0);
         setIsPlaying(false);
         setIsLooping(false);
+        setIsMuted(false);
         if (videoRef.current) videoRef.current.loop = false;
+        if (videoRef.current) videoRef.current.muted = false;
         setError('');
     };
 
@@ -322,6 +325,39 @@ export default function LocalEditorTab() {
         if (videoRef.current) videoRef.current.loop = nextLooping;
     };
 
+    const toggleMute = () => {
+        const nextMuted = !isMuted;
+        setIsMuted(nextMuted);
+        if (videoRef.current) videoRef.current.muted = nextMuted;
+    };
+
+    const handlePlayerKeyDown = (event) => {
+        if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(event.target.tagName)) return;
+        const key = event.key.toLowerCase();
+        if (event.key === ' ' || key === 'k') {
+            event.preventDefault();
+            togglePlayback();
+        } else if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            seekBy(-5000);
+        } else if (event.key === 'ArrowRight') {
+            event.preventDefault();
+            seekBy(5000);
+        } else if (event.key === 'Home') {
+            event.preventDefault();
+            handleSeek(0);
+        } else if (event.key === 'End') {
+            event.preventDefault();
+            handleSeek(durationMs);
+        } else if (key === 'm') {
+            event.preventDefault();
+            toggleMute();
+        } else if (key === 'f') {
+            event.preventDefault();
+            toggleFullscreen();
+        }
+    };
+
     const toggleFullscreen = async () => {
         try {
             if (document.fullscreenElement) {
@@ -401,7 +437,7 @@ export default function LocalEditorTab() {
             {error && <div className="mx-6 mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div>}
             <div className="grid gap-5 p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <main className="min-w-0 space-y-5">
-                    <div ref={playerRef} data-testid="local-editor-player" className={isFullscreen ? 'fixed inset-0 z-50 flex items-center justify-center bg-black p-4' : 'mx-auto flex h-[calc(100vh-180px)] max-h-[72vh] w-full max-w-[360px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl'}>
+                    <div ref={playerRef} data-testid="local-editor-player" tabIndex={0} role="region" aria-label="Video preview. Use Space or K to play or pause, arrow keys to seek, M to mute, and F for fullscreen." aria-keyshortcuts="Space K ArrowLeft ArrowRight Home End M F" onKeyDown={handlePlayerKeyDown} className={isFullscreen ? 'fixed inset-0 z-50 flex items-center justify-center bg-black p-4' : 'mx-auto flex h-[calc(100vh-180px)] max-h-[72vh] w-full max-w-[360px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl'}>
                         <div className="relative h-full max-h-full w-auto max-w-full aspect-[9/16]">
                             <video ref={videoRef} src={videoUrl} controls={false} className="h-full w-full object-contain" onLoadedMetadata={handleMetadata} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onTimeUpdate={(event) => setPlayheadMs(event.currentTarget.currentTime * 1000)} />
                             <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className="absolute right-3 top-3 z-20 rounded-lg border border-white/20 bg-black/60 p-2 text-white shadow-lg backdrop-blur hover:bg-black/80">{isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
