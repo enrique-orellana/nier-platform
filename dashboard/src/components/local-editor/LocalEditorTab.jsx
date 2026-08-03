@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, FileText, Film, Plus, RotateCcw, Upload, X } from 'lucide-react';
+import { Download, FileText, Film, Maximize2, Minimize2, Plus, RotateCcw, Upload, X } from 'lucide-react';
 import LocalEditorTimeline from './LocalEditorTimeline';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock, renderLocalVideo } from './localEditorExport';
@@ -169,6 +169,7 @@ function HookInspector({ hook, onChange, onRemove }) {
 
 export default function LocalEditorTab() {
     const videoRef = useRef(null);
+    const playerRef = useRef(null);
     const objectUrlRef = useRef('');
     const subtitleInputRef = useRef(null);
     const [videoFile, setVideoFile] = useState(null);
@@ -183,9 +184,16 @@ export default function LocalEditorTab() {
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
     useEffect(() => () => {
         if (objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrlRef.current);
+    }, []);
+
+    useEffect(() => {
+        const handleFullscreenChange = () => setIsFullscreen(document.fullscreenElement === playerRef.current);
+        document.addEventListener?.('fullscreenchange', handleFullscreenChange);
+        return () => document.removeEventListener?.('fullscreenchange', handleFullscreenChange);
     }, []);
 
     const selectedCue = useMemo(() => {
@@ -268,6 +276,20 @@ export default function LocalEditorTab() {
         if (videoRef.current) videoRef.current.currentTime = nextMs / 1000;
     };
 
+    const toggleFullscreen = async () => {
+        try {
+            if (document.fullscreenElement) {
+                await document.exitFullscreen?.();
+            } else if (playerRef.current?.requestFullscreen) {
+                await playerRef.current.requestFullscreen();
+            } else {
+                setError('Fullscreen is not supported by this browser.');
+            }
+        } catch (fullscreenError) {
+            setError(fullscreenError.message || 'Could not open fullscreen mode.');
+        }
+    };
+
     const exportSubtitles = () => downloadBlob(new Blob([serializeSrt(subtitleCues)], { type: 'application/x-subrip' }), 'openshorts-subtitles.srt');
 
     const exportVideo = async () => {
@@ -330,9 +352,10 @@ export default function LocalEditorTab() {
             {error && <div className="mx-6 mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div>}
             <div className="grid gap-5 p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <main className="min-w-0 space-y-5">
-                    <div className="mx-auto max-w-[440px] overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl">
-                        <div className="relative aspect-[9/16]">
+                    <div ref={playerRef} data-testid="local-editor-player" className={isFullscreen ? 'fixed inset-0 z-50 flex items-center justify-center bg-black p-4' : 'mx-auto flex h-[calc(100vh-180px)] max-h-[72vh] w-full max-w-[360px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl'}>
+                        <div className="relative h-full max-h-full w-auto max-w-full aspect-[9/16]">
                             <video ref={videoRef} src={videoUrl} controls className="h-full w-full object-contain" onLoadedMetadata={handleMetadata} onTimeUpdate={(event) => setPlayheadMs(event.currentTarget.currentTime * 1000)} />
+                            <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className="absolute right-3 top-3 z-20 rounded-lg border border-white/20 bg-black/60 p-2 text-white shadow-lg backdrop-blur hover:bg-black/80">{isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
                             <div className="pointer-events-none absolute inset-0">
                                 {activeHook && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 rounded-lg px-3 py-2 text-center font-bold shadow-lg ${activeHook.position === 'top' ? 'top-[8%]' : activeHook.position === 'bottom' ? 'bottom-[18%]' : 'top-1/2 -translate-y-1/2'}`} style={{ color: activeHook.color, backgroundColor: activeHook.background, fontSize: `${Math.max(14, (activeHook.fontSize / 2.6) * hookSizeScale)}px`, ...hookEntranceStyle }}>{activeHook.text}</div>}
                                 {activeSubtitle && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`} style={{ fontFamily: previewSubtitleStyle.fontFamily, color: previewSubtitleStyle.animation === 'karaoke' ? previewSubtitleStyle.highlightColor : previewSubtitleStyle.fontColor, fontSize: `${Math.max(12, previewSubtitleStyle.fontSize / 1.6)}px`, textShadow: outlineTextShadow(previewSubtitleStyle.borderWidth, previewSubtitleStyle.borderColor), backgroundColor: previewSubtitleStyle.bgOpacity > 0 ? hexToRgba(previewSubtitleStyle.bgColor, previewSubtitleStyle.bgOpacity) : 'transparent' }}>{activeSubtitle.text}</div>}

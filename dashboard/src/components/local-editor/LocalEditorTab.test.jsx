@@ -24,6 +24,18 @@ describe('LocalEditorTab', () => {
         expect(screen.getAllByText('Viral Hook').length).toBeGreaterThan(0);
     });
 
+    it('offers a viewport-sized player and fullscreen control', async () => {
+        const requestFullscreen = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', { configurable: true, writable: true, value: requestFullscreen });
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /enter fullscreen/i })).toBeInTheDocument());
+        expect(screen.getByTestId('local-editor-player')).toHaveClass('max-h-[72vh]');
+        fireEvent.click(screen.getByRole('button', { name: /enter fullscreen/i }));
+        expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    });
+
     it('imports an SRT file', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
         render(<LocalEditorTab />);
