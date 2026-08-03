@@ -4,6 +4,7 @@ const TAB_PATHS = {
   'ai-agent': '/ai-agent',
   'ugc-gallery': '/ugc-gallery',
   thumbnails: '/thumbnails',
+  editor: '/editor',
   projects: '/projects',
   settings: '/settings',
 };

@@ -17,6 +17,18 @@ describe('frontend tab routing', () => {
     expect(getPathForTab('dashboard')).toBe('/');
   });
 
+  it('maps the standalone local editor tab to /editor', () => {
+    expect(getPathForTab('editor')).toBe('/editor');
+    expect(getTabFromPath('/editor')).toBe('editor');
+    expect(parseRoute('/editor')).toMatchObject({
+      tab: 'editor',
+      projectId: null,
+      clipIndex: null,
+      editor: false,
+      versionId: null,
+    });
+  });
+
   it('builds and parses a project detail route with encoded IDs', () => {
     const path = buildProjectPath('job/with spaces');
     expect(path).toBe('/projects/job%2Fwith%20spaces');
