@@ -11,6 +11,7 @@ import {
     SUBTITLE_ANIMATION_OPTIONS,
     SUBTITLE_COLOR_PRESETS,
     SUBTITLE_FONT_OPTIONS,
+    hexToRgba,
     normalizeSubtitleStyle,
     subtitlePositionClass,
 } from './localEditorStyles';
@@ -332,7 +333,7 @@ export default function LocalEditorTab() {
                             <video ref={videoRef} src={videoUrl} controls className="h-full w-full object-contain" onLoadedMetadata={handleMetadata} onTimeUpdate={(event) => setPlayheadMs(event.currentTarget.currentTime * 1000)} />
                             <div className="pointer-events-none absolute inset-0">
                                 {activeHook && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 rounded-lg px-3 py-2 text-center font-bold shadow-lg ${activeHook.position === 'top' ? 'top-[8%]' : activeHook.position === 'bottom' ? 'bottom-[18%]' : 'top-1/2 -translate-y-1/2'}`} style={{ color: activeHook.color, backgroundColor: activeHook.background, fontSize: `${Math.max(14, (activeHook.fontSize / 2.6) * hookSizeScale)}px`, ...hookEntranceStyle }}>{activeHook.text}</div>}
-                                {activeSubtitle && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`} style={{ fontFamily: previewSubtitleStyle.fontFamily, color: previewSubtitleStyle.fontColor, fontSize: `${Math.max(12, previewSubtitleStyle.fontSize / 1.6)}px`, textShadow: outlineTextShadow(previewSubtitleStyle.borderWidth, previewSubtitleStyle.borderColor), backgroundColor: previewSubtitleStyle.bgOpacity > 0 ? `rgba(0, 0, 0, ${previewSubtitleStyle.bgOpacity})` : 'transparent' }}>{activeSubtitle.text}</div>}
+                                {activeSubtitle && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`} style={{ fontFamily: previewSubtitleStyle.fontFamily, color: previewSubtitleStyle.animation === 'karaoke' ? previewSubtitleStyle.highlightColor : previewSubtitleStyle.fontColor, fontSize: `${Math.max(12, previewSubtitleStyle.fontSize / 1.6)}px`, textShadow: outlineTextShadow(previewSubtitleStyle.borderWidth, previewSubtitleStyle.borderColor), backgroundColor: previewSubtitleStyle.bgOpacity > 0 ? hexToRgba(previewSubtitleStyle.bgColor, previewSubtitleStyle.bgOpacity) : 'transparent' }}>{activeSubtitle.text}</div>}
                             </div>
                         </div>
                     </div>
