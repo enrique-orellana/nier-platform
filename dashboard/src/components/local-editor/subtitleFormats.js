@@ -36,7 +36,8 @@ const parseCueBlock = (block, index, preserveId = false) => {
     const [start, rawEnd] = lines[timingIndex].split(/\s+-->\s+/);
     const end = rawEnd?.split(/\s+/)[0];
     const text = lines.slice(timingIndex + 1).join('\n').trim();
-    if (!start || !end || !text) throw new Error('Invalid subtitle cue');
+    if (!start || !end) throw new Error('Invalid subtitle cue');
+    if (!text) return null;
     return {
         id: preserveId ? (lines[timingIndex - 1]?.trim() || `subtitle-${index + 1}`) : `subtitle-${index + 1}`,
         text,

@@ -51,6 +51,29 @@ describe('FullScreenEditor', () => {
         expect(screen.queryByRole('button', { name: 'Hola clip' })).not.toBeInTheDocument();
     });
 
+    it('deletes a translated subtitle track while keeping the original', () => {
+        const translatedManifest = {
+            ...manifest,
+            subtitle_tracks: [
+                ...manifest.subtitle_tracks,
+                { id: 'en', label: 'EN', language: 'en', origin: 'translation', cues: [{ text: 'Hello', startMs: 1000, endMs: 2000 }] },
+            ],
+        };
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={translatedManifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Delete EN translation' }));
+        expect(screen.queryByRole('button', { name: 'EN' })).not.toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'Original' })).toBeInTheDocument();
+    });
+
+    it('adds a new translated subtitle track to the current draft', async () => {
+        vi.stubGlobal('fetch', vi.fn()
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ translationId: 'translation-1', status: 'queued' }) })
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ translationId: 'translation-1', status: 'done', track: { id: 'en', label: 'EN', language: 'en', origin: 'translation', cues: [{ text: 'Hello', startMs: 1000, endMs: 2000 }] } }) }));
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Translate entire track' }));
+        await waitFor(() => expect(screen.getByRole('option', { name: 'EN' })).toBeInTheDocument());
+    });
+
     it('adds a subtitle cue at the current playhead and selects it', () => {
         render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
         fireEvent.click(screen.getByRole('button', { name: /next frame/i }));

@@ -180,6 +180,19 @@ export default function FullScreenEditor({
     setManifest(next);
     setEditorState(manifestToEditorState(next, { fps }));
   }, [fps]);
+  const deleteSubtitleTrack = useCallback((trackId) => {
+    const base = currentManifestRef.current;
+    const nextTracks = (base.subtitle_tracks || []).filter((track) => track.id !== trackId);
+    const nextActiveTrackId = activeTrackId === trackId
+      ? nextTracks.find((track) => track.origin !== "translation")?.id || nextTracks[0]?.id || null
+      : activeTrackId;
+    const next = { ...base, subtitle_tracks: nextTracks, active_subtitle_track_id: nextActiveTrackId };
+    currentManifestRef.current = next;
+    setManifest(next);
+    setEditorState(manifestToEditorState(next, { fps }));
+    setActiveTrackId(nextActiveTrackId);
+    setSelectedItem(null);
+  }, [activeTrackId, fps]);
   const updateSelectedItem = (nextItem) => {
     if (nextItem.__delete) {
       deleteSelectedItem(nextItem);
@@ -285,6 +298,7 @@ export default function FullScreenEditor({
         setEditorState(manifestToEditorState(next, { fps }));
         setActiveTrackId(track?.id || activeTrackId);
       }}
+      onTrackRemoved={deleteSubtitleTrack}
     />
   );
   const branchVersion = async (versionId) => {

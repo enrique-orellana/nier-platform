@@ -56,4 +56,26 @@ describe('SubtitleTranslationPanel', () => {
 
         expect(screen.getByRole('option', { name: 'English' })).toBeInTheDocument();
     });
+
+    it('offers deletion for translated tracks', () => {
+        const onTrackRemoved = vi.fn();
+        render(
+            <SubtitleTranslationPanel
+                jobId="job"
+                clipIndex={0}
+                versionId="v1"
+                tracks={[
+                    { id: 'original', language: 'en', label: 'Original', origin: 'original' },
+                    { id: 'es', language: 'es', label: 'ES', origin: 'translation' },
+                ]}
+                activeTrackId="original"
+                onTrackAdded={vi.fn()}
+                onTrackRemoved={onTrackRemoved}
+                onSelectTrack={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Delete ES translation' }));
+        expect(onTrackRemoved).toHaveBeenCalledWith('es');
+    });
 });

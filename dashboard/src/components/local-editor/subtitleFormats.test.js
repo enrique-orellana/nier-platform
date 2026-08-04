@@ -20,6 +20,13 @@ describe('subtitle formats', () => {
     ]);
   });
 
+  it('skips empty SRT cues and normalizes zero-duration SRT cues', () => {
+    expect(parseSrt('1\n00:00:00,340 --> 00:00:00,720\nNow\n\n2\n00:00:07,860 --> 00:00:07,860\ncome\n\n3\n00:00:07,860 --> 00:00:07,860\n')).toEqual([
+      { id: 'subtitle-1', text: 'Now', startMs: 340, endMs: 720 },
+      { id: 'subtitle-2', text: 'come', startMs: 7860, endMs: 7861 },
+    ]);
+  });
+
   it('rejects TXT and malformed input', () => {
     expect(() => parseSubtitleFile('a.txt', 'Hi')).toThrow('Only .srt and .vtt');
     expect(() => parseSrt('')).toThrow('No subtitle cues found');

@@ -21,6 +21,7 @@ export default function SubtitleTranslationPanel({
     activeTrackId,
     aiHeaders = {},
     onTrackAdded,
+    onTrackRemoved,
     onSelectTrack,
 }) {
     const [targetLanguage, setTargetLanguage] = useState('es');
@@ -29,6 +30,7 @@ export default function SubtitleTranslationPanel({
     const source = tracks.find((track) => track.id === activeTrackId) || tracks[0];
     const sourceLanguage = source?.language?.toLowerCase();
     const sourceCueCount = (source?.cues || source?.captions || []).length;
+    const targetAlreadyExists = tracks.some((track) => track.id !== source?.id && track.language?.toLowerCase() === targetLanguage);
 
     useEffect(() => {
         setTargetLanguage(sourceLanguage === 'en' ? 'es' : 'en');
@@ -85,7 +87,7 @@ export default function SubtitleTranslationPanel({
                         <span>Source Track</span>
                         <span className="text-zinc-400">{(sourceLanguage || 'unknown').toUpperCase()}</span>
                     </div>
-                    <SubtitleTrackPicker tracks={tracks} activeTrackId={activeTrackId} onSelect={onSelectTrack} />
+                        <SubtitleTrackPicker tracks={tracks} activeTrackId={activeTrackId} onSelect={onSelectTrack} onRemove={onTrackRemoved} />
                 </div>
                 
                 <div className="space-y-2">
@@ -100,18 +102,19 @@ export default function SubtitleTranslationPanel({
                         disabled={isTranslating}
                         aria-label="Target language"
                     >
-                        {Object.entries(LANGUAGES).map(([code, name]) => (
-                            <option key={code} value={code} disabled={code === sourceLanguage} className="bg-zinc-900 text-white">
-                                {name}{code === sourceLanguage ? ' (source)' : ''}
+                        {Object.entries(LANGUAGES).map(([code, name]) => {
+                            const alreadyAdded = tracks.some((track) => track.id !== source?.id && track.language?.toLowerCase() === code);
+                            return <option key={code} value={code} disabled={code === sourceLanguage || alreadyAdded} className="bg-zinc-900 text-white">
+                                {name}{code === sourceLanguage ? ' (source)' : alreadyAdded ? ' (already added)' : ''}
                             </option>
-                        ))}
+                        })}
                     </select>
                 </div>
                 
                 <button 
                     type="button" 
                     onClick={translate} 
-                    disabled={isTranslating || !versionId || !sourceCueCount || targetLanguage === sourceLanguage} 
+                    disabled={isTranslating || !versionId || !sourceCueCount || targetLanguage === sourceLanguage || targetAlreadyExists}
                     className="w-full relative overflow-hidden rounded-lg bg-gradient-to-b from-cyan-400 to-cyan-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_0_15px_rgba(34,211,238,0.2)] transition-all hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(34,211,238,0.4)] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 disabled:grayscale group" 
                     aria-label="Translate entire track"
                 >
