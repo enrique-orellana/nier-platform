@@ -20,5 +20,7 @@ describe('LocalEditorTimeline', () => {
 
         expect(screen.getByRole('button', { name: 'One' })).not.toHaveStyle({ minWidth: '18px' });
         expect(screen.getByRole('button', { name: 'Two' })).not.toHaveStyle({ minWidth: '18px' });
+        expect(screen.getByRole('button', { name: 'One' })).toHaveStyle({ width: '0.5%' });
+        expect(screen.getByRole('button', { name: 'Two' })).toHaveStyle({ width: '0.5%' });
     });
 });

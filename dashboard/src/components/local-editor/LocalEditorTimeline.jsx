@@ -31,7 +31,7 @@ function CueBlock({ cue, durationMs, color, selected, onSelect, onChange, onChan
     };
 
     const left = clampPercent((cue.startMs / durationMs) * 100);
-    const width = Math.max(1, Math.min(100 - left, ((cue.endMs - cue.startMs) / durationMs) * 100));
+    const width = Math.max(0, Math.min(100 - left, ((cue.endMs - cue.startMs) / durationMs) * 100));
 
     return (
         <div
