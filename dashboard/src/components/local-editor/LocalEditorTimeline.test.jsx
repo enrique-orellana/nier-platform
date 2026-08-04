@@ -11,4 +11,14 @@ describe('LocalEditorTimeline', () => {
         expect(screen.getByTestId('local-editor-timeline-canvas')).toHaveStyle({ width: '2544px' });
         expect(screen.getByRole('button', { name: 'Caption' })).toBeInTheDocument();
     });
+
+    it('keeps short adjacent subtitle cues at their actual timeline widths', () => {
+        render(<LocalEditorTimeline durationMs={10000} subtitleCues={[
+            { id: 'cue-1', text: 'One', startMs: 1000, endMs: 1050 },
+            { id: 'cue-2', text: 'Two', startMs: 1050, endMs: 1100 },
+        ]} onSeek={vi.fn()} />);
+
+        expect(screen.getByRole('button', { name: 'One' })).not.toHaveStyle({ minWidth: '18px' });
+        expect(screen.getByRole('button', { name: 'Two' })).not.toHaveStyle({ minWidth: '18px' });
+    });
 });

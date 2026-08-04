@@ -41,7 +41,7 @@ function CueBlock({ cue, durationMs, color, selected, onSelect, onChange }) {
             onPointerDown={(event) => beginDrag(event, 'move')}
             onKeyDown={(event) => event.key === 'Enter' && onSelect(cue)}
             className={`absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[10px] text-white shadow-sm transition-shadow ${selected ? 'ring-2 ring-white' : ''}`}
-            style={{ left: `${left}%`, width: `${width}%`, background: color, minWidth: 18 }}
+            style={{ left: `${left}%`, width: `${width}%`, background: color }}
         >
             <span className="pointer-events-none block truncate">{cue.text || 'Untitled cue'}</span>
             <button
