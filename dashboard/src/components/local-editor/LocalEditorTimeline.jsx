@@ -7,12 +7,13 @@ const MIN_LANE_WIDTH = 760;
 
 const clampPercent = (value) => Math.max(0, Math.min(100, value));
 
-function CueBlock({ cue, durationMs, color, selected, onSelect, onChange }) {
+function CueBlock({ cue, durationMs, color, selected, onSelect, onChange, onChangeStart, onChangeEnd }) {
     const blockRef = useRef(null);
 
     const beginDrag = (event, mode) => {
         event.preventDefault();
         event.stopPropagation();
+        onChangeStart?.();
         const originX = event.clientX;
         const original = { ...cue };
         const width = blockRef.current?.parentElement?.getBoundingClientRect().width || 1;
@@ -22,6 +23,7 @@ function CueBlock({ cue, durationMs, color, selected, onSelect, onChange }) {
         };
         const stop = () => {
             window.removeEventListener('pointermove', update);
+            onChangeEnd?.();
             window.removeEventListener('pointerup', stop);
         };
         window.addEventListener('pointermove', update);
@@ -60,7 +62,7 @@ function CueBlock({ cue, durationMs, color, selected, onSelect, onChange }) {
     );
 }
 
-function Track({ label, cues, durationMs, timelineWidth, color, selectedId, onSelect, onChange }) {
+function Track({ label, cues, durationMs, timelineWidth, color, selectedId, onSelect, onChange, onChangeStart, onChangeEnd }) {
     return (
         <div className="flex min-h-12 w-full items-stretch border-b border-white/10 last:border-b-0">
             <div className="flex w-36 shrink-0 items-center bg-white/[.03] px-3 text-[11px] font-medium text-zinc-300">{label}</div>
@@ -74,6 +76,8 @@ function Track({ label, cues, durationMs, timelineWidth, color, selectedId, onSe
                         selected={selectedId === cue.id}
                         onSelect={onSelect}
                         onChange={onChange}
+                        onChangeStart={onChangeStart}
+                        onChangeEnd={onChangeEnd}
                     />
                 ))}
             </div>
@@ -81,7 +85,7 @@ function Track({ label, cues, durationMs, timelineWidth, color, selectedId, onSe
     );
 }
 
-export default function LocalEditorTimeline({ durationMs = 1, subtitleCues = [], hook = null, selectedId, onSelect, onChange, playheadMs = 0, onSeek }) {
+export default function LocalEditorTimeline({ durationMs = 1, subtitleCues = [], hook = null, selectedId, onSelect, onChange, onChangeStart, onChangeEnd, playheadMs = 0, onSeek }) {
     const timelineRef = useRef(null);
     const safeDuration = Math.max(1, durationMs);
     const timelineWidth = Math.max(MIN_LANE_WIDTH, Math.ceil((safeDuration / 1000) * BASE_PIXELS_PER_SECOND));
@@ -116,8 +120,8 @@ export default function LocalEditorTimeline({ durationMs = 1, subtitleCues = [],
                         {rulerMarks.map((mark) => <span key={mark} className="absolute top-2 -translate-x-1/2 text-[9px] text-zinc-600" style={{ left: `${mark}%` }}>{Math.round((safeDuration * mark) / 1000) / 10}s</span>)}
                         <div className="absolute bottom-0 top-0 w-px bg-cyan-300" style={{ left: `${(playheadMs / safeDuration) * 100}%` }} />
                     </div>
-                    <Track label="Viral Hook" cues={hookCues} durationMs={safeDuration} timelineWidth={timelineWidth} color="#f59e0b" selectedId={selectedId} onSelect={(cue) => onSelect?.(cue, 'hook')} onChange={(cue) => onChange?.(cue, 'hook')} />
-                    <Track label="Subtitles" cues={subtitleCues} durationMs={safeDuration} timelineWidth={timelineWidth} color="#8b5cf6" selectedId={selectedId} onSelect={(cue) => onSelect?.(cue, 'subtitle')} onChange={(cue) => onChange?.(cue, 'subtitle')} />
+                    <Track label="Viral Hook" cues={hookCues} durationMs={safeDuration} timelineWidth={timelineWidth} color="#f59e0b" selectedId={selectedId} onSelect={(cue) => onSelect?.(cue, 'hook')} onChange={(cue) => onChange?.(cue, 'hook')} onChangeStart={onChangeStart} onChangeEnd={onChangeEnd} />
+                    <Track label="Subtitles" cues={subtitleCues} durationMs={safeDuration} timelineWidth={timelineWidth} color="#8b5cf6" selectedId={selectedId} onSelect={(cue) => onSelect?.(cue, 'subtitle')} onChange={(cue) => onChange?.(cue, 'subtitle')} onChangeStart={onChangeStart} onChangeEnd={onChangeEnd} />
                     <div className="pointer-events-none absolute bottom-0 top-0 ml-36" style={{ width: `${timelineWidth}px` }}><div className="absolute bottom-0 top-0 z-10 w-px bg-cyan-300/80" style={{ left: `${(playheadMs / safeDuration) * 100}%` }} /></div>
                 </div>
             </div>

@@ -174,6 +174,7 @@ export default function LocalEditorTab() {
     const playerRef = useRef(null);
     const objectUrlRef = useRef('');
     const subtitleInputRef = useRef(null);
+    const timelineDragRef = useRef(null);
     const [videoFile, setVideoFile] = useState(null);
     const [videoUrl, setVideoUrl] = useState('');
     const [durationMs, setDurationMs] = useState(DEFAULT_DURATION_MS);
@@ -192,9 +193,16 @@ export default function LocalEditorTab() {
     const [hookOpen, setHookOpen] = useState(false);
 
     const { subtitleCues, subtitleStyle, hook } = editHistory.present;
-    const commitEdit = (updater) => setEditHistory((current) => {
+    const commitEdit = (updater, { coalesce = false, transaction = null } = {}) => setEditHistory((current) => {
         const next = typeof updater === 'function' ? updater(current.present) : updater;
         if (next === current.present) return current;
+        if (coalesce && transaction) {
+            if (!transaction.recorded) {
+                transaction.recorded = true;
+                return { past: [...current.past, current.present].slice(-100), present: next, future: [] };
+            }
+            return { ...current, present: next, future: [] };
+        }
         return { past: [...current.past, current.present].slice(-100), present: next, future: [] };
     });
     const undo = () => setEditHistory((current) => {
@@ -274,11 +282,16 @@ export default function LocalEditorTab() {
         }));
     };
 
-    const updateSubtitle = (cue) => commitEdit((current) => ({ ...current, subtitleCues: current.subtitleCues.map((item) => item.id === cue.id ? clampCue(cue, durationMs) : item) }));
-    const updateHook = (nextHook) => commitEdit((current) => ({ ...current, hook: clampCue(nextHook, durationMs) }));
+    const updateSubtitle = (cue, options) => commitEdit((current) => ({ ...current, subtitleCues: current.subtitleCues.map((item) => item.id === cue.id ? clampCue(cue, durationMs) : item) }), options);
+    const updateHook = (nextHook, options) => commitEdit((current) => ({ ...current, hook: clampCue(nextHook, durationMs) }), options);
 
     const handleTimelineSelect = (cue, type) => setSelected({ id: cue.id, type });
-    const handleTimelineChange = (cue, type) => type === 'hook' ? updateHook(cue) : updateSubtitle(cue);
+    const beginTimelineEdit = () => { timelineDragRef.current = { recorded: false }; };
+    const endTimelineEdit = () => { timelineDragRef.current = null; };
+    const handleTimelineChange = (cue, type) => {
+        const transaction = timelineDragRef.current;
+        return type === 'hook' ? updateHook(cue, { coalesce: true, transaction }) : updateSubtitle(cue, { coalesce: true, transaction });
+    };
 
     const importSubtitleFile = async (file) => {
         if (!file) return;
@@ -510,7 +523,7 @@ export default function LocalEditorTab() {
                             </div>
                         </div>
                     </div>
-                    <LocalEditorTimeline durationMs={durationMs} subtitleCues={subtitleCues} hook={hook} selectedId={selected?.id} onSelect={handleTimelineSelect} onChange={handleTimelineChange} playheadMs={playheadMs} onSeek={handleSeek} />
+                    <LocalEditorTimeline durationMs={durationMs} subtitleCues={subtitleCues} hook={hook} selectedId={selected?.id} onSelect={handleTimelineSelect} onChange={handleTimelineChange} onChangeStart={beginTimelineEdit} onChangeEnd={endTimelineEdit} playheadMs={playheadMs} onSeek={handleSeek} />
                 </main>
                 <aside className="space-y-4">
                     <section className="rounded-xl border border-white/10 bg-white/[.02] p-4">

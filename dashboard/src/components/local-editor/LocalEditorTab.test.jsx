@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import LocalEditorTab from './LocalEditorTab';
 
@@ -141,6 +141,29 @@ describe('LocalEditorTab', () => {
         expect(screen.getByLabelText('Subtitle text')).toHaveValue('');
         fireEvent.click(screen.getByRole('button', { name: 'Redo', exact: true }));
         expect(screen.getByLabelText('Subtitle text')).toHaveValue('Undo me');
+    });
+
+    it('undoes a multi-step subtitle cue drag as one action', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({ width: 1000, height: 100, top: 0, left: 0, right: 1000, bottom: 100 }));
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /add subtitle cue/i })).toBeInTheDocument());
+
+        fireEvent.click(screen.getByRole('button', { name: /add subtitle cue/i }));
+        const cue = screen.getByRole('button', { name: 'Timeline cue' });
+        act(() => cue.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 0 })));
+        act(() => {
+            window.dispatchEvent(new MouseEvent('pointermove', { clientX: 100, bubbles: true }));
+            window.dispatchEvent(new MouseEvent('pointermove', { clientX: 200, bubbles: true }));
+            window.dispatchEvent(new MouseEvent('pointerup', { clientX: 200, bubbles: true }));
+        });
+        expect(screen.getByRole('button', { name: 'Timeline cue' })).toHaveStyle({ left: '20%' });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+        expect(screen.getByRole('button', { name: 'Timeline cue' })).toHaveStyle({ left: '0%' });
+        fireEvent.click(screen.getByRole('button', { name: 'Redo', exact: true }));
+        expect(screen.getByRole('button', { name: 'Timeline cue' })).toHaveStyle({ left: '20%' });
     });
 
     it('exposes subtitle styling and removes the whole subtitle track', async () => {
