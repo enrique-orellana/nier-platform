@@ -95,6 +95,7 @@ describe('LocalEditorTab', () => {
     it('adds and edits a hook, then resets', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
         vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
         render(<LocalEditorTab />);
         fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
         fireEvent.click(screen.getByRole('button', { name: /add viral hook/i }));
@@ -106,6 +107,40 @@ describe('LocalEditorTab', () => {
         expect(screen.getByText(/add a hook/i)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
         await waitFor(() => expect(screen.queryByText('Viral Hook')).not.toBeInTheDocument());
+    });
+
+    it('creates subtitle cues and confirms cue removal', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /add subtitle cue/i })).toBeInTheDocument());
+
+        fireEvent.click(screen.getByRole('button', { name: /add subtitle cue/i }));
+        expect(screen.getByLabelText('Subtitle text')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /delete subtitle cue/i })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /delete subtitle cue/i }));
+        expect(confirm).toHaveBeenCalledWith('Remove this subtitle cue?');
+        expect(screen.getByLabelText('Subtitle text')).toBeInTheDocument();
+
+        confirm.mockReturnValue(true);
+        fireEvent.click(screen.getByRole('button', { name: /delete subtitle cue/i }));
+        expect(screen.queryByLabelText('Subtitle text')).not.toBeInTheDocument();
+    });
+
+    it('undoes and redoes subtitle edits', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /add subtitle cue/i })).toBeInTheDocument());
+
+        fireEvent.click(screen.getByRole('button', { name: /add subtitle cue/i }));
+        fireEvent.change(screen.getByLabelText('Subtitle text'), { target: { value: 'Undo me' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+        expect(screen.getByLabelText('Subtitle text')).toHaveValue('');
+        fireEvent.click(screen.getByRole('button', { name: 'Redo', exact: true }));
+        expect(screen.getByLabelText('Subtitle text')).toHaveValue('Undo me');
     });
 
     it('exposes subtitle styling and removes the whole subtitle track', async () => {

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Download, FastForward, FileText, Film, Maximize2, Minimize2, Pause, Play, Plus, Repeat, Rewind, RotateCcw, SkipBack, SkipForward, Square, Upload, X } from 'lucide-react';
+import { ChevronDown, Download, FastForward, FileText, Film, Maximize2, Minimize2, Pause, Play, Plus, Redo2, Repeat, Rewind, RotateCcw, SkipBack, SkipForward, Square, Undo2, Upload, X } from 'lucide-react';
 import LocalEditorTimeline from './LocalEditorTimeline';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock, renderLocalVideo } from './localEditorExport';
+import { createSubtitleCue } from '../../editor/timelineModel';
 import {
     DEFAULT_SUBTITLE_STYLE,
     HOOK_ENTRANCE_OPTIONS,
@@ -177,9 +178,7 @@ export default function LocalEditorTab() {
     const [videoUrl, setVideoUrl] = useState('');
     const [durationMs, setDurationMs] = useState(DEFAULT_DURATION_MS);
     const [playheadMs, setPlayheadMs] = useState(0);
-    const [subtitleCues, setSubtitleCues] = useState([]);
-    const [subtitleStyle, setSubtitleStyle] = useState(DEFAULT_SUBTITLE_STYLE);
-    const [hook, setHook] = useState(null);
+    const [editHistory, setEditHistory] = useState(() => ({ past: [], present: { subtitleCues: [], subtitleStyle: DEFAULT_SUBTITLE_STYLE, hook: null }, future: [] }));
     const [selected, setSelected] = useState(null);
     const [pendingSubtitle, setPendingSubtitle] = useState(null);
     const [error, setError] = useState('');
@@ -192,6 +191,23 @@ export default function LocalEditorTab() {
     const [subtitlesOpen, setSubtitlesOpen] = useState(false);
     const [hookOpen, setHookOpen] = useState(false);
 
+    const { subtitleCues, subtitleStyle, hook } = editHistory.present;
+    const commitEdit = (updater) => setEditHistory((current) => {
+        const next = typeof updater === 'function' ? updater(current.present) : updater;
+        if (next === current.present) return current;
+        return { past: [...current.past, current.present].slice(-100), present: next, future: [] };
+    });
+    const undo = () => setEditHistory((current) => {
+        if (!current.past.length) return current;
+        const previous = current.past[current.past.length - 1];
+        return { past: current.past.slice(0, -1), present: previous, future: [current.present, ...current.future].slice(0, 100) };
+    });
+    const redo = () => setEditHistory((current) => {
+        if (!current.future.length) return current;
+        const [next, ...future] = current.future;
+        return { past: [...current.past, current.present].slice(-100), present: next, future };
+    });
+
     useEffect(() => () => {
         if (objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrlRef.current);
     }, []);
@@ -201,6 +217,23 @@ export default function LocalEditorTab() {
         document.addEventListener?.('fullscreenchange', handleFullscreenChange);
         return () => document.removeEventListener?.('fullscreenchange', handleFullscreenChange);
     }, []);
+
+    useEffect(() => {
+        const handleHistoryKeyDown = (event) => {
+            if (!(event.ctrlKey || event.metaKey)) return;
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target?.tagName)) return;
+            const key = event.key.toLowerCase();
+            if (key === 'z' && !event.shiftKey) {
+                event.preventDefault();
+                undo();
+            } else if ((key === 'z' && event.shiftKey) || key === 'y') {
+                event.preventDefault();
+                redo();
+            }
+        };
+        document.addEventListener('keydown', handleHistoryKeyDown);
+        return () => document.removeEventListener('keydown', handleHistoryKeyDown);
+    });
 
     const selectedCue = useMemo(() => {
         if (!selected) return null;
@@ -231,12 +264,18 @@ export default function LocalEditorTab() {
     const handleMetadata = () => {
         const nextDuration = Math.max(1, Math.round((videoRef.current?.duration || 30) * 1000));
         setDurationMs(nextDuration);
-        setSubtitleCues((current) => current.map((cue) => clampCue(cue, nextDuration)));
-        setHook((current) => current ? clampCue(current, nextDuration) : current);
+        setEditHistory((current) => ({
+            ...current,
+            present: {
+                ...current.present,
+                subtitleCues: current.present.subtitleCues.map((cue) => clampCue(cue, nextDuration)),
+                hook: current.present.hook ? clampCue(current.present.hook, nextDuration) : current.present.hook,
+            },
+        }));
     };
 
-    const updateSubtitle = (cue) => setSubtitleCues((current) => current.map((item) => item.id === cue.id ? clampCue(cue, durationMs) : item));
-    const updateHook = (nextHook) => setHook(clampCue(nextHook, durationMs));
+    const updateSubtitle = (cue) => commitEdit((current) => ({ ...current, subtitleCues: current.subtitleCues.map((item) => item.id === cue.id ? clampCue(cue, durationMs) : item) }));
+    const updateHook = (nextHook) => commitEdit((current) => ({ ...current, hook: clampCue(nextHook, durationMs) }));
 
     const handleTimelineSelect = (cue, type) => setSelected({ id: cue.id, type });
     const handleTimelineChange = (cue, type) => type === 'hook' ? updateHook(cue) : updateSubtitle(cue);
@@ -246,7 +285,7 @@ export default function LocalEditorTab() {
         try {
             if (subtitleCues.length && !window.confirm('Replace the current subtitle track?')) return;
             const cues = parseSubtitleFile(file.name, await file.text());
-            setSubtitleCues(cues.map((cue) => clampCue(cue, durationMs)));
+            commitEdit((current) => ({ ...current, subtitleCues: cues.map((cue) => clampCue(cue, durationMs)) }));
             setPendingSubtitle(null);
             if (subtitleInputRef.current) subtitleInputRef.current.value = '';
             setSelected(null);
@@ -265,22 +304,36 @@ export default function LocalEditorTab() {
     };
 
     const addHook = () => {
+        if (hook && !window.confirm('Replace the current viral hook?')) return;
         const nextHook = { id: 'hook', text: 'Your viral hook', startMs: 0, endMs: Math.min(2500, durationMs), position: 'top', size: 'M', entranceAnimation: 'spring', color: '#ffffff', fontSize: 48, background: '#111111' };
-        setHook(nextHook);
+        commitEdit((current) => ({ ...current, hook: nextHook }));
         setSelected({ id: 'hook', type: 'hook' });
         setHookOpen(true);
     };
 
     const removeHook = () => {
-        setHook(null);
+        if (!hook || !window.confirm('Remove viral hook?')) return;
+        commitEdit((current) => ({ ...current, hook: null }));
         setSelected((current) => current?.type === 'hook' ? null : current);
     };
 
     const removeSubtitles = () => {
         if (!window.confirm('Remove all subtitles?')) return;
-        setSubtitleCues([]);
-        setSubtitleStyle(DEFAULT_SUBTITLE_STYLE);
+        commitEdit((current) => ({ ...current, subtitleCues: [], subtitleStyle: DEFAULT_SUBTITLE_STYLE }));
         setSelected((current) => current?.type === 'subtitle' ? null : current);
+    };
+
+    const addSubtitleCue = () => {
+        const nextCue = clampCue(createSubtitleCue({ playheadMs, durationMs, existingIds: subtitleCues.map((cue) => cue.id) }), durationMs);
+        commitEdit((current) => ({ ...current, subtitleCues: [...current.subtitleCues, nextCue] }));
+        setSelected({ id: nextCue.id, type: 'subtitle' });
+        setSubtitlesOpen(true);
+    };
+
+    const removeSubtitleCue = (id) => {
+        if (!window.confirm('Remove this subtitle cue?')) return;
+        commitEdit((current) => ({ ...current, subtitleCues: current.subtitleCues.filter((cue) => cue.id !== id) }));
+        setSelected((current) => current?.id === id && current.type === 'subtitle' ? null : current);
     };
 
     const handleSeek = (nextMs) => {
@@ -395,9 +448,7 @@ export default function LocalEditorTab() {
         objectUrlRef.current = '';
         setVideoFile(null);
         setVideoUrl('');
-        setSubtitleCues([]);
-        setSubtitleStyle(DEFAULT_SUBTITLE_STYLE);
-        setHook(null);
+        setEditHistory({ past: [], present: { subtitleCues: [], subtitleStyle: DEFAULT_SUBTITLE_STYLE, hook: null }, future: [] });
         setSelected(null);
         setPendingSubtitle(null);
         setPlayheadMs(0);
@@ -428,7 +479,9 @@ export default function LocalEditorTab() {
         <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-6 py-5">
                 <div><h1 className="text-lg font-bold">Local Editor</h1><p className="mt-0.5 text-xs text-zinc-500">{videoFile.name} · local-only editing</p></div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={undo} disabled={!editHistory.past.length} aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"><Undo2 size={13} />Undo</button>
+                    <button type="button" onClick={redo} disabled={!editHistory.future.length} aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)" className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"><Redo2 size={13} />Redo</button>
                     <button type="button" onClick={exportVideo} disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-fuchsia-500 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"><Film size={13} />{busy ? `Exporting ${Math.round(progress * 100)}%` : 'Export Video'}</button>
                     <button type="button" onClick={exportSubtitles} disabled={busy || !subtitleCues.length} className="flex items-center gap-1.5 rounded-lg bg-violet-500 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50"><Download size={13} />Export Subtitles</button>
                     <button type="button" onClick={reset} disabled={busy} aria-label="Reset" className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:opacity-50"><RotateCcw size={13} />Reset</button>
@@ -461,13 +514,13 @@ export default function LocalEditorTab() {
                 </main>
                 <aside className="space-y-4">
                     <section className="rounded-xl border border-white/10 bg-white/[.02] p-4">
-                        <div className="flex items-center justify-between"><button type="button" aria-label="Toggle Subtitles settings" aria-expanded={subtitlesOpen} aria-controls="subtitle-settings-panel" onClick={() => setSubtitlesOpen((open) => !open)} className="flex items-center gap-2 text-sm font-semibold text-white"><ChevronDown size={16} className={`text-violet-300 transition-transform ${subtitlesOpen ? '' : '-rotate-90'}`} />Subtitles</button><FileText size={16} className="text-violet-300" /></div>
+                        <div className="flex items-center justify-between"><button type="button" aria-label="Toggle Subtitles settings" aria-expanded={subtitlesOpen} aria-controls="subtitle-settings-panel" onClick={() => setSubtitlesOpen((open) => !open)} className="flex items-center gap-2 text-sm font-semibold text-white"><ChevronDown size={16} className={`text-violet-300 transition-transform ${subtitlesOpen ? '' : '-rotate-90'}`} />Subtitles</button><div className="flex items-center gap-2"><button type="button" aria-label="Add subtitle cue" title="Add subtitle cue at the current playhead" onClick={addSubtitleCue} className="flex items-center gap-1 rounded-md bg-violet-500/15 px-2 py-1 text-[11px] font-semibold text-violet-200 hover:bg-violet-500/25"><Plus size={12} />Add cue</button><FileText size={16} className="text-violet-300" /></div></div>
                         {subtitlesOpen && <div id="subtitle-settings-panel" className="mt-3">
                             <input ref={subtitleInputRef} type="file" accept=".srt,.vtt,text/vtt,application/x-subrip" aria-label="Subtitle file" className="hidden" onChange={(event) => { const file = event.target.files?.[0] || null; setPendingSubtitle(file); importSubtitleFile(file); }} />
                             <button type="button" onClick={handleImport} className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-200 hover:bg-violet-500/20"><Upload size={14} />Import subtitles</button>
                             <p className="mt-2 text-[11px] leading-5 text-zinc-500">Import timed .srt or .vtt files, then edit every cue directly on the timeline.</p>
                             {pendingSubtitle && <p className="mt-2 truncate text-xs text-violet-300">Ready: {pendingSubtitle.name}</p>}
-                            <SubtitleStyleInspector style={subtitleStyle} onChange={setSubtitleStyle} onRemove={removeSubtitles} hasCues={subtitleCues.length > 0} />
+                            <SubtitleStyleInspector style={subtitleStyle} onChange={(nextStyle) => commitEdit((current) => ({ ...current, subtitleStyle: nextStyle }))} onRemove={removeSubtitles} hasCues={subtitleCues.length > 0} />
                         </div>}
                     </section>
                     <section className="rounded-xl border border-white/10 bg-white/[.02] p-4">
@@ -475,7 +528,7 @@ export default function LocalEditorTab() {
                         {hookOpen && <div id="viral-hook-settings-panel" className="mt-3">{selected?.type === 'hook' ? <HookInspector hook={selectedCue} onChange={updateHook} onRemove={removeHook} /> : <HookInspector hook={null} onChange={updateHook} onRemove={removeHook} />}</div>}
                     </section>
                     <section className="rounded-xl border border-white/10 bg-white/[.02] p-4">
-                        {selected?.type === 'subtitle' ? <SubtitleInspector cue={selectedCue} onChange={updateSubtitle} onDelete={(id) => { setSubtitleCues((current) => current.filter((cue) => cue.id !== id)); setSelected(null); }} /> : <p className="text-xs text-zinc-500">Select a subtitle cue or the hook track to edit its properties.</p>}
+                        {selected?.type === 'subtitle' ? <SubtitleInspector cue={selectedCue} onChange={updateSubtitle} onDelete={removeSubtitleCue} /> : <p className="text-xs text-zinc-500">Select a subtitle cue or the hook track to edit its properties.</p>}
                     </section>
                     <div className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-xs text-zinc-500"><span>Playhead</span><span className="font-mono text-zinc-300">{formatClock(playheadMs)} / {formatClock(durationMs)}</span></div>
                 </aside>
