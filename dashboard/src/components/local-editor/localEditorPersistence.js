@@ -8,13 +8,14 @@ export const EDITOR_HISTORY_LIMIT = 10;
 
 export const createEmptyEditorHistory = () => ({
     past: [],
-    present: { subtitleCues: [], subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE }, hook: null },
+    present: { subtitleCues: [], subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE }, subtitleLanguage: 'en', hook: null },
     future: [],
 });
 
 const normalizeSnapshot = (snapshot) => ({
     subtitleCues: Array.isArray(snapshot?.subtitleCues) ? snapshot.subtitleCues : [],
     subtitleStyle: normalizeSubtitleStyle(snapshot?.subtitleStyle),
+    subtitleLanguage: String(snapshot?.subtitleLanguage || 'en').toLowerCase(),
     hook: snapshot?.hook || null,
 });
 

@@ -1409,6 +1409,27 @@ async def translate_subtitle_track(
         raise HTTPException(status_code=502, detail=f"Translation service unavailable: {exc}") from exc
 
 
+@app.post("/api/local-editor/translate")
+async def translate_local_editor_subtitles(
+    req: SubtitleTrackTranslationRequest,
+    request: Request,
+):
+    """Queue translation for the browser-only editor without requiring a clip version."""
+    import httpx
+    from fastapi.responses import JSONResponse
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{TRANSLATION_SERVICE_URL}/translate",
+                json=req.model_dump(exclude_none=True),
+                headers=_translation_headers(request),
+            )
+        return JSONResponse(status_code=response.status_code, content=response.json())
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Translation service unavailable: {exc}") from exc
+
+
 @app.post("/api/clip/{job_id}/{clip_index}/versions/{version_id}/activate")
 async def activate_clip_version(job_id: str, clip_index: int, version_id: str):
     store = _ensure_clip_versions(job_id, clip_index)

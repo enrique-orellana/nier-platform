@@ -2,14 +2,9 @@ import { useEffect, useState } from 'react';
 import { Languages, Loader2 } from 'lucide-react';
 import { getApiUrl } from '../config';
 import SubtitleTrackPicker from './SubtitleTrackPicker';
+import { SUBTITLE_LANGUAGES } from './subtitleLanguages';
 
-const LANGUAGES = {
-    en: 'English',
-    es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese',
-    pl: 'Polish', hi: 'Hindi', ja: 'Japanese', ko: 'Korean', zh: 'Chinese',
-    ar: 'Arabic', ru: 'Russian', tr: 'Turkish', nl: 'Dutch', sv: 'Swedish',
-    id: 'Indonesian', vi: 'Vietnamese', th: 'Thai', uk: 'Ukrainian', el: 'Greek',
-};
+const LANGUAGES = SUBTITLE_LANGUAGES;
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 

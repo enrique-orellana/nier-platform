@@ -151,6 +151,32 @@ describe('LocalEditorTab', () => {
         expect(screen.queryByText('Generated caption')).not.toBeInTheDocument();
     });
 
+    it('translates the current subtitle track and records one undoable action', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ translationId: 'translation-1', status: 'queued' }) })
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'done', track: { id: 'it', language: 'it', cues: [{ text: 'Ciao', startMs: 0, endMs: 1000 }] } }) });
+        vi.stubGlobal('fetch', fetchMock);
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
+        const subtitleFile = new File(['subtitle'], 'captions.srt', { type: 'application/x-subrip' });
+        subtitleFile.text = async () => '1\n00:00:00,000 --> 00:00:01,000\nHello';
+        fireEvent.change(screen.getByLabelText(/subtitle file/i), { target: { files: [subtitleFile] } });
+        fireEvent.click(screen.getByRole('tab', { name: 'Subtitle table view' }));
+        await waitFor(() => expect(screen.getByDisplayValue('Hello')).toBeInTheDocument());
+        fireEvent.change(screen.getByLabelText(/translation target language/i), { target: { value: 'it' } });
+        fireEvent.click(screen.getByRole('button', { name: /translate subtitles/i }));
+
+        await waitFor(() => expect(screen.getByDisplayValue('Ciao')).toBeInTheDocument());
+        expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/local-editor/translate', expect.objectContaining({ method: 'POST', body: expect.stringContaining('"target_language":"it"') }));
+        expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/translation/translation-1');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+        expect(screen.getByDisplayValue('Hello')).toBeInTheDocument();
+    });
+
     it('asks before replacing existing subtitles during generation', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
         const fetchMock = vi.fn();

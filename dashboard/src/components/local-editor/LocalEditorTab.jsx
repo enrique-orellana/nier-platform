@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Download, FastForward, FileText, Film, Loader2, Maximize2, Minimize2, Pause, Play, Plus, Redo2, Repeat, Rewind, RotateCcw, SkipBack, SkipForward, Square, Undo2, Upload, X } from 'lucide-react';
+import { ChevronDown, Download, FastForward, FileText, Film, Languages, Loader2, Maximize2, Minimize2, Pause, Play, Plus, Redo2, Repeat, Rewind, RotateCcw, SkipBack, SkipForward, Square, Undo2, Upload, X } from 'lucide-react';
 import LocalEditorTimeline from './LocalEditorTimeline';
 import SubtitleCueTable from './SubtitleCueTable';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
@@ -22,8 +22,26 @@ import {
     normalizeSubtitleStyle,
     subtitlePositionClass,
 } from './localEditorStyles';
+import { SUBTITLE_LANGUAGES } from '../subtitleLanguages';
 
 const DEFAULT_DURATION_MS = 30000;
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const getLocalAiHeaders = () => {
+    const provider = localStorage.getItem('ai_provider_v1') || 'gemini';
+    const apiKey = localStorage.getItem('gemini_key') || '';
+    const headers = {
+        'X-AI-Provider': provider,
+        'X-AI-Model': localStorage.getItem('ai_text_model_v1') || 'auto',
+        'X-AI-Analyze-Model': localStorage.getItem('ai_analyze_model_v1') || 'auto',
+        'X-AI-Vision-Model': localStorage.getItem('ai_vision_model_v1') || 'auto',
+        'X-AI-Image-Model': localStorage.getItem('ai_image_model_v1') || 'auto',
+    };
+    const baseUrl = localStorage.getItem('ai_base_url_v1');
+    if (baseUrl) headers['X-AI-Base-Url'] = baseUrl;
+    if (apiKey) headers[provider === 'gemini' ? 'X-Gemini-Key' : 'X-AI-Api-Key'] = apiKey;
+    return headers;
+};
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
 
@@ -241,6 +259,8 @@ export default function LocalEditorTab() {
     const [pendingSubtitle, setPendingSubtitle] = useState(null);
     const [error, setError] = useState('');
     const [generatingSubtitles, setGeneratingSubtitles] = useState(false);
+    const [translatingSubtitles, setTranslatingSubtitles] = useState(false);
+    const [translationTarget, setTranslationTarget] = useState('es');
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState(0);
     const [isFullscreen, setIsFullscreen] = useState(false);
@@ -254,7 +274,7 @@ export default function LocalEditorTab() {
     const [subtitleView, setSubtitleView] = useState('timeline');
     const [subtitleTableLoop, setSubtitleTableLoop] = useState(false);
 
-    const { subtitleCues, subtitleStyle, hook } = editHistory.present;
+    const { subtitleCues, subtitleStyle, subtitleLanguage, hook } = editHistory.present;
     const editHistoryRef = useRef(editHistory);
     useEffect(() => {
         editHistoryRef.current = editHistory;
@@ -408,7 +428,7 @@ export default function LocalEditorTab() {
             if (subtitleCues.length && !window.confirm('Replace the current subtitle track?')) return;
             const cues = parseSubtitleFile(file.name, await file.text());
             const importedCues = cues.map((cue) => clampCue(cue, durationMs));
-            commitEdit((current) => ({ ...current, subtitleCues: importedCues }));
+            commitEdit((current) => ({ ...current, subtitleCues: importedCues, subtitleLanguage: 'en' }));
             setPendingSubtitle(null);
             if (subtitleInputRef.current) subtitleInputRef.current.value = '';
             setSelected(null);
@@ -430,7 +450,7 @@ export default function LocalEditorTab() {
             if (!response.ok) throw new Error(payload.detail || 'Could not generate subtitles.');
             const generatedCues = normalizeGeneratedCues(payload.segments, durationMs);
             if (!generatedCues.length) throw new Error('No speech was detected in this video.');
-            commitEdit((current) => ({ ...current, subtitleCues: generatedCues }));
+            commitEdit((current) => ({ ...current, subtitleCues: generatedCues, subtitleLanguage: String(payload.language || 'en').toLowerCase() }));
             setSelected(null);
             setSubtitlesOpen(true);
         } catch (generationError) {
@@ -446,6 +466,58 @@ export default function LocalEditorTab() {
             return;
         }
         subtitleInputRef.current?.click();
+    };
+
+    const translateSubtitles = async () => {
+        if (!subtitleCues.length || translatingSubtitles) return;
+        const sourceLanguage = String(subtitleLanguage || 'en').toLowerCase();
+        const targetLanguage = String(translationTarget || '').toLowerCase();
+        if (!targetLanguage || targetLanguage === sourceLanguage) {
+            setError('Choose a target language different from the source language.');
+            return;
+        }
+        setTranslatingSubtitles(true);
+        setError('');
+        try {
+            const sourceCues = subtitleCues.map(({ id, text, startMs, endMs }) => ({ id, text, startMs, endMs }));
+            const response = await fetch(getApiUrl('/api/local-editor/translate'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...getLocalAiHeaders() },
+                body: JSON.stringify({
+                    target_language: targetLanguage,
+                    source_track_id: 'original',
+                    tracks: [{ id: 'original', language: sourceLanguage, cues: sourceCues }],
+                }),
+            });
+            let statusPayload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(statusPayload.detail || 'Subtitle translation failed.');
+            const translationId = statusPayload.translationId;
+            if (!translationId) throw new Error('Translation service did not return a job id.');
+            while (!['done', 'error', 'failed'].includes(statusPayload.status)) {
+                await sleep(500);
+                const statusResponse = await fetch(getApiUrl(`/api/translation/${translationId}`));
+                statusPayload = await statusResponse.json().catch(() => ({}));
+                if (!statusResponse.ok) throw new Error(statusPayload.detail || 'Unable to read translation status.');
+            }
+            if (statusPayload.status !== 'done') throw new Error(statusPayload.error || 'Subtitle translation failed.');
+            const translatedCues = statusPayload.track?.cues;
+            if (!Array.isArray(translatedCues) || translatedCues.length !== sourceCues.length) throw new Error('Translation returned an invalid subtitle track.');
+            commitEdit((current) => ({
+                ...current,
+                subtitleLanguage: targetLanguage,
+                subtitleCues: sourceCues.map((cue, index) => ({
+                    ...(current.subtitleCues.find((item) => item.id === cue.id) || cue),
+                    text: String(translatedCues[index]?.text || '').trim(),
+                    label: String(translatedCues[index]?.text || '').trim(),
+                })),
+            }));
+            setSelected(null);
+            setSubtitlesOpen(true);
+        } catch (translationError) {
+            setError(translationError.message || 'Subtitle translation failed.');
+        } finally {
+            setTranslatingSubtitles(false);
+        }
     };
 
     const addHook = () => {
@@ -464,7 +536,7 @@ export default function LocalEditorTab() {
 
     const removeSubtitles = () => {
         if (!window.confirm('Remove all subtitles?')) return;
-        commitEdit((current) => ({ ...current, subtitleCues: [], subtitleStyle: DEFAULT_SUBTITLE_STYLE }));
+        commitEdit((current) => ({ ...current, subtitleCues: [], subtitleStyle: DEFAULT_SUBTITLE_STYLE, subtitleLanguage: 'en' }));
         setSelected((current) => current?.type === 'subtitle' ? null : current);
     };
 
@@ -698,6 +770,14 @@ export default function LocalEditorTab() {
                              </div>
                             <p className="mt-2 text-[11px] leading-5 text-zinc-500">Import timed .srt or .vtt files, then edit every cue directly on the timeline.</p>
                             {pendingSubtitle && <p className="mt-2 truncate text-xs text-violet-300">Ready: {pendingSubtitle.name}</p>}
+                            <div className="mt-4 rounded-lg border border-cyan-400/20 bg-cyan-500/[.06] p-3">
+                                <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-cyan-200"><Languages size={14} />Translate subtitles</div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <label className="text-[11px] text-zinc-400">Source language<select aria-label="Subtitle source language" value={subtitleLanguage} onChange={(event) => commitEdit((current) => ({ ...current, subtitleLanguage: event.target.value }))} disabled={translatingSubtitles} className="input-field mt-1 w-full text-xs">{Object.entries(SUBTITLE_LANGUAGES).map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select></label>
+                                    <label className="text-[11px] text-zinc-400">Target language<select aria-label="Translation target language" value={translationTarget} onChange={(event) => setTranslationTarget(event.target.value)} disabled={translatingSubtitles} className="input-field mt-1 w-full text-xs">{Object.entries(SUBTITLE_LANGUAGES).map(([code, name]) => <option key={code} value={code} disabled={code === subtitleLanguage}>{name}{code === subtitleLanguage ? ' (source)' : ''}</option>)}</select></label>
+                                </div>
+                                <button type="button" aria-label="Translate subtitles" onClick={translateSubtitles} disabled={translatingSubtitles || !subtitleCues.length || translationTarget === subtitleLanguage} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-b from-cyan-400 to-cyan-600 px-3 py-2 text-xs font-bold text-white shadow-[0_0_15px_rgba(34,211,238,0.2)] hover:from-cyan-300 hover:to-cyan-500 disabled:cursor-not-allowed disabled:opacity-50">{translatingSubtitles ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}{translatingSubtitles ? 'Translating…' : 'Translate subtitles'}</button>
+                            </div>
                             <SubtitleStyleInspector style={subtitleStyle} onChange={(nextStyle) => commitEdit((current) => ({ ...current, subtitleStyle: nextStyle }))} onRemove={removeSubtitles} hasCues={subtitleCues.length > 0} />
                         </div>}
                     </section>
