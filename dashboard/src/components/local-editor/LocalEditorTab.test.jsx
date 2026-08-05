@@ -103,7 +103,7 @@ describe('LocalEditorTab', () => {
         await waitFor(() => expect(screen.getAllByText('Hello').length).toBeGreaterThan(0));
     });
 
-    it('keeps imported subtitles as the undo baseline', async () => {
+    it('undoes an imported subtitle track as one action', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
         render(<LocalEditorTab />);
         fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
@@ -114,7 +114,9 @@ describe('LocalEditorTab', () => {
         fireEvent.change(screen.getByLabelText(/subtitle file/i), { target: { files: [subtitleFile] } });
 
         await waitFor(() => expect(screen.getAllByText('Hello').length).toBeGreaterThan(0));
-        expect(screen.getByRole('button', { name: 'Undo', exact: true })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Undo', exact: true })).not.toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+        expect(screen.queryByText('Hello')).not.toBeInTheDocument();
     });
 
     it('undoes the latest imported cue edit without removing the imported track', async () => {
@@ -134,6 +136,36 @@ describe('LocalEditorTab', () => {
 
         expect(screen.getByLabelText('Subtitle text')).toHaveValue('Hello');
         expect(screen.getAllByText('Hello').length).toBeGreaterThan(0);
+    });
+
+    it('uses editor history for Ctrl+Z while editing a cue', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
+        const subtitleFile = new File(['subtitle'], 'captions.srt', { type: 'application/x-subrip' });
+        subtitleFile.text = async () => '1\n00:00:00,000 --> 00:00:01,000\nHello';
+        fireEvent.change(screen.getByLabelText(/subtitle file/i), { target: { files: [subtitleFile] } });
+
+        await waitFor(() => expect(screen.getAllByText('Hello').length).toBeGreaterThan(0));
+        fireEvent.click(screen.getAllByRole('button', { name: 'Hello' })[0]);
+        fireEvent.change(screen.getByLabelText('Subtitle text'), { target: { value: 'Changed' } });
+        fireEvent.keyDown(screen.getByLabelText('Subtitle text'), { key: 'z', ctrlKey: true });
+
+        expect(screen.getByLabelText('Subtitle text')).toHaveValue('Hello');
+    });
+
+    it('keeps the last ten editor actions undoable', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /add subtitle cue/i })).toBeInTheDocument());
+
+        for (let index = 0; index < 12; index += 1) fireEvent.click(screen.getByRole('button', { name: /add subtitle cue/i }));
+        for (let index = 0; index < 11; index += 1) fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+
+        expect(screen.getAllByRole('button', { name: 'Timeline cue' })).toHaveLength(2);
     });
 
     it('adds and edits a hook, then resets', async () => {

@@ -21,6 +21,7 @@ import {
 } from './localEditorStyles';
 
 const DEFAULT_DURATION_MS = 30000;
+const HISTORY_LIMIT = 10;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
 
@@ -202,21 +203,21 @@ export default function LocalEditorTab() {
         if (coalesce && transaction) {
             if (!transaction.recorded) {
                 transaction.recorded = true;
-                return { past: [...current.past, current.present].slice(-100), present: next, future: [] };
+                return { past: [...current.past, current.present].slice(-HISTORY_LIMIT), present: next, future: [] };
             }
             return { ...current, present: next, future: [] };
         }
-        return { past: [...current.past, current.present].slice(-100), present: next, future: [] };
+        return { past: [...current.past, current.present].slice(-HISTORY_LIMIT), present: next, future: [] };
     });
     const undo = () => setEditHistory((current) => {
         if (!current.past.length) return current;
         const previous = current.past[current.past.length - 1];
-        return { past: current.past.slice(0, -1), present: previous, future: [current.present, ...current.future].slice(0, 100) };
+        return { past: current.past.slice(0, -1), present: previous, future: [current.present, ...current.future].slice(0, HISTORY_LIMIT) };
     });
     const redo = () => setEditHistory((current) => {
         if (!current.future.length) return current;
         const [next, ...future] = current.future;
-        return { past: [...current.past, current.present].slice(-100), present: next, future };
+        return { past: [...current.past, current.present].slice(-HISTORY_LIMIT), present: next, future };
     });
 
     useEffect(() => () => {
@@ -232,7 +233,6 @@ export default function LocalEditorTab() {
     useEffect(() => {
         const handleHistoryKeyDown = (event) => {
             if (!(event.ctrlKey || event.metaKey)) return;
-            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target?.tagName)) return;
             const key = event.key.toLowerCase();
             if (key === 'z' && !event.shiftKey) {
                 event.preventDefault();
@@ -320,11 +320,7 @@ export default function LocalEditorTab() {
             if (subtitleCues.length && !window.confirm('Replace the current subtitle track?')) return;
             const cues = parseSubtitleFile(file.name, await file.text());
             const importedCues = cues.map((cue) => clampCue(cue, durationMs));
-            setEditHistory((current) => ({
-                past: [],
-                present: { ...current.present, subtitleCues: importedCues },
-                future: [],
-            }));
+            commitEdit((current) => ({ ...current, subtitleCues: importedCues }));
             setPendingSubtitle(null);
             if (subtitleInputRef.current) subtitleInputRef.current.value = '';
             setSelected(null);
