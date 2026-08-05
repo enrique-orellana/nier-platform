@@ -29,6 +29,8 @@ export const getRecordingOptions = (mimeType, width, height) => {
     };
 };
 
+export const getExportSourceUrl = (video) => String(video?.currentSrc || video?.src || '');
+
 export const prepareVideoForExport = (video) => {
     video?.pause?.();
     if (video) video.currentTime = 0;
@@ -135,150 +137,194 @@ const drawOverlay = (context, text, { x, y, width, fontSize, color, background, 
     context.restore();
 };
 
+const waitForVideoReady = (video) => new Promise((resolve, reject) => {
+    if (video.readyState >= 2) {
+        resolve(video);
+        return;
+    }
+    const cleanup = () => {
+        video.removeEventListener('loadeddata', handleReady);
+        video.removeEventListener('canplay', handleReady);
+        video.removeEventListener('error', handleError);
+    };
+    const handleReady = () => {
+        cleanup();
+        resolve(video);
+    };
+    const handleError = () => {
+        cleanup();
+        reject(new Error('The local video could not be loaded for export.'));
+    };
+    video.addEventListener('loadeddata', handleReady);
+    video.addEventListener('canplay', handleReady);
+    video.addEventListener('error', handleError);
+    video.load();
+});
+
 export async function renderLocalVideo({ video, subtitleCues = [], subtitleStyle = DEFAULT_SUBTITLE_STYLE, hook = null, onProgress = () => {} }) {
     if (!video || typeof document === 'undefined') throw new Error('A local video is required.');
-    if (typeof video.captureStream !== 'function') throw new Error('This browser cannot capture local video audio.');
     if (typeof HTMLCanvasElement === 'undefined' || typeof HTMLCanvasElement.prototype.captureStream !== 'function') {
         throw new Error('This browser cannot render a local video export.');
     }
     if (typeof MediaRecorder === 'undefined') throw new Error('This browser does not support local video recording.');
 
-    const originalTime = video.currentTime;
-    const originalPaused = video.paused;
-    const originalMuted = video.muted;
-    const originalLoop = video.loop;
-    const { width: sourceWidth, height: sourceHeight } = getVideoFrameDimensions(video);
-    video.loop = false;
-    prepareVideoForExport(video);
-    const canvas = document.createElement('canvas');
-    canvas.width = sourceWidth;
-    canvas.height = sourceHeight;
-    const context = canvas.getContext('2d');
-    const frameRate = 30;
-    const canvasStream = canvas.captureStream(frameRate);
-    const sourceStream = video.captureStream();
-    const stream = new MediaStream([
-        ...canvasStream.getVideoTracks(),
-        ...sourceStream.getAudioTracks(),
-    ]);
-    const isSupported = typeof MediaRecorder.isTypeSupported === 'function'
-        ? (type) => MediaRecorder.isTypeSupported(type)
-        : () => true;
-    const mimeType = chooseRecordingMimeType(isSupported);
-    const recorder = new MediaRecorder(stream, getRecordingOptions(mimeType, sourceWidth, sourceHeight));
-    const chunks = [];
+    const sourceUrl = getExportSourceUrl(video);
+    if (!sourceUrl) throw new Error('The local video source is not available for export.');
+
+    const exportVideo = document.createElement('video');
+    exportVideo.preload = 'auto';
+    exportVideo.playsInline = true;
+    exportVideo.loop = false;
+    exportVideo.src = sourceUrl;
+    exportVideo.setAttribute('aria-hidden', 'true');
+    Object.assign(exportVideo.style, {
+        position: 'fixed',
+        width: '1px',
+        height: '1px',
+        opacity: '0',
+        pointerEvents: 'none',
+    });
+    document.body?.appendChild(exportVideo);
+
     let scheduledFrameId = null;
     let scheduledFrameKind = null;
+    let stream = null;
+    let recorder = null;
     let resolveRender;
     let rejectRender;
     let settled = false;
-
-    const finish = (error = null) => {
-        if (settled) return;
-        settled = true;
-        if (scheduledFrameId !== null) {
-            if (scheduledFrameKind === 'video' && typeof video.cancelVideoFrameCallback === 'function') video.cancelVideoFrameCallback(scheduledFrameId);
-            else cancelAnimationFrame(scheduledFrameId);
-            scheduledFrameId = null;
-        }
-        stream.getTracks().forEach((track) => track.stop());
-        if (error) rejectRender(error);
-        else resolveRender(new Blob(chunks, { type: recorder.mimeType || mimeType || 'video/webm' }));
-    };
-
-    const draw = () => {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const nowMs = video.currentTime * 1000;
-        const subtitle = activeCueAt(subtitleCues, nowMs);
-        const subtitleStyleValues = subtitleVisualStyle(subtitleStyle);
-        if (subtitle) {
-            const subtitleElapsedMs = Math.max(0, nowMs - subtitle.startMs);
-            const subtitleProgress = Math.min(1, subtitleElapsedMs / 250);
-            const subtitleScale = subtitleStyleValues.animation === 'pop' ? 0.9 + subtitleProgress * 0.1 : 1;
-            const subtitleOpacity = subtitleStyleValues.animation === 'pop' ? subtitleProgress : 1;
-            const subtitleColor = subtitleStyleValues.animation === 'karaoke' ? subtitleStyleValues.highlightColor : subtitleStyleValues.color;
-            const subtitleWidth = canvas.width * 0.88;
-            const subtitleFontSize = Math.max(24, Math.round(subtitleStyleValues.fontSize * (Math.min(canvas.width, canvas.height) / 440)));
-            const subtitleMetrics = measureOverlay(context, subtitle.text, subtitleWidth, subtitleFontSize, subtitleStyleValues.fontFamily);
-            const subtitleDesiredY = subtitleStyleValues.position === 'top' ? canvas.height * 0.12 : subtitleStyleValues.position === 'middle' ? canvas.height * 0.45 : canvas.height * 0.78;
-            const subtitleY = clampOverlayY(subtitleDesiredY, canvas.height, subtitleMetrics.height, subtitleMetrics.padding);
-            context.save();
-            context.translate(canvas.width / 2, subtitleY);
-            context.scale(subtitleScale, subtitleScale);
-            drawOverlay(context, subtitle.text, {
-                x: 0,
-                y: 0,
-                width: subtitleWidth,
-                fontSize: subtitleFontSize,
-                fontFamily: subtitleStyleValues.fontFamily,
-                color: subtitleColor,
-                background: subtitleStyleValues.backgroundOpacity > 0 ? subtitleStyleValues.background : 'transparent',
-                borderColor: subtitleStyleValues.outlineColor,
-                borderWidth: subtitleStyleValues.outlineWidth,
-                opacity: subtitleOpacity,
-            });
-            context.restore();
-        }
-        const currentHook = hook && nowMs >= hook.startMs && nowMs < hook.endMs ? hook : null;
-        if (currentHook) {
-            const hookState = hookVisualState(currentHook, nowMs - currentHook.startMs);
-            const positionY = currentHook.position === 'bottom' ? canvas.height * 0.84 : currentHook.position === 'center' ? canvas.height * 0.46 : canvas.height * 0.12;
-            context.save();
-            context.translate(canvas.width / 2, positionY + hookState.translateY);
-            context.scale(hookState.scale, hookState.scale);
-            drawOverlay(context, currentHook.text, {
-                x: 0,
-                y: 0,
-                width: canvas.width * 0.9,
-                fontSize: Number(currentHook.fontSize) || Math.max(24, Math.round(canvas.width * 0.05)),
-                color: currentHook.color || '#ffffff',
-                background: currentHook.background || 'rgba(17, 17, 17, 0.8)',
-                opacity: hookState.opacity,
-            });
-            context.restore();
-        }
-        onProgress(video.duration ? Math.min(1, video.currentTime / video.duration) : 0);
-        if (!video.ended) {
-            if (typeof video.requestVideoFrameCallback === 'function') {
-                scheduledFrameKind = 'video';
-                scheduledFrameId = video.requestVideoFrameCallback(() => {
-                    scheduledFrameId = null;
-                    draw();
-                });
-            } else {
-                scheduledFrameKind = 'animation';
-                scheduledFrameId = requestAnimationFrame(() => {
-                    scheduledFrameId = null;
-                    draw();
-                });
-            }
-        }
-    };
-
-    const result = new Promise((resolve, reject) => {
-        resolveRender = resolve;
-        rejectRender = reject;
-        recorder.addEventListener('dataavailable', (event) => {
-            if (event.data?.size) chunks.push(event.data);
-        });
-        recorder.addEventListener('stop', () => finish());
-        video.addEventListener('ended', () => recorder.state === 'recording' && recorder.stop(), { once: true });
-        recorder.addEventListener('error', () => finish(new Error('Local video export failed.')));
-        recorder.start();
-        draw();
-        video.play().catch(() => finish(new Error('The browser blocked local video playback for export.')));
-    });
-
     try {
+        await waitForVideoReady(exportVideo);
+        if (typeof exportVideo.captureStream !== 'function') throw new Error('This browser cannot capture local video audio.');
+        const { width: sourceWidth, height: sourceHeight } = getVideoFrameDimensions(exportVideo);
+        prepareVideoForExport(exportVideo);
+        const canvas = document.createElement('canvas');
+        canvas.width = sourceWidth;
+        canvas.height = sourceHeight;
+        const context = canvas.getContext('2d');
+        const canvasStream = canvas.captureStream(30);
+        const canvasVideoTrack = canvasStream.getVideoTracks()[0];
+        const sourceStream = exportVideo.captureStream();
+        stream = new MediaStream([
+            ...canvasStream.getVideoTracks(),
+            ...sourceStream.getAudioTracks(),
+        ]);
+        const isSupported = typeof MediaRecorder.isTypeSupported === 'function'
+            ? (type) => MediaRecorder.isTypeSupported(type)
+            : () => true;
+        const mimeType = chooseRecordingMimeType(isSupported);
+        try {
+            recorder = new MediaRecorder(stream, getRecordingOptions(mimeType, sourceWidth, sourceHeight));
+        } catch {
+            recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        }
+        const chunks = [];
+        const finish = (error = null) => {
+            if (settled) return;
+            settled = true;
+            if (scheduledFrameId !== null) {
+                if (scheduledFrameKind === 'video' && typeof exportVideo.cancelVideoFrameCallback === 'function') exportVideo.cancelVideoFrameCallback(scheduledFrameId);
+                else cancelAnimationFrame(scheduledFrameId);
+                scheduledFrameId = null;
+            }
+            stream.getTracks().forEach((track) => track.stop());
+            if (error) rejectRender(error);
+            else resolveRender(new Blob(chunks, { type: recorder.mimeType || mimeType || 'video/webm' }));
+        };
+        const draw = () => {
+            context.drawImage(exportVideo, 0, 0, canvas.width, canvas.height);
+            const nowMs = exportVideo.currentTime * 1000;
+            const subtitle = activeCueAt(subtitleCues, nowMs);
+            const subtitleStyleValues = subtitleVisualStyle(subtitleStyle);
+            if (subtitle) {
+                const subtitleElapsedMs = Math.max(0, nowMs - subtitle.startMs);
+                const subtitleProgress = Math.min(1, subtitleElapsedMs / 250);
+                const subtitleScale = subtitleStyleValues.animation === 'pop' ? 0.9 + subtitleProgress * 0.1 : 1;
+                const subtitleOpacity = subtitleStyleValues.animation === 'pop' ? subtitleProgress : 1;
+                const subtitleColor = subtitleStyleValues.animation === 'karaoke' ? subtitleStyleValues.highlightColor : subtitleStyleValues.color;
+                const subtitleWidth = canvas.width * 0.88;
+                const subtitleFontSize = Math.max(24, Math.round(subtitleStyleValues.fontSize * (Math.min(canvas.width, canvas.height) / 440)));
+                const subtitleMetrics = measureOverlay(context, subtitle.text, subtitleWidth, subtitleFontSize, subtitleStyleValues.fontFamily);
+                const subtitleDesiredY = subtitleStyleValues.position === 'top' ? canvas.height * 0.12 : subtitleStyleValues.position === 'middle' ? canvas.height * 0.45 : canvas.height * 0.78;
+                const subtitleY = clampOverlayY(subtitleDesiredY, canvas.height, subtitleMetrics.height, subtitleMetrics.padding);
+                context.save();
+                context.translate(canvas.width / 2, subtitleY);
+                context.scale(subtitleScale, subtitleScale);
+                drawOverlay(context, subtitle.text, {
+                    x: 0,
+                    y: 0,
+                    width: subtitleWidth,
+                    fontSize: subtitleFontSize,
+                    fontFamily: subtitleStyleValues.fontFamily,
+                    color: subtitleColor,
+                    background: subtitleStyleValues.backgroundOpacity > 0 ? subtitleStyleValues.background : 'transparent',
+                    borderColor: subtitleStyleValues.outlineColor,
+                    borderWidth: subtitleStyleValues.outlineWidth,
+                    opacity: subtitleOpacity,
+                });
+                context.restore();
+            }
+            const currentHook = hook && nowMs >= hook.startMs && nowMs < hook.endMs ? hook : null;
+            if (currentHook) {
+                const hookState = hookVisualState(currentHook, nowMs - currentHook.startMs);
+                const positionY = currentHook.position === 'bottom' ? canvas.height * 0.84 : currentHook.position === 'center' ? canvas.height * 0.46 : canvas.height * 0.12;
+                context.save();
+                context.translate(canvas.width / 2, positionY + hookState.translateY);
+                context.scale(hookState.scale, hookState.scale);
+                drawOverlay(context, currentHook.text, {
+                    x: 0,
+                    y: 0,
+                    width: canvas.width * 0.9,
+                    fontSize: Number(currentHook.fontSize) || Math.max(24, Math.round(canvas.width * 0.05)),
+                    color: currentHook.color || '#ffffff',
+                    background: currentHook.background || 'rgba(17, 17, 17, 0.8)',
+                    opacity: hookState.opacity,
+                });
+                context.restore();
+            }
+            canvasVideoTrack?.requestFrame?.();
+            onProgress(exportVideo.duration ? Math.min(1, exportVideo.currentTime / exportVideo.duration) : 0);
+            if (!exportVideo.ended) {
+                if (typeof exportVideo.requestVideoFrameCallback === 'function') {
+                    scheduledFrameKind = 'video';
+                    scheduledFrameId = exportVideo.requestVideoFrameCallback(() => {
+                        scheduledFrameId = null;
+                        draw();
+                    });
+                } else {
+                    scheduledFrameKind = 'animation';
+                    scheduledFrameId = requestAnimationFrame(() => {
+                        scheduledFrameId = null;
+                        draw();
+                    });
+                }
+            }
+        };
+
+        const result = new Promise((resolve, reject) => {
+            resolveRender = resolve;
+            rejectRender = reject;
+            recorder.addEventListener('dataavailable', (event) => {
+                if (event.data?.size) chunks.push(event.data);
+            });
+            recorder.addEventListener('stop', () => finish());
+            exportVideo.addEventListener('ended', () => recorder.state === 'recording' && recorder.stop(), { once: true });
+            recorder.addEventListener('error', () => finish(new Error('Local video export failed.')));
+            recorder.start();
+            draw();
+            exportVideo.play().catch(() => finish(new Error('The browser blocked local video playback for export.')));
+        });
+
         return await result;
     } finally {
         if (scheduledFrameId !== null) {
-            if (scheduledFrameKind === 'video' && typeof video.cancelVideoFrameCallback === 'function') video.cancelVideoFrameCallback(scheduledFrameId);
+            if (scheduledFrameKind === 'video' && typeof exportVideo.cancelVideoFrameCallback === 'function') exportVideo.cancelVideoFrameCallback(scheduledFrameId);
             else cancelAnimationFrame(scheduledFrameId);
         }
-        video.currentTime = originalTime;
-        video.muted = originalMuted;
-        video.loop = originalLoop;
-        if (!originalPaused) video.play().catch(() => {});
+        stream?.getTracks().forEach((track) => track.stop());
+        exportVideo.pause();
+        exportVideo.removeAttribute('src');
+        exportVideo.load();
+        exportVideo.remove();
     }
 }
