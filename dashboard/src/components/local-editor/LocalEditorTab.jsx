@@ -3,7 +3,8 @@ import { ChevronDown, Download, FastForward, FileText, Film, Languages, Loader2,
 import LocalEditorTimeline from './LocalEditorTimeline';
 import SubtitleCueTable from './SubtitleCueTable';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
-import { activeCueAt, formatClock, renderLocalVideo } from './localEditorExport';
+import { activeCueAt, formatClock } from './localEditorExport';
+import { renderLocalVideoOnBackend } from './localEditorRender';
 import { detectEmbeddedSideBars } from './localEditorVideo';
 import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
@@ -96,6 +97,13 @@ const downloadBlob = (blob, fileName) => {
     anchor.download = fileName;
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
+};
+
+const downloadUrl = (url, fileName) => {
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
 };
 
 function UploadState({ onFile, error }) {
@@ -664,8 +672,20 @@ export default function LocalEditorTab() {
         setProgress(0);
         setError('');
         try {
-            const blob = await renderLocalVideo({ video: videoRef.current, subtitleCues, subtitleStyle, hook, onProgress: setProgress });
-            downloadBlob(blob, 'openshorts-local-editor.webm');
+            const video = videoRef.current;
+            if (!video?.videoWidth || !video?.videoHeight) throw new Error('Video metadata is not ready for export.');
+            const outputUrl = await renderLocalVideoOnBackend({
+                file: videoFile,
+                durationSeconds: Number(video.duration) > 0 ? video.duration : durationMs / 1000,
+                fps: 30,
+                width: video.videoWidth,
+                height: video.videoHeight,
+                subtitleCues,
+                subtitleStyle,
+                hook,
+                onProgress: setProgress,
+            });
+            downloadUrl(outputUrl, 'openshorts-local-editor.mp4');
         } catch (exportError) {
             setError(exportError.message || 'Could not export this video locally.');
         } finally {
