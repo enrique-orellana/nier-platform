@@ -5,7 +5,7 @@ import SubtitleCueTable from './SubtitleCueTable';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock } from './localEditorExport';
 import { burnLocalEditorSubtitles, renderLocalVideoOnBackend, renderLocalVideoOnBrowser } from './localEditorRender';
-import { detectEmbeddedSideBars } from './localEditorVideo';
+import { detectEmbeddedSideBars, getFilledFrameDimensions } from './localEditorVideo';
 import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
 import { clearEditorPersistence, createEmptyEditorHistory, EDITOR_HISTORY_LIMIT, loadStoredVideo, readEditorHistory, saveEditorHistory, saveStoredVideo } from './localEditorPersistence';
@@ -674,11 +674,14 @@ export default function LocalEditorTab() {
         try {
             const video = videoRef.current;
             if (!video?.videoWidth || !video?.videoHeight) throw new Error('Video metadata is not ready for export.');
+            const cropForExport = videoViewMode === 'fill' || (videoViewMode === 'auto' && autoCrop);
+            const outputDimensions = cropForExport
+                ? getFilledFrameDimensions(video.videoWidth, video.videoHeight)
+                : { width: video.videoWidth, height: video.videoHeight };
             const renderParams = {
                 durationSeconds: Number(video.duration) > 0 ? video.duration : durationMs / 1000,
                 fps: 30,
-                width: video.videoWidth,
-                height: video.videoHeight,
+                ...outputDimensions,
                 subtitleCues,
                 subtitleStyle,
                 hook,

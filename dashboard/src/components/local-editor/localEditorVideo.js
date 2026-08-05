@@ -2,6 +2,21 @@ const DARK_PIXEL_THRESHOLD = 24;
 const DARK_COLUMN_RATIO = 0.96;
 const MIN_SIDE_BAR_RATIO = 0.12;
 
+const evenDimension = (value) => {
+    const rounded = Math.max(2, Math.round(Number(value) || 0));
+    return rounded % 2 === 0 ? rounded : rounded - 1;
+};
+
+export const getFilledFrameDimensions = (width, height, targetAspect = 9 / 16) => {
+    const sourceWidth = Math.max(2, Number(width) || 2);
+    const sourceHeight = Math.max(2, Number(height) || 2);
+    const sourceAspect = sourceWidth / sourceHeight;
+    if (sourceAspect > targetAspect) {
+        return { width: evenDimension(sourceHeight * targetAspect), height: evenDimension(sourceHeight) };
+    }
+    return { width: evenDimension(sourceWidth), height: evenDimension(sourceWidth / targetAspect) };
+};
+
 const isDarkPixel = (data, index) => (
     data[index] <= DARK_PIXEL_THRESHOLD
     && data[index + 1] <= DARK_PIXEL_THRESHOLD

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasEmbeddedSideBars } from './localEditorVideo';
+import { getFilledFrameDimensions, hasEmbeddedSideBars } from './localEditorVideo';
 
 const makeImageData = (width, height, contentStart, contentEnd) => {
     const data = new Uint8ClampedArray(width * height * 4);
@@ -23,5 +23,9 @@ describe('localEditorVideo', () => {
 
     it('does not crop a frame that has content across its width', () => {
         expect(hasEmbeddedSideBars(makeImageData(10, 6, 0, 9))).toBe(false);
+    });
+
+    it('uses the centered 9:16 frame dimensions when exporting a wide source with portrait content', () => {
+        expect(getFilledFrameDimensions(1920, 1080)).toEqual({ width: 608, height: 1080 });
     });
 });
