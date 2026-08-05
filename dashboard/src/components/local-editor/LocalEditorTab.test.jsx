@@ -324,6 +324,11 @@ describe('LocalEditorTab', () => {
         expect(screen.getByLabelText('Subtitle outline width')).toBeInTheDocument();
         expect(screen.getByLabelText('Subtitle background opacity')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Pop' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Show background box' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Show background box' }));
+        expect(screen.getByRole('button', { name: 'Hide background box' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Hide background box' }));
+        expect(screen.getByRole('button', { name: 'Show background box' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /remove subtitles/i }));
         expect(screen.queryByText('Hello')).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /export subtitles/i })).toBeDisabled();
