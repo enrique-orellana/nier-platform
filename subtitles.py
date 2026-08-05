@@ -1,6 +1,10 @@
 import os
+import re
 import subprocess
 from master_policy import master_video_encode_args
+
+
+SENTENCE_END_RE = re.compile(r"[.!?…]+(?:[\"'’”»)\]]+)?$")
 
 
 def transcribe_audio(video_path):
@@ -96,6 +100,11 @@ def build_subtitle_segments(transcript, clip_start, clip_end, max_chars=20, max_
             current_block.append(normalized_word)
             block_start = start
         else:
+            if SENTENCE_END_RE.search(current_block[-1]['word']):
+                append_current_block()
+                current_block = [normalized_word]
+                block_start = start
+                continue
             current_text_len = sum(len(w['word']) + 1 for w in current_block)
             duration = end - block_start
             if current_text_len + len(word['word']) > max_chars or duration > max_duration:
