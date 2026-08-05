@@ -38,6 +38,17 @@ describe('LocalEditorTab', () => {
         expect(requestFullscreen).toHaveBeenCalledTimes(1);
     });
 
+    it('allows the player to fill the preview when fit mode leaves bars visible', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /fill video/i })).toBeInTheDocument());
+        const video = screen.getByTestId('local-editor-player').querySelector('video');
+        expect(video).toHaveClass('object-contain');
+        fireEvent.click(screen.getByRole('button', { name: /fill video/i }));
+        expect(video).toHaveClass('object-cover');
+    });
+
     it('collapses overlay settings and exposes custom video controls', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
         render(<LocalEditorTab />);

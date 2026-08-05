@@ -3,6 +3,7 @@ import { ChevronDown, Download, FastForward, FileText, Film, Maximize2, Minimize
 import LocalEditorTimeline from './LocalEditorTimeline';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock, renderLocalVideo } from './localEditorExport';
+import { detectEmbeddedSideBars } from './localEditorVideo';
 import { createSubtitleCue } from '../../editor/timelineModel';
 import {
     DEFAULT_SUBTITLE_STYLE,
@@ -189,6 +190,8 @@ export default function LocalEditorTab() {
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLooping, setIsLooping] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
+    const [videoViewMode, setVideoViewMode] = useState('auto');
+    const [autoCrop, setAutoCrop] = useState(false);
     const [subtitlesOpen, setSubtitlesOpen] = useState(false);
     const [hookOpen, setHookOpen] = useState(false);
 
@@ -264,6 +267,8 @@ export default function LocalEditorTab() {
         setIsPlaying(false);
         setIsLooping(false);
         setIsMuted(false);
+        setVideoViewMode('auto');
+        setAutoCrop(false);
         if (videoRef.current) videoRef.current.loop = false;
         if (videoRef.current) videoRef.current.muted = false;
         setError('');
@@ -281,6 +286,22 @@ export default function LocalEditorTab() {
             },
         }));
     };
+
+    const detectVideoFraming = () => {
+        const video = videoRef.current;
+        if (!video) return;
+        const detect = () => {
+            try {
+                setAutoCrop(detectEmbeddedSideBars(video));
+            } catch {
+                setAutoCrop(false);
+            }
+        };
+        if (typeof video.requestVideoFrameCallback === 'function') video.requestVideoFrameCallback(detect);
+        else window.setTimeout(detect, 0);
+    };
+
+    const cycleVideoViewMode = () => setVideoViewMode((current) => current === 'auto' ? 'fill' : current === 'fill' ? 'fit' : 'auto');
 
     const updateSubtitle = (cue, options) => commitEdit((current) => ({ ...current, subtitleCues: current.subtitleCues.map((item) => item.id === cue.id ? clampCue(cue, durationMs) : item) }), options);
     const updateHook = (nextHook, options) => commitEdit((current) => ({ ...current, hook: clampCue(nextHook, durationMs) }), options);
@@ -487,6 +508,8 @@ export default function LocalEditorTab() {
             : activeHook?.entranceAnimation === 'spring'
                 ? { opacity: Math.min(1, hookElapsedMs / 250), transform: `scale(${0.82 + Math.min(1, hookElapsedMs / 350) * 0.18})` }
                 : {};
+    const shouldCropVideo = videoViewMode === 'fill' || (videoViewMode === 'auto' && autoCrop);
+    const videoViewLabel = videoViewMode === 'auto' ? (autoCrop ? 'Auto crop' : 'Auto fit') : videoViewMode === 'fill' ? 'Fill' : 'Fit';
 
     return (
         <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white">
@@ -505,7 +528,7 @@ export default function LocalEditorTab() {
                 <main className="min-w-0 space-y-5">
                     <div ref={playerRef} data-testid="local-editor-player" tabIndex={0} role="region" aria-label="Video preview. Use Space or K to play or pause, arrow keys to seek, M to mute, and F for fullscreen." aria-keyshortcuts="Space K ArrowLeft ArrowRight Home End M F" onKeyDown={handlePlayerKeyDown} className={isFullscreen ? 'fixed inset-0 z-50 flex items-center justify-center bg-black p-4' : 'mx-auto flex h-[calc(100vh-180px)] max-h-[72vh] w-full max-w-[360px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl'}>
                         <div className="relative h-full max-h-full w-auto max-w-full aspect-[9/16]">
-                            <video ref={videoRef} src={videoUrl} controls={false} className="h-full w-full object-contain" onLoadedMetadata={handleMetadata} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onTimeUpdate={(event) => setPlayheadMs(event.currentTarget.currentTime * 1000)} />
+                            <video ref={videoRef} src={videoUrl} controls={false} className={`h-full w-full ${shouldCropVideo ? 'object-cover' : 'object-contain'}`} onLoadedMetadata={handleMetadata} onLoadedData={detectVideoFraming} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onTimeUpdate={(event) => setPlayheadMs(event.currentTarget.currentTime * 1000)} />
                             <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className="absolute right-3 top-3 z-20 rounded-lg border border-white/20 bg-black/60 p-2 text-white shadow-lg backdrop-blur hover:bg-black/80">{isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
                             <div className="pointer-events-none absolute inset-0">
                                 {activeHook && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 ${hookPositionClass(activeHook.position)}`}><div className="rounded-lg px-3 py-2 text-center font-bold shadow-lg" style={{ color: activeHook.color, backgroundColor: activeHook.background, fontSize: `${Math.max(14, (activeHook.fontSize / 2.6) * hookSizeScale)}px`, ...hookEntranceStyle }}>{activeHook.text}</div></div>}
@@ -519,6 +542,7 @@ export default function LocalEditorTab() {
                                 <button type="button" aria-label="Fast forward 5 seconds" title="Fast forward 5 seconds" onClick={() => seekBy(5000)} className="rounded p-1.5 hover:bg-white/10 hover:text-white"><FastForward size={16} /></button>
                                 <button type="button" aria-label="Go to end" title="Go to end" onClick={() => handleSeek(durationMs)} className="rounded p-1.5 hover:bg-white/10 hover:text-white"><SkipForward size={16} /></button>
                                 <button type="button" aria-label={isLooping ? 'Disable loop' : 'Enable loop'} title={isLooping ? 'Disable loop' : 'Enable loop'} onClick={toggleLoop} className={`rounded p-1.5 hover:bg-white/10 hover:text-white ${isLooping ? 'text-fuchsia-300' : ''}`}><Repeat size={16} /></button>
+                                <button type="button" aria-label={videoViewMode === 'auto' ? (autoCrop ? 'Fit video' : 'Fill video') : videoViewMode === 'fill' ? 'Fit video' : 'Auto fit video'} title="Change video fit mode" onClick={cycleVideoViewMode} className="rounded px-1.5 py-1 text-[10px] font-semibold hover:bg-white/10 hover:text-white">{videoViewLabel}</button>
                                 <span className="ml-1 min-w-[74px] text-center font-mono text-[10px] text-zinc-400">{formatClock(playheadMs)} / {formatClock(durationMs)}</span>
                             </div>
                         </div>
