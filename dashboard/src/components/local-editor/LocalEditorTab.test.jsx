@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalEditorTab from './LocalEditorTab';
 import { DEFAULT_SUBTITLE_STYLE } from './localEditorStyles';
 
@@ -13,6 +13,10 @@ if (!URL.createObjectURL) {
 describe('LocalEditorTab', () => {
     beforeEach(() => {
         localStorage.clear();
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
     });
 
     it('shows a local-only upload state', () => {
@@ -125,6 +129,64 @@ describe('LocalEditorTab', () => {
         fireEvent.change(screen.getByLabelText(/subtitle file/i), { target: { files: [subtitleFile] } });
         fireEvent.click(screen.getByRole('button', { name: /import subtitles/i }));
         await waitFor(() => expect(screen.getAllByText('Hello').length).toBeGreaterThan(0));
+    });
+
+    it('generates subtitles from the local video and records one undoable action', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ language: 'en', segments: [{ start: 0.25, end: 1.4, text: 'Generated caption' }] }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
+        fireEvent.click(screen.getByRole('button', { name: /generate subtitles/i }));
+
+        await waitFor(() => expect(screen.getAllByText('Generated caption').length).toBeGreaterThan(0));
+        expect(fetchMock).toHaveBeenCalledWith('/api/local-editor/transcribe', expect.objectContaining({ method: 'POST', body: expect.any(FormData) }));
+        expect(screen.getByRole('button', { name: 'Undo', exact: true })).not.toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+        expect(screen.queryByText('Generated caption')).not.toBeInTheDocument();
+    });
+
+    it('asks before replacing existing subtitles during generation', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
+        const subtitleFile = new File(['subtitle'], 'captions.srt', { type: 'application/x-subrip' });
+        subtitleFile.text = async () => '1\n00:00:00,000 --> 00:00:01,000\nExisting';
+        fireEvent.change(screen.getByLabelText(/subtitle file/i), { target: { files: [subtitleFile] } });
+        await waitFor(() => expect(screen.getAllByText('Existing').length).toBeGreaterThan(0));
+
+        fireEvent.click(screen.getByRole('button', { name: /generate subtitles/i }));
+        expect(confirm).toHaveBeenCalledWith('Replace the current subtitle track?');
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(screen.getAllByText('Existing').length).toBeGreaterThan(0);
+    });
+
+    it('keeps existing subtitles when generation fails', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({ detail: 'Transcription unavailable' }) }));
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
+        const subtitleFile = new File(['subtitle'], 'captions.srt', { type: 'application/x-subrip' });
+        subtitleFile.text = async () => '1\n00:00:00,000 --> 00:00:01,000\nKeep me';
+        fireEvent.change(screen.getByLabelText(/subtitle file/i), { target: { files: [subtitleFile] } });
+        await waitFor(() => expect(screen.getAllByText('Keep me').length).toBeGreaterThan(0));
+
+        fireEvent.click(screen.getByRole('button', { name: /generate subtitles/i }));
+        await waitFor(() => expect(screen.getByText('Transcription unavailable')).toBeInTheDocument());
+        expect(screen.getAllByText('Keep me').length).toBeGreaterThan(0);
     });
 
     it('undoes an imported subtitle track as one action', async () => {

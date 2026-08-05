@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Download, FastForward, FileText, Film, Maximize2, Minimize2, Pause, Play, Plus, Redo2, Repeat, Rewind, RotateCcw, SkipBack, SkipForward, Square, Undo2, Upload, X } from 'lucide-react';
+import { ChevronDown, Download, FastForward, FileText, Film, Loader2, Maximize2, Minimize2, Pause, Play, Plus, Redo2, Repeat, Rewind, RotateCcw, SkipBack, SkipForward, Square, Undo2, Upload, X } from 'lucide-react';
 import LocalEditorTimeline from './LocalEditorTimeline';
 import SubtitleCueTable from './SubtitleCueTable';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock, renderLocalVideo } from './localEditorExport';
 import { detectEmbeddedSideBars } from './localEditorVideo';
+import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
 import { clearEditorPersistence, createEmptyEditorHistory, EDITOR_HISTORY_LIMIT, loadStoredVideo, readEditorHistory, saveEditorHistory, saveStoredVideo } from './localEditorPersistence';
 import {
@@ -31,6 +32,28 @@ const clampCue = (cue, durationMs) => {
     const startMs = clamp(cue.startMs, 0, Math.max(0, duration - 80));
     const endMs = clamp(cue.endMs, startMs + 80, duration);
     return { ...cue, startMs, endMs };
+};
+
+const normalizeGeneratedCues = (segments, durationMs) => {
+    let previousEndMs = 0;
+    return (Array.isArray(segments) ? segments : [])
+        .map((segment, index) => ({
+            id: `generated-${Date.now()}-${index}`,
+            type: 'subtitle',
+            label: String(segment?.text || '').trim(),
+            text: String(segment?.text || '').trim(),
+            startMs: Number(segment?.start) * 1000,
+            endMs: Number(segment?.end) * 1000,
+        }))
+        .filter((cue) => cue.text && Number.isFinite(cue.startMs) && Number.isFinite(cue.endMs) && cue.endMs > cue.startMs)
+        .sort((left, right) => left.startMs - right.startMs)
+        .map((cue) => {
+            const normalized = clampCue({ ...cue, startMs: Math.max(cue.startMs, previousEndMs) }, durationMs);
+            if (normalized.endMs <= normalized.startMs) return null;
+            previousEndMs = normalized.endMs;
+            return normalized;
+        })
+        .filter(Boolean);
 };
 
 const outlineTextShadow = (width, color) => {
@@ -217,6 +240,7 @@ export default function LocalEditorTab() {
     const [selected, setSelected] = useState(null);
     const [pendingSubtitle, setPendingSubtitle] = useState(null);
     const [error, setError] = useState('');
+    const [generatingSubtitles, setGeneratingSubtitles] = useState(false);
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState(0);
     const [isFullscreen, setIsFullscreen] = useState(false);
@@ -391,6 +415,28 @@ export default function LocalEditorTab() {
             setError('');
         } catch (importError) {
             setError(importError.message || 'Could not import subtitles.');
+        }
+    };
+
+    const generateSubtitles = async () => {
+        if (subtitleCues.length && !window.confirm('Replace the current subtitle track?')) return;
+        setGeneratingSubtitles(true);
+        setError('');
+        try {
+            const formData = new FormData();
+            formData.append('file', videoFile, videoFile.name);
+            const response = await fetch(getApiUrl('/api/local-editor/transcribe'), { method: 'POST', body: formData });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.detail || 'Could not generate subtitles.');
+            const generatedCues = normalizeGeneratedCues(payload.segments, durationMs);
+            if (!generatedCues.length) throw new Error('No speech was detected in this video.');
+            commitEdit((current) => ({ ...current, subtitleCues: generatedCues }));
+            setSelected(null);
+            setSubtitlesOpen(true);
+        } catch (generationError) {
+            setError(generationError.message || 'Could not generate subtitles.');
+        } finally {
+            setGeneratingSubtitles(false);
         }
     };
 
@@ -646,7 +692,10 @@ export default function LocalEditorTab() {
                         <div className="flex items-center justify-between"><button type="button" aria-label="Toggle Subtitles settings" aria-expanded={subtitlesOpen} aria-controls="subtitle-settings-panel" onClick={() => setSubtitlesOpen((open) => !open)} className="flex items-center gap-2 text-sm font-semibold text-white"><ChevronDown size={16} className={`text-violet-300 transition-transform ${subtitlesOpen ? '' : '-rotate-90'}`} />Subtitles</button><div className="flex items-center gap-2"><button type="button" aria-label="Add subtitle cue" title="Add subtitle cue at the current playhead" onClick={addSubtitleCue} className="flex items-center gap-1 rounded-md bg-violet-500/15 px-2 py-1 text-[11px] font-semibold text-violet-200 hover:bg-violet-500/25"><Plus size={12} />Add cue</button><FileText size={16} className="text-violet-300" /></div></div>
                         {subtitlesOpen && <div id="subtitle-settings-panel" className="mt-3">
                             <input ref={subtitleInputRef} type="file" accept=".srt,.vtt,text/vtt,application/x-subrip" aria-label="Subtitle file" className="hidden" onChange={(event) => { const file = event.target.files?.[0] || null; setPendingSubtitle(file); importSubtitleFile(file); }} />
-                            <button type="button" onClick={handleImport} className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-200 hover:bg-violet-500/20"><Upload size={14} />Import subtitles</button>
+                             <div className="grid grid-cols-2 gap-2">
+                                 <button type="button" onClick={handleImport} className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-200 hover:bg-violet-500/20"><Upload size={14} />Import subtitles</button>
+                                 <button type="button" onClick={generateSubtitles} disabled={generatingSubtitles} className="flex w-full items-center justify-center gap-2 rounded-lg border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-2 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-50">{generatingSubtitles ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}{generatingSubtitles ? 'Transcribing…' : 'Generate subtitles'}</button>
+                             </div>
                             <p className="mt-2 text-[11px] leading-5 text-zinc-500">Import timed .srt or .vtt files, then edit every cue directly on the timeline.</p>
                             {pendingSubtitle && <p className="mt-2 truncate text-xs text-violet-300">Ready: {pendingSubtitle.name}</p>}
                             <SubtitleStyleInspector style={subtitleStyle} onChange={(nextStyle) => commitEdit((current) => ({ ...current, subtitleStyle: nextStyle }))} onRemove={removeSubtitles} hasCues={subtitleCues.length > 0} />
