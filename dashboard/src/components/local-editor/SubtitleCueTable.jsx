@@ -49,7 +49,7 @@ function CueTextInput({ cue, onCommit }) {
             onChange={(event) => setDraft(event.target.value)}
             onBlur={() => onCommit(draft)}
             onClick={(event) => event.stopPropagation()}
-            className="w-full bg-transparent px-2 py-4 text-left text-sm text-white outline-none placeholder:text-zinc-600 focus:bg-black/20"
+            className="min-w-0 flex-1 bg-transparent px-2 py-4 text-left text-sm text-white outline-none placeholder:text-zinc-600 focus:bg-black/20"
         />
     );
 }
@@ -98,11 +98,12 @@ export default function SubtitleCueTable({ cues = [], selectedId, playheadMs = 0
                     <tbody>
                         {!sortedCues.length && <tr><td colSpan="3" className="px-4 py-10 text-center text-sm text-zinc-500">Import subtitles or add a cue to edit it here.</td></tr>}
                         {sortedCues.map((cue, index) => {
-                            const active = cue.id === selectedId || (cue.id === currentCue?.id && followAudio);
-                            return <tr key={cue.id} ref={(node) => { if (node) rowRefs.current.set(cue.id, node); else rowRefs.current.delete(cue.id); }} aria-selected={active} tabIndex={0} onClick={() => scrollToCue(cue)} onKeyDown={(event) => event.key === 'Enter' && scrollToCue(cue)} className={`border-b border-white/10 text-white outline-none transition-colors ${active ? 'bg-violet-900/70' : index % 2 ? 'bg-[#42105d] hover:bg-violet-900/60' : 'bg-[#2b2b2d] hover:bg-[#38383b]'}`}>
+                            const current = cue.id === currentCue?.id;
+                            const selected = cue.id === selectedId;
+                            return <tr key={cue.id} ref={(node) => { if (node) rowRefs.current.set(cue.id, node); else rowRefs.current.delete(cue.id); }} aria-selected={selected} aria-current={current ? 'time' : undefined} data-current-cue={current ? 'true' : 'false'} tabIndex={0} onClick={() => scrollToCue(cue)} onKeyDown={(event) => event.key === 'Enter' && scrollToCue(cue)} className={`border-b border-white/10 text-white outline-none transition-colors ${current ? 'bg-violet-500/20 outline outline-1 outline-violet-300/60 outline-offset-[-1px] shadow-[inset_3px_0_0_rgba(196,181,253,0.85)]' : selected ? 'bg-violet-900/70' : index % 2 ? 'bg-[#42105d] hover:bg-violet-900/60' : 'bg-[#2b2b2d] hover:bg-[#38383b]'}`}>
                                 <td className="border-r border-white/10 p-0"><CueTimeInput cue={cue} field="start" value={cue.startMs} onCommit={(value) => updateCue(cue, 'startMs', value)} /></td>
                                 <td className="border-r border-white/10 p-0"><CueTimeInput cue={cue} field="end" value={cue.endMs} onCommit={(value) => updateCue(cue, 'endMs', value)} /></td>
-                                <td className="p-0"><CueTextInput cue={cue} onCommit={(value) => updateCue(cue, 'text', value)} /></td>
+                                <td className="p-0"><div className="flex min-w-0 items-center"><CueTextInput cue={cue} onCommit={(value) => updateCue(cue, 'text', value)} />{current && <span className="mr-2 shrink-0 rounded border border-violet-200/50 bg-violet-200/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-100">CURRENT</span>}</div></td>
                             </tr>;
                         })}
                     </tbody>
