@@ -199,9 +199,21 @@ export default function LocalEditorTab() {
     const [hookOpen, setHookOpen] = useState(false);
 
     const { subtitleCues, subtitleStyle, hook } = editHistory.present;
+    const editHistoryRef = useRef(editHistory);
     useEffect(() => {
+        editHistoryRef.current = editHistory;
         saveEditorHistory(editHistory);
     }, [editHistory]);
+
+    useEffect(() => {
+        const persistCurrentHistory = () => saveEditorHistory(editHistoryRef.current);
+        window.addEventListener('pagehide', persistCurrentHistory);
+        window.addEventListener('beforeunload', persistCurrentHistory);
+        return () => {
+            window.removeEventListener('pagehide', persistCurrentHistory);
+            window.removeEventListener('beforeunload', persistCurrentHistory);
+        };
+    }, []);
 
     const commitEdit = (updater, { coalesce = false, transaction = null } = {}) => setEditHistory((current) => {
         const next = typeof updater === 'function' ? updater(current.present) : updater;

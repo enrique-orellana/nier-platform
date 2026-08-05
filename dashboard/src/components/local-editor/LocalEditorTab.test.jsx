@@ -200,6 +200,36 @@ describe('LocalEditorTab', () => {
         await waitFor(() => expect(screen.getAllByText('Restored').length).toBeGreaterThan(0));
     });
 
+    it('persists the final position of an imported cue after a timeline move', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({ width: 1000, height: 100, top: 0, left: 0, right: 1000, bottom: 100 }));
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
+        const subtitleFile = new File(['subtitle'], 'captions.srt', { type: 'application/x-subrip' });
+        subtitleFile.text = async () => '1\n00:00:00,000 --> 00:00:01,000\nHello';
+        fireEvent.change(screen.getByLabelText(/subtitle file/i), { target: { files: [subtitleFile] } });
+        await waitFor(() => expect(screen.getAllByText('Hello').length).toBeGreaterThan(0));
+
+        const cue = screen.getByRole('button', { name: 'Hello' });
+        act(() => cue.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 0 })));
+        act(() => {
+            window.dispatchEvent(new MouseEvent('pointermove', { clientX: 200, bubbles: true }));
+            window.dispatchEvent(new MouseEvent('pointerup', { clientX: 200, bubbles: true }));
+        });
+
+        await waitFor(() => {
+            const saved = JSON.parse(localStorage.getItem('openshorts_local_editor_state_v1'));
+            expect(saved.present.subtitleCues[0].startMs).toBe(6000);
+        });
+
+        localStorage.removeItem('openshorts_local_editor_state_v1');
+        window.dispatchEvent(new Event('pagehide'));
+        const flushed = JSON.parse(localStorage.getItem('openshorts_local_editor_state_v1'));
+        expect(flushed.present.subtitleCues[0].startMs).toBe(6000);
+    });
+
     it('adds and edits a hook, then resets', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
         vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
