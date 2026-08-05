@@ -19,6 +19,16 @@ export const chooseRecordingMimeType = (isTypeSupported = () => false) => (
         .find((type) => isTypeSupported(type)) || ''
 );
 
+export const getRecordingOptions = (mimeType, width, height) => {
+    const pixels = Math.max(1, Number(width) || 1) * Math.max(1, Number(height) || 1);
+    const videoBitsPerSecond = Math.max(8_000_000, Math.min(24_000_000, Math.round(pixels * 8)));
+    return {
+        ...(mimeType ? { mimeType } : {}),
+        videoBitsPerSecond,
+        audioBitsPerSecond: 192_000,
+    };
+};
+
 export const prepareVideoForExport = (video) => {
     video?.pause?.();
     if (video) video.currentTime = 0;
@@ -136,7 +146,9 @@ export async function renderLocalVideo({ video, subtitleCues = [], subtitleStyle
     const originalTime = video.currentTime;
     const originalPaused = video.paused;
     const originalMuted = video.muted;
+    const originalLoop = video.loop;
     const { width: sourceWidth, height: sourceHeight } = getVideoFrameDimensions(video);
+    video.loop = false;
     prepareVideoForExport(video);
     const canvas = document.createElement('canvas');
     canvas.width = sourceWidth;
@@ -153,9 +165,10 @@ export async function renderLocalVideo({ video, subtitleCues = [], subtitleStyle
         ? (type) => MediaRecorder.isTypeSupported(type)
         : () => true;
     const mimeType = chooseRecordingMimeType(isSupported);
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const recorder = new MediaRecorder(stream, getRecordingOptions(mimeType, sourceWidth, sourceHeight));
     const chunks = [];
-    let animationFrame = null;
+    let scheduledFrameId = null;
+    let scheduledFrameKind = null;
     let resolveRender;
     let rejectRender;
     let settled = false;
@@ -163,7 +176,11 @@ export async function renderLocalVideo({ video, subtitleCues = [], subtitleStyle
     const finish = (error = null) => {
         if (settled) return;
         settled = true;
-        if (animationFrame) cancelAnimationFrame(animationFrame);
+        if (scheduledFrameId !== null) {
+            if (scheduledFrameKind === 'video' && typeof video.cancelVideoFrameCallback === 'function') video.cancelVideoFrameCallback(scheduledFrameId);
+            else cancelAnimationFrame(scheduledFrameId);
+            scheduledFrameId = null;
+        }
         stream.getTracks().forEach((track) => track.stop());
         if (error) rejectRender(error);
         else resolveRender(new Blob(chunks, { type: recorder.mimeType || mimeType || 'video/webm' }));
@@ -221,7 +238,21 @@ export async function renderLocalVideo({ video, subtitleCues = [], subtitleStyle
             context.restore();
         }
         onProgress(video.duration ? Math.min(1, video.currentTime / video.duration) : 0);
-        if (!video.ended) animationFrame = requestAnimationFrame(draw);
+        if (!video.ended) {
+            if (typeof video.requestVideoFrameCallback === 'function') {
+                scheduledFrameKind = 'video';
+                scheduledFrameId = video.requestVideoFrameCallback(() => {
+                    scheduledFrameId = null;
+                    draw();
+                });
+            } else {
+                scheduledFrameKind = 'animation';
+                scheduledFrameId = requestAnimationFrame(() => {
+                    scheduledFrameId = null;
+                    draw();
+                });
+            }
+        }
     };
 
     const result = new Promise((resolve, reject) => {
@@ -241,9 +272,13 @@ export async function renderLocalVideo({ video, subtitleCues = [], subtitleStyle
     try {
         return await result;
     } finally {
-        if (animationFrame) cancelAnimationFrame(animationFrame);
+        if (scheduledFrameId !== null) {
+            if (scheduledFrameKind === 'video' && typeof video.cancelVideoFrameCallback === 'function') video.cancelVideoFrameCallback(scheduledFrameId);
+            else cancelAnimationFrame(scheduledFrameId);
+        }
         video.currentTime = originalTime;
         video.muted = originalMuted;
+        video.loop = originalLoop;
         if (!originalPaused) video.play().catch(() => {});
     }
 }

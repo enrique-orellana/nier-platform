@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { activeCueAt, chooseRecordingMimeType, clampOverlayY, formatClock, getVideoFrameDimensions, hookVisualState, prepareVideoForExport, subtitleVisualStyle } from './localEditorExport';
+import { activeCueAt, chooseRecordingMimeType, clampOverlayY, formatClock, getRecordingOptions, getVideoFrameDimensions, hookVisualState, prepareVideoForExport, subtitleVisualStyle } from './localEditorExport';
 
 describe('local editor export helpers', () => {
     it('finds a cue active at the playhead', () => {
@@ -45,5 +45,13 @@ describe('local editor export helpers', () => {
 
     it('uses the source video dimensions for the export canvas', () => {
         expect(getVideoFrameDimensions({ videoWidth: 1920, videoHeight: 1080 })).toEqual({ width: 1920, height: 1080 });
+    });
+
+    it('uses explicit high-quality recorder options', () => {
+        expect(getRecordingOptions('video/webm', 1080, 1920)).toEqual({
+            mimeType: 'video/webm',
+            videoBitsPerSecond: 16588800,
+            audioBitsPerSecond: 192000,
+        });
     });
 });
