@@ -319,7 +319,12 @@ export default function LocalEditorTab() {
         try {
             if (subtitleCues.length && !window.confirm('Replace the current subtitle track?')) return;
             const cues = parseSubtitleFile(file.name, await file.text());
-            commitEdit((current) => ({ ...current, subtitleCues: cues.map((cue) => clampCue(cue, durationMs)) }));
+            const importedCues = cues.map((cue) => clampCue(cue, durationMs));
+            setEditHistory((current) => ({
+                past: [],
+                present: { ...current.present, subtitleCues: importedCues },
+                future: [],
+            }));
             setPendingSubtitle(null);
             if (subtitleInputRef.current) subtitleInputRef.current.value = '';
             setSelected(null);
