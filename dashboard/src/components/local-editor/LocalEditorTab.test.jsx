@@ -124,6 +124,8 @@ describe('LocalEditorTab', () => {
         fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
         await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
         fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
+        expect(screen.getByLabelText('Subtitle source language')).toHaveStyle({ colorScheme: 'dark' });
+        expect(screen.getByLabelText('Translation target language')).toHaveStyle({ colorScheme: 'dark' });
         expect(screen.getByText(/timings stay intact/i)).toBeInTheDocument();
         const subtitleFile = new File(['subtitle'], 'captions.srt', { type: 'application/x-subrip' });
         subtitleFile.text = async () => '1\n00:00:00,000 --> 00:00:01,000\nHello';
