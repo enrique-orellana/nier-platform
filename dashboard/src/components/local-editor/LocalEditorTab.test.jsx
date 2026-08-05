@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalEditorTab from './LocalEditorTab';
+import { DEFAULT_SUBTITLE_STYLE } from './localEditorStyles';
 
 const makeVideoFile = () => new File(['video'], 'demo.mp4', { type: 'video/mp4' });
 
@@ -9,6 +10,10 @@ if (!URL.createObjectURL) {
 }
 
 describe('LocalEditorTab', () => {
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
     it('shows a local-only upload state', () => {
         render(<LocalEditorTab />);
         expect(screen.getByRole('heading', { name: 'Local Editor' })).toBeInTheDocument();
@@ -166,6 +171,33 @@ describe('LocalEditorTab', () => {
         for (let index = 0; index < 11; index += 1) fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
 
         expect(screen.getAllByRole('button', { name: 'Timeline cue' })).toHaveLength(2);
+    });
+
+    it('persists editor actions in local browser storage', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /add subtitle cue/i })).toBeInTheDocument());
+
+        fireEvent.click(screen.getByRole('button', { name: /add subtitle cue/i }));
+
+        const saved = JSON.parse(localStorage.getItem('openshorts_local_editor_state_v1'));
+        expect(saved.present.subtitleCues).toHaveLength(1);
+        expect(saved.past).toHaveLength(1);
+    });
+
+    it('restores saved editor actions after the component is mounted again', async () => {
+        const restoredCue = { id: 'restored', type: 'subtitle', label: 'Restored', text: 'Restored', startMs: 0, endMs: 1000 };
+        localStorage.setItem('openshorts_local_editor_state_v1', JSON.stringify({
+            past: [],
+            present: { subtitleCues: [restoredCue], subtitleStyle: DEFAULT_SUBTITLE_STYLE, hook: null },
+            future: [],
+        }));
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+
+        await waitFor(() => expect(screen.getAllByText('Restored').length).toBeGreaterThan(0));
     });
 
     it('adds and edits a hook, then resets', async () => {

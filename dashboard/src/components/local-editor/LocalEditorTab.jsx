@@ -5,6 +5,7 @@ import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock, renderLocalVideo } from './localEditorExport';
 import { detectEmbeddedSideBars } from './localEditorVideo';
 import { createSubtitleCue } from '../../editor/timelineModel';
+import { clearEditorPersistence, createEmptyEditorHistory, EDITOR_HISTORY_LIMIT, loadStoredVideo, readEditorHistory, saveEditorHistory, saveStoredVideo } from './localEditorPersistence';
 import {
     DEFAULT_SUBTITLE_STYLE,
     HOOK_ENTRANCE_OPTIONS,
@@ -21,7 +22,6 @@ import {
 } from './localEditorStyles';
 
 const DEFAULT_DURATION_MS = 30000;
-const HISTORY_LIMIT = 10;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
 
@@ -177,11 +177,13 @@ export default function LocalEditorTab() {
     const objectUrlRef = useRef('');
     const subtitleInputRef = useRef(null);
     const timelineDragRef = useRef(null);
+    const videoRestoreGenerationRef = useRef(0);
+    const videoLoadStartedRef = useRef(false);
     const [videoFile, setVideoFile] = useState(null);
     const [videoUrl, setVideoUrl] = useState('');
     const [durationMs, setDurationMs] = useState(DEFAULT_DURATION_MS);
     const [playheadMs, setPlayheadMs] = useState(0);
-    const [editHistory, setEditHistory] = useState(() => ({ past: [], present: { subtitleCues: [], subtitleStyle: DEFAULT_SUBTITLE_STYLE, hook: null }, future: [] }));
+    const [editHistory, setEditHistory] = useState(readEditorHistory);
     const [selected, setSelected] = useState(null);
     const [pendingSubtitle, setPendingSubtitle] = useState(null);
     const [error, setError] = useState('');
@@ -197,27 +199,31 @@ export default function LocalEditorTab() {
     const [hookOpen, setHookOpen] = useState(false);
 
     const { subtitleCues, subtitleStyle, hook } = editHistory.present;
+    useEffect(() => {
+        saveEditorHistory(editHistory);
+    }, [editHistory]);
+
     const commitEdit = (updater, { coalesce = false, transaction = null } = {}) => setEditHistory((current) => {
         const next = typeof updater === 'function' ? updater(current.present) : updater;
         if (next === current.present) return current;
         if (coalesce && transaction) {
             if (!transaction.recorded) {
                 transaction.recorded = true;
-                return { past: [...current.past, current.present].slice(-HISTORY_LIMIT), present: next, future: [] };
+                return { past: [...current.past, current.present].slice(-EDITOR_HISTORY_LIMIT), present: next, future: [] };
             }
             return { ...current, present: next, future: [] };
         }
-        return { past: [...current.past, current.present].slice(-HISTORY_LIMIT), present: next, future: [] };
+        return { past: [...current.past, current.present].slice(-EDITOR_HISTORY_LIMIT), present: next, future: [] };
     });
     const undo = () => setEditHistory((current) => {
         if (!current.past.length) return current;
         const previous = current.past[current.past.length - 1];
-        return { past: current.past.slice(0, -1), present: previous, future: [current.present, ...current.future].slice(0, HISTORY_LIMIT) };
+        return { past: current.past.slice(0, -1), present: previous, future: [current.present, ...current.future].slice(0, EDITOR_HISTORY_LIMIT) };
     });
     const redo = () => setEditHistory((current) => {
         if (!current.future.length) return current;
         const [next, ...future] = current.future;
-        return { past: [...current.past, current.present].slice(-HISTORY_LIMIT), present: next, future };
+        return { past: [...current.past, current.present].slice(-EDITOR_HISTORY_LIMIT), present: next, future };
     });
 
     useEffect(() => () => {
@@ -252,11 +258,13 @@ export default function LocalEditorTab() {
         return subtitleCues.find((cue) => cue.id === selected.id) || null;
     }, [hook, selected, subtitleCues]);
 
-    const loadVideo = (file) => {
+    const loadVideo = (file, { persist = true } = {}) => {
         if (!file?.type?.startsWith('video/')) {
             setError('Please choose a playable video file.');
             return;
         }
+        videoLoadStartedRef.current = true;
+        if (persist) void saveStoredVideo(file);
         const nextUrl = URL.createObjectURL(file);
         if (objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrlRef.current);
         objectUrlRef.current = nextUrl;
@@ -273,6 +281,16 @@ export default function LocalEditorTab() {
         if (videoRef.current) videoRef.current.muted = false;
         setError('');
     };
+
+    useEffect(() => {
+        const generation = videoRestoreGenerationRef.current;
+        let active = true;
+        loadStoredVideo().then((file) => {
+            if (!active || generation !== videoRestoreGenerationRef.current || videoLoadStartedRef.current || !file) return;
+            loadVideo(file, { persist: false });
+        });
+        return () => { active = false; };
+    }, []);
 
     const handleMetadata = () => {
         const nextDuration = Math.max(1, Math.round((videoRef.current?.duration || 30) * 1000));
@@ -477,13 +495,16 @@ export default function LocalEditorTab() {
     };
 
     const reset = () => {
+        videoRestoreGenerationRef.current += 1;
+        videoLoadStartedRef.current = true;
+        void clearEditorPersistence();
         videoRef.current?.pause();
         if (videoRef.current) videoRef.current.loop = false;
         if (objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrlRef.current);
         objectUrlRef.current = '';
         setVideoFile(null);
         setVideoUrl('');
-        setEditHistory({ past: [], present: { subtitleCues: [], subtitleStyle: DEFAULT_SUBTITLE_STYLE, hook: null }, future: [] });
+        setEditHistory(createEmptyEditorHistory());
         setSelected(null);
         setPendingSubtitle(null);
         setPlayheadMs(0);
