@@ -392,6 +392,7 @@ describe('LocalEditorTab', () => {
         expect(screen.getByRole('button', { name: 'Middle' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Bottom' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Pop' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Remove Subtitles' })).toHaveClass('w-full');
         expect(screen.getByRole('button', { name: 'Show background box' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Show background box' }));
         expect(screen.getByLabelText('Subtitle background opacity')).toBeInTheDocument();

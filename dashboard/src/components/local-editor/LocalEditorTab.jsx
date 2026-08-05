@@ -116,7 +116,6 @@ function SubtitleStyleInspector({ style, onChange, onRemove, hasCues }) {
         <div className="mt-4 space-y-5 border-t border-white/10 pt-4">
             <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-white">Subtitle Style</h3>
-                {hasCues && <button type="button" onClick={onRemove} className="text-xs text-red-300 hover:text-red-200">Remove Subtitles</button>}
             </div>
             <div>
                 <span className={cleanLabelClass}>Position</span>
@@ -158,6 +157,7 @@ function SubtitleStyleInspector({ style, onChange, onRemove, hasCues }) {
                 {current.bgOpacity > 0 && <div className="flex items-center gap-3"><label className="relative h-8 w-8 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-white/10" title="Background color"><div className="h-full w-full" style={{ backgroundColor: current.bgColor }} /><input aria-label="Subtitle background color" type="color" value={current.bgColor} onChange={(event) => update('bgColor', event.target.value)} className="absolute inset-0 cursor-pointer opacity-0" /></label><div className="flex-1"><input aria-label="Subtitle background opacity" type="range" min="0.1" max="1" step="0.05" value={current.bgOpacity} onChange={(event) => update('bgOpacity', Number(event.target.value))} className="w-full accent-primary" /><div className="flex justify-between text-[10px] text-zinc-500"><span>Transparent</span><span>{Math.round(current.bgOpacity * 100)}%</span></div></div></div>}
             </div>
             {!hasCues && <p className="text-[11px] text-zinc-500">Import subtitles to enable this style.</p>}
+            {hasCues && <button type="button" onClick={onRemove} className="w-full rounded-lg border border-red-400/30 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-400/10">Remove Subtitles</button>}
         </div>
     );
 }
