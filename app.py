@@ -766,7 +766,7 @@ async def get_status(job_id: str):
     }
 
 from editor import VideoEditor
-from subtitles import generate_srt, burn_subtitles, generate_srt_from_video, transcribe_audio
+from subtitles import build_subtitle_segments, generate_srt, burn_subtitles, generate_srt_from_video, transcribe_audio
 from hooks import add_hook_to_video
 from translate import translate_video, get_supported_languages
 from thumbnail import analyze_video_for_titles, refine_titles, generate_thumbnail, generate_youtube_description
@@ -1696,7 +1696,7 @@ async def transcribe_local_editor_video(file: UploadFile = File(...)):
         transcript = await loop.run_in_executor(None, transcribe_audio, temp_path)
         return {
             "language": transcript.get("language", "und"),
-            "segments": transcript.get("segments", []),
+            "segments": build_subtitle_segments(transcript, 0, float("inf")),
         }
     except HTTPException:
         raise

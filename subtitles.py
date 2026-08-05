@@ -60,68 +60,68 @@ def generate_srt_from_video(video_path, output_path, max_chars=20, max_duration=
     return generate_srt(transcript, 0, duration, output_path, max_chars, max_duration)
 
 
-def generate_srt(transcript, clip_start, clip_end, output_path, max_chars=20, max_duration=2.0):
-    """
-    Generates an SRT file from the transcript for a specific time range.
-    Groups words into short lines suitable for vertical video.
-    """
-    
+def build_subtitle_segments(transcript, clip_start, clip_end, max_chars=20, max_duration=2.0):
+    """Build compact timed subtitle cues using the clip generator's rules."""
     words = []
-    # 1. Extract and flatten words within range
     for segment in transcript.get('segments', []):
         for word_info in segment.get('words', []):
-            # Check overlap
             if word_info['end'] > clip_start and word_info['start'] < clip_end:
-                words.append(word_info)
-    
-    if not words:
+                words.append({
+                    'word': str(word_info.get('word', '')).strip(),
+                    'start': float(word_info['start']),
+                    'end': float(word_info['end']),
+                })
+
+    cues = []
+    current_block = []
+    block_start = None
+
+    def append_current_block():
+        if not current_block:
+            return
+        cues.append({
+            'start': current_block[0]['start'] - clip_start,
+            'end': current_block[-1]['end'] - clip_start,
+            'text': " ".join(word['word'] for word in current_block).strip(),
+        })
+
+    for word in words:
+        start = max(0, word['start'] - clip_start)
+        end = max(0, word['end'] - clip_start)
+        if not word['word'] or end <= start:
+            continue
+
+        normalized_word = {**word, 'start': start, 'end': end}
+        if not current_block:
+            current_block.append(normalized_word)
+            block_start = start
+        else:
+            current_text_len = sum(len(w['word']) + 1 for w in current_block)
+            duration = end - block_start
+            if current_text_len + len(word['word']) > max_chars or duration > max_duration:
+                append_current_block()
+                current_block = [normalized_word]
+                block_start = start
+            else:
+                current_block.append(normalized_word)
+
+    append_current_block()
+    return cues
+
+
+def generate_srt(transcript, clip_start, clip_end, output_path, max_chars=20, max_duration=2.0):
+    """Generate an SRT using compact timed cues for a specific time range."""
+    cues = build_subtitle_segments(transcript, clip_start, clip_end, max_chars, max_duration)
+    if not cues:
         return False
 
     srt_content = ""
-    index = 1
-    
-    current_block = []
-    block_start = None
-    
-    for i, word in enumerate(words):
-        # Adjust times relative to clip
-        start = max(0, word['start'] - clip_start)
-        end = max(0, word['end'] - clip_start)
-        
-        # Clip to video duration logic handled by ffmpeg usually, but good to be safe
-        
-        if not current_block:
-            current_block.append(word)
-            block_start = start
-        else:
-            # Decide whether to close block
-            current_text_len = sum(len(w['word']) + 1 for w in current_block)
-            duration = end - block_start
-            
-            if current_text_len + len(word['word']) > max_chars or duration > max_duration:
-                # Finalize current block
-                # End time of block is start of this word (gap) or end of last word?
-                # Usually end of last word.
-                block_end = current_block[-1]['end'] - clip_start
-                
-                text = " ".join([w['word'] for w in current_block]).strip()
-                srt_content += format_srt_block(index, block_start, block_end, text)
-                index += 1
-                
-                current_block = [word]
-                block_start = start
-            else:
-                current_block.append(word)
-    
-    # Final block
-    if current_block:
-        block_end = current_block[-1]['end'] - clip_start
-        text = " ".join([w['word'] for w in current_block]).strip()
-        srt_content += format_srt_block(index, block_start, block_end, text)
-        
+    for index, cue in enumerate(cues, start=1):
+        srt_content += format_srt_block(index, cue['start'], cue['end'], cue['text'])
+
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(srt_content)
-        
+
     return True
 
 def format_srt_block(index, start, end, text):

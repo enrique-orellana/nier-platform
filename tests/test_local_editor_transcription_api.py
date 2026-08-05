@@ -8,7 +8,24 @@ def test_local_editor_transcription_returns_segments(tmp_path, monkeypatch):
     monkeypatch.setattr(app_module, "transcribe_audio", lambda path: {
         "language": "it",
         "segments": [
-            {"start": 0.25, "end": 1.4, "text": " Ciao mondo "},
+            {
+                "start": 0.0,
+                "end": 3.9,
+                "text": " Adesso ti faccio vedere un altro esercizio per bloccare i muscoli. ",
+                "words": [
+                    {"word": "Adesso", "start": 0.0, "end": 0.3},
+                    {"word": "ti", "start": 0.3, "end": 0.6},
+                    {"word": "faccio", "start": 0.6, "end": 0.9},
+                    {"word": "vedere", "start": 0.9, "end": 1.2},
+                    {"word": "un", "start": 1.2, "end": 1.5},
+                    {"word": "altro", "start": 1.5, "end": 1.8},
+                    {"word": "esercizio", "start": 1.8, "end": 2.4},
+                    {"word": "per", "start": 2.4, "end": 2.7},
+                    {"word": "bloccare", "start": 2.7, "end": 3.2},
+                    {"word": "i", "start": 3.2, "end": 3.4},
+                    {"word": "muscoli.", "start": 3.4, "end": 3.9},
+                ],
+            },
             {"start": 1.4, "end": 1.4, "text": "empty duration"},
         ],
     })
@@ -22,8 +39,10 @@ def test_local_editor_transcription_returns_segments(tmp_path, monkeypatch):
     assert response.json() == {
         "language": "it",
         "segments": [
-            {"start": 0.25, "end": 1.4, "text": " Ciao mondo "},
-            {"start": 1.4, "end": 1.4, "text": "empty duration"},
+            {"start": 0.0, "end": 0.9, "text": "Adesso ti faccio"},
+            {"start": 0.9, "end": 1.8, "text": "vedere un altro"},
+            {"start": 1.8, "end": 2.7, "text": "esercizio per"},
+            {"start": 2.7, "end": 3.9, "text": "bloccare i muscoli."},
         ],
     }
     assert list(tmp_path.iterdir()) == []
