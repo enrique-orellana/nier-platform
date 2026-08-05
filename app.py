@@ -1728,6 +1728,47 @@ async def transcribe_local_editor_video(file: UploadFile = File(...)):
             os.remove(temp_path)
 
 
+@app.post("/api/local-editor/render", status_code=202)
+async def render_local_editor_video(file: UploadFile = File(...), props: str = Form(...)):
+    """Upload a local-editor source into the shared render volume and start a native render."""
+    suffix = Path(file.filename or "local-video.mp4").suffix.lower()
+    allowed_suffixes = {".mp4", ".mov", ".webm", ".m4v", ".mkv"}
+    if (not file.content_type or not file.content_type.startswith("video/")) and suffix not in allowed_suffixes:
+        raise HTTPException(status_code=400, detail="Please upload a supported video file.")
+
+    try:
+        render_props = json.loads(props)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid render properties.") from exc
+    if not isinstance(render_props, dict):
+        raise HTTPException(status_code=400, detail="Invalid render properties.")
+    if any(key not in render_props for key in ("durationInFrames", "fps", "width", "height")):
+        raise HTTPException(status_code=400, detail="Render properties are missing video metadata.")
+
+    job_id = f"local-editor-{uuid.uuid4().hex}"
+    job_output_dir = os.path.join(OUTPUT_DIR, job_id)
+    source_filename = f"source{suffix if suffix in allowed_suffixes else '.mp4'}"
+    source_path = os.path.join(job_output_dir, source_filename)
+    os.makedirs(job_output_dir, exist_ok=True)
+    try:
+        with open(source_path, "wb") as output:
+            shutil.copyfileobj(file.file, output)
+        render_props["videoUrl"] = f"/videos/{job_id}/{source_filename}"
+        import httpx
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(f"{RENDER_SERVICE_URL}/render", json={"jobId": job_id, "clipIndex": 0, "props": render_props})
+        response.raise_for_status()
+        payload = response.json()
+        if not payload.get("renderId"):
+            raise RuntimeError("Render service did not return a render ID.")
+        return {**payload, "jobId": job_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        shutil.rmtree(job_output_dir, ignore_errors=True)
+        raise HTTPException(status_code=502, detail=f"Could not start local video render: {exc}") from exc
+
+
 class HookRequest(BaseModel):
     job_id: str
     clip_index: int

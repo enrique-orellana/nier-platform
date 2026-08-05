@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderInBrowser } from '../../lib/renderInBrowser';
-import { buildRemotionRenderProps, renderLocalVideoOnBrowser } from './localEditorRender';
+import { buildRemotionRenderProps, renderLocalVideoOnBackend, renderLocalVideoOnBrowser } from './localEditorRender';
 
 vi.mock('../../lib/renderInBrowser', () => ({ renderInBrowser: vi.fn() }));
 
@@ -44,5 +44,22 @@ describe('local editor Remotion rendering', () => {
             height: 1080,
             subtitles: expect.objectContaining({ captions: [{ text: 'Hello', startMs: 0, endMs: 1000 }] }),
         }));
+    });
+
+    it('falls back to the native backend renderer for unsupported browser codecs', async () => {
+        const fetchImpl = vi.fn()
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ renderId: 'render-1', jobId: 'local-editor-1' }) })
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'done', progress: 100, outputUrl: '/output/local-editor-1/render.mp4' }) });
+        const outputUrl = await renderLocalVideoOnBackend({
+            file: new File(['video'], 'source.mp4', { type: 'video/mp4' }),
+            durationSeconds: 2,
+            width: 608,
+            height: 1080,
+            pollMs: 0,
+            fetchImpl,
+        });
+
+        expect(outputUrl).toBe('/videos/local-editor-1/render.mp4');
+        expect(fetchImpl.mock.calls[0][1].body).toBeInstanceOf(FormData);
     });
 });

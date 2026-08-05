@@ -4,7 +4,7 @@ import LocalEditorTimeline from './LocalEditorTimeline';
 import SubtitleCueTable from './SubtitleCueTable';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock } from './localEditorExport';
-import { renderLocalVideoOnBrowser } from './localEditorRender';
+import { renderLocalVideoOnBackend, renderLocalVideoOnBrowser } from './localEditorRender';
 import { detectEmbeddedSideBars } from './localEditorVideo';
 import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
@@ -674,8 +674,7 @@ export default function LocalEditorTab() {
         try {
             const video = videoRef.current;
             if (!video?.videoWidth || !video?.videoHeight) throw new Error('Video metadata is not ready for export.');
-            const outputUrl = await renderLocalVideoOnBrowser({
-                videoUrl: video.currentSrc || video.src,
+            const renderParams = {
                 durationSeconds: Number(video.duration) > 0 ? video.duration : durationMs / 1000,
                 fps: 30,
                 width: video.videoWidth,
@@ -684,7 +683,15 @@ export default function LocalEditorTab() {
                 subtitleStyle,
                 hook,
                 onProgress: setProgress,
-            });
+            };
+            let outputUrl;
+            try {
+                outputUrl = await renderLocalVideoOnBrowser({ videoUrl: video.currentSrc || video.src, ...renderParams });
+            } catch (browserRenderError) {
+                setProgress(0);
+                outputUrl = await renderLocalVideoOnBackend({ file: videoFile, ...renderParams });
+                if (!outputUrl) throw browserRenderError;
+            }
             downloadUrl(outputUrl, 'openshorts-local-editor.mp4');
         } catch (exportError) {
             setError(exportError.message || 'Could not export this video locally.');
