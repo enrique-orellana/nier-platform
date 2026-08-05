@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderInBrowser } from '../../lib/renderInBrowser';
-import { buildRemotionRenderProps, renderLocalVideoOnBackend, renderLocalVideoOnBrowser } from './localEditorRender';
+import { buildRemotionRenderProps, burnLocalEditorSubtitles, renderLocalVideoOnBackend, renderLocalVideoOnBrowser } from './localEditorRender';
 
 vi.mock('../../lib/renderInBrowser', () => ({ renderInBrowser: vi.fn() }));
 
@@ -61,5 +61,31 @@ describe('local editor Remotion rendering', () => {
 
         expect(outputUrl).toBe('/videos/local-editor-1/render.mp4');
         expect(fetchImpl.mock.calls[0][1].body).toBeInstanceOf(FormData);
+    });
+
+    it('burns edited cues through the backend FFmpeg subtitle path after rendering', async () => {
+        const fetchImpl = vi.fn()
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ renderId: 'render-1', jobId: 'local-editor-1' }) })
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'done', progress: 100, outputUrl: '/output/local-editor-1/render.mp4' }) })
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ outputUrl: '/videos/local-editor-1/subtitled.mp4' }) });
+
+        const outputUrl = await burnLocalEditorSubtitles({
+            file: new File(['video'], 'source.mp4', { type: 'video/mp4' }),
+            durationSeconds: 2,
+            width: 608,
+            height: 1080,
+            subtitleCues: [{ text: 'Do I need to undress?', startMs: 0, endMs: 1000 }],
+            subtitleStyle: { position: 'bottom', fontFamily: 'Verdana', fontSize: 24 },
+            pollMs: 0,
+            fetchImpl,
+        });
+
+        expect(outputUrl).toBe('/videos/local-editor-1/subtitled.mp4');
+        expect(fetchImpl.mock.calls[2][0]).toContain('/api/local-editor/burn-subtitles');
+        expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toMatchObject({
+            job_id: 'local-editor-1',
+            input_filename: 'render.mp4',
+            subtitle_cues: [{ text: 'Do I need to undress?', startMs: 0, endMs: 1000 }],
+        });
     });
 });

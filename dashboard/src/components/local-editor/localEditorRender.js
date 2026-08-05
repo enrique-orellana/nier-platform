@@ -82,6 +82,7 @@ export async function renderLocalVideoOnBackend({
     onProgress = () => {},
     pollMs = 1200,
     fetchImpl = fetch,
+    returnMetadata = false,
 }) {
     if (!file) throw new Error('A local video is required.');
     const formData = new FormData();
@@ -101,7 +102,59 @@ export async function renderLocalVideoOnBackend({
             const filename = String(status.outputUrl || '').split(/[\\/]/).filter(Boolean).pop();
             if (!filename) throw new Error('Render completed without an output file.');
             onProgress(1);
-            return getApiUrl(`/videos/${started.jobId}/${filename}`);
+            const result = {
+                outputUrl: getApiUrl(`/videos/${started.jobId}/${filename}`),
+                jobId: started.jobId,
+                filename,
+            };
+            return returnMetadata ? result : result.outputUrl;
         }
     } while (status.status !== 'done' && status.status !== 'completed');
+}
+
+export async function burnLocalEditorSubtitles({
+    file,
+    durationSeconds,
+    fps = 30,
+    width,
+    height,
+    subtitleCues = [],
+    subtitleStyle = null,
+    hook = null,
+    onProgress = () => {},
+    pollMs = 1200,
+    fetchImpl = fetch,
+}) {
+    if (!subtitleCues.length) {
+        return renderLocalVideoOnBackend({ file, durationSeconds, fps, width, height, subtitleCues, subtitleStyle, hook, onProgress, pollMs, fetchImpl });
+    }
+
+    const rendered = await renderLocalVideoOnBackend({
+        file,
+        durationSeconds,
+        fps,
+        width,
+        height,
+        subtitleCues: [],
+        subtitleStyle: null,
+        hook,
+        onProgress: (progress) => onProgress(Math.max(0, Math.min(0.85, Number(progress) * 0.85))),
+        pollMs,
+        fetchImpl,
+        returnMetadata: true,
+    });
+
+    const response = await fetchImpl(getApiUrl('/api/local-editor/burn-subtitles'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            job_id: rendered.jobId,
+            input_filename: rendered.filename,
+            subtitle_cues: subtitleCues,
+            subtitle_style: subtitleStyle || {},
+        }),
+    });
+    const payload = await responsePayload(response);
+    onProgress(1);
+    return getApiUrl(payload.outputUrl);
 }

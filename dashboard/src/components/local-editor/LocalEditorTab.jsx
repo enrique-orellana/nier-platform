@@ -4,7 +4,7 @@ import LocalEditorTimeline from './LocalEditorTimeline';
 import SubtitleCueTable from './SubtitleCueTable';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock } from './localEditorExport';
-import { renderLocalVideoOnBackend, renderLocalVideoOnBrowser } from './localEditorRender';
+import { burnLocalEditorSubtitles, renderLocalVideoOnBackend, renderLocalVideoOnBrowser } from './localEditorRender';
 import { detectEmbeddedSideBars } from './localEditorVideo';
 import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
@@ -685,12 +685,16 @@ export default function LocalEditorTab() {
                 onProgress: setProgress,
             };
             let outputUrl;
-            try {
-                outputUrl = await renderLocalVideoOnBrowser({ videoUrl: video.currentSrc || video.src, ...renderParams });
-            } catch (browserRenderError) {
-                setProgress(0);
-                outputUrl = await renderLocalVideoOnBackend({ file: videoFile, ...renderParams });
-                if (!outputUrl) throw browserRenderError;
+            if (subtitleCues.length) {
+                outputUrl = await burnLocalEditorSubtitles({ file: videoFile, ...renderParams });
+            } else {
+                try {
+                    outputUrl = await renderLocalVideoOnBrowser({ videoUrl: video.currentSrc || video.src, ...renderParams });
+                } catch (browserRenderError) {
+                    setProgress(0);
+                    outputUrl = await renderLocalVideoOnBackend({ file: videoFile, ...renderParams });
+                    if (!outputUrl) throw browserRenderError;
+                }
             }
             downloadUrl(outputUrl, 'openshorts-local-editor.mp4');
         } catch (exportError) {

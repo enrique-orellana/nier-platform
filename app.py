@@ -22,6 +22,7 @@ from render_manifest import load_manifest, save_manifest_atomic, verify_manifest
 from version_store import VersionStore
 from s3_uploader import upload_job_artifacts, delete_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
 from ai_client import AIConfig, load_ai_config, ai_config_to_env, discover_lmstudio_models, chat_json
+from local_editor_subtitles import write_local_editor_srt, subtitle_style_to_ffmpeg_options
 
 load_dotenv()
 
@@ -1767,6 +1768,55 @@ async def render_local_editor_video(file: UploadFile = File(...), props: str = F
     except Exception as exc:
         shutil.rmtree(job_output_dir, ignore_errors=True)
         raise HTTPException(status_code=502, detail=f"Could not start local video render: {exc}") from exc
+
+
+class LocalEditorSubtitleBurnRequest(BaseModel):
+    job_id: str
+    input_filename: str
+    subtitle_cues: List[Dict[str, Any]]
+    subtitle_style: Dict[str, Any] = {}
+
+
+@app.post("/api/local-editor/burn-subtitles")
+async def burn_local_editor_subtitles(req: LocalEditorSubtitleBurnRequest):
+    """Apply the existing FFmpeg/ASS subtitle renderer to a local-editor render."""
+    if not req.job_id.startswith("local-editor-"):
+        raise HTTPException(status_code=400, detail="Invalid local editor render job.")
+
+    filename = os.path.basename(req.input_filename)
+    if filename != req.input_filename or not filename.lower().endswith((".mp4", ".m4v", ".mov", ".webm", ".mkv")):
+        raise HTTPException(status_code=400, detail="Invalid local editor render filename.")
+    if not req.subtitle_cues:
+        raise HTTPException(status_code=400, detail="At least one subtitle cue is required.")
+
+    job_output_dir = os.path.abspath(os.path.join(OUTPUT_DIR, req.job_id))
+    input_path = os.path.abspath(os.path.join(job_output_dir, filename))
+    if os.path.commonpath([job_output_dir, input_path]) != job_output_dir or not os.path.isfile(input_path):
+        raise HTTPException(status_code=404, detail="Local editor render was not found.")
+
+    suffix = uuid.uuid4().hex[:10]
+    srt_path = os.path.join(job_output_dir, f"local-editor-subtitles-{suffix}.srt")
+    output_filename = f"subtitled_{Path(filename).stem}_{suffix}.mp4"
+    output_path = os.path.join(job_output_dir, output_filename)
+
+    try:
+        write_local_editor_srt(req.subtitle_cues, srt_path)
+        options = subtitle_style_to_ffmpeg_options(req.subtitle_style)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: burn_subtitles(input_path, srt_path, output_path, **options),
+        )
+        if not os.path.isfile(output_path):
+            raise RuntimeError("FFmpeg completed without producing a subtitle export.")
+        return {"outputUrl": f"/videos/{req.job_id}/{output_filename}"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not burn local subtitles: {exc}") from exc
+    finally:
+        if os.path.exists(srt_path):
+            os.remove(srt_path)
 
 
 class HookRequest(BaseModel):
