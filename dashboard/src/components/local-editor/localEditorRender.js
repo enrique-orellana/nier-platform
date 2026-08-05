@@ -1,8 +1,6 @@
-import { getApiUrl } from '../../config';
+import { renderInBrowser } from '../../lib/renderInBrowser';
 
-const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-
-export const buildBackendRenderProps = ({
+export const buildRemotionRenderProps = ({
     durationSeconds,
     fps = 30,
     width,
@@ -36,14 +34,8 @@ export const buildBackendRenderProps = ({
     effects: null,
 });
 
-const responsePayload = async (response) => {
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.detail || payload.error || `Request failed (${response.status})`);
-    return payload;
-};
-
-export async function renderLocalVideoOnBackend({
-    file,
+export async function renderLocalVideoOnBrowser({
+    videoUrl,
     durationSeconds,
     fps = 30,
     width,
@@ -52,31 +44,19 @@ export async function renderLocalVideoOnBackend({
     subtitleStyle = null,
     hook = null,
     onProgress = () => {},
-    pollMs = 1200,
-    fetchImpl = fetch,
+    signal,
 }) {
-    if (!file) throw new Error('A local video is required.');
-    const formData = new FormData();
-    formData.append('file', file, file.name);
-    formData.append('props', JSON.stringify(buildBackendRenderProps({ durationSeconds, fps, width, height, subtitleCues, subtitleStyle, hook })));
-
-    const startedResponse = await fetchImpl(getApiUrl('/api/local-editor/render'), { method: 'POST', body: formData });
-    const started = await responsePayload(startedResponse);
-    if (!started.renderId || !started.jobId) throw new Error('Render service did not return a render ID.');
-
-    let status = null;
-    do {
-        if (pollMs > 0) await wait(pollMs);
-        const statusResponse = await fetchImpl(getApiUrl(`/api/render/${started.renderId}`));
-        status = await responsePayload(statusResponse);
-        onProgress(Math.max(0, Math.min(1, Number(status.progress || 0) / 100)));
-        if (status.status === 'error' || status.status === 'failed') throw new Error(status.error || 'Native video render failed.');
-        if (status.status === 'done' || status.status === 'completed') {
-            const outputUrl = String(status.outputUrl || '');
-            const filename = outputUrl.split(/[\\/]/).filter(Boolean).pop();
-            if (!filename) throw new Error('Render completed without an output file.');
-            onProgress(1);
-            return getApiUrl(`/videos/${started.jobId}/${filename}`);
-        }
-    } while (status.status !== 'done' && status.status !== 'completed');
+    const props = buildRemotionRenderProps({ durationSeconds, fps, width, height, subtitleCues, subtitleStyle, hook });
+    return renderInBrowser({
+        videoUrl,
+        durationInSeconds: durationSeconds,
+        fps,
+        width,
+        height,
+        subtitles: props.subtitles,
+        hook: props.hook,
+        effects: props.effects,
+        onProgress,
+        signal,
+    });
 }

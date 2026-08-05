@@ -4,7 +4,7 @@ import LocalEditorTimeline from './LocalEditorTimeline';
 import SubtitleCueTable from './SubtitleCueTable';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock } from './localEditorExport';
-import { renderLocalVideoOnBackend } from './localEditorRender';
+import { renderLocalVideoOnBrowser } from './localEditorRender';
 import { detectEmbeddedSideBars } from './localEditorVideo';
 import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
@@ -674,8 +674,8 @@ export default function LocalEditorTab() {
         try {
             const video = videoRef.current;
             if (!video?.videoWidth || !video?.videoHeight) throw new Error('Video metadata is not ready for export.');
-            const outputUrl = await renderLocalVideoOnBackend({
-                file: videoFile,
+            const outputUrl = await renderLocalVideoOnBrowser({
+                videoUrl: video.currentSrc || video.src,
                 durationSeconds: Number(video.duration) > 0 ? video.duration : durationMs / 1000,
                 fps: 30,
                 width: video.videoWidth,

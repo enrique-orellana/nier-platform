@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildBackendRenderProps, renderLocalVideoOnBackend } from './localEditorRender';
+import { renderInBrowser } from '../../lib/renderInBrowser';
+import { buildRemotionRenderProps, renderLocalVideoOnBrowser } from './localEditorRender';
 
-describe('local editor backend rendering', () => {
+vi.mock('../../lib/renderInBrowser', () => ({ renderInBrowser: vi.fn() }));
+
+describe('local editor Remotion rendering', () => {
     it('converts local editor overlays to the native render contract', () => {
-        const props = buildBackendRenderProps({
+        const props = buildRemotionRenderProps({
             durationSeconds: 6,
             fps: 25,
             width: 608,
@@ -18,28 +21,28 @@ describe('local editor backend rendering', () => {
         expect(props.hook).toMatchObject({ text: 'Hook', displayDurationSec: 2, position: 'center' });
     });
 
-    it('uploads the source and polls the native render until it completes', async () => {
-        const fetchImpl = vi.fn()
-            .mockResolvedValueOnce({ ok: true, json: async () => ({ renderId: 'render-1', jobId: 'local-editor-1' }) })
-            .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'rendering', progress: 50 }) })
-            .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'done', progress: 100, outputUrl: '/output/local-editor-1/render.mp4' }) });
-        const onProgress = vi.fn();
+    it('renders locally with the same Remotion/WebCodecs composition', async () => {
+        renderInBrowser.mockResolvedValue('blob:rendered-mp4');
 
-        const outputUrl = await renderLocalVideoOnBackend({
-            file: new File(['video'], 'source.mp4', { type: 'video/mp4' }),
+        const outputUrl = await renderLocalVideoOnBrowser({
+            videoUrl: 'blob:source',
             durationSeconds: 2,
             fps: 25,
             width: 608,
             height: 1080,
-            pollMs: 0,
-            fetchImpl,
-            onProgress,
+            subtitleCues: [{ text: 'Hello', startMs: 0, endMs: 1000 }],
+            subtitleStyle: { position: 'bottom' },
+            onProgress: vi.fn(),
         });
 
-        expect(outputUrl).toBe('/videos/local-editor-1/render.mp4');
-        expect(fetchImpl).toHaveBeenCalledTimes(3);
-        expect(fetchImpl.mock.calls[0][1].body).toBeInstanceOf(FormData);
-        expect(onProgress).toHaveBeenCalledWith(0.5);
-        expect(onProgress).toHaveBeenLastCalledWith(1);
+        expect(outputUrl).toBe('blob:rendered-mp4');
+        expect(renderInBrowser).toHaveBeenCalledWith(expect.objectContaining({
+            videoUrl: 'blob:source',
+            durationInSeconds: 2,
+            fps: 25,
+            width: 608,
+            height: 1080,
+            subtitles: expect.objectContaining({ captions: [{ text: 'Hello', startMs: 0, endMs: 1000 }] }),
+        }));
     });
 });
