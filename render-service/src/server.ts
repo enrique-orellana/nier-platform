@@ -49,8 +49,28 @@ app.use(express.json({ limit: "10mb" }));
 const PORT = parseInt(process.env.PORT || "3100", 10);
 const OUTPUT_DIR = process.env.OUTPUT_DIR || "/output";
 
-// Serve video files from the shared output volume so Remotion can access them via HTTP
-app.use("/output", express.static(OUTPUT_DIR));
+// Serve video files from the shared output volume so Remotion can access them via HTTP.
+// The Remotion bundle runs from a different origin (localhost:3000), so media
+// requests must explicitly allow cross-origin reads. Without this, @remotion/media
+// falls back to its frame proxy and Chromium can terminate the compositor when the
+// proxy cannot decode the source.
+app.use(
+  "/output",
+  (req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Range, Content-Type");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+
+    if (req.method === "OPTIONS") {
+      res.sendStatus(204);
+      return;
+    }
+
+    next();
+  },
+  express.static(OUTPUT_DIR),
+);
 
 // Health check
 app.get("/health", (_req, res) => {
