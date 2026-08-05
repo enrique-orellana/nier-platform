@@ -766,7 +766,7 @@ async def get_status(job_id: str):
     }
 
 from editor import VideoEditor
-from subtitles import generate_srt, burn_subtitles, generate_srt_from_video
+from subtitles import generate_srt, burn_subtitles, generate_srt_from_video, transcribe_audio
 from hooks import add_hook_to_video
 from translate import translate_video, get_supported_languages
 from thumbnail import analyze_video_for_titles, refine_titles, generate_thumbnail, generate_youtube_description
@@ -1680,6 +1680,31 @@ async def add_subtitles(req: SubtitleRequest):
         "success": True,
         "new_video_url": f"/videos/{req.job_id}/{output_filename}"
     }
+
+
+@app.post("/api/local-editor/transcribe")
+async def transcribe_local_editor_video(file: UploadFile = File(...)):
+    if not file.content_type or not file.content_type.startswith("video/"):
+        raise HTTPException(status_code=400, detail="Please upload a video file.")
+
+    safe_name = Path(file.filename or "local-video").name
+    temp_path = os.path.join(UPLOAD_DIR, f"local-editor-{uuid.uuid4().hex}-{safe_name}")
+    try:
+        with open(temp_path, "wb") as output:
+            shutil.copyfileobj(file.file, output)
+        loop = asyncio.get_running_loop()
+        transcript = await loop.run_in_executor(None, transcribe_audio, temp_path)
+        return {
+            "language": transcript.get("language", "und"),
+            "segments": transcript.get("segments", []),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Subtitle generation failed: {exc}") from exc
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 class HookRequest(BaseModel):
     job_id: str
