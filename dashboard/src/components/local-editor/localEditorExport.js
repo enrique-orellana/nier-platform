@@ -19,6 +19,25 @@ export const chooseRecordingMimeType = (isTypeSupported = () => false) => (
         .find((type) => isTypeSupported(type)) || ''
 );
 
+export const prepareVideoForExport = (video) => {
+    video?.pause?.();
+    if (video) video.currentTime = 0;
+    return video;
+};
+
+export const getVideoFrameDimensions = (video) => {
+    const width = Number(video?.videoWidth);
+    const height = Number(video?.videoHeight);
+    if (!width || !height) throw new Error('Video metadata is not ready for export.');
+    return { width, height };
+};
+
+export const clampOverlayY = (desiredY, canvasHeight, overlayHeight, padding) => {
+    const safePadding = Math.max(0, Number(padding) || 0);
+    const maxY = Math.max(safePadding, (Number(canvasHeight) || 0) - (Number(overlayHeight) || 0) + safePadding);
+    return Math.max(safePadding, Math.min(Number(desiredY) || 0, maxY));
+};
+
 export const hookVisualState = (hook = {}, elapsedMs = 0) => {
     const progress = Math.max(0, Math.min(1, Number(elapsedMs) / 500));
     const scale = HOOK_SIZE_SCALE[hook.size] || HOOK_SIZE_SCALE.M;
@@ -47,7 +66,7 @@ export const subtitleVisualStyle = (style = {}) => {
     };
 };
 
-const drawWrappedText = (context, text, x, y, maxWidth, lineHeight, paintLine = (line, lineX, lineY) => context.fillText(line, lineX, lineY)) => {
+const wrapTextLines = (context, text, maxWidth) => {
     const lines = String(text || '').split('\n');
     const output = [];
     lines.forEach((line) => {
@@ -64,8 +83,18 @@ const drawWrappedText = (context, text, x, y, maxWidth, lineHeight, paintLine = 
         });
         output.push(current);
     });
-    output.forEach((line, index) => paintLine(line, x, y + index * lineHeight));
-    return output.length;
+    return output;
+};
+
+const measureOverlay = (context, text, width, fontSize, fontFamily) => {
+    context.save();
+    context.font = `700 ${fontSize}px ${fontFamily}, sans-serif`;
+    const padding = fontSize * 0.35;
+    const maxWidth = width - padding * 2;
+    const lines = wrapTextLines(context, text, maxWidth);
+    const lineHeight = fontSize * 1.2;
+    context.restore();
+    return { lines, padding, lineHeight, height: lines.length * lineHeight + padding * 2 };
 };
 
 const drawOverlay = (context, text, { x, y, width, fontSize, color, background, fontFamily = 'Arial, sans-serif', borderColor = '#000000', borderWidth = 0, opacity = 1 }) => {
@@ -75,25 +104,23 @@ const drawOverlay = (context, text, { x, y, width, fontSize, color, background, 
     context.font = `700 ${fontSize}px ${fontFamily}, sans-serif`;
     context.textAlign = 'center';
     context.textBaseline = 'top';
-    const lineHeight = fontSize * 1.2;
-    const padding = fontSize * 0.35;
-    const lines = String(text).split('\n');
-    const maxWidth = width - padding * 2;
-    const measured = lines.reduce((max, line) => Math.max(max, context.measureText(line).width), 0);
-    const boxWidth = Math.min(width, measured + padding * 2);
-    const boxHeight = lines.length * lineHeight + padding * 2;
+    const metrics = measureOverlay(context, text, width, fontSize, fontFamily);
+    const measured = metrics.lines.reduce((max, line) => Math.max(max, context.measureText(line).width), 0);
+    const boxWidth = Math.min(width, measured + metrics.padding * 2);
+    const boxHeight = metrics.height;
     if (background && background !== 'transparent') {
         context.fillStyle = background;
-        context.fillRect(x - boxWidth / 2, y - padding, boxWidth, boxHeight);
+        context.fillRect(x - boxWidth / 2, y - metrics.padding, boxWidth, boxHeight);
     }
-    drawWrappedText(context, text, x, y, maxWidth, lineHeight, (line, lineX, lineY) => {
+    metrics.lines.forEach((line, index) => {
+        const lineY = y + index * metrics.lineHeight;
         if (borderWidth > 0) {
             context.strokeStyle = borderColor;
             context.lineWidth = borderWidth * 2;
-            context.strokeText(line, lineX, lineY);
+            context.strokeText(line, x, lineY);
         }
         context.fillStyle = color;
-        context.fillText(line, lineX, lineY);
+        context.fillText(line, x, lineY);
     });
     context.restore();
 };
@@ -106,9 +133,14 @@ export async function renderLocalVideo({ video, subtitleCues = [], subtitleStyle
     }
     if (typeof MediaRecorder === 'undefined') throw new Error('This browser does not support local video recording.');
 
+    const originalTime = video.currentTime;
+    const originalPaused = video.paused;
+    const originalMuted = video.muted;
+    const { width: sourceWidth, height: sourceHeight } = getVideoFrameDimensions(video);
+    prepareVideoForExport(video);
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 1080;
-    canvas.height = video.videoHeight || 1920;
+    canvas.width = sourceWidth;
+    canvas.height = sourceHeight;
     const context = canvas.getContext('2d');
     const frameRate = 30;
     const canvasStream = canvas.captureStream(frameRate);
@@ -123,9 +155,6 @@ export async function renderLocalVideo({ video, subtitleCues = [], subtitleStyle
     const mimeType = chooseRecordingMimeType(isSupported);
     const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     const chunks = [];
-    const originalTime = video.currentTime;
-    const originalPaused = video.paused;
-    const originalMuted = video.muted;
     let animationFrame = null;
     let resolveRender;
     let rejectRender;
@@ -151,14 +180,19 @@ export async function renderLocalVideo({ video, subtitleCues = [], subtitleStyle
             const subtitleScale = subtitleStyleValues.animation === 'pop' ? 0.9 + subtitleProgress * 0.1 : 1;
             const subtitleOpacity = subtitleStyleValues.animation === 'pop' ? subtitleProgress : 1;
             const subtitleColor = subtitleStyleValues.animation === 'karaoke' ? subtitleStyleValues.highlightColor : subtitleStyleValues.color;
+            const subtitleWidth = canvas.width * 0.88;
+            const subtitleFontSize = Math.max(24, Math.round(subtitleStyleValues.fontSize * (Math.min(canvas.width, canvas.height) / 440)));
+            const subtitleMetrics = measureOverlay(context, subtitle.text, subtitleWidth, subtitleFontSize, subtitleStyleValues.fontFamily);
+            const subtitleDesiredY = subtitleStyleValues.position === 'top' ? canvas.height * 0.12 : subtitleStyleValues.position === 'middle' ? canvas.height * 0.45 : canvas.height * 0.78;
+            const subtitleY = clampOverlayY(subtitleDesiredY, canvas.height, subtitleMetrics.height, subtitleMetrics.padding);
             context.save();
-            context.translate(canvas.width / 2, subtitleStyleValues.position === 'top' ? canvas.height * 0.12 : subtitleStyleValues.position === 'middle' ? canvas.height * 0.45 : canvas.height * 0.78);
+            context.translate(canvas.width / 2, subtitleY);
             context.scale(subtitleScale, subtitleScale);
             drawOverlay(context, subtitle.text, {
                 x: 0,
                 y: 0,
-                width: canvas.width * 0.88,
-                fontSize: Math.max(24, Math.round(subtitleStyleValues.fontSize * (canvas.width / 440))),
+                width: subtitleWidth,
+                fontSize: subtitleFontSize,
                 fontFamily: subtitleStyleValues.fontFamily,
                 color: subtitleColor,
                 background: subtitleStyleValues.backgroundOpacity > 0 ? subtitleStyleValues.background : 'transparent',

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { activeCueAt, chooseRecordingMimeType, formatClock, hookVisualState, subtitleVisualStyle } from './localEditorExport';
+import { describe, expect, it, vi } from 'vitest';
+import { activeCueAt, chooseRecordingMimeType, clampOverlayY, formatClock, getVideoFrameDimensions, hookVisualState, prepareVideoForExport, subtitleVisualStyle } from './localEditorExport';
 
 describe('local editor export helpers', () => {
     it('finds a cue active at the playhead', () => {
@@ -27,5 +27,23 @@ describe('local editor export helpers', () => {
             color: '#FFDD00',
             background: 'rgba(0, 0, 0, 0.5)',
         });
+    });
+
+    it('resets the source video to the beginning before export', () => {
+        const video = { currentTime: 27.5, pause: vi.fn() };
+
+        prepareVideoForExport(video);
+
+        expect(video.pause).toHaveBeenCalledTimes(1);
+        expect(video.currentTime).toBe(0);
+    });
+
+    it('keeps subtitle overlays inside the rendered frame', () => {
+        expect(clampOverlayY(560, 720, 260, 20)).toBe(480);
+        expect(clampOverlayY(0, 720, 260, 20)).toBe(20);
+    });
+
+    it('uses the source video dimensions for the export canvas', () => {
+        expect(getVideoFrameDimensions({ videoWidth: 1920, videoHeight: 1080 })).toEqual({ width: 1920, height: 1080 });
     });
 });
