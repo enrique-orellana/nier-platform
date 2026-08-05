@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Download, FastForward, FileText, Film, Maximize2, Minimize2, Pause, Play, Plus, Redo2, Repeat, Rewind, RotateCcw, SkipBack, SkipForward, Square, Undo2, Upload, X } from 'lucide-react';
 import LocalEditorTimeline from './LocalEditorTimeline';
+import SubtitleCueTable from './SubtitleCueTable';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock, renderLocalVideo } from './localEditorExport';
 import { detectEmbeddedSideBars } from './localEditorVideo';
@@ -226,6 +227,8 @@ export default function LocalEditorTab() {
     const [autoCrop, setAutoCrop] = useState(false);
     const [subtitlesOpen, setSubtitlesOpen] = useState(false);
     const [hookOpen, setHookOpen] = useState(false);
+    const [subtitleView, setSubtitleView] = useState('timeline');
+    const [subtitleTableLoop, setSubtitleTableLoop] = useState(false);
 
     const { subtitleCues, subtitleStyle, hook } = editHistory.present;
     const editHistoryRef = useRef(editHistory);
@@ -436,6 +439,21 @@ export default function LocalEditorTab() {
         if (videoRef.current) videoRef.current.currentTime = clampedMs / 1000;
     };
 
+    const handleVideoTimeUpdate = (event) => {
+        const nextMs = event.currentTarget.currentTime * 1000;
+        const loopCue = subtitleTableLoop
+            ? selected?.type === 'subtitle'
+                ? subtitleCues.find((cue) => cue.id === selected.id)
+                : activeCueAt(subtitleCues, playheadMs)
+            : null;
+        if (loopCue && nextMs >= loopCue.endMs) {
+            event.currentTarget.currentTime = loopCue.startMs / 1000;
+            setPlayheadMs(loopCue.startMs);
+            return;
+        }
+        setPlayheadMs(nextMs);
+    };
+
     const seekBy = (deltaMs) => {
         const currentMs = videoRef.current ? videoRef.current.currentTime * 1000 : playheadMs;
         handleSeek(currentMs + deltaMs);
@@ -591,7 +609,7 @@ export default function LocalEditorTab() {
                 <main className="min-w-0 space-y-5">
                     <div ref={playerRef} data-testid="local-editor-player" tabIndex={0} role="region" aria-label="Video preview. Use Space or K to play or pause, arrow keys to seek, M to mute, and F for fullscreen." aria-keyshortcuts="Space K ArrowLeft ArrowRight Home End M F" onKeyDown={handlePlayerKeyDown} className={isFullscreen ? 'fixed inset-0 z-50 flex items-center justify-center bg-black p-4' : 'mx-auto flex h-[calc(100vh-180px)] max-h-[72vh] w-full max-w-[360px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl'}>
                         <div className="relative h-full max-h-full w-auto max-w-full aspect-[9/16]">
-                            <video ref={videoRef} src={videoUrl} controls={false} className={`h-full w-full ${shouldCropVideo ? 'object-cover' : 'object-contain'}`} onLoadedMetadata={handleMetadata} onLoadedData={detectVideoFraming} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onTimeUpdate={(event) => setPlayheadMs(event.currentTarget.currentTime * 1000)} />
+                            <video ref={videoRef} src={videoUrl} controls={false} className={`h-full w-full ${shouldCropVideo ? 'object-cover' : 'object-contain'}`} onLoadedMetadata={handleMetadata} onLoadedData={detectVideoFraming} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onTimeUpdate={handleVideoTimeUpdate} />
                             <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className="absolute right-3 top-3 z-20 rounded-lg border border-white/20 bg-black/60 p-2 text-white shadow-lg backdrop-blur hover:bg-black/80">{isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
                             <div className="pointer-events-none absolute inset-0">
                                 {activeHook && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 ${hookPositionClass(activeHook.position)}`}><div className="rounded-lg px-3 py-2 text-center font-bold shadow-lg" style={{ color: activeHook.color, backgroundColor: activeHook.background, fontSize: `${Math.max(14, (activeHook.fontSize / 2.6) * hookSizeScale)}px`, ...hookEntranceStyle }}>{activeHook.text}</div></div>}
@@ -610,7 +628,16 @@ export default function LocalEditorTab() {
                             </div>
                         </div>
                     </div>
-                    <LocalEditorTimeline durationMs={durationMs} subtitleCues={subtitleCues} hook={hook} selectedId={selected?.id} onSelect={handleTimelineSelect} onChange={handleTimelineChange} onChangeStart={beginTimelineEdit} onChangeEnd={endTimelineEdit} playheadMs={playheadMs} onSeek={handleSeek} />
+                    <div className="rounded-xl border border-white/10 bg-[#101014] p-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2">
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Subtitle workspace</span>
+                            <div role="tablist" aria-label="Subtitle editing view" className="flex rounded-lg border border-white/10 bg-black/20 p-0.5">
+                                <button type="button" role="tab" aria-label="Timeline view" aria-selected={subtitleView === 'timeline'} onClick={() => setSubtitleView('timeline')} className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === 'timeline' ? 'bg-white text-black' : 'text-zinc-400 hover:bg-white/10 hover:text-white'}`}>Timeline</button>
+                                <button type="button" role="tab" aria-label="Subtitle table view" aria-selected={subtitleView === 'table'} onClick={() => setSubtitleView('table')} className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === 'table' ? 'bg-violet-500 text-white' : 'text-zinc-400 hover:bg-white/10 hover:text-white'}`}>Cue table</button>
+                            </div>
+                        </div>
+                        {subtitleView === 'table' ? <SubtitleCueTable cues={subtitleCues} selectedId={selected?.id} playheadMs={playheadMs} onSelect={handleTimelineSelect} onChange={(cue) => updateSubtitle(cue)} loopSegment={subtitleTableLoop} onLoopSegmentChange={setSubtitleTableLoop} onSpeedChange={(speed) => { if (videoRef.current) videoRef.current.playbackRate = speed; }} /> : <LocalEditorTimeline durationMs={durationMs} subtitleCues={subtitleCues} hook={hook} selectedId={selected?.id} onSelect={handleTimelineSelect} onChange={handleTimelineChange} onChangeStart={beginTimelineEdit} onChangeEnd={endTimelineEdit} playheadMs={playheadMs} onSeek={handleSeek} />}
+                    </div>
                 </main>
                 <aside className="space-y-4">
                     <section className="rounded-xl border border-white/10 bg-white/[.02] p-4">

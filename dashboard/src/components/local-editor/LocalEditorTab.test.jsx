@@ -31,6 +31,24 @@ describe('LocalEditorTab', () => {
         expect(screen.getAllByText('Viral Hook').length).toBeGreaterThan(0);
     });
 
+    it('switches between the subtitle timeline and cue table', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /add subtitle cue/i })).toBeInTheDocument());
+
+        expect(screen.getByRole('tab', { name: 'Timeline view' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('tab', { name: 'Subtitle table view' }));
+        expect(screen.getByRole('columnheader', { name: 'Start' })).toBeInTheDocument();
+        expect(screen.getByRole('columnheader', { name: 'End' })).toBeInTheDocument();
+        expect(screen.getByRole('columnheader', { name: 'Text' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Scroll to current subtitle' })).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', { name: 'Follow audio' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Timeline view' }));
+        expect(screen.getByTestId('local-editor-timeline-canvas')).toBeInTheDocument();
+    });
+
     it('offers a viewport-sized player and fullscreen control', async () => {
         const requestFullscreen = vi.fn().mockResolvedValue(undefined);
         Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', { configurable: true, writable: true, value: requestFullscreen });
