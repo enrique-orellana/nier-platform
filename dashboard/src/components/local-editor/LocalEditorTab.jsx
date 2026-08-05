@@ -247,12 +247,11 @@ export default function LocalEditorTab() {
         };
     }, []);
 
-    const commitEdit = (updater, { coalesce = false, transaction = null } = {}) => setEditHistory((current) => {
+    const commitEdit = (updater, { coalesce = false, transaction = null, recordAction = false } = {}) => setEditHistory((current) => {
         const next = typeof updater === 'function' ? updater(current.present) : updater;
         if (next === current.present) return current;
         if (coalesce && transaction) {
-            if (!transaction.recorded) {
-                transaction.recorded = true;
+            if (recordAction) {
                 return { past: [...current.past, current.present].slice(-EDITOR_HISTORY_LIMIT), present: next, future: [] };
             }
             return { ...current, present: next, future: [] };
@@ -373,7 +372,10 @@ export default function LocalEditorTab() {
     const endTimelineEdit = () => { timelineDragRef.current = null; };
     const handleTimelineChange = (cue, type) => {
         const transaction = timelineDragRef.current;
-        return type === 'hook' ? updateHook(cue, { coalesce: true, transaction }) : updateSubtitle(cue, { coalesce: true, transaction });
+        const recordAction = Boolean(transaction && !transaction.recorded);
+        if (transaction) transaction.recorded = true;
+        const options = transaction ? { coalesce: true, transaction, recordAction } : {};
+        return type === 'hook' ? updateHook(cue, options) : updateSubtitle(cue, options);
     };
 
     const importSubtitleFile = async (file) => {

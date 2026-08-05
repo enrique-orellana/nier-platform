@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalEditorTab from './LocalEditorTab';
 import { DEFAULT_SUBTITLE_STYLE } from './localEditorStyles';
@@ -242,10 +243,48 @@ describe('LocalEditorTab', () => {
             expect(saved.present.subtitleCues[0].startMs).toBe(6000);
         });
 
+        fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+        expect(screen.getByRole('button', { name: 'Hello' })).toHaveStyle({ left: '0%' });
+        fireEvent.click(screen.getByRole('button', { name: 'Redo', exact: true }));
+        expect(screen.getByRole('button', { name: 'Hello' })).toHaveStyle({ left: '20%' });
+
         localStorage.removeItem('openshorts_local_editor_state_v1');
         window.dispatchEvent(new Event('pagehide'));
         const flushed = JSON.parse(localStorage.getItem('openshorts_local_editor_state_v1'));
         expect(flushed.present.subtitleCues[0].startMs).toBe(6000);
+    });
+
+    it('records each imported cue timeline move as its own undoable action', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({ width: 1000, height: 100, top: 0, left: 0, right: 1000, bottom: 100 }));
+        render(<StrictMode><LocalEditorTab /></StrictMode>);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
+        const subtitleFile = new File(['subtitle'], 'captions.srt', { type: 'application/x-subrip' });
+        subtitleFile.text = async () => '1\n00:00:00,000 --> 00:00:01,000\nFirst\n\n2\n00:00:01,000 --> 00:00:02,000\nSecond';
+        fireEvent.change(screen.getByLabelText(/subtitle file/i), { target: { files: [subtitleFile] } });
+        await waitFor(() => expect(screen.getAllByText('First').length).toBeGreaterThan(0));
+
+        const dragCue = (name, clientX) => {
+            const cue = screen.getByRole('button', { name });
+            act(() => fireEvent.pointerDown(cue, { clientX: 0 }));
+            act(() => {
+                fireEvent.pointerMove(window, { clientX });
+                fireEvent.pointerUp(window, { clientX });
+            });
+        };
+        dragCue('First', 100);
+        dragCue('Second', 200);
+
+        await waitFor(() => {
+            const saved = JSON.parse(localStorage.getItem('openshorts_local_editor_state_v1'));
+            expect(saved.past).toHaveLength(3);
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+        expect(screen.getByRole('button', { name: 'Second' })).toHaveStyle({ left: '3.3333333333333335%' });
+        fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+        expect(screen.getByRole('button', { name: 'First' })).toHaveStyle({ left: '0%' });
     });
 
     it('adds and edits a hook, then resets', async () => {
