@@ -4,7 +4,7 @@ import LocalEditorTimeline from './LocalEditorTimeline';
 import SubtitleCueTable from './SubtitleCueTable';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock } from './localEditorExport';
-import { burnLocalEditorSubtitles, renderLocalVideoOnBackend, renderLocalVideoOnBrowser } from './localEditorRender';
+import { burnLocalEditorSubtitles, renderLocalVideoOnBackend, renderLocalVideoOnBrowser, syncSubtitleCue } from './localEditorRender';
 import { detectEmbeddedSideBars, getFilledFrameDimensions } from './localEditorVideo';
 import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
@@ -485,7 +485,7 @@ export default function LocalEditorTab({
 
     const cycleVideoViewMode = () => setVideoViewMode((current) => current === 'auto' ? 'fill' : current === 'fill' ? 'fit' : 'auto');
 
-    const updateSubtitle = (cue, options) => commitEdit((current) => ({ ...current, subtitleCues: current.subtitleCues.map((item) => item.id === cue.id ? clampCue(cue, durationMs) : item) }), options);
+    const updateSubtitle = (cue, options) => commitEdit((current) => ({ ...current, subtitleCues: current.subtitleCues.map((item) => item.id === cue.id ? syncSubtitleCue(item, clampCue(cue, durationMs)) : item) }), options);
     const updateHook = (nextHook, options) => commitEdit((current) => ({ ...current, hook: clampCue(nextHook, durationMs) }), options);
 
     const handleTimelineSelect = (cue, type) => setSelected({ id: cue.id, type });

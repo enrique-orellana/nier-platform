@@ -4,6 +4,64 @@ import { toClipGeneratorSubtitleStyle } from './localEditorStyles';
 
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+const cueWords = (text) => String(text || '').trim().split(/\s+/).filter(Boolean);
+const cueText = (cue) => String(cue?.text || '').trim();
+const captionText = (captions) => captions.map((caption) => String(caption?.text || '').trim()).filter(Boolean).join(' ').trim();
+
+const distributeCueWords = (text, startMs, endMs) => {
+    const words = cueWords(text);
+    if (!words.length) return [];
+    const start = Number(startMs) || 0;
+    const end = Math.max(start + 1, Number(endMs) || start + 1);
+    const duration = end - start;
+    return words.map((word, index) => ({
+        text: word,
+        startMs: Math.round(start + (index * duration) / words.length),
+        endMs: Math.max(
+            Math.round(start + (index * duration) / words.length) + 1,
+            Math.round(start + ((index + 1) * duration) / words.length),
+        ),
+    }));
+};
+
+export const syncSubtitleCue = (previousCue, nextCue) => {
+    const nextText = cueText(nextCue);
+    if (!Array.isArray(previousCue?.captions) || !previousCue.captions.length) {
+        return nextText
+            ? { ...nextCue, captions: distributeCueWords(nextText, nextCue.startMs, nextCue.endMs) }
+            : nextCue;
+    }
+    const previousText = captionText(previousCue.captions);
+    if (previousText !== nextText) {
+        return { ...nextCue, captions: distributeCueWords(nextText, nextCue.startMs, nextCue.endMs) };
+    }
+
+    const previousStart = Number(previousCue.startMs) || 0;
+    const previousDuration = Math.max(1, (Number(previousCue.endMs) || previousStart + 1) - previousStart);
+    const nextStart = Number(nextCue.startMs) || 0;
+    const nextDuration = Math.max(1, (Number(nextCue.endMs) || nextStart + 1) - nextStart);
+    return {
+        ...nextCue,
+        captions: previousCue.captions.map((caption) => ({
+            ...caption,
+            startMs: Math.round(nextStart + (((Number(caption.startMs) || previousStart) - previousStart) / previousDuration) * nextDuration),
+            endMs: Math.max(
+                Math.round(nextStart + (((Number(caption.startMs) || previousStart) - previousStart) / previousDuration) * nextDuration) + 1,
+                Math.round(nextStart + (((Number(caption.endMs) || previousStart + 1) - previousStart) / previousDuration) * nextDuration),
+            ),
+        })),
+    };
+};
+
+export const cueCaptionsForRender = (cue) => {
+    if (!Array.isArray(cue?.captions) || !cue.captions.length) {
+        return [{ text: cueText(cue), startMs: Number(cue?.startMs), endMs: Number(cue?.endMs) }];
+    }
+    return captionText(cue.captions) === cueText(cue)
+        ? cue.captions.map((caption) => ({ text: String(caption.text || ''), startMs: Number(caption.startMs), endMs: Number(caption.endMs) }))
+        : distributeCueWords(cueText(cue), cue.startMs, cue.endMs);
+};
+
 export const buildRemotionRenderProps = ({
     durationSeconds,
     fps = 30,
@@ -19,11 +77,7 @@ export const buildRemotionRenderProps = ({
     height: Number(height),
     subtitles: subtitleCues.length
         ? {
-            captions: subtitleCues.flatMap(({ text, startMs, endMs, captions }) => (
-                Array.isArray(captions) && captions.length
-                    ? captions.map((caption) => ({ text: String(caption.text || ''), startMs: Number(caption.startMs), endMs: Number(caption.endMs) }))
-                    : [{ text: String(text || ''), startMs: Number(startMs), endMs: Number(endMs) }]
-            )),
+            captions: subtitleCues.flatMap((cue) => cueCaptionsForRender(cue)),
             position: subtitleStyle?.position || 'bottom',
             style: toClipGeneratorSubtitleStyle(subtitleStyle || undefined),
         }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderInBrowser } from '../../lib/renderInBrowser';
-import { buildRemotionRenderProps, burnLocalEditorSubtitles, renderLocalVideoOnBackend, renderLocalVideoOnBrowser } from './localEditorRender';
+import { buildRemotionRenderProps, burnLocalEditorSubtitles, renderLocalVideoOnBackend, renderLocalVideoOnBrowser, syncSubtitleCue } from './localEditorRender';
 
 vi.mock('../../lib/renderInBrowser', () => ({ renderInBrowser: vi.fn() }));
 
@@ -46,6 +46,63 @@ describe('local editor Remotion rendering', () => {
         expect(props.subtitles.captions).toEqual([
             { text: 'Do', startMs: 200, endMs: 400 },
             { text: 'I', startMs: 400, endMs: 550 },
+        ]);
+    });
+
+    it('uses edited cue text instead of stale generated words', () => {
+        const props = buildRemotionRenderProps({
+            durationSeconds: 2,
+            fps: 25,
+            width: 608,
+            height: 1080,
+            subtitleCues: [{
+                text: 'Updated subtitle text',
+                startMs: 200,
+                endMs: 800,
+                captions: [
+                    { text: 'Original', startMs: 200, endMs: 500 },
+                    { text: 'subtitle', startMs: 500, endMs: 800 },
+                ],
+            }],
+        });
+
+        expect(props.subtitles.captions).toEqual([
+            { text: 'Updated', startMs: 200, endMs: 400 },
+            { text: 'subtitle', startMs: 400, endMs: 600 },
+            { text: 'text', startMs: 600, endMs: 800 },
+        ]);
+    });
+
+    it('creates word timings when an imported cue is edited', () => {
+        const nextCue = syncSubtitleCue(
+            { text: 'Original text', startMs: 100, endMs: 900 },
+            { text: 'Edited cue text', startMs: 100, endMs: 900 },
+        );
+
+        expect(nextCue.captions).toEqual([
+            { text: 'Edited', startMs: 100, endMs: 367 },
+            { text: 'cue', startMs: 367, endMs: 633 },
+            { text: 'text', startMs: 633, endMs: 900 },
+        ]);
+    });
+
+    it('moves generated word timings with the cue', () => {
+        const nextCue = syncSubtitleCue(
+            {
+                text: 'Move this',
+                startMs: 100,
+                endMs: 500,
+                captions: [
+                    { text: 'Move', startMs: 100, endMs: 300 },
+                    { text: 'this', startMs: 300, endMs: 500 },
+                ],
+            },
+            { text: 'Move this', startMs: 600, endMs: 1000 },
+        );
+
+        expect(nextCue.captions).toEqual([
+            { text: 'Move', startMs: 600, endMs: 800 },
+            { text: 'this', startMs: 800, endMs: 1000 },
         ]);
     });
 
