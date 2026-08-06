@@ -26,6 +26,22 @@ describe('LocalEditorTab', () => {
         expect(screen.getByLabelText(/upload video/i)).toBeInTheDocument();
     });
 
+    it('loads a project clip into the same editor without showing the upload state', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:project-clip');
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            blob: async () => new Blob(['video'], { type: 'video/mp4' }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        render(<LocalEditorTab initialVideoUrl="/api/video-proxy/project.mp4" initialVideoName="project.mp4" />);
+
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        expect(fetchMock).toHaveBeenCalledWith('/api/video-proxy/project.mp4');
+        expect(screen.queryByLabelText(/upload video/i)).not.toBeInTheDocument();
+        expect(screen.getByText(/project\.mp4/)).toBeInTheDocument();
+    });
+
     it('shows timeline controls after selecting a video', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
         render(<LocalEditorTab />);

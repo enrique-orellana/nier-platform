@@ -98,6 +98,16 @@ describe('FullScreenEditor', () => {
         expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
     });
 
+    it('uses the local editor workspace while retaining project actions and version history', async () => {
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: vi.fn(() => 'blob:project-video') });
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(['video'], { type: 'video/mp4' }) }));
+        render(<FullScreenEditor useLocalEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} editorActions={Object.fromEntries(['onAutoEdit', 'onConvertNativeShort', 'onSubtitles', 'onViralHook', 'onDubVoice', 'onPost', 'onDownload'].map((name) => [name, vi.fn()]))} onClose={vi.fn()} />);
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        expect(screen.getByRole('region', { name: 'Editor actions' })).toBeInTheDocument();
+        expect(screen.getByText(/version history/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /save as new version/i })).toBeInTheDocument();
+    });
+
     it('exposes a draft session that accumulates effects and optional subtitle tracks', async () => {
         let session;
         render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }} initialManifest={{ ...manifest, subtitle_tracks: [], layers: { hook: manifest.layers.hook, effects: null, subtitles: null } }} initialVersion={{ version_id: 'v1', status: 'done', output_url: '/videos/job/v1.mp4' }} onSessionReady={(api) => { session = api; }} onClose={vi.fn()} />);

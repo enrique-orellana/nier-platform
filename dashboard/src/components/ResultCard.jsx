@@ -646,6 +646,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 aiHeaders={getAiHeaders ? getAiHeaders('json') : {}}
                 onRendered={(url) => applyRenderedVideoUrl(url, { persist: true })}
                 onSessionReady={(session) => { editorSessionRef.current = session; }}
+                useLocalEditor={editorOpen}
                 editorActions={{
                     onAutoEdit: handleAutoEdit,
                     isEditing,

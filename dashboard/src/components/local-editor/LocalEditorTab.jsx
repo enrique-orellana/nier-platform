@@ -268,7 +268,18 @@ function HookInspector({ hook, onChange, onRemove }) {
     );
 }
 
-export default function LocalEditorTab() {
+export default function LocalEditorTab({
+    initialVideoUrl = '',
+    initialVideoName = '',
+    initialEditorState = null,
+    initialStateKey = null,
+    onStateChange,
+    onClose = null,
+    headerActions = null,
+    sidePanel = null,
+    footer = null,
+    persistHistory = true,
+}) {
     const videoRef = useRef(null);
     const playerRef = useRef(null);
     const objectUrlRef = useRef('');
@@ -280,7 +291,10 @@ export default function LocalEditorTab() {
     const [videoUrl, setVideoUrl] = useState('');
     const [durationMs, setDurationMs] = useState(DEFAULT_DURATION_MS);
     const [playheadMs, setPlayheadMs] = useState(0);
-    const [editHistory, setEditHistory] = useState(readEditorHistory);
+    const [editHistory, setEditHistory] = useState(() => {
+        const history = createEmptyEditorHistory();
+        return initialEditorState ? { ...history, present: { ...history.present, ...initialEditorState } } : readEditorHistory();
+    });
     const [selected, setSelected] = useState(null);
     const [pendingSubtitle, setPendingSubtitle] = useState(null);
     const [error, setError] = useState('');
@@ -299,23 +313,34 @@ export default function LocalEditorTab() {
     const [hookOpen, setHookOpen] = useState(false);
     const [subtitleView, setSubtitleView] = useState('timeline');
     const [subtitleTableLoop, setSubtitleTableLoop] = useState(false);
+    const [remoteVideoLoading, setRemoteVideoLoading] = useState(Boolean(initialVideoUrl));
 
     const { subtitleCues, subtitleStyle, subtitleLanguage, hook } = editHistory.present;
     const editHistoryRef = useRef(editHistory);
     useEffect(() => {
         editHistoryRef.current = editHistory;
-        saveEditorHistory(editHistory);
-    }, [editHistory]);
+        if (persistHistory) saveEditorHistory(editHistory);
+        onStateChange?.(editHistory.present);
+    }, [editHistory, onStateChange, persistHistory]);
 
     useEffect(() => {
-        const persistCurrentHistory = () => saveEditorHistory(editHistoryRef.current);
+        if (!initialEditorState || initialStateKey === null) return;
+        setEditHistory((current) => ({
+            ...createEmptyEditorHistory(),
+            present: { ...current.present, ...initialEditorState },
+        }));
+        setSelected(null);
+    }, [initialStateKey]);
+
+    useEffect(() => {
+        const persistCurrentHistory = () => { if (persistHistory) saveEditorHistory(editHistoryRef.current); };
         window.addEventListener('pagehide', persistCurrentHistory);
         window.addEventListener('beforeunload', persistCurrentHistory);
         return () => {
             window.removeEventListener('pagehide', persistCurrentHistory);
             window.removeEventListener('beforeunload', persistCurrentHistory);
         };
-    }, []);
+    }, [persistHistory]);
 
     const commitEdit = (updater, { coalesce = false, transaction = null, recordAction = false } = {}) => setEditHistory((current) => {
         const next = typeof updater === 'function' ? updater(current.present) : updater;
@@ -396,6 +421,32 @@ export default function LocalEditorTab() {
     };
 
     useEffect(() => {
+        if (!initialVideoUrl) return undefined;
+        let active = true;
+        videoLoadStartedRef.current = true;
+        setRemoteVideoLoading(true);
+        fetch(initialVideoUrl)
+            .then((response) => {
+                if (!response.ok) throw new Error(`Could not load project video (${response.status}).`);
+                return response.blob();
+            })
+            .then((blob) => {
+                if (!active) return;
+                const type = blob.type && blob.type.startsWith('video/') ? blob.type : 'video/mp4';
+                const name = initialVideoName || initialVideoUrl.split('?')[0].split('/').pop() || 'project-video.mp4';
+                loadVideo(new File([blob], name, { type }), { persist: false });
+            })
+            .catch((loadError) => {
+                if (active) setError(loadError.message || 'Could not load the project video.');
+            })
+            .finally(() => {
+                if (active) setRemoteVideoLoading(false);
+            });
+        return () => { active = false; };
+    }, [initialVideoName, initialVideoUrl]);
+
+    useEffect(() => {
+        if (initialVideoUrl) return undefined;
         const generation = videoRestoreGenerationRef.current;
         let active = true;
         loadStoredVideo().then((file) => {
@@ -403,7 +454,7 @@ export default function LocalEditorTab() {
             loadVideo(file, { persist: false });
         });
         return () => { active = false; };
-    }, []);
+    }, [initialVideoUrl]);
 
     const handleMetadata = () => {
         const nextDuration = Math.max(1, Math.round((videoRef.current?.duration || 30) * 1000));
@@ -728,7 +779,7 @@ export default function LocalEditorTab() {
     const reset = () => {
         videoRestoreGenerationRef.current += 1;
         videoLoadStartedRef.current = true;
-        void clearEditorPersistence();
+        if (persistHistory) void clearEditorPersistence();
         videoRef.current?.pause();
         if (videoRef.current) videoRef.current.loop = false;
         if (objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrlRef.current);
@@ -746,7 +797,7 @@ export default function LocalEditorTab() {
     };
 
     if (!videoFile) {
-        return <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white"><div className="border-b border-white/10 px-4 py-3"><h1 className="text-lg font-bold">Local Editor</h1><p className="mt-0.5 text-xs text-zinc-500">Edit local videos, subtitles, and viral hooks in your browser.</p></div><UploadState onFile={loadVideo} error={error} /></div>;
+        return <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white"><div className="flex items-center justify-between border-b border-white/10 px-4 py-3"><div><h1 className="text-lg font-bold">Local Editor</h1><p className="mt-0.5 text-xs text-zinc-500">Edit local videos, subtitles, and viral hooks in your browser.</p></div>{onClose && <button type="button" onClick={onClose} aria-label="Close editor" className="rounded-lg p-2 text-zinc-400 hover:bg-white/10 hover:text-white"><X size={18} /></button>}</div>{remoteVideoLoading ? <div className="flex h-64 items-center justify-center gap-2 text-sm text-zinc-400"><Loader2 size={18} className="animate-spin" />Loading project video…</div> : <UploadState onFile={loadVideo} error={error} />}</div>;
     }
 
     const activeSubtitle = activeCueAt(subtitleCues, playheadMs);
@@ -773,11 +824,13 @@ export default function LocalEditorTab() {
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-6 py-5">
                 <div><h1 className="text-lg font-bold">Local Editor</h1><p className="mt-0.5 text-xs text-zinc-500">{videoFile.name} · local-only editing</p></div>
                 <div className="flex flex-wrap items-center gap-2">
+                    {headerActions}
                     <button type="button" onClick={undo} disabled={!editHistory.past.length} aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"><Undo2 size={13} />Undo</button>
                     <button type="button" onClick={redo} disabled={!editHistory.future.length} aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)" className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"><Redo2 size={13} />Redo</button>
                     <button type="button" onClick={exportVideo} disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-fuchsia-500 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"><Film size={13} />{busy ? `Exporting ${Math.round(progress * 100)}%` : 'Export Video'}</button>
                     <button type="button" onClick={exportSubtitles} disabled={busy || !subtitleCues.length} className="flex items-center gap-1.5 rounded-lg bg-violet-500 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50"><Download size={13} />Export Subtitles</button>
                     <button type="button" onClick={reset} disabled={busy} aria-label="Reset" className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:opacity-50"><RotateCcw size={13} />Reset</button>
+                    {onClose && <button type="button" onClick={onClose} aria-label="Close editor" title="Close editor" className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5"><X size={13} />Close</button>}
                 </div>
             </div>
             {error && <div className="mx-6 mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div>}
@@ -863,8 +916,10 @@ export default function LocalEditorTab() {
                         {selected?.type === 'subtitle' ? <SubtitleInspector cue={selectedCue} onChange={updateSubtitle} onDelete={removeSubtitleCue} /> : <p className="text-xs text-zinc-500">Select a subtitle cue or the hook track to edit its properties.</p>}
                     </section>
                     <div className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-xs text-zinc-500"><span>Playhead</span><span className="font-mono text-zinc-300">{formatClock(playheadMs)} / {formatClock(durationMs)}</span></div>
+                    {sidePanel}
                 </aside>
             </div>
+            {footer && <div className="border-t border-white/10 px-6 py-3">{footer}</div>}
         </div>
     );
 }

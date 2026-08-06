@@ -17,6 +17,8 @@ import InspectorPanel from "./InspectorPanel";
 import SubtitleTranslationPanel from "../SubtitleTranslationPanel";
 import { saveAndRenderVersion } from "../../editor/renderVersion";
 import EditorActionToolbar from "./EditorActionToolbar";
+import LocalEditorTab from "../local-editor/LocalEditorTab";
+import { DEFAULT_SUBTITLE_STYLE } from "../local-editor/localEditorStyles";
 
 const proxyUrl = (url) => {
   if (!url || url.startsWith("blob:") || !url.startsWith("http")) return url;
@@ -34,6 +36,86 @@ const defaultSubtitleTrackId = (nextManifest) =>
   nextManifest?.subtitle_tracks?.[0]?.id ||
   (nextManifest?.timeline?.transcript?.segments?.length ? "original" : null);
 
+const localCuesFromTrack = (track) => (track?.cues || track?.captions || []).map((cue, index) => ({
+  id: cue.id || `${track?.id || "subtitle"}-${index}`,
+  type: "subtitle",
+  label: cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
+  text: cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
+  startMs: Number(cue.startMs || 0),
+  endMs: Number(cue.endMs || cue.startMs || 0),
+  captions: Array.isArray(cue.captions) ? cue.captions : undefined,
+}));
+
+const manifestToLocalEditorState = (sourceManifest, trackId) => {
+  const source = sourceManifest || {};
+  const tracks = Array.isArray(source.subtitle_tracks) ? source.subtitle_tracks : [];
+  const activeTrack = tracks.find((track) => track.id === trackId) || tracks[0];
+  const hook = source.layers?.hook;
+  return {
+    subtitleCues: localCuesFromTrack(activeTrack),
+    subtitleStyle: activeTrack?.style || source.layers?.subtitles?.style || DEFAULT_SUBTITLE_STYLE,
+    subtitleLanguage: activeTrack?.language || source.layers?.subtitles?.language || "en",
+    hook: hook ? {
+      id: "hook",
+      text: hook.text || "",
+      startMs: Number(hook.startMs || 0),
+      endMs: Number(hook.endMs || ((hook.startMs || 0) + (hook.displayDurationSec || 2) * 1000)),
+      position: hook.position || "top",
+      size: hook.size || "M",
+      entranceAnimation: hook.entranceAnimation || "spring",
+      color: hook.color || "#FFFFFF",
+      fontSize: Number(hook.fontSize || 48),
+      background: hook.background || "#111111",
+    } : null,
+  };
+};
+
+const localEditorStateToManifest = (sourceManifest, localState, trackId) => {
+  const source = JSON.parse(JSON.stringify(sourceManifest || {}));
+  const state = localState || manifestToLocalEditorState(source, trackId);
+  const nextTrackId = trackId || "original";
+  const existingTracks = Array.isArray(source.subtitle_tracks) ? source.subtitle_tracks : [];
+  const existingTrack = existingTracks.find((track) => track.id === nextTrackId) || {};
+  const cues = (state.subtitleCues || []).map((cue) => ({
+    text: cue.text || cue.label || "",
+    startMs: Math.round(Number(cue.startMs || 0)),
+    endMs: Math.round(Number(cue.endMs || cue.startMs || 0)),
+    ...(Array.isArray(cue.captions) && cue.captions.length ? { captions: cue.captions } : {}),
+  }));
+  source.subtitle_tracks = [
+    ...existingTracks.filter((track) => track.id !== nextTrackId),
+    {
+      ...existingTrack,
+      id: nextTrackId,
+      language: state.subtitleLanguage || existingTrack.language || "en",
+      label: existingTrack.label || state.subtitleLanguage || "Original",
+      origin: existingTrack.origin || "manual",
+      cues,
+      captions: cues.flatMap((cue) => cue.captions || [{ text: cue.text, startMs: cue.startMs, endMs: cue.endMs }]),
+      style: state.subtitleStyle || existingTrack.style || DEFAULT_SUBTITLE_STYLE,
+    },
+  ];
+  source.active_subtitle_track_id = nextTrackId;
+  source.layers = {
+    ...(source.layers || {}),
+    subtitles: {
+      ...(source.layers?.subtitles || {}),
+      captions: cues.flatMap((cue) => cue.captions || [{ text: cue.text, startMs: cue.startMs, endMs: cue.endMs }]),
+      cues,
+      style: state.subtitleStyle || source.layers?.subtitles?.style || DEFAULT_SUBTITLE_STYLE,
+      language: state.subtitleLanguage || source.layers?.subtitles?.language || "en",
+    },
+    hook: state.hook ? {
+      ...(source.layers?.hook || {}),
+      ...state.hook,
+      startMs: Math.round(Number(state.hook.startMs || 0)),
+      endMs: Math.round(Number(state.hook.endMs || 0)),
+      displayDurationSec: Math.max(0.001, (Number(state.hook.endMs || 0) - Number(state.hook.startMs || 0)) / 1000),
+    } : null,
+  };
+  return source;
+};
+
 export default function FullScreenEditor({
   isOpen = true,
   jobId,
@@ -47,6 +129,7 @@ export default function FullScreenEditor({
   onVersionChange,
   editorActions = null,
   onSessionReady,
+  useLocalEditor = false,
 }) {
   const [version, setVersion] = useState(initialVersion);
   const [manifest, setManifest] = useState(initialManifest);
@@ -72,6 +155,7 @@ export default function FullScreenEditor({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [localDraft, setLocalDraft] = useState(() => manifestToLocalEditorState(initialManifest, defaultSubtitleTrackId(initialManifest)));
   const durationSeconds = editorState.durationSec || 30;
   const fps = editorState.fps || clip.output_fps || 30;
 
@@ -123,7 +207,9 @@ export default function FullScreenEditor({
       setEditorState(
         manifestToEditorState(hydratedManifest, { fps: clip.output_fps || 30 }),
       );
-      setActiveTrackId(defaultSubtitleTrackId(hydratedManifest));
+      const nextTrackId = defaultSubtitleTrackId(hydratedManifest);
+      setActiveTrackId(nextTrackId);
+      setLocalDraft(manifestToLocalEditorState(hydratedManifest, nextTrackId));
     };
     load().catch(() => {});
     return () => {
@@ -150,6 +236,14 @@ export default function FullScreenEditor({
   const currentManifest = useMemo(
     () => ({ ...editorStateToManifest(editorState, manifest || initialManifest || {}), active_subtitle_track_id: activeTrackId || null }),
     [activeTrackId, editorState, initialManifest, manifest],
+  );
+  const projectManifest = useMemo(
+    () => (useLocalEditor ? localEditorStateToManifest(currentManifest, localDraft, activeTrackId) : currentManifest),
+    [activeTrackId, currentManifest, localDraft, useLocalEditor],
+  );
+  const projectInputProps = useMemo(
+    () => ({ ...manifestToRenderProps(projectManifest, { activeSubtitleTrackId: activeTrackId }), videoUrl: proxyUrl(projectManifest.timeline?.source_video_url || clip.video_url) }),
+    [activeTrackId, clip.video_url, projectManifest],
   );
   const currentManifestRef = useRef(currentManifest);
   useEffect(() => {
@@ -275,7 +369,9 @@ export default function FullScreenEditor({
       setEditorState(
         manifestToEditorState(hydratedManifest, { fps: clip.output_fps || 30 }),
       );
-      setActiveTrackId(defaultSubtitleTrackId(hydratedManifest));
+      const nextTrackId = defaultSubtitleTrackId(hydratedManifest);
+      setActiveTrackId(nextTrackId);
+      setLocalDraft(manifestToLocalEditorState(hydratedManifest, nextTrackId));
       setSelectedItem(null);
     } catch {
       /* keep the current draft active when a historical version cannot be loaded */
@@ -320,7 +416,9 @@ export default function FullScreenEditor({
       onVersionChange?.(payload.version?.version_id);
       setManifest(hydratedManifest);
       setEditorState(manifestToEditorState(hydratedManifest, { fps }));
-      setActiveTrackId(defaultSubtitleTrackId(hydratedManifest));
+      const nextTrackId = defaultSubtitleTrackId(hydratedManifest);
+      setActiveTrackId(nextTrackId);
+      setLocalDraft(manifestToLocalEditorState(hydratedManifest, nextTrackId));
       setSelectedItem(null);
     } catch (branchError) {
       setError(branchError.message);
@@ -333,7 +431,7 @@ export default function FullScreenEditor({
     setBusy(true);
     setError(null);
     const props = {
-      ...inputProps,
+      ...(useLocalEditor ? projectInputProps : inputProps),
       durationInFrames: editorState.durationFrames,
       fps,
       width: clip.output_width || 1080,
@@ -342,7 +440,7 @@ export default function FullScreenEditor({
     const result = await saveAndRenderVersion({
       jobId,
       clipIndex,
-      manifest: { ...currentManifest, active_subtitle_track_id: activeTrackId },
+      manifest: { ...projectManifest, active_subtitle_track_id: activeTrackId },
       parentVersionId: version.version_id,
       props,
     });
@@ -359,7 +457,7 @@ export default function FullScreenEditor({
         result.error || "Render failed. The previous version is still active.",
       );
     setBusy(false);
-  }, [activeTrackId, busy, clip.output_height, clip.output_width, clipIndex, currentManifest, editorState.durationFrames, fps, inputProps, jobId, onRendered, onVersionChange, version]);
+  }, [activeTrackId, busy, clip.output_height, clip.output_width, clipIndex, currentManifest, editorState.durationFrames, fps, inputProps, jobId, onRendered, onVersionChange, projectInputProps, projectManifest, useLocalEditor, version]);
 
   const downloadVersion = async () => {
     if (!version?.output_url || version.status !== "done") return;
@@ -388,6 +486,42 @@ export default function FullScreenEditor({
   }, [applyLayer, currentManifest, isOpen, onSessionReady, saveVersion, setSourceVideo]);
 
   if (!isOpen) return null;
+  if (useLocalEditor) {
+    return (
+      <div className="fixed inset-0 z-[60] bg-background text-white" data-testid="full-screen-editor">
+        <LocalEditorTab
+          initialVideoUrl={projectInputProps.videoUrl}
+          initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
+          initialEditorState={localDraft}
+          initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}`}
+          onStateChange={setLocalDraft}
+          persistHistory={false}
+          onClose={onClose}
+          headerActions={editorActions ? <EditorActionToolbar {...editorActions} /> : null}
+          sidePanel={(
+            <section className="rounded-xl border border-white/10 bg-white/[.02] p-4" aria-label="Version history">
+              <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-primary">Version History</h2>
+              <VersionHistory
+                versions={versions}
+                currentVersionId={version?.version_id}
+                selectedVersionId={version?.version_id}
+                onSelect={loadVersion}
+                onBranch={branchVersion}
+              />
+            </section>
+          )}
+          footer={(
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <span className="mr-auto text-xs text-red-300" role="alert">{error}</span>
+              <button type="button" onClick={downloadVersion} disabled={!version?.output_url || version.status !== "done" || busy} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40">Download version</button>
+              <button type="button" onClick={onClose} className="rounded-lg px-3 py-2 text-xs font-semibold text-zinc-400 hover:bg-white/10 hover:text-white">Cancel</button>
+              <button type="button" onClick={saveVersion} disabled={busy || !version?.version_id} className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy ? "Rendering…" : "Save as new version"}</button>
+            </div>
+          )}
+        />
+      </div>
+    );
+  }
   return (
     <div
       className="fixed inset-0 z-[60] flex flex-col bg-background text-white"
