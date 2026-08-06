@@ -18,6 +18,11 @@ describe('local editor Remotion rendering', () => {
 
         expect(props).toMatchObject({ durationInFrames: 150, fps: 25, width: 608, height: 1080 });
         expect(props.subtitles.captions).toEqual([{ text: 'Hello', startMs: 500, endMs: 1500 }]);
+        expect(props.subtitles.style).toMatchObject({
+            fontFamily: 'Verdana',
+            fontSize: 52.8,
+            borderWidth: 3,
+        });
         expect(props.hook).toMatchObject({ text: 'Hook', displayDurationSec: 2, position: 'center' });
     });
 

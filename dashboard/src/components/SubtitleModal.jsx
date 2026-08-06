@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Type, Loader2 } from 'lucide-react';
 import { getApiUrl } from '../config';
 import RemotionPreview from './RemotionPreview';
+import { toClipGeneratorSubtitleStyle } from './local-editor/localEditorStyles';
 
 // Route MinIO URLs through the backend proxy to avoid CORS blocks
 const getUrlFilename = (url) => {
@@ -121,17 +122,17 @@ export default function SubtitleModal({ isOpen, onClose, onGenerate, isProcessin
     const subtitleConfig = {
         captions,
         position,
-        style: {
+        style: toClipGeneratorSubtitleStyle({
             fontFamily: fontName,
-            fontSize: fontSize * 2.2, // Scale up for 1080p (modal fontSize is for small preview)
+            fontSize,
             fontColor,
             highlightColor,
             borderColor,
-            borderWidth: borderWidth * 1.5,
+            borderWidth,
             bgColor,
             bgOpacity,
             animation,
-        },
+        }),
     };
 
     // Fallback: static CSS preview (same as original)

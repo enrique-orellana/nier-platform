@@ -7,6 +7,7 @@ import {
     SUBTITLE_HIGHLIGHT_PRESETS,
     hookPositionClass,
     normalizeSubtitleStyle,
+    toClipGeneratorSubtitleStyle,
     subtitlePositionClass,
 } from './localEditorStyles';
 
@@ -24,10 +25,24 @@ describe('local editor overlay styles', () => {
         });
     });
 
+    it('converts editor subtitle controls to the Clip Generator render scale', () => {
+        expect(toClipGeneratorSubtitleStyle({
+            fontSize: 24,
+            borderWidth: 2,
+            fontFamily: 'Verdana',
+            animation: 'pop',
+        })).toMatchObject({
+            fontSize: 52.8,
+            borderWidth: 3,
+            fontFamily: 'Verdana',
+            animation: 'pop',
+        });
+    });
+
     it('maps subtitle positions to preview classes', () => {
-        expect(subtitlePositionClass('top')).toContain('top');
-        expect(subtitlePositionClass('middle')).toContain('top-1/2');
-        expect(subtitlePositionClass('bottom')).toContain('bottom');
+        expect(subtitlePositionClass('top')).toBe('top-[12%]');
+        expect(subtitlePositionClass('middle')).toBe('top-[45%]');
+        expect(subtitlePositionClass('bottom')).toBe('bottom-[10%]');
     });
 
     it('matches the existing subtitle color preset values and labels', () => {
