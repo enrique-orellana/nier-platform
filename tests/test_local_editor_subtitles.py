@@ -1,4 +1,8 @@
-from local_editor_subtitles import build_local_editor_srt, subtitle_style_to_ffmpeg_options
+from local_editor_subtitles import (
+    build_local_editor_srt,
+    subtitle_style_to_ffmpeg_options,
+    word_captions_from_transcript,
+)
 
 
 def test_build_local_editor_srt_preserves_multiline_cue_text_and_timing():
@@ -32,3 +36,17 @@ def test_subtitle_style_maps_editor_values_to_existing_ffmpeg_renderer():
         "bg_color": "#000000",
         "bg_opacity": 0.5,
     }
+
+
+def test_word_captions_from_transcript_matches_clip_generator_timing_contract():
+    assert word_captions_from_transcript({
+        "segments": [{
+            "words": [
+                {"word": "Do", "start": 0.2, "end": 0.4},
+                {"word": "I", "start": 0.4, "end": 0.55},
+            ],
+        }],
+    }) == [
+        {"text": "Do", "startMs": 200, "endMs": 400},
+        {"text": "I", "startMs": 400, "endMs": 550},
+    ]

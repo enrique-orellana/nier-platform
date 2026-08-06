@@ -8,6 +8,7 @@ import { burnLocalEditorSubtitles, renderLocalVideoOnBackend, renderLocalVideoOn
 import { detectEmbeddedSideBars, getFilledFrameDimensions } from './localEditorVideo';
 import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
+import { groupCaptionsIntoBlocks } from '../../remotion/lib/captions';
 import { clearEditorPersistence, createEmptyEditorHistory, EDITOR_HISTORY_LIMIT, loadStoredVideo, readEditorHistory, saveEditorHistory, saveStoredVideo } from './localEditorPersistence';
 import {
     DEFAULT_SUBTITLE_STYLE,
@@ -53,16 +54,33 @@ const clampCue = (cue, durationMs) => {
     return { ...cue, startMs, endMs };
 };
 
-const normalizeGeneratedCues = (segments, durationMs) => {
+const normalizeGeneratedCues = (captions, durationMs) => {
+    const wordCaptions = (Array.isArray(captions) ? captions : [])
+        .map((caption) => ({
+            text: String(caption?.text || caption?.word || '').trim(),
+            startMs: Number(caption?.startMs ?? Number(caption?.start || 0) * 1000),
+            endMs: Number(caption?.endMs ?? Number(caption?.end || 0) * 1000),
+        }))
+        .filter((caption) => caption.text && Number.isFinite(caption.startMs) && Number.isFinite(caption.endMs) && caption.endMs > caption.startMs)
+        .sort((left, right) => left.startMs - right.startMs);
+    const blocks = wordCaptions.length
+        ? groupCaptionsIntoBlocks(wordCaptions).map((block) => ({
+            text: block.text,
+            startMs: block.startMs,
+            endMs: block.endMs,
+            captions: block.words.map((word) => ({ text: word.text, startMs: word.startMs, endMs: word.endMs })),
+        }))
+        : [];
     let previousEndMs = 0;
-    return (Array.isArray(segments) ? segments : [])
+    return blocks
         .map((segment, index) => ({
             id: `generated-${Date.now()}-${index}`,
             type: 'subtitle',
-            label: String(segment?.text || '').trim(),
-            text: String(segment?.text || '').trim(),
-            startMs: Number(segment?.start) * 1000,
-            endMs: Number(segment?.end) * 1000,
+            label: segment.text,
+            text: segment.text,
+            startMs: segment.startMs,
+            endMs: segment.endMs,
+            captions: segment.captions,
         }))
         .filter((cue) => cue.text && Number.isFinite(cue.startMs) && Number.isFinite(cue.endMs) && cue.endMs > cue.startMs)
         .sort((left, right) => left.startMs - right.startMs)
@@ -456,7 +474,7 @@ export default function LocalEditorTab() {
             const response = await fetch(getApiUrl('/api/local-editor/transcribe'), { method: 'POST', body: formData });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(payload.detail || 'Could not generate subtitles.');
-            const generatedCues = normalizeGeneratedCues(payload.segments, durationMs);
+              const generatedCues = normalizeGeneratedCues(payload.captions?.length ? payload.captions : payload.segments, durationMs);
             if (!generatedCues.length) throw new Error('No speech was detected in this video.');
             commitEdit((current) => ({ ...current, subtitleCues: generatedCues, subtitleLanguage: String(payload.language || 'en').toLowerCase() }));
             setSelected(null);
@@ -732,6 +750,10 @@ export default function LocalEditorTab() {
     }
 
     const activeSubtitle = activeCueAt(subtitleCues, playheadMs);
+    const activeSubtitleWords = activeSubtitle?.captions?.length
+        ? activeSubtitle.captions
+        : activeSubtitle ? [{ text: activeSubtitle.text, startMs: activeSubtitle.startMs, endMs: activeSubtitle.endMs }] : [];
+    const activeSubtitleWordIndex = activeSubtitleWords.findIndex((word) => playheadMs >= word.startMs && playheadMs < word.endMs);
     const activeHook = hook && playheadMs >= hook.startMs && playheadMs < hook.endMs ? hook : null;
     const previewSubtitleStyle = normalizeSubtitleStyle(subtitleStyle);
     const hookElapsedMs = activeHook ? Math.max(0, playheadMs - activeHook.startMs) : 0;
@@ -767,7 +789,13 @@ export default function LocalEditorTab() {
                             <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className="absolute right-3 top-3 z-20 rounded-lg border border-white/20 bg-black/60 p-2 text-white shadow-lg backdrop-blur hover:bg-black/80">{isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
                             <div className="pointer-events-none absolute inset-0">
                                 {activeHook && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 ${hookPositionClass(activeHook.position)}`}><div className="rounded-lg px-3 py-2 text-center font-bold shadow-lg" style={{ color: activeHook.color, backgroundColor: activeHook.background, fontSize: `${Math.max(14, (activeHook.fontSize / 2.6) * hookSizeScale)}px`, ...hookEntranceStyle }}>{activeHook.text}</div></div>}
-                                {activeSubtitle && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`} style={{ fontFamily: previewSubtitleStyle.fontFamily, color: previewSubtitleStyle.animation === 'karaoke' ? previewSubtitleStyle.highlightColor : previewSubtitleStyle.fontColor, fontSize: `${Math.max(12, previewSubtitleStyle.fontSize / 1.6)}px`, textShadow: outlineTextShadow(previewSubtitleStyle.borderWidth, previewSubtitleStyle.borderColor), backgroundColor: previewSubtitleStyle.bgOpacity > 0 ? hexToRgba(previewSubtitleStyle.bgColor, previewSubtitleStyle.bgOpacity) : 'transparent' }}>{activeSubtitle.text}</div>}
+                                {activeSubtitle && <div className={`absolute left-1/2 flex w-[88%] -translate-x-1/2 flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`} style={{ fontFamily: previewSubtitleStyle.fontFamily, fontSize: `${Math.max(12, previewSubtitleStyle.fontSize / 1.6)}px`, textShadow: outlineTextShadow(previewSubtitleStyle.borderWidth, previewSubtitleStyle.borderColor), backgroundColor: previewSubtitleStyle.bgOpacity > 0 ? hexToRgba(previewSubtitleStyle.bgColor, previewSubtitleStyle.bgOpacity) : 'transparent' }}>
+                                    {activeSubtitleWords.map((word, index) => {
+                                        const isActive = index === activeSubtitleWordIndex;
+                                        const isKaraoke = previewSubtitleStyle.animation === 'karaoke' && isActive;
+                                        return <span key={`${word.startMs}-${index}`} style={{ color: isKaraoke ? previewSubtitleStyle.bgColor : isActive ? previewSubtitleStyle.highlightColor : previewSubtitleStyle.fontColor, display: 'inline-block', transform: isActive && previewSubtitleStyle.animation === 'pop' ? 'scale(1.1)' : 'none', textShadow: previewSubtitleStyle.animation === 'word-highlight' && isActive ? `0 0 12px ${previewSubtitleStyle.highlightColor}, 0 0 24px ${previewSubtitleStyle.highlightColor}40` : 'inherit', backgroundColor: isKaraoke ? previewSubtitleStyle.highlightColor : 'transparent', borderRadius: isKaraoke ? 4 : 0, padding: isKaraoke ? '2px 6px' : 0 }}>{word.text}</span>;
+                                    })}
+                                </div>}
                             </div>
                             <div data-testid="local-editor-video-controls" className="absolute bottom-0 left-0 right-0 z-30 flex items-center justify-center gap-1 border-t border-white/10 bg-[#202126]/95 px-2 py-1.5 text-zinc-300 shadow-lg backdrop-blur">
                                 <button type="button" aria-label="Go to beginning" title="Go to beginning" onClick={() => handleSeek(0)} className="rounded p-1.5 hover:bg-white/10 hover:text-white"><SkipBack size={16} /></button>

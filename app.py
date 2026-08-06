@@ -22,7 +22,11 @@ from render_manifest import load_manifest, save_manifest_atomic, verify_manifest
 from version_store import VersionStore
 from s3_uploader import upload_job_artifacts, delete_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
 from ai_client import AIConfig, load_ai_config, ai_config_to_env, discover_lmstudio_models, chat_json
-from local_editor_subtitles import write_local_editor_srt, subtitle_style_to_ffmpeg_options
+from local_editor_subtitles import (
+    subtitle_style_to_ffmpeg_options,
+    word_captions_from_transcript,
+    write_local_editor_srt,
+)
 
 load_dotenv()
 
@@ -1718,6 +1722,7 @@ async def transcribe_local_editor_video(file: UploadFile = File(...)):
         transcript = await loop.run_in_executor(None, transcribe_audio, temp_path)
         return {
             "language": transcript.get("language", "und"),
+            "captions": word_captions_from_transcript(transcript),
             "segments": build_subtitle_segments(transcript, 0, float("inf")),
         }
     except HTTPException:

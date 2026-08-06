@@ -18,7 +18,11 @@ export const buildRemotionRenderProps = ({
     height: Number(height),
     subtitles: subtitleCues.length
         ? {
-            captions: subtitleCues.map(({ text, startMs, endMs }) => ({ text: String(text || ''), startMs: Number(startMs), endMs: Number(endMs) })),
+            captions: subtitleCues.flatMap(({ text, startMs, endMs, captions }) => (
+                Array.isArray(captions) && captions.length
+                    ? captions.map((caption) => ({ text: String(caption.text || ''), startMs: Number(caption.startMs), endMs: Number(caption.endMs) }))
+                    : [{ text: String(text || ''), startMs: Number(startMs), endMs: Number(endMs) }]
+            )),
             position: subtitleStyle?.position || 'bottom',
             style: subtitleStyle || undefined,
         }
@@ -126,6 +130,11 @@ export async function burnLocalEditorSubtitles({
     fetchImpl = fetch,
 }) {
     if (!subtitleCues.length) {
+        return renderLocalVideoOnBackend({ file, durationSeconds, fps, width, height, subtitleCues, subtitleStyle, hook, onProgress, pollMs, fetchImpl });
+    }
+
+    const hasWordTimings = subtitleCues.some((cue) => Array.isArray(cue.captions) && cue.captions.length > 0);
+    if (hasWordTimings) {
         return renderLocalVideoOnBackend({ file, durationSeconds, fps, width, height, subtitleCues, subtitleStyle, hook, onProgress, pollMs, fetchImpl });
     }
 

@@ -36,6 +36,18 @@ def write_local_editor_srt(cues: Iterable[dict[str, Any]], path: str | Path) -> 
     Path(path).write_text(build_local_editor_srt(cues), encoding="utf-8")
 
 
+def word_captions_from_transcript(transcript: dict[str, Any] | None) -> list[dict[str, Any]]:
+    captions: list[dict[str, Any]] = []
+    for segment in (transcript or {}).get("segments", []):
+        for word in segment.get("words", []):
+            text = str(word.get("word") or word.get("text") or "").strip()
+            start_ms = round(float(word.get("start") or 0) * 1000)
+            end_ms = round(float(word.get("end") or 0) * 1000)
+            if text and end_ms > start_ms:
+                captions.append({"text": text, "startMs": start_ms, "endMs": end_ms})
+    return captions
+
+
 def subtitle_style_to_ffmpeg_options(style: dict[str, Any] | None) -> dict[str, Any]:
     source = style or {}
     return {
