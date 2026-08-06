@@ -11,14 +11,14 @@ import { VideoEffects } from "./VideoEffects";
  * Uses native HTML5 media in the Player and the browser-compatible Remotion Video during rendering.
  */
 export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
-  const { videoUrl, subtitles, subtitleTracks, activeSubtitleTrackId, hook, effects } =
+  const { videoUrl, videoFit, subtitles, subtitleTracks, activeSubtitleTrackId, hook, effects } =
     rawProps as unknown as ShortVideoProps;
   const environment = useRemotionEnvironment();
   const activeTrack = subtitleTracks?.find(
     (track) => track.id === (activeSubtitleTrackId || subtitleTracks[0]?.id)
   );
   const activeSubtitles = activeTrack && subtitles
-    ? { ...subtitles, captions: activeTrack.captions, style: activeTrack.style || subtitles.style }
+    ? { ...subtitles, captions: activeTrack.captions, blocks: undefined, style: activeTrack.style || subtitles.style }
     : subtitles;
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
@@ -27,12 +27,12 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
         {environment.isRendering ? (
             <Video
             src={videoUrl}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            style={{ width: "100%", height: "100%", objectFit: videoFit || "cover" }}
           />
         ) : (
           <Html5Video
             src={videoUrl}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            style={{ width: "100%", height: "100%", objectFit: videoFit || "cover" }}
           />
         )}
       </VideoEffects>

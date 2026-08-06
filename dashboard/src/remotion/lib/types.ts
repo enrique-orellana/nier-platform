@@ -7,6 +7,13 @@ export interface CaptionWord {
   endMs: number;
 }
 
+export interface SubtitleBlock {
+  words: CaptionWord[];
+  startMs: number;
+  endMs: number;
+  text: string;
+}
+
 // --- Subtitle config ---
 export type SubtitleAnimation = "none" | "word-highlight" | "pop" | "karaoke";
 export type SubtitlePosition = "top" | "middle" | "bottom";
@@ -25,6 +32,7 @@ export interface SubtitleStyle {
 
 export interface SubtitleConfig {
   captions: CaptionWord[];
+  blocks?: SubtitleBlock[];
   position: SubtitlePosition;
   style: SubtitleStyle;
 }
@@ -77,6 +85,7 @@ export interface ShortVideoProps {
   fps: number;
   width: number;
   height: number;
+  videoFit?: "cover" | "contain";
   subtitles: SubtitleConfig | null;
   subtitleTracks?: SubtitleTrack[];
   activeSubtitleTrackId?: string | null;

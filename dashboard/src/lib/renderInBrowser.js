@@ -21,6 +21,7 @@ export async function renderInBrowser({
     fps = 30,
     width = 1080,
     height = 1920,
+    videoFit = 'cover',
     subtitles = null,
     hook = null,
     effects = null,
@@ -45,13 +46,14 @@ export async function renderInBrowser({
             fps,
             width,
             height,
+            videoFit,
             subtitles,
             hook,
             effects,
         },
         container: 'mp4',
         videoCodec: 'h264',
-        videoBitrate: 'high',
+        videoBitrate: 'very-high',
         audioCodec: 'aac',
         onProgress: onProgress
             ? ({ progress }) => onProgress(progress)

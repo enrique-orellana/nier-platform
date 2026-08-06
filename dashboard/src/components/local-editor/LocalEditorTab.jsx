@@ -771,6 +771,7 @@ export default function LocalEditorTab({
                 durationSeconds: Number(video.duration) > 0 ? video.duration : durationMs / 1000,
                 fps: 30,
                 ...outputDimensions,
+                videoFit: cropForExport ? 'cover' : 'contain',
                 subtitleCues,
                 subtitleStyle,
                 hook,

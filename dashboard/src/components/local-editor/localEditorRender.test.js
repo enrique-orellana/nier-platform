@@ -18,6 +18,7 @@ describe('local editor Remotion rendering', () => {
 
         expect(props).toMatchObject({ durationInFrames: 150, fps: 25, width: 608, height: 1080 });
         expect(props.subtitles.captions).toEqual([{ text: 'Hello', startMs: 500, endMs: 1500 }]);
+        expect(props.subtitles.blocks).toEqual([{ words: [{ text: 'Hello', startMs: 500, endMs: 1500 }], startMs: 500, endMs: 1500, text: 'Hello' }]);
         expect(props.subtitles.style).toMatchObject({
             fontFamily: 'Verdana',
             fontSize: 52.8,
@@ -47,6 +48,7 @@ describe('local editor Remotion rendering', () => {
             { text: 'Do', startMs: 200, endMs: 400 },
             { text: 'I', startMs: 400, endMs: 550 },
         ]);
+        expect(props.subtitles.blocks).toHaveLength(1);
     });
 
     it('uses edited cue text instead of stale generated words', () => {
@@ -173,11 +175,10 @@ describe('local editor Remotion rendering', () => {
         expect(fetchImpl.mock.calls[0][1].body).toBeInstanceOf(FormData);
     });
 
-    it('burns edited cues through the backend FFmpeg subtitle path after rendering', async () => {
+    it('renders imported and edited cues through the native Remotion path once', async () => {
         const fetchImpl = vi.fn()
             .mockResolvedValueOnce({ ok: true, json: async () => ({ renderId: 'render-1', jobId: 'local-editor-1' }) })
-            .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'done', progress: 100, outputUrl: '/output/local-editor-1/render.mp4' }) })
-            .mockResolvedValueOnce({ ok: true, json: async () => ({ outputUrl: '/videos/local-editor-1/subtitled.mp4' }) });
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'done', progress: 100, outputUrl: '/output/local-editor-1/render.mp4' }) });
 
         const outputUrl = await burnLocalEditorSubtitles({
             file: new File(['video'], 'source.mp4', { type: 'video/mp4' }),
@@ -190,13 +191,11 @@ describe('local editor Remotion rendering', () => {
             fetchImpl,
         });
 
-        expect(outputUrl).toBe('/videos/local-editor-1/subtitled.mp4');
-        expect(fetchImpl.mock.calls[2][0]).toContain('/api/local-editor/burn-subtitles');
-        expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toMatchObject({
-            job_id: 'local-editor-1',
-            input_filename: 'render.mp4',
-            subtitle_cues: [{ text: 'Do I need to undress?', startMs: 0, endMs: 1000 }],
-        });
+        expect(outputUrl).toBe('/videos/local-editor-1/render.mp4');
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+        expect(JSON.parse(fetchImpl.mock.calls[0][1].body.get('props')).subtitles.blocks).toEqual([
+            { words: [{ text: 'Do I need to undress?', startMs: 0, endMs: 1000 }], startMs: 0, endMs: 1000, text: 'Do I need to undress?' },
+        ]);
     });
 
     it('uses the Clip Generator Remotion path for word-timed generated cues', async () => {

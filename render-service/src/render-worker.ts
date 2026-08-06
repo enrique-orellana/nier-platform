@@ -19,6 +19,7 @@ export interface RenderParams {
     fps: number;
     width: number;
     height: number;
+    videoFit?: "cover" | "contain";
     subtitles: unknown;
     hook: unknown;
     effects: unknown;

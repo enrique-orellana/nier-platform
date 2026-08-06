@@ -11,13 +11,13 @@ import { VideoEffects } from "./VideoEffects";
  * Uses @remotion/media Video for browser-side rendering compatibility.
  */
 export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
-  const { videoUrl, subtitles, subtitleTracks, activeSubtitleTrackId, hook, effects } =
+  const { videoUrl, videoFit, subtitles, subtitleTracks, activeSubtitleTrackId, hook, effects } =
     rawProps as unknown as ShortVideoProps;
   const activeTrack = subtitleTracks?.find(
     (track) => track.id === (activeSubtitleTrackId || subtitleTracks[0]?.id)
   );
   const activeSubtitles = activeTrack && subtitles
-    ? { ...subtitles, captions: activeTrack.captions, style: activeTrack.style || subtitles.style }
+    ? { ...subtitles, captions: activeTrack.captions, blocks: undefined, style: activeTrack.style || subtitles.style }
     : subtitles;
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
@@ -26,7 +26,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
         <Video
           src={videoUrl}
           style={{ width: "100%", height: "100%" }}
-          objectFit="cover"
+          objectFit={videoFit || "cover"}
         />
       </VideoEffects>
 

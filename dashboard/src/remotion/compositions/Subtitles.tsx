@@ -33,9 +33,25 @@ const DEFAULT_SUBTITLE_STYLE: SubtitleConfig["style"] = {
   animation: "none",
 };
 
+export const getSubtitleFrameRange = (
+  cue: { startMs: number; endMs: number },
+  fps: number
+) => {
+  const startFrame = Math.round((cue.startMs / 1000) * fps);
+  const endFrame = Math.max(startFrame + 1, Math.round((cue.endMs / 1000) * fps));
+  return { startFrame, endFrame, durationFrames: endFrame - startFrame };
+};
+
+export const getSubtitleTimeMs = (
+  blockStartFrame: number,
+  relativeFrame: number,
+  fps: number
+) => ((blockStartFrame + relativeFrame) / fps) * 1000;
+
 export function normalizeSubtitleConfig(config: Partial<SubtitleConfig> | null | undefined): SubtitleConfig {
   return {
     captions: Array.isArray(config?.captions) ? config.captions : [],
+    blocks: Array.isArray(config?.blocks) ? config.blocks : undefined,
     position: config?.position || "bottom",
     style: { ...DEFAULT_SUBTITLE_STYLE, ...(config?.style || {}) },
   };
@@ -44,16 +60,12 @@ export function normalizeSubtitleConfig(config: Partial<SubtitleConfig> | null |
 export const Subtitles: React.FC<SubtitlesProps> = ({ config }) => {
   const { fps } = useVideoConfig();
   const normalizedConfig = normalizeSubtitleConfig(config);
-  const blocks = groupCaptionsIntoBlocks(normalizedConfig.captions);
+  const blocks = normalizedConfig.blocks?.length ? normalizedConfig.blocks : groupCaptionsIntoBlocks(normalizedConfig.captions);
 
   return (
     <AbsoluteFill>
       {blocks.map((block, i) => {
-        const startFrame = Math.round((block.startMs / 1000) * fps);
-        const durationFrames = Math.max(
-          1,
-          Math.round(((block.endMs - block.startMs) / 1000) * fps)
-        );
+        const { startFrame, durationFrames } = getSubtitleFrameRange(block, fps);
 
         return (
           <Sequence
@@ -65,7 +77,7 @@ export const Subtitles: React.FC<SubtitlesProps> = ({ config }) => {
             <SubtitleBlock
               block={block}
               config={normalizedConfig}
-              blockStartMs={block.startMs}
+              blockStartFrame={startFrame}
             />
           </Sequence>
         );
@@ -77,20 +89,20 @@ export const Subtitles: React.FC<SubtitlesProps> = ({ config }) => {
 interface SubtitleBlockProps {
   block: ReturnType<typeof groupCaptionsIntoBlocks>[number];
   config: SubtitleConfig;
-  blockStartMs: number;
+  blockStartFrame: number;
 }
 
 const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
   block,
   config,
-  blockStartMs,
+  blockStartFrame,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { style, position } = config;
 
   // Current time relative to composition start (sequence-relative frame)
-  const currentTimeMs = blockStartMs + (frame / fps) * 1000;
+  const currentTimeMs = getSubtitleTimeMs(blockStartFrame, frame, fps);
   const activeIndex = getActiveWordIndex(block.words, currentTimeMs);
 
   const positionStyle = POSITION_MAP[position] ?? POSITION_MAP.bottom;
@@ -140,7 +152,7 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
             frame={frame}
             fps={fps}
             wordStartMs={word.startMs}
-            blockStartMs={blockStartMs}
+            blockStartFrame={blockStartFrame}
           />
         ))}
       </div>
@@ -157,7 +169,7 @@ interface WordSpanProps {
   frame: number;
   fps: number;
   wordStartMs: number;
-  blockStartMs: number;
+  blockStartFrame: number;
 }
 
 const WordSpan: React.FC<WordSpanProps> = ({
@@ -169,11 +181,9 @@ const WordSpan: React.FC<WordSpanProps> = ({
   frame,
   fps,
   wordStartMs,
-  blockStartMs,
+  blockStartFrame,
 }) => {
-  const wordStartFrame = Math.round(
-    ((wordStartMs - blockStartMs) / 1000) * fps
-  );
+  const wordStartFrame = Math.round((wordStartMs / 1000) * fps) - blockStartFrame;
 
   let transform = "";
   let color = style.fontColor;

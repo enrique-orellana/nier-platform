@@ -78,6 +78,7 @@ export const buildRemotionRenderProps = ({
     fps = 30,
     width,
     height,
+    videoFit = 'cover',
     subtitleCues = [],
     subtitleStyle = null,
     hook = null,
@@ -86,9 +87,16 @@ export const buildRemotionRenderProps = ({
     fps: Number(fps || 30),
     width: Number(width),
     height: Number(height),
+    videoFit,
     subtitles: subtitleCues.length
         ? {
             captions: subtitleCues.flatMap((cue) => cueCaptionsForRender(cue)),
+            blocks: subtitleCues.map((cue) => ({
+                words: cueCaptionsForRender(cue),
+                startMs: Number(cue.startMs),
+                endMs: Number(cue.endMs),
+                text: String(cue.text || ''),
+            })),
             position: subtitleStyle?.position || 'bottom',
             style: toClipGeneratorSubtitleStyle(subtitleStyle || undefined),
         }
@@ -113,13 +121,14 @@ export async function renderLocalVideoOnBrowser({
     fps = 30,
     width,
     height,
+    videoFit = 'cover',
     subtitleCues = [],
     subtitleStyle = null,
     hook = null,
     onProgress = () => {},
     signal,
 }) {
-    const props = buildRemotionRenderProps({ durationSeconds, fps, width, height, subtitleCues, subtitleStyle, hook });
+    const props = buildRemotionRenderProps({ durationSeconds, fps, width, height, videoFit, subtitleCues, subtitleStyle, hook });
     return renderInBrowser({
         videoUrl,
         durationInSeconds: durationSeconds,
@@ -146,6 +155,7 @@ export async function renderLocalVideoOnBackend({
     fps = 30,
     width,
     height,
+    videoFit = 'cover',
     subtitleCues = [],
     subtitleStyle = null,
     hook = null,
@@ -157,7 +167,7 @@ export async function renderLocalVideoOnBackend({
     if (!file) throw new Error('A local video is required.');
     const formData = new FormData();
     formData.append('file', file, file.name);
-    formData.append('props', JSON.stringify(buildRemotionRenderProps({ durationSeconds, fps, width, height, subtitleCues, subtitleStyle, hook })));
+    formData.append('props', JSON.stringify(buildRemotionRenderProps({ durationSeconds, fps, width, height, videoFit, subtitleCues, subtitleStyle, hook })));
 
     const started = await responsePayload(await fetchImpl(getApiUrl('/api/local-editor/render'), { method: 'POST', body: formData }));
     if (!started.renderId || !started.jobId) throw new Error('Render service did not return a render ID.');
@@ -188,6 +198,7 @@ export async function burnLocalEditorSubtitles({
     fps = 30,
     width,
     height,
+    videoFit = 'cover',
     subtitleCues = [],
     subtitleStyle = null,
     hook = null,
@@ -195,41 +206,5 @@ export async function burnLocalEditorSubtitles({
     pollMs = 1200,
     fetchImpl = fetch,
 }) {
-    if (!subtitleCues.length) {
-        return renderLocalVideoOnBackend({ file, durationSeconds, fps, width, height, subtitleCues, subtitleStyle, hook, onProgress, pollMs, fetchImpl });
-    }
-
-    const hasWordTimings = subtitleCues.some((cue) => Array.isArray(cue.captions) && cue.captions.length > 0);
-    if (hasWordTimings) {
-        return renderLocalVideoOnBackend({ file, durationSeconds, fps, width, height, subtitleCues, subtitleStyle, hook, onProgress, pollMs, fetchImpl });
-    }
-
-    const rendered = await renderLocalVideoOnBackend({
-        file,
-        durationSeconds,
-        fps,
-        width,
-        height,
-        subtitleCues: [],
-        subtitleStyle: null,
-        hook,
-        onProgress: (progress) => onProgress(Math.max(0, Math.min(0.85, Number(progress) * 0.85))),
-        pollMs,
-        fetchImpl,
-        returnMetadata: true,
-    });
-
-    const response = await fetchImpl(getApiUrl('/api/local-editor/burn-subtitles'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            job_id: rendered.jobId,
-            input_filename: rendered.filename,
-            subtitle_cues: subtitleCues,
-            subtitle_style: subtitleStyle || {},
-        }),
-    });
-    const payload = await responsePayload(response);
-    onProgress(1);
-    return getApiUrl(payload.outputUrl);
+    return renderLocalVideoOnBackend({ file, durationSeconds, fps, width, height, videoFit, subtitleCues, subtitleStyle, hook, onProgress, pollMs, fetchImpl });
 }
