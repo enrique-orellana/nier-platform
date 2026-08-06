@@ -70,6 +70,20 @@ describe('LocalEditorTab', () => {
         expect(screen.getByTestId('local-editor-timeline-canvas')).toBeInTheDocument();
     });
 
+    it('shows word timings for a cue after its text is entered', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /add subtitle cue/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /add subtitle cue/i }));
+        fireEvent.change(screen.getByLabelText('Subtitle text'), { target: { value: 'One two' } });
+
+        await waitFor(() => expect(screen.getByLabelText('Word 1 text')).toHaveValue('One'));
+        expect(screen.getByLabelText('Word 2 text')).toHaveValue('two');
+        expect(screen.getByLabelText('Word 1 start')).toHaveValue(0);
+        expect(screen.getByLabelText('Word 2 end')).toHaveValue(2000);
+    });
+
     it('offers a viewport-sized player and fullscreen control', async () => {
         const requestFullscreen = vi.fn().mockResolvedValue(undefined);
         Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', { configurable: true, writable: true, value: requestFullscreen });

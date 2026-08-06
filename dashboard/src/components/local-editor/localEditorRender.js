@@ -7,6 +7,12 @@ const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, mill
 const cueWords = (text) => String(text || '').trim().split(/\s+/).filter(Boolean);
 const cueText = (cue) => String(cue?.text || '').trim();
 const captionText = (captions) => captions.map((caption) => String(caption?.text || '').trim()).filter(Boolean).join(' ').trim();
+const sameCaptions = (left = [], right = []) => left.length === right.length && left.every((caption, index) => {
+    const other = right[index];
+    return String(caption?.text || '') === String(other?.text || '')
+        && Number(caption?.startMs) === Number(other?.startMs)
+        && Number(caption?.endMs) === Number(other?.endMs);
+});
 
 const distributeCueWords = (text, startMs, endMs) => {
     const words = cueWords(text);
@@ -32,6 +38,11 @@ export const syncSubtitleCue = (previousCue, nextCue) => {
             : nextCue;
     }
     const previousText = captionText(previousCue.captions);
+    if (Array.isArray(nextCue.captions) && nextCue.captions.length && !sameCaptions(previousCue.captions, nextCue.captions)) {
+        return captionText(nextCue.captions) === nextText
+            ? nextCue
+            : { ...nextCue, captions: distributeCueWords(nextText, nextCue.startMs, nextCue.endMs) };
+    }
     if (previousText !== nextText) {
         return { ...nextCue, captions: distributeCueWords(nextText, nextCue.startMs, nextCue.endMs) };
     }

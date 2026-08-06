@@ -106,6 +106,31 @@ describe('local editor Remotion rendering', () => {
         ]);
     });
 
+    it('keeps manually edited word timings when the cue text matches them', () => {
+        const nextCue = syncSubtitleCue(
+            {
+                text: 'Keep timing',
+                startMs: 0,
+                endMs: 1000,
+                captions: [
+                    { text: 'Keep', startMs: 0, endMs: 300 },
+                    { text: 'timing', startMs: 300, endMs: 1000 },
+                ],
+            },
+            {
+                text: 'Keep timing',
+                startMs: 0,
+                endMs: 1000,
+                captions: [
+                    { text: 'Keep', startMs: 0, endMs: 700 },
+                    { text: 'timing', startMs: 700, endMs: 1000 },
+                ],
+            },
+        );
+
+        expect(nextCue.captions[0].endMs).toBe(700);
+    });
+
     it('renders locally with the same Remotion/WebCodecs composition', async () => {
         renderInBrowser.mockResolvedValue('blob:rendered-mp4');
 
