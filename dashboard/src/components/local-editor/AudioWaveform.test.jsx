@@ -35,6 +35,19 @@ describe('AudioWaveform', () => {
         expect(screen.getByTestId('audio-waveform')).toHaveAttribute('aria-label', 'Audio waveform');
     });
 
+    it('distributes waveform bars across the full lane width', async () => {
+        getAudioData.mockResolvedValue({ durationInSeconds: 4, channelWaveforms: [new Float32Array([0, 0.5, 1, 0.25])] });
+        getWaveformPortion.mockReturnValue([
+            { index: 0, amplitude: 0.25 },
+            { index: 1, amplitude: 0.8 },
+        ]);
+
+        render(<AudioWaveform videoUrl="blob:full-width" durationMs={4000} sampleCount={2} />);
+
+        const bars = await screen.findAllByTestId('audio-waveform-bar');
+        bars.forEach((bar) => expect(bar).toHaveClass('flex-1'));
+    });
+
     it('reuses decoded audio data while recalculating bars for a new sample count', async () => {
         getAudioData.mockResolvedValue({ durationInSeconds: 4, numberOfChannels: 1, sampleRate: 48000, channelWaveforms: [new Float32Array([0, 0.5, 1, 0.25])] });
         getWaveformPortion.mockImplementation(({ numberOfSamples }) => Array.from({ length: numberOfSamples }, (_, index) => ({ index, amplitude: 0.5 })));
