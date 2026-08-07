@@ -24,7 +24,8 @@ export default defineConfig(({ mode }) => {
     allowedHosts: [
       'openshorts.app',
       'www.openshorts.app',
-      'openshorts.127.0.0.1.nip.io'
+      'openshorts.127.0.0.1.nip.io',
+      'openshorts-frontend'
     ],
     proxy: {
       '/api': {
