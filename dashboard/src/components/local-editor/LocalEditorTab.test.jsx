@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalEditorTab from './LocalEditorTab';
 import { DEFAULT_SUBTITLE_STYLE } from './localEditorStyles';
 
+vi.mock('./AudioWaveform', () => ({
+    default: ({ videoUrl }) => <div data-testid="audio-waveform" data-video-url={videoUrl} />,
+}));
+
 const makeVideoFile = () => new File(['video'], 'demo.mp4', { type: 'video/mp4' });
 
 if (!URL.createObjectURL) {
@@ -50,6 +54,8 @@ describe('LocalEditorTab', () => {
         fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
         expect(screen.getByRole('button', { name: /import subtitles/i })).toBeInTheDocument();
         expect(screen.getAllByText('Viral Hook').length).toBeGreaterThan(0);
+        expect(screen.getByTestId('local-editor-audio-track')).toBeInTheDocument();
+        expect(screen.getByTestId('audio-waveform')).toHaveAttribute('data-video-url', 'blob:demo');
     });
 
     it('switches between the subtitle timeline and cue table', async () => {
