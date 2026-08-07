@@ -9,18 +9,17 @@ import { detectEmbeddedSideBars, getFilledFrameDimensions } from './localEditorV
 import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
 import { groupCaptionsIntoBlocks } from '../../remotion/lib/captions';
+import { HOOK_FONT_FAMILY, getHookAnimationStyle, getHookBoxStyle, getHookPositionStyle } from '../../remotion/lib/hookVisual';
 import { clearEditorPersistence, createEmptyEditorHistory, EDITOR_HISTORY_LIMIT, loadStoredVideo, readEditorHistory, saveEditorHistory, saveStoredVideo } from './localEditorPersistence';
 import {
     DEFAULT_SUBTITLE_STYLE,
     HOOK_ENTRANCE_OPTIONS,
     HOOK_SIZE_OPTIONS,
-    HOOK_SIZE_SCALE,
     SUBTITLE_ANIMATION_OPTIONS,
     SUBTITLE_COLOR_PRESETS,
     SUBTITLE_FONT_OPTIONS,
     SUBTITLE_HIGHLIGHT_PRESETS,
     hexToRgba,
-    hookPositionClass,
     normalizeSubtitleStyle,
     subtitlePositionClass,
 } from './localEditorStyles';
@@ -619,7 +618,7 @@ export default function LocalEditorTab({
 
     const addHook = () => {
         if (hook && !window.confirm('Replace the current viral hook?')) return;
-        const nextHook = { id: 'hook', text: 'Your viral hook', startMs: 0, endMs: Math.min(2500, durationMs), position: 'top', size: 'M', entranceAnimation: 'spring', color: '#ffffff', fontSize: 48, background: '#111111' };
+        const nextHook = { id: 'hook', text: 'Your viral hook', startMs: 0, endMs: Math.min(2500, durationMs), position: 'top', size: 'M', entranceAnimation: 'spring', color: '#ffffff', fontSize: 48, background: '#111111', fontFamily: HOOK_FONT_FAMILY };
         commitEdit((current) => ({ ...current, hook: nextHook }));
         setSelected({ id: 'hook', type: 'hook' });
         setHookOpen(true);
@@ -829,14 +828,7 @@ export default function LocalEditorTab({
     const activeHook = hook && playheadMs >= hook.startMs && playheadMs < hook.endMs ? hook : null;
     const previewSubtitleStyle = normalizeSubtitleStyle(subtitleStyle);
     const hookElapsedMs = activeHook ? Math.max(0, playheadMs - activeHook.startMs) : 0;
-    const hookSizeScale = activeHook ? (HOOK_SIZE_SCALE[activeHook.size] || HOOK_SIZE_SCALE.M) : 1;
-    const hookEntranceStyle = activeHook?.entranceAnimation === 'fade'
-        ? { opacity: Math.min(1, hookElapsedMs / 500) }
-        : activeHook?.entranceAnimation === 'slide-up'
-            ? { opacity: Math.min(1, hookElapsedMs / 500), transform: `translateY(${Math.max(0, 24 - hookElapsedMs / 20)}px)` }
-            : activeHook?.entranceAnimation === 'spring'
-                ? { opacity: Math.min(1, hookElapsedMs / 250), transform: `scale(${0.82 + Math.min(1, hookElapsedMs / 350) * 0.18})` }
-                : {};
+    const hookEntranceStyle = activeHook ? getHookAnimationStyle(activeHook.entranceAnimation, hookElapsedMs) : {};
     const shouldCropVideo = videoViewMode === 'fill' || (videoViewMode === 'auto' && autoCrop);
     const videoViewLabel = videoViewMode === 'auto' ? (autoCrop ? 'Auto crop' : 'Auto fit') : videoViewMode === 'fill' ? 'Fill' : 'Fit';
 
@@ -862,7 +854,7 @@ export default function LocalEditorTab({
                             <video ref={videoRef} src={videoUrl} controls={false} className={`h-full w-full ${shouldCropVideo ? 'object-cover' : 'object-contain'}`} onLoadedMetadata={handleMetadata} onLoadedData={detectVideoFraming} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onTimeUpdate={handleVideoTimeUpdate} />
                             <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className="absolute right-3 top-3 z-20 rounded-lg border border-white/20 bg-black/60 p-2 text-white shadow-lg backdrop-blur hover:bg-black/80">{isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
                             <div className="pointer-events-none absolute inset-0">
-                                {activeHook && <div className={`absolute left-1/2 w-[88%] -translate-x-1/2 ${hookPositionClass(activeHook.position)}`}><div className="rounded-lg px-3 py-2 text-center font-bold shadow-lg" style={{ color: activeHook.color, backgroundColor: activeHook.background, fontSize: `${Math.max(14, (activeHook.fontSize / 2.6) * hookSizeScale)}px`, ...hookEntranceStyle }}>{activeHook.text}</div></div>}
+                                {activeHook && <div className="absolute w-[88%]" style={{ left: '50%', ...getHookPositionStyle(activeHook.position) }}><div className="text-center" style={{ ...getHookBoxStyle(activeHook), ...hookEntranceStyle }}>{activeHook.text}</div></div>}
                                 {activeSubtitle && <div className={`absolute left-1/2 flex w-[88%] -translate-x-1/2 flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`} style={{ fontFamily: previewSubtitleStyle.fontFamily, fontSize: `${Math.max(12, previewSubtitleStyle.fontSize * (20 / 24))}px`, textShadow: outlineTextShadow(previewSubtitleStyle.borderWidth, previewSubtitleStyle.borderColor), backgroundColor: previewSubtitleStyle.bgOpacity > 0 ? hexToRgba(previewSubtitleStyle.bgColor, previewSubtitleStyle.bgOpacity) : 'transparent' }}>
                                     {activeSubtitleWords.map((word, index) => {
                                         const isActive = index === activeSubtitleWordIndex;

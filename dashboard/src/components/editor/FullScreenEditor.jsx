@@ -19,6 +19,7 @@ import { saveAndRenderVersion } from "../../editor/renderVersion";
 import EditorActionToolbar from "./EditorActionToolbar";
 import LocalEditorTab from "../local-editor/LocalEditorTab";
 import { DEFAULT_SUBTITLE_STYLE } from "../local-editor/localEditorStyles";
+import { HOOK_FONT_FAMILY } from "../../remotion/lib/hookVisual";
 
 const proxyUrl = (url) => {
   if (!url || url.startsWith("blob:") || !url.startsWith("http")) return url;
@@ -66,6 +67,7 @@ const manifestToLocalEditorState = (sourceManifest, trackId) => {
       color: hook.color || "#FFFFFF",
       fontSize: Number(hook.fontSize || 48),
       background: hook.background || "#111111",
+      fontFamily: hook.fontFamily || HOOK_FONT_FAMILY,
     } : null,
   };
 };

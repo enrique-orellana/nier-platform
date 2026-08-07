@@ -58,6 +58,10 @@ export interface HookConfig {
   size: HookSize;
   entranceAnimation: HookEntrance;
   displayDurationSec: number;
+  color?: string;
+  background?: string;
+  fontSize?: number;
+  fontFamily?: string;
   startMs?: number;
   endMs?: number;
 }
