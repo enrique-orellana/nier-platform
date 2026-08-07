@@ -35,6 +35,20 @@ describe('AudioWaveform', () => {
         expect(screen.getByTestId('audio-waveform')).toHaveAttribute('aria-label', 'Audio waveform');
     });
 
+    it('reuses decoded audio data while recalculating bars for a new sample count', async () => {
+        getAudioData.mockResolvedValue({ durationInSeconds: 4, numberOfChannels: 1, sampleRate: 48000, channelWaveforms: [new Float32Array([0, 0.5, 1, 0.25])] });
+        getWaveformPortion.mockImplementation(({ numberOfSamples }) => Array.from({ length: numberOfSamples }, (_, index) => ({ index, amplitude: 0.5 })));
+
+        const { rerender } = render(<AudioWaveform videoUrl="blob:cache" durationMs={4000} sampleCount={3} />);
+        await waitFor(() => expect(getWaveformPortion).toHaveBeenCalledTimes(1));
+
+        rerender(<AudioWaveform videoUrl="blob:cache" durationMs={4000} sampleCount={4} />);
+
+        await waitFor(() => expect(getWaveformPortion).toHaveBeenCalledTimes(2));
+        expect(getAudioData).toHaveBeenCalledTimes(1);
+        expect(getWaveformPortion).toHaveBeenLastCalledWith(expect.objectContaining({ numberOfSamples: 4 }));
+    });
+
     it('keeps the lane usable when audio decoding fails', async () => {
         getAudioData.mockRejectedValue(new Error('unsupported audio'));
 

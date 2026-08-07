@@ -18,10 +18,14 @@ export default function AudioWaveform({ videoUrl = '', durationMs = 1, sampleCou
         }
 
         setState({ status: 'loading', bars: [] });
-        const audioDataPromise = audioDataCache.get(videoUrl) || getAudioData(videoUrl).then((audioData) => {
-            audioDataCache.set(videoUrl, audioData);
-            return audioData;
-        });
+        let audioDataPromise = audioDataCache.get(videoUrl);
+        if (!audioDataPromise) {
+            audioDataPromise = getAudioData(videoUrl).catch((error) => {
+                audioDataCache.delete(videoUrl);
+                throw error;
+            });
+            audioDataCache.set(videoUrl, audioDataPromise);
+        }
         audioDataPromise
             .then((audioData) => getWaveformPortion({
                 audioData,
