@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { moveCue, resizeCue } from '../../editor/timelineModel';
+import AudioWaveform from './AudioWaveform';
 
 const TRACK_LABEL_WIDTH = 144;
 const BASE_PIXELS_PER_SECOND = 80;
@@ -62,9 +63,9 @@ function CueBlock({ cue, durationMs, color, selected, onSelect, onChange, onChan
     );
 }
 
-function Track({ label, cues, durationMs, timelineWidth, color, selectedId, onSelect, onChange, onChangeStart, onChangeEnd }) {
+function Track({ label, cues, durationMs, timelineWidth, color, selectedId, onSelect, onChange, onChangeStart, onChangeEnd, testId }) {
     return (
-        <div className="flex min-h-12 w-full items-stretch border-b border-white/10 last:border-b-0">
+        <div data-testid={testId} className="flex min-h-12 w-full items-stretch border-b border-white/10 last:border-b-0">
             <div className="flex w-36 shrink-0 items-center bg-white/[.03] px-3 text-[11px] font-medium text-zinc-300">{label}</div>
             <div className="relative shrink-0 bg-black/20" style={{ width: `${timelineWidth}px` }}>
                 {cues.map((cue) => (
@@ -85,7 +86,7 @@ function Track({ label, cues, durationMs, timelineWidth, color, selectedId, onSe
     );
 }
 
-export default function LocalEditorTimeline({ durationMs = 1, subtitleCues = [], hook = null, selectedId, onSelect, onChange, onChangeStart, onChangeEnd, playheadMs = 0, onSeek }) {
+export default function LocalEditorTimeline({ videoUrl = '', durationMs = 1, subtitleCues = [], hook = null, selectedId, onSelect, onChange, onChangeStart, onChangeEnd, playheadMs = 0, onSeek }) {
     const timelineRef = useRef(null);
     const safeDuration = Math.max(1, durationMs);
     const timelineWidth = Math.max(MIN_LANE_WIDTH, Math.ceil((safeDuration / 1000) * BASE_PIXELS_PER_SECOND));
@@ -120,8 +121,14 @@ export default function LocalEditorTimeline({ durationMs = 1, subtitleCues = [],
                         {rulerMarks.map((mark) => <span key={mark} className="absolute top-2 -translate-x-1/2 text-[9px] text-zinc-600" style={{ left: `${mark}%` }}>{Math.round((safeDuration * mark) / 1000) / 10}s</span>)}
                         <div className="absolute bottom-0 top-0 w-px bg-cyan-300" style={{ left: `${(playheadMs / safeDuration) * 100}%` }} />
                     </div>
-                    <Track label="Viral Hook" cues={hookCues} durationMs={safeDuration} timelineWidth={timelineWidth} color="#f59e0b" selectedId={selectedId} onSelect={(cue) => onSelect?.(cue, 'hook')} onChange={(cue) => onChange?.(cue, 'hook')} onChangeStart={onChangeStart} onChangeEnd={onChangeEnd} />
-                    <Track label="Subtitles" cues={subtitleCues} durationMs={safeDuration} timelineWidth={timelineWidth} color="#8b5cf6" selectedId={selectedId} onSelect={(cue) => onSelect?.(cue, 'subtitle')} onChange={(cue) => onChange?.(cue, 'subtitle')} onChangeStart={onChangeStart} onChangeEnd={onChangeEnd} />
+                    <Track testId="local-editor-hook-track" label="Viral Hook" cues={hookCues} durationMs={safeDuration} timelineWidth={timelineWidth} color="#f59e0b" selectedId={selectedId} onSelect={(cue) => onSelect?.(cue, 'hook')} onChange={(cue) => onChange?.(cue, 'hook')} onChangeStart={onChangeStart} onChangeEnd={onChangeEnd} />
+                    <Track testId="local-editor-subtitles-track" label="Subtitles" cues={subtitleCues} durationMs={safeDuration} timelineWidth={timelineWidth} color="#8b5cf6" selectedId={selectedId} onSelect={(cue) => onSelect?.(cue, 'subtitle')} onChange={(cue) => onChange?.(cue, 'subtitle')} onChangeStart={onChangeStart} onChangeEnd={onChangeEnd} />
+                    <div data-testid="local-editor-audio-track" className="flex min-h-12 w-full items-stretch border-b border-white/10 last:border-b-0">
+                        <div className="flex w-36 shrink-0 items-center bg-white/[.03] px-3 text-[11px] font-medium text-zinc-300">Audio</div>
+                        <div className="relative shrink-0 bg-black/20" style={{ width: `${timelineWidth}px` }}>
+                            <AudioWaveform videoUrl={videoUrl} durationMs={safeDuration} sampleCount={Math.max(96, Math.min(240, Math.ceil(timelineWidth / 4)))} />
+                        </div>
+                    </div>
                     <div className="pointer-events-none absolute bottom-0 top-0 ml-36" style={{ width: `${timelineWidth}px` }}><div className="absolute bottom-0 top-0 z-10 w-px bg-cyan-300/80" style={{ left: `${(playheadMs / safeDuration) * 100}%` }} /></div>
                 </div>
             </div>
