@@ -2,15 +2,24 @@ import base64
 import json
 import os
 import re
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from typing import Any, Mapping, Optional, Sequence
 
 import httpx
+from codex_auth import (
+    CodexReauthRequired,
+    default_codex_store,
+    get_access_token,
+    get_codex_account_id,
+    refresh_credentials,
+)
 
 GEMINI_TEXT_MODEL = "gemini-2.5-flash"
 GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview"
+CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.4")
 AUTO_MODEL_VALUES = {"", "auto", "default"}
 LMSTUDIO_PLACEHOLDER_MODELS = {"qwen3:latest", "qwen2.5vl:latest"}
 
@@ -36,6 +45,9 @@ class AIConfig:
 
     def is_lmstudio(self) -> bool:
         return self.normalized_provider() == "lmstudio"
+
+    def is_openai_codex(self) -> bool:
+        return self.normalized_provider() == "openai-codex"
 
     def resolved_base_url(self) -> str:
         if not self.base_url:
@@ -328,6 +340,99 @@ def _build_openai_message(prompt: str, images: Optional[Sequence[Any]] = None) -
     return {"role": "user", "content": content}
 
 
+def _build_codex_input(prompt: str, images: Optional[Sequence[Any]] = None) -> list[dict[str, Any]]:
+    content: list[dict[str, Any]] = [{"type": "input_text", "text": prompt}]
+    for image in images or []:
+        encoded = _encode_image_source(image)
+        content.append({
+            "type": "input_image",
+            "image_url": f"data:image/png;base64,{encoded}",
+        })
+    return [{"role": "user", "content": content}]
+
+
+def _extract_codex_sse_text(lines: Sequence[Any]) -> str:
+    chunks: list[str] = []
+    for raw_line in lines:
+        line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else str(raw_line)
+        if not line.startswith("data:"):
+            continue
+        data = line[5:].strip()
+        if data == "[DONE]":
+            break
+        try:
+            event = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == "response.output_text.delta":
+            delta = event.get("delta")
+            if isinstance(delta, str):
+                chunks.append(delta)
+    return "".join(chunks)
+
+
+def _codex_chat(
+    config: AIConfig,
+    prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    json_mode: bool = False,
+    model: Optional[str] = None,
+    images: Optional[Sequence[Any]] = None,
+    timeout: float = 300.0,
+) -> str:
+    del json_mode
+    resolved_model = _normalize_model_for_provider(model or config.text_model, "openai-codex", "text")
+    if resolved_model.lower() in AUTO_MODEL_VALUES:
+        resolved_model = CODEX_DEFAULT_MODEL
+
+    payload: dict[str, Any] = {
+        "model": resolved_model,
+        "input": _build_codex_input(prompt, images),
+        "stream": True,
+        "store": False,
+        "include": ["reasoning.encrypted_content"],
+    }
+    if system_prompt:
+        payload["instructions"] = system_prompt
+
+    text = ""
+    for attempt in range(2):
+        access_token = get_access_token()
+        account_id = get_codex_account_id()
+        request_id = str(uuid.uuid4())
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "ChatGPT-Account-ID": account_id,
+            "originator": "codex_cli_rs",
+            "Version": os.environ.get("CODEX_CLIENT_VERSION", "0.142.3"),
+            "session_id": request_id,
+            "x-client-request-id": request_id,
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+        }
+
+        with httpx.Client(timeout=timeout) as client:
+            with client.stream(
+                "POST",
+                "https://chatgpt.com/backend-api/codex/responses",
+                headers=headers,
+                json=payload,
+            ) as response:
+                if response.status_code in {401, 403}:
+                    if attempt:
+                        raise CodexReauthRequired("ChatGPT authorization was rejected. Reconnect ChatGPT.")
+                    refresh_credentials(default_codex_store())
+                    continue
+                response.raise_for_status()
+                text = _extract_codex_sse_text(response.iter_lines())
+        break
+
+    if not text:
+        raise RuntimeError("Codex returned no text output.")
+    return text
+
+
 def _lmstudio_chat(
     config: AIConfig,
     prompt: str,
@@ -391,6 +496,17 @@ def chat_completion(
 
     if provider == "lmstudio":
         return _lmstudio_chat(
+            config,
+            prompt,
+            system_prompt=system_prompt,
+            json_mode=json_mode,
+            model=model or config.text_model,
+            images=images,
+            timeout=timeout,
+        )
+
+    if provider == "openai-codex":
+        return _codex_chat(
             config,
             prompt,
             system_prompt=system_prompt,
