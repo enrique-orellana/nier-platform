@@ -14,6 +14,7 @@ import AISettingsPanel from './components/AISettingsPanel';
 import LocalEditorTab from './components/local-editor/LocalEditorTab';
 
 import { pickLmStudioModel, pickProviderAfterDiscoveryFailure } from './lib/lmStudio';
+import { normalizeCodexStatus } from './lib/openaiCodex';
 import { getApiUrl } from './config';
 import {
   buildEditorPath,
@@ -226,6 +227,101 @@ function App() {
   
   const [lmStudioAvailable, setLmStudioAvailable] = useState(null);
   const [lmStudioModels, setLmStudioModels] = useState({ textModels: [], visionModels: [] });
+  const [codexStatus, setCodexStatus] = useState({ connected: false, pending: false, requiresReconnect: false });
+  const [codexPending, setCodexPending] = useState(null);
+  const [codexError, setCodexError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch(getApiUrl('/api/ai/openai-codex/status'))
+      .then((res) => {
+        if (!res.ok) throw new Error('Unable to load ChatGPT connection status.');
+        return res.json();
+      })
+      .then((data) => {
+        if (!cancelled) setCodexStatus(normalizeCodexStatus(data));
+      })
+      .catch((error) => {
+        if (!cancelled) setCodexError(error.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const connectCodex = useCallback(async () => {
+    setCodexError('');
+    try {
+      const res = await fetch(getApiUrl('/api/ai/openai-codex/connect'), { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Unable to start ChatGPT connection.');
+
+      setCodexPending({
+        verificationUrl: data.verificationUrl,
+        userCode: data.userCode,
+        intervalSeconds: data.intervalSeconds,
+      });
+      setCodexStatus({ connected: false, pending: true, requiresReconnect: false });
+      if (data.verificationUrl) window.open(data.verificationUrl, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      setCodexStatus({ connected: false, pending: false, requiresReconnect: true });
+      setCodexError(error.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!codexStatus.pending) return undefined;
+
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(getApiUrl('/api/ai/openai-codex/poll'), { method: 'POST' });
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok) throw new Error(data.detail || 'ChatGPT connection check failed.');
+
+        if (data.status === 'connected' || data.connected === true) {
+          setCodexStatus(normalizeCodexStatus(data));
+          setCodexPending(null);
+          return;
+        }
+        if (data.status === 'expired' || data.status === 'error') {
+          setCodexStatus({ connected: false, pending: false, requiresReconnect: true });
+          setCodexPending(null);
+          setCodexError(data.error || 'ChatGPT connection expired.');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCodexStatus({ connected: false, pending: false, requiresReconnect: true });
+          setCodexPending(null);
+          setCodexError(error.message);
+        }
+      }
+    };
+
+    poll();
+    const intervalMs = Math.max(1000, Number(codexPending?.intervalSeconds || 5) * 1000);
+    const timer = setInterval(poll, intervalMs);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [codexStatus.pending, codexPending?.intervalSeconds]);
+
+  const disconnectCodex = useCallback(async () => {
+    setCodexError('');
+    try {
+      const res = await fetch(getApiUrl('/api/ai/openai-codex/disconnect'), { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Unable to disconnect ChatGPT.');
+      setCodexStatus(normalizeCodexStatus(data));
+      setCodexPending(null);
+    } catch (error) {
+      setCodexError(error.message);
+    }
+  }, []);
   
   useEffect(() => {
     let cancelled = false;
@@ -333,7 +429,8 @@ function App() {
     }
   }, [aiProvider, aiBaseUrl, detectLmStudio]);
 
-  const isLocalAi = aiProvider !== 'gemini';
+  const needsAiConnection = (aiProvider === 'gemini' && !apiKey)
+    || (aiProvider === 'openai-codex' && !codexStatus.connected);
   const lastProviderRef = useRef(aiProvider);
 
   // Sync state for original video playback
@@ -463,6 +560,14 @@ function App() {
     const previousProvider = lastProviderRef.current;
     lastProviderRef.current = aiProvider;
 
+    if (aiProvider === 'openai-codex') {
+      setAiTextModel('auto');
+      setAiAnalyzeModel('auto');
+      setAiVisionModel('auto');
+      setAiImageModel('');
+      return;
+    }
+
     if (aiProvider === 'gemini') {
       setAiTextModel((current) => (!current || current === '') ? GEMINI_TEXT_MODEL : current);
       setAiAnalyzeModel((current) => (!current || current === '') ? GEMINI_TEXT_MODEL : current);
@@ -557,7 +662,7 @@ function App() {
 
     if (aiProvider === 'gemini' && apiKey) {
       headers['X-Gemini-Key'] = apiKey;
-    } else if (apiKey) {
+    } else if (apiKey && aiProvider !== 'openai-codex') {
       headers['X-AI-Api-Key'] = apiKey;
     }
 
@@ -634,6 +739,14 @@ function App() {
   const handleProcess = async (data) => {
     if (aiProvider === 'gemini' && !apiKey) {
       setShowKeyModal(true);
+      return;
+    }
+    if (aiProvider === 'openai-codex' && !codexStatus.connected) {
+      navigateToTab('settings');
+      setLogs([codexStatus.requiresReconnect
+        ? 'Reconnect ChatGPT in Settings before processing.'
+        : 'Connect ChatGPT in Settings before processing.']);
+      setStatus('error');
       return;
     }
     if (aiProvider === 'lmstudio' && !aiBaseUrl.trim()) {
@@ -831,14 +944,14 @@ function App() {
                 />
               )}
 
-              {!isLocalAi && !apiKey && (
+              {needsAiConnection && (
                 <button
                   onClick={() => navigateToTab('settings')}
                   className="text-xs text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1 rounded-full border border-amber-500/30 transition-colors flex items-center gap-1.5"
                   title="Click to configure your API keys"
                 >
                   <AlertTriangle size={12} />
-                  Gemini API Key Missing
+                  {aiProvider === 'openai-codex' ? 'Connect ChatGPT' : 'Gemini API Key Missing'}
                 </button>
               )}
             </div>
@@ -846,14 +959,16 @@ function App() {
         )}
 
         {/* Persistent Missing Keys Banner — visible on every screen */}
-        {!isLocalAi && !apiKey && activeTab !== 'settings' && (
+        {needsAiConnection && activeTab !== 'settings' && (
           <div className="mx-6 mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between gap-4 shrink-0 animate-[fadeIn_0.3s_ease-out]">
             <div className="flex items-center gap-3 text-sm text-amber-200">
               <KeyRound size={16} className="shrink-0 text-amber-400" />
               <div>
-                <span className="font-semibold">Gemini API key missing.</span>{' '}
+                <span className="font-semibold">{aiProvider === 'openai-codex' ? 'ChatGPT connection required.' : 'Gemini API key missing.'}</span>{' '}
                 <span className="text-amber-200/80">
-                  Set your Gemini API key to use OpenShorts. Upload-Post is optional and only needed if you want social publishing.
+                  {aiProvider === 'openai-codex'
+                    ? 'Connect your ChatGPT account in Settings to use OpenAI Codex. Upload-Post is optional and only needed for social publishing.'
+                    : 'Set your Gemini API key to use OpenShorts. Upload-Post is optional and only needed if you want social publishing.'}
                 </span>
               </div>
             </div>
@@ -911,6 +1026,11 @@ function App() {
                 setAiImageModel={setAiImageModel}
                 lmStudioAvailable={lmStudioAvailable}
                 lmStudioModels={lmStudioModels}
+                codexStatus={codexStatus}
+                codexPending={codexPending}
+                codexError={codexError}
+                onConnectCodex={connectCodex}
+                onDisconnectCodex={disconnectCodex}
                 onDetectLmStudio={detectLmStudio}
               />
 
