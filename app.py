@@ -22,6 +22,13 @@ from render_manifest import load_manifest, save_manifest_atomic, verify_manifest
 from version_store import VersionStore
 from s3_uploader import upload_job_artifacts, delete_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
 from ai_client import AIConfig, load_ai_config, ai_config_to_env, discover_lmstudio_models, chat_json
+from codex_auth import (
+    CodexAuthError,
+    PendingDeviceLogin,
+    default_codex_store,
+    poll_device_login,
+    start_device_login,
+)
 from local_editor_subtitles import (
     subtitle_style_to_ffmpeg_options,
     word_captions_from_transcript,
@@ -425,6 +432,8 @@ async def run_job_wrapper(job_id):
         print(f"✅ Released slot for job: {job_id}")
 
 startup_lmstudio_discovery = None
+codex_pending_login: Optional[PendingDeviceLogin] = None
+codex_pending_lock = threading.Lock()
 
 async def background_discover_lmstudio():
     global startup_lmstudio_discovery
@@ -606,6 +615,76 @@ async def run_job(job_id, job_data):
 class LmStudioDiscoveryRequest(BaseModel):
     baseUrl: str
     apiKey: Optional[str] = None
+
+
+@app.get("/api/ai/openai-codex/status")
+async def openai_codex_status():
+    status = default_codex_store().status()
+    with codex_pending_lock:
+        status["pending"] = codex_pending_login is not None
+    return status
+
+
+@app.post("/api/ai/openai-codex/connect")
+async def openai_codex_connect():
+    global codex_pending_login
+    with codex_pending_lock:
+        if codex_pending_login is not None:
+            return {
+                "status": "pending",
+                "verificationUrl": "https://auth.openai.com/codex/device",
+                "userCode": "",
+                "intervalSeconds": 5,
+            }
+        try:
+            started = start_device_login()
+        except CodexAuthError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        codex_pending_login = started.pending
+        return started.to_public()
+
+
+@app.post("/api/ai/openai-codex/poll")
+async def openai_codex_poll():
+    global codex_pending_login
+    with codex_pending_lock:
+        pending = codex_pending_login
+    if pending is None:
+        return await openai_codex_status()
+
+    try:
+        result = poll_device_login(pending)
+    except CodexAuthError as exc:
+        with codex_pending_lock:
+            codex_pending_login = None
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    if result.status == "connected" and result.credentials is not None:
+        default_codex_store().save(result.credentials)
+        with codex_pending_lock:
+            codex_pending_login = None
+        return {"status": "connected", "connected": True, "pending": False}
+
+    if result.status in {"expired", "error"}:
+        with codex_pending_lock:
+            codex_pending_login = None
+        return {
+            "status": result.status,
+            "connected": False,
+            "pending": False,
+            "error": result.error,
+        }
+
+    return {"status": "pending", "connected": False, "pending": True}
+
+
+@app.post("/api/ai/openai-codex/disconnect")
+async def openai_codex_disconnect():
+    global codex_pending_login
+    default_codex_store().clear()
+    with codex_pending_lock:
+        codex_pending_login = None
+    return {"connected": False, "pending": False}
 
 
 def _lmstudio_discovery_failure(base_url: str) -> dict[str, Any]:
