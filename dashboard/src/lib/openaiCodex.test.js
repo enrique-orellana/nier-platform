@@ -84,6 +84,22 @@ describe('OpenAI Codex helpers', () => {
     expect(pickCodexEffort({ currentEffort: 'ultra', modelId: 'gpt-5.6-luna', models: catalog.models })).toBe('auto');
   });
 
+  it('preserves efforts already normalized by the backend catalog endpoint', () => {
+    const catalog = normalizeCodexModels({
+      models: [{
+        id: 'gpt-5.6-luna',
+        label: 'GPT-5.6-Luna',
+        efforts: [{ id: 'max', label: 'Max', description: 'Maximum' }],
+        defaultEffort: 'max',
+      }],
+    });
+
+    expect(catalog.models[0].efforts).toEqual([
+      { id: 'max', label: 'Max', description: 'Maximum' },
+    ]);
+    expect(catalog.models[0].defaultEffort).toBe('max');
+  });
+
   it('keeps an available model and falls back to Auto when it disappears', () => {
     const models = [{ id: 'gpt-5.4', label: 'GPT-5.4', supportsVision: true }];
 

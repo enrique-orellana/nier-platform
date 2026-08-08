@@ -27,6 +27,7 @@ export const normalizeCodexModels = (payload = {}) => {
       || model?.supported_reasoning_efforts
       || model?.supportedReasoningEfforts
       || model?.reasoning_efforts
+      || model?.efforts
       || [];
     if (!Array.isArray(rawEfforts)) return [];
     const effortIds = new Set();
