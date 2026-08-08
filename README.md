@@ -155,6 +155,7 @@ OpenShorts is free. You only pay for the AI APIs you use — and most have gener
 | Service | Free Tier | Paid Cost | Used For |
 |---------|-----------|-----------|----------|
 | **Google Gemini** | Free trial with generous limits | < $0.01 per 10-min video | Viral moment detection, script generation, web research |
+| **OpenAI Codex (ChatGPT)** | Included with eligible ChatGPT plans | Plan-dependent | AI clip detection and generation through your ChatGPT subscription |
 | **fal.ai** | Pay-per-use | ~$0.50-1.50 per AI Short | Actor generation, talking head video, lip-sync |
 | **ElevenLabs** | Free tier available | Pay-per-use | Voiceover, voice dubbing |
 | **Upload-Post** | **10 free uploads/month** to all networks (no credit card) | Pay-per-use | Auto-publishing to TikTok, Instagram, YouTube |
@@ -166,8 +167,10 @@ OpenShorts is free. You only pay for the AI APIs you use — and most have gener
 
 ## Requirements
 
+- **OpenAI Codex (ChatGPT)** — optional alternative to a Gemini API key; connect it from Dashboard **Settings** with the device-code flow and no OpenAI API key.
+
 - **Docker & Docker Compose**
-- **Google Gemini API Key** ([Free — get it here](https://aistudio.google.com/app/apikey)) — required for all AI features
+- **Google Gemini API Key** ([Free — get it here](https://aistudio.google.com/app/apikey)) — required for Gemini AI features; use OpenAI Codex as an alternative.
 - **fal.ai API Key** ([Pay-per-use](https://fal.ai)) — required for AI Shorts (actor generation, video, lip-sync)
 - **ElevenLabs API Key** ([Free tier](https://elevenlabs.io)) — required for voiceover/dubbing
 - **Upload-Post API Key** ([free tier](https://upload-post.com)) — required for direct social posting
@@ -197,7 +200,7 @@ docker compose up --build
 ### 4. Open Dashboard
 Navigate to **`http://localhost:5175`**
 
-1. Go to **Settings** and enter your API keys (Gemini, fal.ai, ElevenLabs, Upload-Post)
+1. Go to **Settings** and choose Gemini, LM Studio, or **OpenAI Codex (ChatGPT)**. Codex connects through ChatGPT device authorization and does not use an OpenAI API key.
 2. **Clip Generator**: Upload a long-form video to generate viral shorts
 3. **AI Shorts**: Describe your product or paste a URL to generate UGC marketing videos
 4. **YouTube Studio**: Generate thumbnails, titles, and descriptions for YouTube
@@ -262,11 +265,14 @@ build commands, the `openshorts.yaml` bundle, and a remote-deploy update flow.
 | `AWS_S3_PUBLIC_ENDPOINT_URL` | Endpoint used to generate presigned URLs for public access |
 | `AWS_S3_FORCE_PATH_STYLE` | Force path-style URLs, recommended for MinIO |
 | `MAX_CONCURRENT_JOBS` | Concurrent processing limit (default: 5) |
+| `OPENSHORTS_CODEX_AUTH_FILE` | Optional path for the installation-scoped Codex credential file |
+| `CODEX_MODEL` | Optional Codex model override (default: `gpt-5.4`) |
 
 **Client-side (encrypted in localStorage):**
 | Key | Description |
 |-----|------------|
 | `GEMINI_API_KEY` | Google Gemini — required |
+| `ai_provider_v1` | Selected provider; use `openai-codex` for a ChatGPT subscription |
 | `FAL_KEY` | fal.ai — required for AI Shorts |
 | `ELEVENLABS_API_KEY` | ElevenLabs — required for voiceover/dubbing |
 | `UPLOAD_POST_API_KEY` | Upload-Post — required, for social posting |
@@ -279,6 +285,7 @@ build commands, the `openshorts.yaml` bundle, and a remote-deploy update flow.
 - **Concurrency Control**: Semaphore-based job queue (`MAX_CONCURRENT_JOBS`)
 - **Auto-Cleanup**: Automatic purging of old jobs (1h retention)
 - **Encrypted Keys**: API keys encrypted client-side, never stored server-side
+- **Codex credentials**: ChatGPT device authorization tokens stay in the backend's protected, git-ignored credential file and are never returned to the browser
 - **Upload Validation**: Image uploads validated for format and minimum size
 - **File Limits**: 2GB upload limit protection
 

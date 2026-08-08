@@ -26,7 +26,7 @@ from codex_auth import (
     CodexAuthError,
     PendingDeviceLogin,
     default_codex_store,
-    poll_device_login,
+    poll_device_login_once,
     start_device_login,
 )
 from local_editor_subtitles import (
@@ -653,7 +653,7 @@ async def openai_codex_poll():
         return await openai_codex_status()
 
     try:
-        result = poll_device_login(pending)
+        result = poll_device_login_once(pending)
     except CodexAuthError as exc:
         with codex_pending_lock:
             codex_pending_login = None

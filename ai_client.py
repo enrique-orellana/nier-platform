@@ -24,6 +24,10 @@ AUTO_MODEL_VALUES = {"", "auto", "default"}
 LMSTUDIO_PLACEHOLDER_MODELS = {"qwen3:latest", "qwen2.5vl:latest"}
 
 
+def _codex_default_model() -> str:
+    return os.environ.get("CODEX_MODEL", CODEX_DEFAULT_MODEL)
+
+
 @dataclass
 class AIConfig:
     provider: str = "gemini"
@@ -384,7 +388,7 @@ def _codex_chat(
     del json_mode
     resolved_model = _normalize_model_for_provider(model or config.text_model, "openai-codex", "text")
     if resolved_model.lower() in AUTO_MODEL_VALUES:
-        resolved_model = CODEX_DEFAULT_MODEL
+        resolved_model = _codex_default_model()
 
     payload: dict[str, Any] = {
         "model": resolved_model,

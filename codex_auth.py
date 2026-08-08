@@ -230,6 +230,74 @@ def start_device_login(*, client: Optional[httpx.Client] = None) -> DeviceLoginS
     return DeviceLoginStart(pending=pending, verification_url=DEVICE_VERIFICATION_URL)
 
 
+def _poll_device_login_once(
+    auth_client: httpx.Client,
+    pending: PendingDeviceLogin,
+    *,
+    now: Callable[[], float],
+) -> DeviceLoginPollResult:
+    if now() - pending.started_at >= DEVICE_AUTH_TIMEOUT_SECONDS:
+        return DeviceLoginPollResult(
+            status="expired",
+            error="ChatGPT device authorization expired. Start again to reconnect.",
+        )
+
+    response = auth_client.post(
+        DEVICE_TOKEN_URL,
+        json={
+            "device_auth_id": pending.device_auth_id,
+            "user_code": pending.user_code,
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    if response.status_code in {403, 404}:
+        return DeviceLoginPollResult(status="pending")
+    if response.status_code != 200:
+        return DeviceLoginPollResult(
+            status="error",
+            error="ChatGPT device authorization failed.",
+        )
+
+    code_payload = response.json()
+    authorization_code = str(code_payload.get("authorization_code") or "").strip()
+    code_verifier = str(code_payload.get("code_verifier") or "").strip()
+    if not authorization_code or not code_verifier:
+        return DeviceLoginPollResult(
+            status="error",
+            error="ChatGPT returned an invalid authorization response.",
+        )
+
+    exchange = auth_client.post(
+        OAUTH_TOKEN_URL,
+        data={
+            "grant_type": "authorization_code",
+            "code": authorization_code,
+            "redirect_uri": DEVICE_REDIRECT_URI,
+            "client_id": CODEX_CLIENT_ID,
+            "code_verifier": code_verifier,
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    if exchange.status_code != 200:
+        return DeviceLoginPollResult(
+            status="error",
+            error="ChatGPT token exchange failed.",
+        )
+    credentials = _credentials_from_token_response(exchange.json())
+    return DeviceLoginPollResult(status="connected", credentials=credentials)
+
+
+def poll_device_login_once(
+    pending: PendingDeviceLogin,
+    *,
+    client: Optional[httpx.Client] = None,
+    now: Callable[[], float] = time.time,
+) -> DeviceLoginPollResult:
+    """Advance device authorization once without sleeping between attempts."""
+    with _client_context(client) as auth_client:
+        return _poll_device_login_once(auth_client, pending, now=now)
+
+
 def poll_device_login(
     pending: PendingDeviceLogin,
     *,
@@ -239,50 +307,11 @@ def poll_device_login(
 ) -> DeviceLoginPollResult:
     with _client_context(client) as auth_client:
         while now() - pending.started_at < DEVICE_AUTH_TIMEOUT_SECONDS:
-            response = auth_client.post(
-                DEVICE_TOKEN_URL,
-                json={
-                    "device_auth_id": pending.device_auth_id,
-                    "user_code": pending.user_code,
-                },
-                headers={"Content-Type": "application/json"},
-            )
-            if response.status_code in {403, 404}:
+            result = _poll_device_login_once(auth_client, pending, now=now)
+            if result.status == "pending":
                 sleep(pending.interval_seconds)
                 continue
-            if response.status_code != 200:
-                return DeviceLoginPollResult(
-                    status="error",
-                    error="ChatGPT device authorization failed.",
-                )
-
-            code_payload = response.json()
-            authorization_code = str(code_payload.get("authorization_code") or "").strip()
-            code_verifier = str(code_payload.get("code_verifier") or "").strip()
-            if not authorization_code or not code_verifier:
-                return DeviceLoginPollResult(
-                    status="error",
-                    error="ChatGPT returned an invalid authorization response.",
-                )
-
-            exchange = auth_client.post(
-                OAUTH_TOKEN_URL,
-                data={
-                    "grant_type": "authorization_code",
-                    "code": authorization_code,
-                    "redirect_uri": DEVICE_REDIRECT_URI,
-                    "client_id": CODEX_CLIENT_ID,
-                    "code_verifier": code_verifier,
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
-            if exchange.status_code != 200:
-                return DeviceLoginPollResult(
-                    status="error",
-                    error="ChatGPT token exchange failed.",
-                )
-            credentials = _credentials_from_token_response(exchange.json())
-            return DeviceLoginPollResult(status="connected", credentials=credentials)
+            return result
 
     return DeviceLoginPollResult(
         status="expired",

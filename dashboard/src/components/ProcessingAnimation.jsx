@@ -9,8 +9,14 @@ const ProcessingAnimation = ({ media, isComplete, syncedTime, isSyncedPlaying, s
 
   const modelLabel = aiProvider === 'gemini'
     ? (aiTextModel || 'gemini-2.5-flash')
+    : aiProvider === 'openai-codex'
+      ? (aiTextModel || 'Codex default')
     : (aiTextModel || 'qwen3:latest');
-  const providerLabel = aiProvider === 'gemini' ? 'GEMINI' : 'OLLAMA';
+  const providerLabel = aiProvider === 'gemini'
+    ? 'GEMINI'
+    : aiProvider === 'openai-codex'
+      ? 'CODEX'
+      : 'OLLAMA';
 
   useEffect(() => {
     if (!media) return;

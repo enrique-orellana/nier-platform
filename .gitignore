@@ -45,3 +45,7 @@ skills-lock.json
 .playwright-mcp
 .superpowers/
 .worktrees/
+
+# Installation-scoped ChatGPT Codex credentials
+.openshorts/
+**/codex-auth.json

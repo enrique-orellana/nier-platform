@@ -9,6 +9,7 @@ from codex_auth import (
     CodexReauthRequired,
     PendingDeviceLogin,
     poll_device_login,
+    poll_device_login_once,
     refresh_credentials,
     start_device_login,
 )
@@ -118,6 +119,17 @@ def test_poll_device_login_retries_pending_then_exchanges_authorization_code():
 
     assert result.status == "connected"
     assert result.credentials.access_token == "access"
+
+
+@patch("codex_auth.httpx.Client", FakeCodexAuthClient)
+def test_poll_device_login_once_returns_pending_without_blocking():
+    FakeCodexAuthClient.responses = [FakeResponse(403)]
+    pending = PendingDeviceLogin("device-id", "ABCD-EFGH", 5, 0)
+
+    result = poll_device_login_once(pending, now=lambda: 1)
+
+    assert result.status == "pending"
+    assert result.credentials is None
 
 
 @patch("codex_auth.httpx.Client", FakeCodexAuthClient)
