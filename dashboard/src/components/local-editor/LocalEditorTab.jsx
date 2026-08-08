@@ -673,6 +673,13 @@ export default function LocalEditorTab({
                     ...(current.subtitleCues.find((item) => item.id === cue.id) || cue),
                     text: String(translatedCues[index]?.text || '').trim(),
                     label: String(translatedCues[index]?.text || '').trim(),
+                    captions: Array.isArray(translatedCues[index]?.captions)
+                        ? translatedCues[index].captions.map((caption) => ({
+                            text: String(caption?.text || '').trim(),
+                            startMs: Number(caption?.startMs),
+                            endMs: Number(caption?.endMs),
+                        }))
+                        : undefined,
                 })),
             }));
             setSelected(null);

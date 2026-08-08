@@ -247,6 +247,60 @@ describe('LocalEditorTab', () => {
         expect(screen.getByDisplayValue('Hello')).toBeInTheDocument();
     });
 
+    it('replaces stale word captions when applying a translated track', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ translationId: 'translation-with-words', status: 'queued' }) })
+            .mockResolvedValueOnce({ ok: true, json: async () => ({
+                status: 'done',
+                track: {
+                    id: 'it',
+                    language: 'it',
+                    cues: [{
+                        text: 'Ciao mondo',
+                        startMs: 0,
+                        endMs: 1000,
+                        captions: [
+                            { text: 'Ciao', startMs: 0, endMs: 500 },
+                            { text: 'mondo', startMs: 500, endMs: 1000 },
+                        ],
+                    }],
+                },
+            }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        render(<LocalEditorTab initialEditorState={{
+            subtitleCues: [{
+                id: 'cue-1',
+                type: 'subtitle',
+                label: 'Hello world',
+                text: 'Hello world',
+                startMs: 0,
+                endMs: 1000,
+                captions: [
+                    { text: 'Hello', startMs: 0, endMs: 500 },
+                    { text: 'world', startMs: 500, endMs: 1000 },
+                ],
+            }],
+            subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+            subtitleLanguage: 'en',
+            hook: null,
+        }} initialStateKey="translation-with-words" />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
+        fireEvent.change(screen.getByLabelText(/translation target language/i), { target: { value: 'it' } });
+        fireEvent.click(screen.getByRole('button', { name: /translate subtitles/i }));
+
+        await waitFor(() => {
+            const saved = JSON.parse(localStorage.getItem('openshorts_local_editor_state_v1'));
+            expect(saved.present.subtitleCues[0].captions).toEqual([
+                { text: 'Ciao', startMs: 0, endMs: 500 },
+                { text: 'mondo', startMs: 500, endMs: 1000 },
+            ]);
+        });
+    });
+
     it('asks before replacing existing subtitles during generation', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
         const fetchMock = vi.fn();
