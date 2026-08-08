@@ -499,18 +499,21 @@ export default function FullScreenEditor({
           onStateChange={setLocalDraft}
           persistHistory={false}
           onClose={onClose}
-          headerActions={editorActions ? <EditorActionToolbar {...editorActions} /> : null}
+          headerActions={null}
           sidePanel={(
-            <section className="rounded-xl border border-white/10 bg-white/[.02] p-4" aria-label="Version history">
-              <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-primary">Version History</h2>
-              <VersionHistory
-                versions={versions}
-                currentVersionId={version?.version_id}
-                selectedVersionId={version?.version_id}
-                onSelect={loadVersion}
-                onBranch={branchVersion}
-              />
-            </section>
+            <>
+              {editorActions && <EditorActionToolbar {...editorActions} />}
+              <section className="rounded-xl border border-white/10 bg-white/[.02] p-4" aria-label="Version history">
+                <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-primary">Version History</h2>
+                <VersionHistory
+                  versions={versions}
+                  currentVersionId={version?.version_id}
+                  selectedVersionId={version?.version_id}
+                  onSelect={loadVersion}
+                  onBranch={branchVersion}
+                />
+              </section>
+            </>
           )}
           footer={(
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -547,7 +550,6 @@ export default function FullScreenEditor({
           <X size={20} />
         </button>
       </header>
-      {editorActions && <EditorActionToolbar {...editorActions} />}
       <div className="grid min-h-0 flex-1 grid-cols-[300px_minmax(0,1fr)_320px] grid-rows-[minmax(320px,1fr)_minmax(220px,38vh)] gap-2 p-2">
         <section
           className="glass-panel row-span-2 flex flex-col overflow-auto p-5 shadow-lg"
@@ -591,7 +593,8 @@ export default function FullScreenEditor({
           className="glass-panel row-span-2 flex flex-col overflow-auto p-5 shadow-lg"
           aria-label="Inspector"
         >
-          <h2 className="mb-5 text-xs font-bold uppercase tracking-widest text-primary drop-shadow-sm">
+          {editorActions && <EditorActionToolbar {...editorActions} />}
+          <h2 className="mb-5 mt-5 text-xs font-bold uppercase tracking-widest text-primary drop-shadow-sm">
             Inspector
           </h2>
           <InspectorPanel

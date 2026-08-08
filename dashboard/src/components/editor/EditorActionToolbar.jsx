@@ -19,14 +19,15 @@ export default function EditorActionToolbar({
     editError,
 }) {
     return (
-        <div className="fixed left-2 right-2 top-[4.5rem] z-[70] border-b border-white/[0.08] bg-surfaceLight/95 px-3 py-2 shadow-lg backdrop-blur" aria-label="Editor actions" role="region">
+        <div className="rounded-xl border border-white/10 bg-white/[.02] p-3" aria-label="Editor actions" role="region">
+            <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-primary">Actions</h3>
             {editError && (
                 <div className="mb-2 flex items-center gap-2 text-[11px] text-red-400" role="alert">
                     <AlertCircle size={13} className="shrink-0" />
                     <span className="truncate">{editError}</span>
                 </div>
             )}
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+            <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">
                 <button type="button" onClick={onAutoEdit} disabled={isEditing} className={`${actionButton} bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500`}>
                     {isEditing ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
                     {isEditing ? 'Editing…' : 'Auto Edit'}

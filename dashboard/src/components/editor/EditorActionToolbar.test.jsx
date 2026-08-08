@@ -13,6 +13,15 @@ describe('EditorActionToolbar', () => {
         Object.values(actions).forEach((action) => expect(action).toHaveBeenCalledOnce());
     });
 
+    it('renders as a compact Actions inspector card', () => {
+        render(<EditorActionToolbar onAutoEdit={vi.fn()} onConvertNativeShort={vi.fn()} onSubtitles={vi.fn()} onViralHook={vi.fn()} onDubVoice={vi.fn()} onPost={vi.fn()} onDownload={vi.fn()} />);
+
+        const region = screen.getByRole('region', { name: 'Editor actions' });
+        expect(screen.getByRole('heading', { name: 'Actions' })).toBeInTheDocument();
+        expect(region).toHaveClass('rounded-xl', 'border', 'p-3');
+        expect(region).not.toHaveClass('fixed', 'top-[4.5rem]', 'z-[70]');
+    });
+
     it('disables a workflow while it is processing', () => {
         render(<EditorActionToolbar onAutoEdit={vi.fn()} isEditing onConvertNativeShort={vi.fn()} onSubtitles={vi.fn()} onViralHook={vi.fn()} onDubVoice={vi.fn()} onPost={vi.fn()} onDownload={vi.fn()} />);
         expect(screen.getByRole('button', { name: /editing/i })).toBeDisabled();
