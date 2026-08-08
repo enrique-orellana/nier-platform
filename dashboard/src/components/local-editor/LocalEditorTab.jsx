@@ -4,7 +4,7 @@ import LocalEditorTimeline from './LocalEditorTimeline';
 import SubtitleCueTable from './SubtitleCueTable';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock } from './localEditorExport';
-import { burnLocalEditorSubtitles, renderLocalVideoOnBackend, renderLocalVideoOnBrowser, syncSubtitleCue } from './localEditorRender';
+import { burnLocalEditorSubtitles, cueCaptionsForRender, renderLocalVideoOnBackend, renderLocalVideoOnBrowser, syncSubtitleCue } from './localEditorRender';
 import { detectEmbeddedSideBars, getFilledFrameDimensions } from './localEditorVideo';
 import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
@@ -981,9 +981,7 @@ export default function LocalEditorTab({
     }
 
     const activeSubtitle = activeCueAt(subtitleCues, playheadMs);
-    const activeSubtitleWords = activeSubtitle?.captions?.length
-        ? activeSubtitle.captions
-        : activeSubtitle ? [{ text: activeSubtitle.text, startMs: activeSubtitle.startMs, endMs: activeSubtitle.endMs }] : [];
+    const activeSubtitleWords = activeSubtitle ? cueCaptionsForRender(activeSubtitle) : [];
     const activeSubtitleWordIndex = activeSubtitleWords.findIndex((word) => playheadMs >= word.startMs && playheadMs < word.endMs);
     const activeHook = hook && playheadMs >= hook.startMs && playheadMs < hook.endMs ? hook : null;
     const previewSubtitleStyle = normalizeSubtitleStyle(subtitleStyle);

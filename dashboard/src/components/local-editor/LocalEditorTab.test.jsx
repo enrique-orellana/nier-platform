@@ -301,6 +301,31 @@ describe('LocalEditorTab', () => {
         });
     });
 
+    it('uses the current cue text in the preview when saved word captions are stale', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        render(<LocalEditorTab initialEditorState={{
+            subtitleCues: [{
+                id: 'cue-1',
+                type: 'subtitle',
+                label: 'Ciao mondo',
+                text: 'Ciao mondo',
+                startMs: 0,
+                endMs: 1000,
+                captions: [
+                    { text: 'Hello', startMs: 0, endMs: 500 },
+                    { text: 'world', startMs: 500, endMs: 1000 },
+                ],
+            }],
+            subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+            subtitleLanguage: 'it',
+            hook: null,
+        }} initialStateKey="stale-preview-captions" />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+
+        await waitFor(() => expect(within(screen.getByTestId('local-editor-player')).getByText('Ciao')).toBeInTheDocument());
+        expect(within(screen.getByTestId('local-editor-player')).queryByText('Hello')).not.toBeInTheDocument();
+    });
+
     it('asks before replacing existing subtitles during generation', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
         const fetchMock = vi.fn();
