@@ -19,6 +19,9 @@ export default defineConfig(({ mode }) => {
     resolve: {
       dedupe: ['mediabunny'],
     },
+    optimizeDeps: {
+      exclude: ['mediabunny'],
+    },
     test: {
       environment: 'jsdom',
       setupFiles: './src/test/setup.js',

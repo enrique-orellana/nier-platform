@@ -1057,7 +1057,7 @@ function App() {
                       Connect
                     </button>
                   </div>
-                  <p className="text-xs text-zinc-500 leading-relaxed">
+                  <div className="text-xs text-zinc-500 leading-relaxed">
                     Connect your Upload-Post account if you want publishing features.
                     <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <a href="https://app.upload-post.com/login" target="_blank" rel="noopener noreferrer" className="p-2 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex flex-col gap-1">
@@ -1077,7 +1077,7 @@ function App() {
                     <span className="text-zinc-600 italic">
                       Keys are only stored in your browser. They are sent to the backend only when you publish, never stored server-side.
                     </span>
-                  </p>
+                  </div>
                 </div>
               </div>
 
@@ -1112,7 +1112,7 @@ function App() {
                       Save
                     </button>
                   </div>
-                  <p className="text-xs text-zinc-500 leading-relaxed">
+                  <div className="text-xs text-zinc-500 leading-relaxed">
                     Get your API key from ElevenLabs to enable video translation.
                     <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <a href="https://elevenlabs.io/sign-up" target="_blank" rel="noopener noreferrer" className="p-2 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex flex-col gap-1">
@@ -1128,7 +1128,7 @@ function App() {
                     <span className="text-zinc-600 italic">
                       Keys are only stored in your browser. They are sent to the backend only to process your request, never stored server-side.
                     </span>
-                  </p>
+                  </div>
                 </div>
               </div>
 
@@ -1163,7 +1163,7 @@ function App() {
                       Save
                     </button>
                   </div>
-                  <p className="text-xs text-zinc-500 leading-relaxed">
+                  <div className="text-xs text-zinc-500 leading-relaxed">
                     Get your API key from fal.ai to enable AI actor video generation.
                     <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener noreferrer" className="p-2 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex flex-col gap-1">
@@ -1179,7 +1179,7 @@ function App() {
                     <span className="text-zinc-600 italic">
                       Keys are only stored in your browser. Sent to backend only to process requests.
                     </span>
-                  </p>
+                  </div>
                 </div>
               </div>
             </div>
