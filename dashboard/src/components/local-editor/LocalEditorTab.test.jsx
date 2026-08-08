@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { StrictMode } from 'react';
+import { StrictMode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalEditorTab from './LocalEditorTab';
 import { DEFAULT_SUBTITLE_STYLE } from './localEditorStyles';
@@ -12,6 +12,18 @@ vi.mock('./AudioWaveform', () => ({
 }));
 
 const makeVideoFile = () => new File(['video'], 'demo.mp4', { type: 'video/mp4' });
+
+const controlledEditorState = {
+    subtitleCues: [],
+    subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+    subtitleLanguage: 'en',
+    hook: null,
+};
+
+function EchoingEditor() {
+    const [state, setState] = useState(controlledEditorState);
+    return <LocalEditorTab initialEditorState={state} initialStateKey="draft-1" onStateChange={setState} />;
+}
 
 const deleteDatabase = (name) => new Promise((resolve) => {
     const request = indexedDB.deleteDatabase(name);
@@ -40,6 +52,13 @@ describe('LocalEditorTab', () => {
         expect(screen.getByRole('heading', { name: 'Local Editor' })).toBeInTheDocument();
         expect(screen.getByText(/stays in your browser/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/upload video/i)).toBeInTheDocument();
+    });
+
+    it('does not reapply an echoed initial editor state on every render', () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        expect(() => render(<EchoingEditor />)).not.toThrow();
+        expect(errorSpy.mock.calls.flat().join(' ')).not.toContain('Maximum update depth exceeded');
     });
 
     it('loads a project clip into the same editor without showing the upload state', async () => {

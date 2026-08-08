@@ -349,6 +349,7 @@ export default function LocalEditorTab({
     const editHistoryRef = useRef(editHistory);
     const activeProjectIdRef = useRef(null);
     const activeProjectNameRef = useRef('');
+    const appliedInitialStateKeyRef = useRef(null);
     const projectSaveTimerRef = useRef(null);
     const legacyHistoryPresentRef = useRef((() => {
         try { return Boolean(localStorage.getItem('openshorts_local_editor_state_v1')); } catch { return false; }
@@ -380,7 +381,8 @@ export default function LocalEditorTab({
     }, [activeProjectId, durationMs, editHistory, onStateChange, persistHistory, videoFile]);
 
     useEffect(() => {
-        if (!initialEditorState || initialStateKey === null) return;
+        if (!initialEditorState || initialStateKey === null || appliedInitialStateKeyRef.current === initialStateKey) return;
+        appliedInitialStateKeyRef.current = initialStateKey;
         setEditHistory((current) => ({
             ...createEmptyEditorHistory(),
             present: { ...current.present, ...initialEditorState },
