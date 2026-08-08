@@ -47,6 +47,7 @@ data:
   AWS_S3_FORCE_PATH_STYLE: "true"
   RENDER_SERVICE_URL: http://openshorts-renderer.openshorts.svc.cluster.local:3100
   TRANSLATION_SERVICE_URL: http://openshorts-translation.openshorts.svc.cluster.local:3200
+  OPENSHORTS_CODEX_AUTH_FILE: /app/output/.openshorts/codex-auth.json
   PORT: "3100"
   OUTPUT_DIR: /output
   REMOTION_BUNDLE_PATH: /app/remotion
@@ -159,6 +160,9 @@ spec:
           envFrom:
             - configMapRef:
                 name: openshorts-config
+          volumeMounts:
+            - name: workdir
+              mountPath: /app/output
           readinessProbe:
             httpGet:
               path: /health
@@ -182,6 +186,10 @@ spec:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
             runAsUser: 1000
+      volumes:
+        - name: workdir
+          persistentVolumeClaim:
+            claimName: openshorts-workdir
       terminationGracePeriodSeconds: 30
 ---
 apiVersion: v1
