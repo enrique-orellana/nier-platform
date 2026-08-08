@@ -14,7 +14,12 @@ import AISettingsPanel from './components/AISettingsPanel';
 import LocalEditorTab from './components/local-editor/LocalEditorTab';
 
 import { pickLmStudioModel, pickProviderAfterDiscoveryFailure } from './lib/lmStudio';
-import { codexPollState, normalizeCodexStatus } from './lib/openaiCodex';
+import {
+  codexPollState,
+  normalizeCodexModels,
+  normalizeCodexStatus,
+  pickCodexModel,
+} from './lib/openaiCodex';
 import { getApiUrl } from './config';
 import {
   buildEditorPath,
@@ -230,6 +235,7 @@ function App() {
   const [codexStatus, setCodexStatus] = useState({ connected: false, pending: false, requiresReconnect: false });
   const [codexPending, setCodexPending] = useState(null);
   const [codexError, setCodexError] = useState('');
+  const [codexModels, setCodexModels] = useState({ models: [], defaultModel: '', loading: false, error: '', loaded: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -320,6 +326,37 @@ function App() {
       setCodexError(error.message);
     }
   }, []);
+
+  const refreshCodexModels = useCallback(async () => {
+    setCodexModels((current) => ({ ...current, loading: true, error: '' }));
+    try {
+      const res = await fetch(getApiUrl('/api/ai/openai-codex/models'), { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Unable to load available Codex models.');
+      const catalog = normalizeCodexModels(data);
+      setCodexModels({ ...catalog, loading: false, error: '', loaded: true });
+    } catch (error) {
+      setCodexModels((current) => ({ ...current, loading: false, error: error.message, loaded: true }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (aiProvider !== 'openai-codex' || !codexStatus.connected) {
+      setCodexModels({ models: [], defaultModel: '', loading: false, error: '', loaded: false });
+      return undefined;
+    }
+
+    refreshCodexModels();
+    return undefined;
+  }, [aiProvider, codexStatus.connected, refreshCodexModels]);
+
+  useEffect(() => {
+    if (aiProvider !== 'openai-codex' || !codexStatus.connected || codexModels.loading || !codexModels.loaded) return;
+
+    setAiTextModel((current) => pickCodexModel({ currentModel: current, models: codexModels.models }));
+    setAiAnalyzeModel((current) => pickCodexModel({ currentModel: current, models: codexModels.models }));
+    setAiVisionModel((current) => pickCodexModel({ currentModel: current, models: codexModels.models }));
+  }, [aiProvider, codexStatus.connected, codexModels.loading, codexModels.loaded, codexModels.models]);
   
   useEffect(() => {
     let cancelled = false;
@@ -559,9 +596,11 @@ function App() {
     lastProviderRef.current = aiProvider;
 
     if (aiProvider === 'openai-codex') {
-      setAiTextModel('auto');
-      setAiAnalyzeModel('auto');
-      setAiVisionModel('auto');
+      if (previousProvider !== 'openai-codex') {
+        setAiTextModel('auto');
+        setAiAnalyzeModel('auto');
+        setAiVisionModel('auto');
+      }
       setAiImageModel('');
       return;
     }
@@ -1027,8 +1066,12 @@ function App() {
                 codexStatus={codexStatus}
                 codexPending={codexPending}
                 codexError={codexError}
+                codexModels={codexModels}
+                codexModelsLoading={codexModels.loading}
+                codexModelsError={codexModels.error}
                 onConnectCodex={connectCodex}
                 onDisconnectCodex={disconnectCodex}
+                onRefreshCodexModels={refreshCodexModels}
                 onDetectLmStudio={detectLmStudio}
               />
 

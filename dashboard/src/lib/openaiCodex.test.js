@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { codexPollState, codexStatusLabel, normalizeCodexStatus } from './openaiCodex';
+import {
+  codexPollState,
+  codexStatusLabel,
+  normalizeCodexModels,
+  normalizeCodexStatus,
+  pickCodexModel,
+} from './openaiCodex';
 
 
 describe('OpenAI Codex helpers', () => {
@@ -33,5 +39,26 @@ describe('OpenAI Codex helpers', () => {
       pending: false,
       requiresReconnect: true,
     });
+  });
+
+  it('normalizes the account model catalog and removes duplicate or invalid entries', () => {
+    expect(normalizeCodexModels({
+      models: [
+        { slug: 'gpt-5.4', title: 'GPT-5.4', supportsVision: true },
+        { id: 'gpt-5.4', label: 'Duplicate' },
+        { title: 'Missing id' },
+      ],
+      defaultModel: 'gpt-5.4',
+    })).toEqual({
+      models: [{ id: 'gpt-5.4', label: 'GPT-5.4', supportsVision: true }],
+      defaultModel: 'gpt-5.4',
+    });
+  });
+
+  it('keeps an available model and falls back to Auto when it disappears', () => {
+    const models = [{ id: 'gpt-5.4', label: 'GPT-5.4', supportsVision: true }];
+
+    expect(pickCodexModel({ currentModel: 'gpt-5.4', models })).toBe('gpt-5.4');
+    expect(pickCodexModel({ currentModel: 'retired-model', models })).toBe('auto');
   });
 });

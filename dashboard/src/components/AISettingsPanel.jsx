@@ -25,13 +25,43 @@ export default function AISettingsPanel({
   codexStatus = { connected: false, pending: false, requiresReconnect: false },
   codexPending = null,
   codexError = '',
+  codexModels = { models: [], defaultModel: '' },
+  codexModelsLoading = false,
+  codexModelsError = '',
   onConnectCodex = () => {},
   onDisconnectCodex = () => {},
+  onRefreshCodexModels = () => {},
 }) {
   const providerOptions = buildVisibleProviders({ lmStudioAvailable });
   const isCodex = aiProvider === 'openai-codex';
   const textOptions = aiProvider === 'lmstudio' ? lmStudioModels.textModels : null;
   const visionOptions = aiProvider === 'lmstudio' ? lmStudioModels.visionModels : null;
+  const codexTextOptions = codexModels.models || [];
+  const codexVisionOptions = codexTextOptions.some((model) => model.supportsVision)
+    ? codexTextOptions.filter((model) => model.supportsVision)
+    : codexTextOptions;
+  const codexModelDisabled = !codexStatus.connected || codexModelsLoading;
+
+  const renderCodexModelSelect = (label, value, onChange, options) => (
+    <label className="block" key={label}>
+      <span className="block text-sm text-zinc-400 mb-2">{label}</span>
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(e) => {
+          setAiQualityPreset('custom');
+          onChange(e.target.value);
+        }}
+        className="input-field"
+        disabled={codexModelDisabled}
+      >
+        <option value="auto">Auto (Codex default)</option>
+        {options.map((model) => (
+          <option key={model.id} value={model.id}>{model.label}</option>
+        ))}
+      </select>
+    </label>
+  );
 
   return (
     <div className="glass-panel p-6 mb-8">
@@ -132,14 +162,30 @@ export default function AISettingsPanel({
 
         {isCodex ? (
           <>
-            {['Text Model', 'Clip Analysis Model', 'Vision Model'].map((label) => (
-              <label className="block" key={label}>
-                <span className="block text-sm text-zinc-400 mb-2">{label}</span>
-                <select value="auto" className="input-field" disabled>
-                  <option value="auto">Auto (Codex default)</option>
-                </select>
-              </label>
-            ))}
+            <div className="md:col-span-2 flex items-center justify-between gap-3 -mb-2">
+              <p className="text-xs text-zinc-500">
+                {codexModelsLoading
+                  ? 'Loading models available to this ChatGPT account...'
+                  : codexModelsError
+                    ? codexModelsError
+                    : codexTextOptions.length
+                      ? `${codexTextOptions.length} account model${codexTextOptions.length === 1 ? '' : 's'} available`
+                      : codexStatus.connected
+                        ? 'No account models discovered yet.'
+                        : 'Connect ChatGPT to load account models.'}
+              </p>
+              <button
+                type="button"
+                onClick={onRefreshCodexModels}
+                disabled={!codexStatus.connected || codexModelsLoading}
+                className="text-xs text-primary hover:underline disabled:text-zinc-600 disabled:no-underline"
+              >
+                {codexModelsLoading ? 'Refreshing...' : 'Refresh models'}
+              </button>
+            </div>
+            {renderCodexModelSelect('Text Model', aiTextModel, setAiTextModel, codexTextOptions)}
+            {renderCodexModelSelect('Clip Analysis Model', aiAnalyzeModel, setAiAnalyzeModel, codexTextOptions)}
+            {renderCodexModelSelect('Vision Model', aiVisionModel, setAiVisionModel, codexVisionOptions)}
           </>
         ) : !textOptions ? (
           <>

@@ -138,4 +138,37 @@ describe('AISettingsPanel', () => {
     fireEvent.click(cancelButton);
     expect(onDisconnectCodex).toHaveBeenCalled();
   });
+
+  it('shows account-available Codex models and refreshes the catalog', () => {
+    const onRefreshCodexModels = vi.fn();
+    render(
+      <AISettingsPanel
+        aiProvider="openai-codex"
+        aiBaseUrl=""
+        apiKey=""
+        aiQualityPreset="custom"
+        aiTextModel="auto"
+        aiAnalyzeModel="auto"
+        aiVisionModel="auto"
+        aiImageModel=""
+        lmStudioAvailable={false}
+        lmStudioModels={{ textModels: [], visionModels: [] }}
+        codexStatus={{ connected: true, pending: false, requiresReconnect: false }}
+        codexModels={{
+          models: [{ id: 'gpt-5.4', label: 'GPT-5.4', supportsVision: true }],
+          defaultModel: 'gpt-5.4',
+        }}
+        onRefreshCodexModels={onRefreshCodexModels}
+        onConnectCodex={vi.fn()}
+        onDisconnectCodex={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('combobox', { name: /Text Model/i })).toHaveValue('auto');
+    expect(screen.getAllByRole('option', { name: 'GPT-5.4' })).toHaveLength(3);
+    const refreshButton = screen.getByRole('button', { name: /Refresh models/i });
+    expect(refreshButton).toBeEnabled();
+    fireEvent.click(refreshButton);
+    expect(onRefreshCodexModels).toHaveBeenCalled();
+  });
 });

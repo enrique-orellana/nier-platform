@@ -20,6 +20,7 @@ from codex_auth import (
 GEMINI_TEXT_MODEL = "gemini-2.5-flash"
 GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview"
 CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.4")
+CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
 AUTO_MODEL_VALUES = {"", "auto", "default"}
 LMSTUDIO_PLACEHOLDER_MODELS = {"qwen3:latest", "qwen2.5vl:latest"}
 
@@ -259,6 +260,104 @@ def discover_lmstudio_models(base_url: str, api_key: str = "", timeout: float = 
         "textModels": models,
         "visionModels": [model for model in models if model["supportsVision"]],
     }
+
+
+def _codex_model_value(model: Mapping[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = model.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def _codex_model_is_available(model: Mapping[str, Any]) -> bool:
+    visibility = _codex_model_value(model, "visibility", "status").lower()
+    if visibility in {"hidden", "private", "unavailable", "disabled"}:
+        return False
+    if model.get("hidden") is True or model.get("is_hidden") is True:
+        return False
+    if model.get("available") is False or model.get("enabled") is False:
+        return False
+    return True
+
+
+def _normalize_codex_model(model: Mapping[str, Any]) -> Optional[dict[str, Any]]:
+    model_id = _codex_model_value(model, "slug", "id", "model", "name")
+    if not model_id or not _codex_model_is_available(model):
+        return None
+
+    modalities = model.get("input_modalities") or model.get("inputModalities") or model.get("modalities") or []
+    if isinstance(modalities, str):
+        modalities = [modalities]
+    supports_vision = bool(model.get("supportsVision") or model.get("supports_vision"))
+    supports_vision = supports_vision or any(
+        str(modality).strip().lower() in {"image", "vision"}
+        for modality in modalities
+    )
+    return {
+        "id": model_id,
+        "label": _codex_model_value(model, "title", "display_name", "displayName") or model_id,
+        "supportsVision": supports_vision,
+    }
+
+
+def _codex_request_headers(access_token: str, account_id: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {access_token}",
+        "ChatGPT-Account-ID": account_id,
+        "originator": "codex_cli_rs",
+        "Version": os.environ.get("CODEX_CLIENT_VERSION", "0.142.3"),
+        "Accept": "application/json",
+    }
+
+
+def discover_codex_models(timeout: float = 10.0) -> dict[str, Any]:
+    """Return the models available to the stored ChatGPT Codex account."""
+    for attempt in range(2):
+        access_token = get_access_token()
+        account_id = get_codex_account_id()
+        with httpx.Client(timeout=timeout) as client:
+            response = client.get(
+                CODEX_MODELS_URL,
+                headers=_codex_request_headers(access_token, account_id),
+                params={"client_version": os.environ.get("CODEX_CLIENT_VERSION", "0.142.3")},
+            )
+        if response.status_code in {401, 403}:
+            if attempt:
+                raise CodexReauthRequired("ChatGPT authorization was rejected. Reconnect ChatGPT.")
+            refresh_credentials(default_codex_store())
+            continue
+        response.raise_for_status()
+        payload = response.json()
+        raw_models = payload.get("models") if isinstance(payload, dict) else payload
+        if isinstance(raw_models, dict):
+            raw_models = raw_models.get("data") or raw_models.get("models") or []
+        if not isinstance(raw_models, list):
+            raw_models = []
+
+        models = []
+        seen_ids = set()
+        for raw_model in raw_models:
+            if not isinstance(raw_model, Mapping):
+                continue
+            normalized = _normalize_codex_model(raw_model)
+            if normalized and normalized["id"] not in seen_ids:
+                models.append(normalized)
+                seen_ids.add(normalized["id"])
+
+        default_model = ""
+        if isinstance(payload, dict):
+            default_model = str(
+                payload.get("default_model")
+                or payload.get("defaultModel")
+                or payload.get("default")
+                or ""
+            ).strip()
+        if default_model and default_model not in seen_ids:
+            default_model = ""
+        return {"models": models, "defaultModel": default_model}
+
+    raise RuntimeError("Unable to discover Codex models.")
 
 
 def resolve_lmstudio_model(

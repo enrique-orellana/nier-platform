@@ -62,6 +62,88 @@ class FakeCodexStreamClient:
         ])
 
 
+class FakeCodexCatalogResponse:
+    def __init__(self, status_code, payload):
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        return None
+
+
+class FakeCodexCatalogClient:
+    responses = []
+    last_url = None
+    last_headers = None
+    last_params = None
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def get(self, url, headers=None, params=None):
+        self.__class__.last_url = url
+        self.__class__.last_headers = headers
+        self.__class__.last_params = params
+        return self.__class__.responses.pop(0)
+
+
+def test_codex_model_discovery_normalizes_available_models(monkeypatch):
+    FakeCodexCatalogClient.responses = [FakeCodexCatalogResponse(200, {
+        "models": [
+            {"slug": "gpt-5.4", "title": "GPT-5.4", "input_modalities": ["text", "image"], "visibility": "list"},
+            {"id": "hidden-model", "display_name": "Hidden", "visibility": "hidden"},
+            {"slug": "", "title": "Invalid"},
+        ],
+        "default_model": "gpt-5.4",
+    })]
+    monkeypatch.setattr(ai_client.httpx, "Client", FakeCodexCatalogClient)
+    monkeypatch.setattr(ai_client, "get_access_token", lambda: "access")
+    monkeypatch.setattr(ai_client, "get_codex_account_id", lambda: "account")
+
+    result = ai_client.discover_codex_models()
+
+    assert result == {
+        "models": [{
+            "id": "gpt-5.4",
+            "label": "GPT-5.4",
+            "supportsVision": True,
+        }],
+        "defaultModel": "gpt-5.4",
+    }
+    assert FakeCodexCatalogClient.last_url == "https://chatgpt.com/backend-api/codex/models"
+    assert FakeCodexCatalogClient.last_params == {"client_version": "0.142.3"}
+    assert FakeCodexCatalogClient.last_headers["Authorization"] == "Bearer access"
+    assert FakeCodexCatalogClient.last_headers["ChatGPT-Account-ID"] == "account"
+
+
+def test_codex_model_discovery_refreshes_once_after_auth_rejection(monkeypatch):
+    FakeCodexCatalogClient.responses = [
+        FakeCodexCatalogResponse(401, {}),
+        FakeCodexCatalogResponse(200, {"models": [{"slug": "gpt-5.4"}]}),
+    ]
+    access_tokens = iter(["old-access", "new-access"])
+    refreshes = []
+    monkeypatch.setattr(ai_client.httpx, "Client", FakeCodexCatalogClient)
+    monkeypatch.setattr(ai_client, "get_access_token", lambda: next(access_tokens))
+    monkeypatch.setattr(ai_client, "get_codex_account_id", lambda: "account")
+    monkeypatch.setattr(ai_client, "refresh_credentials", lambda store: refreshes.append(store))
+
+    result = ai_client.discover_codex_models()
+
+    assert result["models"][0]["id"] == "gpt-5.4"
+    assert len(refreshes) == 1
+    assert FakeCodexCatalogClient.last_headers["Authorization"] == "Bearer new-access"
+
+
 def test_codex_transport_aggregates_response_output_text_deltas(monkeypatch):
     config = ai_client.AIConfig(provider="openai-codex", text_model="auto")
     monkeypatch.setattr(ai_client, "get_access_token", lambda: "access")

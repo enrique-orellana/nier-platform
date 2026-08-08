@@ -21,9 +21,10 @@ from pydantic import BaseModel
 from render_manifest import load_manifest, save_manifest_atomic, verify_manifest_assets, calculate_revision, master_is_current
 from version_store import VersionStore
 from s3_uploader import upload_job_artifacts, delete_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
-from ai_client import AIConfig, load_ai_config, ai_config_to_env, discover_lmstudio_models, chat_json
+from ai_client import AIConfig, load_ai_config, ai_config_to_env, discover_codex_models, discover_lmstudio_models, chat_json
 from codex_auth import (
     CodexAuthError,
+    CodexReauthRequired,
     PendingDeviceLogin,
     default_codex_store,
     poll_device_login_once,
@@ -685,6 +686,23 @@ async def openai_codex_disconnect():
     with codex_pending_lock:
         codex_pending_login = None
     return {"connected": False, "pending": False}
+
+
+@app.get("/api/ai/openai-codex/models")
+async def openai_codex_models():
+    try:
+        discovered = discover_codex_models()
+    except CodexReauthRequired as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except Exception as exc:
+        print(f"Codex model discovery failed: {exc}")
+        raise HTTPException(status_code=502, detail="Unable to discover available Codex models.") from exc
+
+    return {
+        "provider": "openai-codex",
+        "models": discovered.get("models", []),
+        "defaultModel": discovered.get("defaultModel", ""),
+    }
 
 
 def _lmstudio_discovery_failure(base_url: str) -> dict[str, Any]:
