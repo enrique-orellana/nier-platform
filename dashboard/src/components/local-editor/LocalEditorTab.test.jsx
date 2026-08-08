@@ -1,8 +1,11 @@
+import 'fake-indexeddb/auto';
+
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalEditorTab from './LocalEditorTab';
 import { DEFAULT_SUBTITLE_STYLE } from './localEditorStyles';
+import { EDITOR_PROJECT_DB_NAME, EDITOR_VIDEO_DB_NAME, createStoredProject, listStoredProjects } from './localEditorPersistence';
 
 vi.mock('./AudioWaveform', () => ({
     default: ({ videoUrl }) => <div data-testid="audio-waveform" data-video-url={videoUrl} />,
@@ -10,13 +13,22 @@ vi.mock('./AudioWaveform', () => ({
 
 const makeVideoFile = () => new File(['video'], 'demo.mp4', { type: 'video/mp4' });
 
+const deleteDatabase = (name) => new Promise((resolve) => {
+    const request = indexedDB.deleteDatabase(name);
+    request.onsuccess = resolve;
+    request.onerror = resolve;
+    request.onblocked = resolve;
+});
+
 if (!URL.createObjectURL) {
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: () => 'blob:demo' });
 }
 
 describe('LocalEditorTab', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         localStorage.clear();
+        await deleteDatabase(EDITOR_PROJECT_DB_NAME);
+        await deleteDatabase(EDITOR_VIDEO_DB_NAME);
     });
 
     afterEach(() => {
@@ -529,5 +541,41 @@ describe('LocalEditorTab', () => {
         fireEvent.click(screen.getByRole('button', { name: /remove subtitles/i }));
         expect(screen.queryByText('Hello')).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /export subtitles/i })).toBeDisabled();
+    });
+
+    it('saves a named project and auto-saves later edits', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        vi.spyOn(window, 'prompt').mockReturnValue('Demo project');
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /save project/i })).toBeInTheDocument());
+
+        fireEvent.click(screen.getByRole('button', { name: /save project/i }));
+        await waitFor(async () => expect((await listStoredProjects()).map((project) => project.name)).toEqual(['Demo project']));
+
+        fireEvent.click(screen.getByRole('button', { name: /add subtitle cue/i }));
+        await waitFor(async () => expect((await listStoredProjects())[0].history.present.subtitleCues).toHaveLength(1), { timeout: 1500 });
+    });
+
+    it('opens another project and requires confirmation before deleting it', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:project');
+        const other = await createStoredProject({ name: 'Other project', history: { past: [], present: { subtitleCues: [], subtitleStyle: DEFAULT_SUBTITLE_STYLE, subtitleLanguage: 'en', hook: null }, future: [] }, file: new File(['other'], 'other.mp4', { type: 'video/mp4' }) });
+        render(<LocalEditorTab />);
+
+        fireEvent.click(screen.getByRole('button', { name: /^Projects$/i }));
+        await waitFor(() => expect(screen.getByRole('dialog', { name: /saved projects/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: 'Open Other project' }));
+        await waitFor(() => expect(screen.getByText(/other\.mp4/)).toBeInTheDocument());
+
+        fireEvent.click(screen.getByRole('button', { name: /^Projects$/i }));
+        await waitFor(() => expect(screen.getByRole('dialog', { name: /saved projects/i })).toBeInTheDocument());
+        vi.spyOn(window, 'confirm').mockReturnValue(false);
+        fireEvent.click(screen.getByRole('button', { name: 'Delete Other project' }));
+        expect(screen.getByRole('button', { name: 'Open Other project' })).toBeInTheDocument();
+
+        window.confirm.mockReturnValue(true);
+        fireEvent.click(screen.getByRole('button', { name: 'Delete Other project' }));
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Open Other project' })).not.toBeInTheDocument());
+        expect((await listStoredProjects()).find((project) => project.id === other.id)).toBeUndefined();
     });
 });

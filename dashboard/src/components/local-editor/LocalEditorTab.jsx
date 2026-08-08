@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Download, FastForward, FileText, Film, Languages, Loader2, Maximize2, Minimize2, Pause, Play, Plus, Redo2, Repeat, Rewind, RotateCcw, SkipBack, SkipForward, Square, Undo2, Upload, X } from 'lucide-react';
+import { ChevronDown, Download, FastForward, FileText, Film, FolderOpen, Languages, Loader2, Maximize2, Minimize2, Pause, Play, Plus, Redo2, Repeat, Rewind, RotateCcw, Save, SkipBack, SkipForward, Square, Undo2, Upload, X } from 'lucide-react';
 import LocalEditorTimeline from './LocalEditorTimeline';
 import SubtitleCueTable from './SubtitleCueTable';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
@@ -10,7 +10,8 @@ import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
 import { groupCaptionsIntoBlocks } from '../../remotion/lib/captions';
 import { HOOK_FONT_FAMILY, getHookAnimationStyle, getHookBoxStyle, getHookPositionStyle } from '../../remotion/lib/hookVisual';
-import { clearEditorPersistence, createEmptyEditorHistory, EDITOR_HISTORY_LIMIT, loadStoredVideo, readEditorHistory, saveEditorHistory, saveStoredVideo } from './localEditorPersistence';
+import LocalEditorProjects from './LocalEditorProjects';
+import { createEmptyEditorHistory, createStoredProject, deleteStoredProject, EDITOR_HISTORY_LIMIT, getActiveProjectId, listStoredProjects, loadStoredProject, migrateLegacyProject, readEditorHistory, renameStoredProject, saveEditorHistory, saveStoredProject, setActiveProjectId } from './localEditorPersistence';
 import {
     DEFAULT_SUBTITLE_STYLE,
     HOOK_ENTRANCE_OPTIONS,
@@ -333,14 +334,44 @@ export default function LocalEditorTab({
     const [subtitleView, setSubtitleView] = useState('timeline');
     const [subtitleTableLoop, setSubtitleTableLoop] = useState(false);
     const [remoteVideoLoading, setRemoteVideoLoading] = useState(Boolean(initialVideoUrl));
+    const [projects, setProjects] = useState([]);
+    const [activeProjectId, setActiveProjectIdState] = useState(null);
+    const [projectsOpen, setProjectsOpen] = useState(false);
+    const [projectStorageWarning, setProjectStorageWarning] = useState('');
 
     const { subtitleCues, subtitleStyle, subtitleLanguage, hook } = editHistory.present;
     const editHistoryRef = useRef(editHistory);
+    const activeProjectIdRef = useRef(null);
+    const activeProjectNameRef = useRef('');
+    const projectSaveTimerRef = useRef(null);
+    const legacyHistoryPresentRef = useRef((() => {
+        try { return Boolean(localStorage.getItem('openshorts_local_editor_state_v1')); } catch { return false; }
+    })());
     useEffect(() => {
         editHistoryRef.current = editHistory;
-        if (persistHistory) saveEditorHistory(editHistory);
+        if (persistHistory && !activeProjectIdRef.current) saveEditorHistory(editHistory);
         onStateChange?.(editHistory.present);
-    }, [editHistory, onStateChange, persistHistory]);
+        const persistedProjectId = activeProjectIdRef.current || activeProjectId;
+        if (!persistedProjectId || !videoFile) return undefined;
+        if (projectSaveTimerRef.current) window.clearTimeout(projectSaveTimerRef.current);
+        projectSaveTimerRef.current = window.setTimeout(async () => {
+            const saved = await saveStoredProject({
+                id: persistedProjectId,
+                name: activeProjectNameRef.current || videoFile.name,
+                history: editHistoryRef.current,
+                videoName: videoFile.name,
+                durationMs,
+            }, null);
+            if (!saved) setProjectStorageWarning('Could not save this project in browser storage. Your current edits are still available in memory.');
+            else {
+                setProjectStorageWarning('');
+                setProjects(await listStoredProjects());
+            }
+        }, 350);
+        return () => {
+            if (projectSaveTimerRef.current) window.clearTimeout(projectSaveTimerRef.current);
+        };
+    }, [activeProjectId, durationMs, editHistory, onStateChange, persistHistory, videoFile]);
 
     useEffect(() => {
         if (!initialEditorState || initialStateKey === null) return;
@@ -349,10 +380,10 @@ export default function LocalEditorTab({
             present: { ...current.present, ...initialEditorState },
         }));
         setSelected(null);
-    }, [initialStateKey]);
+    }, [initialEditorState, initialStateKey]);
 
     useEffect(() => {
-        const persistCurrentHistory = () => { if (persistHistory) saveEditorHistory(editHistoryRef.current); };
+        const persistCurrentHistory = () => { if (persistHistory && !activeProjectIdRef.current) saveEditorHistory(editHistoryRef.current); };
         window.addEventListener('pagehide', persistCurrentHistory);
         window.addEventListener('beforeunload', persistCurrentHistory);
         return () => {
@@ -360,6 +391,41 @@ export default function LocalEditorTab({
             window.removeEventListener('beforeunload', persistCurrentHistory);
         };
     }, [persistHistory]);
+
+    const refreshProjects = async () => {
+        const storedProjects = await listStoredProjects();
+        setProjects(storedProjects);
+        return storedProjects;
+    };
+
+    useEffect(() => {
+        let active = true;
+        const initializeProjects = async () => {
+            await migrateLegacyProject({ hasLegacyHistory: legacyHistoryPresentRef.current });
+            const storedProjects = await listStoredProjects();
+            const storedActiveId = await getActiveProjectId();
+            if (!active) return;
+            setProjects(storedProjects);
+            if (initialVideoUrl || !storedActiveId || videoLoadStartedRef.current) return;
+            const stored = await loadStoredProject(storedActiveId);
+            if (!active) return;
+            if (!stored?.file) {
+                await setActiveProjectId(null);
+                return;
+            }
+            activeProjectIdRef.current = stored.project.id;
+            activeProjectNameRef.current = stored.project.name;
+            setActiveProjectIdState(stored.project.id);
+            setEditHistory(stored.project.history);
+            loadVideo(stored.file, { persist: false, projectId: stored.project.id, restoredDurationMs: stored.project.durationMs });
+        };
+        void initializeProjects();
+        return () => { active = false; };
+    }, [initialVideoUrl]);
+
+    useEffect(() => () => {
+        if (projectSaveTimerRef.current) window.clearTimeout(projectSaveTimerRef.current);
+    }, []);
 
     const commitEdit = (updater, { coalesce = false, transaction = null, recordAction = false } = {}) => setEditHistory((current) => {
         const next = typeof updater === 'function' ? updater(current.present) : updater;
@@ -415,19 +481,24 @@ export default function LocalEditorTab({
         return subtitleCues.find((cue) => cue.id === selected.id) || null;
     }, [hook, selected, subtitleCues]);
 
-    const loadVideo = (file, { persist = true } = {}) => {
+    const loadVideo = (file, { persist = true, projectId = null, restoredDurationMs = null } = {}) => {
         if (!file?.type?.startsWith('video/')) {
             setError('Please choose a playable video file.');
             return;
         }
         videoLoadStartedRef.current = true;
-        if (persist) void saveStoredVideo(file);
+        if (persist && !projectId) {
+            activeProjectIdRef.current = null;
+            activeProjectNameRef.current = '';
+            setActiveProjectIdState(null);
+            void setActiveProjectId(null);
+        }
         const nextUrl = URL.createObjectURL(file);
         if (objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrlRef.current);
         objectUrlRef.current = nextUrl;
         setVideoFile(file);
         setVideoUrl(nextUrl);
-        setDurationMs(DEFAULT_DURATION_MS);
+        setDurationMs(restoredDurationMs || DEFAULT_DURATION_MS);
         setPlayheadMs(0);
         setIsPlaying(false);
         setIsLooping(false);
@@ -463,17 +534,6 @@ export default function LocalEditorTab({
             });
         return () => { active = false; };
     }, [initialVideoName, initialVideoUrl]);
-
-    useEffect(() => {
-        if (initialVideoUrl) return undefined;
-        const generation = videoRestoreGenerationRef.current;
-        let active = true;
-        loadStoredVideo().then((file) => {
-            if (!active || generation !== videoRestoreGenerationRef.current || videoLoadStartedRef.current || !file) return;
-            loadVideo(file, { persist: false });
-        });
-        return () => { active = false; };
-    }, [initialVideoUrl]);
 
     const handleMetadata = () => {
         const nextDuration = Math.max(1, Math.round((videoRef.current?.duration || 30) * 1000));
@@ -796,10 +856,13 @@ export default function LocalEditorTab({
         }
     };
 
-    const reset = () => {
+    const startNewProject = () => {
         videoRestoreGenerationRef.current += 1;
         videoLoadStartedRef.current = true;
-        if (persistHistory) void clearEditorPersistence();
+        activeProjectIdRef.current = null;
+        activeProjectNameRef.current = '';
+        setActiveProjectIdState(null);
+        void setActiveProjectId(null);
         videoRef.current?.pause();
         if (videoRef.current) videoRef.current.loop = false;
         if (objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrlRef.current);
@@ -816,8 +879,77 @@ export default function LocalEditorTab({
         setError('');
     };
 
+    const saveProject = async () => {
+        if (!videoFile) return;
+        let name = activeProjectNameRef.current;
+        if (!activeProjectId) name = window.prompt('Project name', videoFile.name)?.trim() || '';
+        if (!name) return;
+        const saved = activeProjectId
+            ? await saveStoredProject({ id: activeProjectId, name, history: editHistoryRef.current, videoName: videoFile.name, durationMs }, videoFile)
+            : await createStoredProject({ name, history: editHistoryRef.current, file: videoFile, durationMs });
+        if (!saved) {
+            setProjectStorageWarning('Could not save this project in browser storage. Your current edits are still available in memory.');
+            return;
+        }
+        activeProjectIdRef.current = saved.id;
+        activeProjectNameRef.current = saved.name;
+        setActiveProjectIdState(saved.id);
+        await setActiveProjectId(saved.id);
+        setProjectStorageWarning('');
+        await refreshProjects();
+    };
+
+    const openProject = async (projectId) => {
+        const stored = await loadStoredProject(projectId);
+        if (!stored?.file) {
+            setProjectStorageWarning('This project video is unavailable in browser storage.');
+            return;
+        }
+        activeProjectIdRef.current = stored.project.id;
+        activeProjectNameRef.current = stored.project.name;
+        setActiveProjectIdState(stored.project.id);
+        await setActiveProjectId(stored.project.id);
+        setEditHistory(stored.project.history);
+        setSelected(null);
+        loadVideo(stored.file, { persist: false, projectId: stored.project.id, restoredDurationMs: stored.project.durationMs });
+        setProjectsOpen(false);
+        setProjectStorageWarning('');
+    };
+
+    const renameProject = async (project) => {
+        const name = window.prompt('Project name', project.name)?.trim() || '';
+        if (!name) return;
+        const renamed = await renameStoredProject(project.id, name);
+        if (!renamed) {
+            setProjectStorageWarning('Could not rename this project in browser storage.');
+            return;
+        }
+        if (project.id === activeProjectIdRef.current) activeProjectNameRef.current = renamed.name;
+        await refreshProjects();
+    };
+
+    const deleteProject = async (projectId) => {
+        const project = projects.find((item) => item.id === projectId);
+        if (!project || !window.confirm(`Delete ${project.name}?`)) return;
+        const deleted = await deleteStoredProject(projectId);
+        if (!deleted) {
+            setProjectStorageWarning('Could not delete this project from browser storage.');
+            return;
+        }
+        if (projectId === activeProjectIdRef.current) startNewProject();
+        await refreshProjects();
+    };
+
+    const openProjects = async () => {
+        await refreshProjects();
+        setProjectsOpen(true);
+    };
+
+    const reset = startNewProject;
+    const projectsDialog = <LocalEditorProjects open={projectsOpen} projects={projects} activeProjectId={activeProjectId} onClose={() => setProjectsOpen(false)} onOpen={openProject} onRename={renameProject} onDelete={deleteProject} onNewProject={() => { startNewProject(); setProjectsOpen(false); }} />;
+
     if (!videoFile) {
-        return <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white"><div className="flex items-center justify-between border-b border-white/10 px-4 py-3"><div><h1 className="text-lg font-bold">Local Editor</h1><p className="mt-0.5 text-xs text-zinc-500">Edit local videos, subtitles, and viral hooks in your browser.</p></div>{onClose && <button type="button" onClick={onClose} aria-label="Close editor" className="rounded-lg p-2 text-zinc-400 hover:bg-white/10 hover:text-white"><X size={18} /></button>}</div>{remoteVideoLoading ? <div className="flex h-64 items-center justify-center gap-2 text-sm text-zinc-400"><Loader2 size={18} className="animate-spin" />Loading project video…</div> : <UploadState onFile={loadVideo} error={error} />}</div>;
+        return <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white"><div className="flex items-center justify-between border-b border-white/10 px-4 py-3"><div><h1 className="text-lg font-bold">Local Editor</h1><p className="mt-0.5 text-xs text-zinc-500">Edit local videos, subtitles, and viral hooks in your browser.</p></div><div className="flex items-center gap-2"><button type="button" onClick={openProjects} className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5"><FolderOpen size={13} />Projects</button>{onClose && <button type="button" onClick={onClose} aria-label="Close editor" className="rounded-lg p-2 text-zinc-400 hover:bg-white/10 hover:text-white"><X size={18} /></button>}</div></div>{projectStorageWarning && <div className="mx-4 mt-4 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">{projectStorageWarning}</div>}{remoteVideoLoading ? <div className="flex h-64 items-center justify-center gap-2 text-sm text-zinc-400"><Loader2 size={18} className="animate-spin" />Loading project video…</div> : <UploadState onFile={loadVideo} error={error} />}{projectsDialog}</div>;
     }
 
     const activeSubtitle = activeCueAt(subtitleCues, playheadMs);
@@ -838,6 +970,8 @@ export default function LocalEditorTab({
                 <div><h1 className="text-lg font-bold">Local Editor</h1><p className="mt-0.5 text-xs text-zinc-500">{videoFile.name} · local-only editing</p></div>
                 <div className="flex flex-wrap items-center gap-2">
                     {headerActions}
+                    <button type="button" onClick={saveProject} disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"><Save size={13} />Save Project</button>
+                    <button type="button" onClick={openProjects} className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5"><FolderOpen size={13} />Projects</button>
                     <button type="button" onClick={undo} disabled={!editHistory.past.length} aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"><Undo2 size={13} />Undo</button>
                     <button type="button" onClick={redo} disabled={!editHistory.future.length} aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)" className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"><Redo2 size={13} />Redo</button>
                     <button type="button" onClick={exportVideo} disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-fuchsia-500 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"><Film size={13} />{busy ? `Exporting ${Math.round(progress * 100)}%` : 'Export Video'}</button>
@@ -847,6 +981,7 @@ export default function LocalEditorTab({
                 </div>
             </div>
             {error && <div className="mx-6 mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div>}
+            {projectStorageWarning && <div className="mx-6 mt-4 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">{projectStorageWarning}</div>}
             <div className="grid gap-5 p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <main className="min-w-0 space-y-5">
                     <div ref={playerRef} data-testid="local-editor-player" tabIndex={0} role="region" aria-label="Video preview. Use Space or K to play or pause, arrow keys to seek, M to mute, and F for fullscreen." aria-keyshortcuts="Space K ArrowLeft ArrowRight Home End M F" onKeyDown={handlePlayerKeyDown} className={isFullscreen ? 'fixed inset-0 z-50 flex items-center justify-center bg-black p-4' : 'mx-auto flex h-[calc(100vh-180px)] max-h-[72vh] w-full max-w-[360px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl'}>
@@ -933,6 +1068,7 @@ export default function LocalEditorTab({
                 </aside>
             </div>
             {footer && <div className="border-t border-white/10 px-6 py-3">{footer}</div>}
+            {projectsDialog}
         </div>
     );
 }
