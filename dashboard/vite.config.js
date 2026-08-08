@@ -16,6 +16,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    resolve: {
+      dedupe: ['mediabunny'],
+    },
     test: {
       environment: 'jsdom',
       setupFiles: './src/test/setup.js',

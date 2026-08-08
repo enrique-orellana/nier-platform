@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalEditorTab from './LocalEditorTab';
@@ -545,12 +545,15 @@ describe('LocalEditorTab', () => {
 
     it('saves a named project and auto-saves later edits', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
-        vi.spyOn(window, 'prompt').mockReturnValue('Demo project');
         render(<LocalEditorTab />);
         fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
         await waitFor(() => expect(screen.getByRole('button', { name: /save project/i })).toBeInTheDocument());
 
         fireEvent.click(screen.getByRole('button', { name: /save project/i }));
+        const saveDialog = screen.getByRole('dialog', { name: /save project/i });
+        expect(saveDialog).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Project name'), { target: { value: 'Demo project' } });
+        fireEvent.click(within(saveDialog).getByRole('button', { name: /^save project$/i }));
         await waitFor(async () => expect((await listStoredProjects()).map((project) => project.name)).toEqual(['Demo project']));
 
         fireEvent.click(screen.getByRole('button', { name: /add subtitle cue/i }));

@@ -337,7 +337,10 @@ export default function LocalEditorTab({
     const [projects, setProjects] = useState([]);
     const [activeProjectId, setActiveProjectIdState] = useState(null);
     const [projectsOpen, setProjectsOpen] = useState(false);
+    const [saveProjectDialogOpen, setSaveProjectDialogOpen] = useState(false);
+    const [projectNameDraft, setProjectNameDraft] = useState('');
     const [projectStorageWarning, setProjectStorageWarning] = useState('');
+    const [projectSaveNotice, setProjectSaveNotice] = useState('');
 
     const { subtitleCues, subtitleStyle, subtitleLanguage, hook } = editHistory.present;
     const editHistoryRef = useRef(editHistory);
@@ -879,24 +882,37 @@ export default function LocalEditorTab({
         setError('');
     };
 
+    const openSaveProjectDialog = () => {
+        if (!videoFile) return;
+        setProjectNameDraft(activeProjectNameRef.current || videoFile.name);
+        setProjectStorageWarning('');
+        setProjectSaveNotice('');
+        setSaveProjectDialogOpen(true);
+    };
+
     const saveProject = async () => {
         if (!videoFile) return;
-        let name = activeProjectNameRef.current;
-        if (!activeProjectId) name = window.prompt('Project name', videoFile.name)?.trim() || '';
+        const name = projectNameDraft.trim();
         if (!name) return;
-        const saved = activeProjectId
-            ? await saveStoredProject({ id: activeProjectId, name, history: editHistoryRef.current, videoName: videoFile.name, durationMs }, videoFile)
-            : await createStoredProject({ name, history: editHistoryRef.current, file: videoFile, durationMs });
-        if (!saved) {
+        try {
+            const saved = activeProjectId
+                ? await saveStoredProject({ id: activeProjectId, name, history: editHistoryRef.current, videoName: videoFile.name, durationMs }, videoFile)
+                : await createStoredProject({ name, history: editHistoryRef.current, file: videoFile, durationMs });
+            if (!saved) {
+                setProjectStorageWarning('Could not save this project in browser storage. Your current edits are still available in memory.');
+                return;
+            }
+            activeProjectIdRef.current = saved.id;
+            activeProjectNameRef.current = saved.name;
+            setActiveProjectIdState(saved.id);
+            await setActiveProjectId(saved.id);
+            setProjectStorageWarning('');
+            setProjectSaveNotice(`Saved “${saved.name}”`);
+            setSaveProjectDialogOpen(false);
+            await refreshProjects();
+        } catch {
             setProjectStorageWarning('Could not save this project in browser storage. Your current edits are still available in memory.');
-            return;
         }
-        activeProjectIdRef.current = saved.id;
-        activeProjectNameRef.current = saved.name;
-        setActiveProjectIdState(saved.id);
-        await setActiveProjectId(saved.id);
-        setProjectStorageWarning('');
-        await refreshProjects();
     };
 
     const openProject = async (projectId) => {
@@ -970,7 +986,7 @@ export default function LocalEditorTab({
                 <div><h1 className="text-lg font-bold">Local Editor</h1><p className="mt-0.5 text-xs text-zinc-500">{videoFile.name} · local-only editing</p></div>
                 <div className="flex flex-wrap items-center gap-2">
                     {headerActions}
-                    <button type="button" onClick={saveProject} disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"><Save size={13} />Save Project</button>
+                    <button type="button" onClick={openSaveProjectDialog} disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"><Save size={13} />Save Project</button>
                     <button type="button" onClick={openProjects} className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5"><FolderOpen size={13} />Projects</button>
                     <button type="button" onClick={undo} disabled={!editHistory.past.length} aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"><Undo2 size={13} />Undo</button>
                     <button type="button" onClick={redo} disabled={!editHistory.future.length} aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)" className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"><Redo2 size={13} />Redo</button>
@@ -982,6 +998,19 @@ export default function LocalEditorTab({
             </div>
             {error && <div className="mx-6 mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div>}
             {projectStorageWarning && <div className="mx-6 mt-4 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">{projectStorageWarning}</div>}
+            {projectSaveNotice && <div className="mx-6 mt-4 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-100" role="status">{projectSaveNotice}</div>}
+            {saveProjectDialogOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation">
+                <div role="dialog" aria-modal="true" aria-labelledby="save-project-dialog-title" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#17171b] p-5 text-white shadow-2xl">
+                    <h2 id="save-project-dialog-title" className="text-base font-semibold">Save project</h2>
+                    <p className="mt-1 text-xs text-zinc-400">Choose a name for this browser-local project.</p>
+                    <label htmlFor="local-editor-project-name" className="mt-4 block text-xs font-medium text-zinc-300">Project name</label>
+                    <input id="local-editor-project-name" value={projectNameDraft} onChange={(event) => setProjectNameDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void saveProject(); }} autoFocus className="mt-1.5 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400" />
+                    <div className="mt-5 flex justify-end gap-2">
+                        <button type="button" onClick={() => setSaveProjectDialogOpen(false)} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300 hover:bg-white/5">Cancel</button>
+                        <button type="button" onClick={() => void saveProject()} disabled={!projectNameDraft.trim()} className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50">Save project</button>
+                    </div>
+                </div>
+            </div>}
             <div className="grid gap-5 p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <main className="min-w-0 space-y-5">
                     <div ref={playerRef} data-testid="local-editor-player" tabIndex={0} role="region" aria-label="Video preview. Use Space or K to play or pause, arrow keys to seek, M to mute, and F for fullscreen." aria-keyshortcuts="Space K ArrowLeft ArrowRight Home End M F" onKeyDown={handlePlayerKeyDown} className={isFullscreen ? 'fixed inset-0 z-50 flex items-center justify-center bg-black p-4' : 'mx-auto flex h-[calc(100vh-180px)] max-h-[72vh] w-full max-w-[360px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl'}>
