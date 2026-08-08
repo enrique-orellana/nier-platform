@@ -44,3 +44,4 @@ skills/
 skills-lock.json
 .playwright-mcp
 .superpowers/
+.worktrees/
