@@ -14,7 +14,7 @@ import AISettingsPanel from './components/AISettingsPanel';
 import LocalEditorTab from './components/local-editor/LocalEditorTab';
 
 import { pickLmStudioModel, pickProviderAfterDiscoveryFailure } from './lib/lmStudio';
-import { normalizeCodexStatus } from './lib/openaiCodex';
+import { codexPollState, normalizeCodexStatus } from './lib/openaiCodex';
 import { getApiUrl } from './config';
 import {
   buildEditorPath,
@@ -282,15 +282,13 @@ function App() {
         if (cancelled) return;
         if (!res.ok) throw new Error(data.detail || 'ChatGPT connection check failed.');
 
-        if (data.status === 'connected' || data.connected === true) {
-          setCodexStatus(normalizeCodexStatus(data));
+        const terminalState = codexPollState(data);
+        if (terminalState) {
+          setCodexStatus(terminalState);
           setCodexPending(null);
-          return;
-        }
-        if (data.status === 'expired' || data.status === 'error') {
-          setCodexStatus({ connected: false, pending: false, requiresReconnect: true });
-          setCodexPending(null);
-          setCodexError(data.error || 'ChatGPT connection expired.');
+          if (data.status === 'expired' || data.status === 'error') {
+            setCodexError(data.error || 'ChatGPT connection expired.');
+          }
         }
       } catch (error) {
         if (!cancelled) {

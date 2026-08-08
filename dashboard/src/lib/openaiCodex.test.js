@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { codexStatusLabel, normalizeCodexStatus } from './openaiCodex';
+import { codexPollState, codexStatusLabel, normalizeCodexStatus } from './openaiCodex';
 
 
 describe('OpenAI Codex helpers', () => {
@@ -17,5 +17,21 @@ describe('OpenAI Codex helpers', () => {
     expect(codexStatusLabel({ requiresReconnect: true })).toBe('Reconnect ChatGPT');
     expect(codexStatusLabel({ connected: true })).toBe('Connected to ChatGPT');
     expect(codexStatusLabel({})).toBe('Not connected');
+  });
+
+  it('clears a poll when the backend reports that no authorization is pending', () => {
+    expect(codexPollState({ connected: false, pending: false })).toEqual({
+      connected: false,
+      pending: false,
+      requiresReconnect: false,
+    });
+  });
+
+  it('requires reconnect after a terminal poll error', () => {
+    expect(codexPollState({ status: 'expired', connected: false, pending: false })).toEqual({
+      connected: false,
+      pending: false,
+      requiresReconnect: true,
+    });
   });
 });

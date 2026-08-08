@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import AISettingsPanel from './AISettingsPanel';
@@ -112,6 +112,7 @@ describe('AISettingsPanel', () => {
   });
 
   it('shows the device code while Codex connection is pending', () => {
+    const onDisconnectCodex = vi.fn();
     render(
       <AISettingsPanel
         aiProvider="openai-codex"
@@ -127,11 +128,14 @@ describe('AISettingsPanel', () => {
         codexStatus={{ connected: false, pending: true, requiresReconnect: false }}
         codexPending={{ userCode: 'ABCD-EFGH' }}
         onConnectCodex={vi.fn()}
-        onDisconnectCodex={vi.fn()}
+        onDisconnectCodex={onDisconnectCodex}
       />,
     );
 
     expect(screen.getByText('ABCD-EFGH')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Connecting/i })).toBeDisabled();
+    const cancelButton = screen.getByRole('button', { name: /Cancel connection/i });
+    expect(cancelButton).toBeEnabled();
+    fireEvent.click(cancelButton);
+    expect(onDisconnectCodex).toHaveBeenCalled();
   });
 });
