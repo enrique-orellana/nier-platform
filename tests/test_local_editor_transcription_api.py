@@ -38,6 +38,19 @@ def test_local_editor_transcription_returns_segments(tmp_path, monkeypatch):
     assert response.status_code == 200
     assert response.json() == {
         "language": "it",
+        "captions": [
+            {"text": "Adesso", "startMs": 0, "endMs": 300},
+            {"text": "ti", "startMs": 300, "endMs": 600},
+            {"text": "faccio", "startMs": 600, "endMs": 900},
+            {"text": "vedere", "startMs": 900, "endMs": 1200},
+            {"text": "un", "startMs": 1200, "endMs": 1500},
+            {"text": "altro", "startMs": 1500, "endMs": 1800},
+            {"text": "esercizio", "startMs": 1800, "endMs": 2400},
+            {"text": "per", "startMs": 2400, "endMs": 2700},
+            {"text": "bloccare", "startMs": 2700, "endMs": 3200},
+            {"text": "i", "startMs": 3200, "endMs": 3400},
+            {"text": "muscoli.", "startMs": 3400, "endMs": 3900},
+        ],
         "segments": [
             {"start": 0.0, "end": 0.9, "text": "Adesso ti faccio"},
             {"start": 0.9, "end": 1.8, "text": "vedere un altro"},
