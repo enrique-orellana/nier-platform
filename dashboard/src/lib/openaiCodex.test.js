@@ -5,6 +5,7 @@ import {
   codexStatusLabel,
   normalizeCodexModels,
   normalizeCodexStatus,
+  pickCodexEffort,
   pickCodexModel,
 } from './openaiCodex';
 
@@ -50,9 +51,37 @@ describe('OpenAI Codex helpers', () => {
       ],
       defaultModel: 'gpt-5.4',
     })).toEqual({
-      models: [{ id: 'gpt-5.4', label: 'GPT-5.4', supportsVision: true }],
+      models: [{
+        id: 'gpt-5.4',
+        label: 'GPT-5.4',
+        supportsVision: true,
+        efforts: [],
+        defaultEffort: '',
+      }],
       defaultModel: 'gpt-5.4',
     });
+  });
+
+  it('normalizes model-specific effort metadata and falls back when an effort disappears', () => {
+    const catalog = normalizeCodexModels({
+      models: [{
+        id: 'gpt-5.6-luna',
+        displayName: 'GPT-5.6-Luna',
+        supported_reasoning_levels: [
+          { effort: 'medium', description: 'Balanced' },
+          { effort: 'max', description: 'Maximum' },
+        ],
+        default_reasoning_level: 'medium',
+      }],
+    });
+
+    expect(catalog.models[0].efforts).toEqual([
+      { id: 'medium', label: 'Medium', description: 'Balanced' },
+      { id: 'max', label: 'Max', description: 'Maximum' },
+    ]);
+    expect(catalog.models[0].defaultEffort).toBe('medium');
+    expect(pickCodexEffort({ currentEffort: 'max', modelId: 'gpt-5.6-luna', models: catalog.models })).toBe('max');
+    expect(pickCodexEffort({ currentEffort: 'ultra', modelId: 'gpt-5.6-luna', models: catalog.models })).toBe('auto');
   });
 
   it('keeps an available model and falls back to Auto when it disappears', () => {

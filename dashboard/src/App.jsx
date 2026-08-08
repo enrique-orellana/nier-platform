@@ -18,6 +18,7 @@ import {
   codexPollState,
   normalizeCodexModels,
   normalizeCodexStatus,
+  pickCodexEffort,
   pickCodexModel,
 } from './lib/openaiCodex';
 import { getApiUrl } from './config';
@@ -191,6 +192,9 @@ function App() {
   const [aiAnalyzeModel, setAiAnalyzeModel] = useState(() => localStorage.getItem('ai_analyze_model_v1') || import.meta.env.VITE_AI_ANALYZE_MODEL || 'auto');
   const [aiVisionModel, setAiVisionModel] = useState(() => localStorage.getItem('ai_vision_model_v1') || import.meta.env.VITE_AI_VISION_MODEL || 'auto');
   const [aiImageModel, setAiImageModel] = useState(() => localStorage.getItem('ai_image_model_v1') || import.meta.env.VITE_AI_IMAGE_MODEL || 'auto');
+  const [aiTextEffort, setAiTextEffort] = useState(() => localStorage.getItem('ai_text_effort_v1') || 'auto');
+  const [aiAnalyzeEffort, setAiAnalyzeEffort] = useState(() => localStorage.getItem('ai_analyze_effort_v1') || 'auto');
+  const [aiVisionEffort, setAiVisionEffort] = useState(() => localStorage.getItem('ai_vision_effort_v1') || 'auto');
   // Social API State - Load encrypted or plain
   const [uploadPostKey, setUploadPostKey] = useState(() => {
     const stored = localStorage.getItem('uploadPostKey_v3');
@@ -356,7 +360,11 @@ function App() {
     setAiTextModel((current) => pickCodexModel({ currentModel: current, models: codexModels.models }));
     setAiAnalyzeModel((current) => pickCodexModel({ currentModel: current, models: codexModels.models }));
     setAiVisionModel((current) => pickCodexModel({ currentModel: current, models: codexModels.models }));
-  }, [aiProvider, codexStatus.connected, codexModels.loading, codexModels.loaded, codexModels.models]);
+    const defaultModel = codexModels.defaultModel;
+    setAiTextEffort((current) => pickCodexEffort({ currentEffort: current, modelId: aiTextModel === 'auto' ? defaultModel : aiTextModel, models: codexModels.models }));
+    setAiAnalyzeEffort((current) => pickCodexEffort({ currentEffort: current, modelId: aiAnalyzeModel === 'auto' ? defaultModel : aiAnalyzeModel, models: codexModels.models }));
+    setAiVisionEffort((current) => pickCodexEffort({ currentEffort: current, modelId: aiVisionModel === 'auto' ? defaultModel : aiVisionModel, models: codexModels.models }));
+  }, [aiProvider, codexStatus.connected, codexModels.loading, codexModels.loaded, codexModels.models, codexModels.defaultModel, aiTextModel, aiAnalyzeModel, aiVisionModel]);
   
   useEffect(() => {
     let cancelled = false;
@@ -592,6 +600,18 @@ function App() {
   }, [aiImageModel]);
 
   useEffect(() => {
+    localStorage.setItem('ai_text_effort_v1', aiTextEffort);
+  }, [aiTextEffort]);
+
+  useEffect(() => {
+    localStorage.setItem('ai_analyze_effort_v1', aiAnalyzeEffort);
+  }, [aiAnalyzeEffort]);
+
+  useEffect(() => {
+    localStorage.setItem('ai_vision_effort_v1', aiVisionEffort);
+  }, [aiVisionEffort]);
+
+  useEffect(() => {
     const previousProvider = lastProviderRef.current;
     lastProviderRef.current = aiProvider;
 
@@ -600,6 +620,9 @@ function App() {
         setAiTextModel('auto');
         setAiAnalyzeModel('auto');
         setAiVisionModel('auto');
+        setAiTextEffort('auto');
+        setAiAnalyzeEffort('auto');
+        setAiVisionEffort('auto');
       }
       setAiImageModel('');
       return;
@@ -691,6 +714,9 @@ function App() {
       'X-AI-Analyze-Model': aiAnalyzeModel,
       'X-AI-Vision-Model': aiVisionModel,
       'X-AI-Image-Model': aiImageModel,
+      'X-AI-Reasoning-Effort': aiTextEffort,
+      'X-AI-Analyze-Reasoning-Effort': aiAnalyzeEffort,
+      'X-AI-Vision-Reasoning-Effort': aiVisionEffort,
     };
 
     if (shouldSendAiBaseUrl()) {
@@ -1061,6 +1087,12 @@ function App() {
                 setAiVisionModel={setAiVisionModel}
                 aiImageModel={aiImageModel}
                 setAiImageModel={setAiImageModel}
+                aiTextEffort={aiTextEffort}
+                setAiTextEffort={setAiTextEffort}
+                aiAnalyzeEffort={aiAnalyzeEffort}
+                setAiAnalyzeEffort={setAiAnalyzeEffort}
+                aiVisionEffort={aiVisionEffort}
+                setAiVisionEffort={setAiVisionEffort}
                 lmStudioAvailable={lmStudioAvailable}
                 lmStudioModels={lmStudioModels}
                 codexStatus={codexStatus}

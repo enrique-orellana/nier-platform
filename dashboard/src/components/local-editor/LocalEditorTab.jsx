@@ -38,6 +38,9 @@ const getLocalAiHeaders = () => {
         'X-AI-Analyze-Model': localStorage.getItem('ai_analyze_model_v1') || 'auto',
         'X-AI-Vision-Model': localStorage.getItem('ai_vision_model_v1') || 'auto',
         'X-AI-Image-Model': localStorage.getItem('ai_image_model_v1') || 'auto',
+        'X-AI-Reasoning-Effort': localStorage.getItem('ai_text_effort_v1') || 'auto',
+        'X-AI-Analyze-Reasoning-Effort': localStorage.getItem('ai_analyze_effort_v1') || 'auto',
+        'X-AI-Vision-Reasoning-Effort': localStorage.getItem('ai_vision_effort_v1') || 'auto',
     };
     const baseUrl = localStorage.getItem('ai_base_url_v1');
     if (baseUrl) headers['X-AI-Base-Url'] = baseUrl;

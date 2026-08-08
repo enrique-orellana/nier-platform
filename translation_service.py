@@ -35,6 +35,9 @@ def _ai_headers(request_headers: Mapping[str, str]) -> dict[str, str]:
         "x-ai-analyze-model": "X-AI-Analyze-Model",
         "x-ai-vision-model": "X-AI-Vision-Model",
         "x-ai-image-model": "X-AI-Image-Model",
+        "x-ai-reasoning-effort": "X-AI-Reasoning-Effort",
+        "x-ai-analyze-reasoning-effort": "X-AI-Analyze-Reasoning-Effort",
+        "x-ai-vision-reasoning-effort": "X-AI-Vision-Reasoning-Effort",
     }
     return {
         allowed[key.lower()]: value

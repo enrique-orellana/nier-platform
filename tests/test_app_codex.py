@@ -52,9 +52,30 @@ def test_build_ai_config_allows_codex_without_api_key():
     assert config.api_key == ""
 
 
+def test_build_ai_config_reads_codex_reasoning_effort_headers():
+    config = app_module.build_ai_config(
+        provider="openai-codex",
+        extra={
+            "X-AI-Reasoning-Effort": "high",
+            "X-AI-Analyze-Reasoning-Effort": "xhigh",
+            "X-AI-Vision-Reasoning-Effort": "medium",
+        },
+    )
+
+    assert config.reasoning_effort == "high"
+    assert config.analyze_reasoning_effort == "xhigh"
+    assert config.vision_reasoning_effort == "medium"
+
+
 def test_codex_models_returns_account_available_models(monkeypatch):
     monkeypatch.setattr(app_module, "discover_codex_models", lambda: {
-        "models": [{"id": "gpt-5.4", "label": "GPT-5.4", "supportsVision": True}],
+        "models": [{
+            "id": "gpt-5.4",
+            "label": "GPT-5.4",
+            "supportsVision": True,
+            "efforts": [{"id": "high", "label": "High", "description": "Deep"}],
+            "defaultEffort": "high",
+        }],
         "defaultModel": "gpt-5.4",
     })
 
@@ -63,7 +84,13 @@ def test_codex_models_returns_account_available_models(monkeypatch):
     assert response.status_code == 200
     assert response.json() == {
         "provider": "openai-codex",
-        "models": [{"id": "gpt-5.4", "label": "GPT-5.4", "supportsVision": True}],
+        "models": [{
+            "id": "gpt-5.4",
+            "label": "GPT-5.4",
+            "supportsVision": True,
+            "efforts": [{"id": "high", "label": "High", "description": "Deep"}],
+            "defaultEffort": "high",
+        }],
         "defaultModel": "gpt-5.4",
     }
 

@@ -1092,7 +1092,12 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6):
 
     try:
         model_name = ai_config.analyze_model or ai_config.text_model or ("gemini-2.5-flash" if ai_config.is_gemini() else "")
-        text = chat_json(ai_config, prompt, model=model_name)
+        text = chat_json(
+            ai_config,
+            prompt,
+            model=model_name,
+            reasoning_effort=ai_config.analyze_reasoning_effort,
+        )
 
         result_json = text if isinstance(text, dict) else {}
         if not result_json:

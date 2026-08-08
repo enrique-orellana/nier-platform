@@ -68,6 +68,9 @@ def build_ai_config(
     analyze_model: Optional[str] = None,
     vision_model: Optional[str] = None,
     image_model: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
+    analyze_reasoning_effort: Optional[str] = None,
+    vision_reasoning_effort: Optional[str] = None,
     extra: Optional[Dict[str, str]] = None,
 ) -> AIConfig:
     source = dict(extra or {})
@@ -85,6 +88,12 @@ def build_ai_config(
         source["X-AI-Vision-Model"] = vision_model
     if image_model:
         source["X-AI-Image-Model"] = image_model
+    if reasoning_effort:
+        source["X-AI-Reasoning-Effort"] = reasoning_effort
+    if analyze_reasoning_effort:
+        source["X-AI-Analyze-Reasoning-Effort"] = analyze_reasoning_effort
+    if vision_reasoning_effort:
+        source["X-AI-Vision-Reasoning-Effort"] = vision_reasoning_effort
     ai_config = load_ai_config(source)
     if ai_config.is_lmstudio() and not ai_config.base_url:
         raise HTTPException(status_code=400, detail="Missing LM Studio base URL. Set it in Settings.")
@@ -1038,6 +1047,9 @@ async def edit_clip(
     x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
     x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
     x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
+    x_ai_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Reasoning-Effort"),
+    x_ai_analyze_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Analyze-Reasoning-Effort"),
+    x_ai_vision_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Vision-Reasoning-Effort"),
 ):
     ai_config = build_ai_config(
         provider=x_ai_provider or ("gemini" if (req.api_key or x_gemini_key or os.environ.get("GEMINI_API_KEY")) else None),
@@ -1046,6 +1058,9 @@ async def edit_clip(
         model=x_ai_model,
         vision_model=x_ai_vision_model,
         image_model=x_ai_image_model,
+        reasoning_effort=x_ai_reasoning_effort,
+        analyze_reasoning_effort=x_ai_analyze_reasoning_effort,
+        vision_reasoning_effort=x_ai_vision_reasoning_effort,
         extra=dict(os.environ),
     )
 
@@ -1282,6 +1297,9 @@ def _translation_headers(request: Request) -> dict[str, str]:
         "x-ai-analyze-model": "X-AI-Analyze-Model",
         "x-ai-vision-model": "X-AI-Vision-Model",
         "x-ai-image-model": "X-AI-Image-Model",
+        "x-ai-reasoning-effort": "X-AI-Reasoning-Effort",
+        "x-ai-analyze-reasoning-effort": "X-AI-Analyze-Reasoning-Effort",
+        "x-ai-vision-reasoning-effort": "X-AI-Vision-Reasoning-Effort",
     }
     return {
         allowed[key.lower()]: value
@@ -1601,6 +1619,9 @@ async def generate_effects_config(
     x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
     x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
     x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
+    x_ai_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Reasoning-Effort"),
+    x_ai_analyze_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Analyze-Reasoning-Effort"),
+    x_ai_vision_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Vision-Reasoning-Effort"),
 ):
     """Generate structured EffectsConfig JSON for Remotion rendering via the selected AI provider."""
     ai_config = build_ai_config(
@@ -1610,6 +1631,9 @@ async def generate_effects_config(
         model=x_ai_model,
         vision_model=x_ai_vision_model,
         image_model=x_ai_image_model,
+        reasoning_effort=x_ai_reasoning_effort,
+        analyze_reasoning_effort=x_ai_analyze_reasoning_effort,
+        vision_reasoning_effort=x_ai_vision_reasoning_effort,
     )
 
     if ai_config.is_gemini() and not ai_config.api_key:
@@ -2326,6 +2350,9 @@ async def thumbnail_analyze(
     x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
     x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
     x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
+    x_ai_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Reasoning-Effort"),
+    x_ai_analyze_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Analyze-Reasoning-Effort"),
+    x_ai_vision_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Vision-Reasoning-Effort"),
 ):
     """Analyze a video and suggest viral YouTube titles."""
     ai_config = build_ai_config(
@@ -2335,6 +2362,9 @@ async def thumbnail_analyze(
         model=x_ai_model,
         vision_model=x_ai_vision_model,
         image_model=x_ai_image_model,
+        reasoning_effort=x_ai_reasoning_effort,
+        analyze_reasoning_effort=x_ai_analyze_reasoning_effort,
+        vision_reasoning_effort=x_ai_vision_reasoning_effort,
     )
     if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing X-Gemini-Key header")
@@ -2423,6 +2453,9 @@ async def thumbnail_titles(
     x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
     x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
     x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
+    x_ai_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Reasoning-Effort"),
+    x_ai_analyze_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Analyze-Reasoning-Effort"),
+    x_ai_vision_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Vision-Reasoning-Effort"),
 ):
     """Refine title suggestions or accept a manual title."""
     ai_config = build_ai_config(
@@ -2432,6 +2465,9 @@ async def thumbnail_titles(
         model=x_ai_model,
         vision_model=x_ai_vision_model,
         image_model=x_ai_image_model,
+        reasoning_effort=x_ai_reasoning_effort,
+        analyze_reasoning_effort=x_ai_analyze_reasoning_effort,
+        vision_reasoning_effort=x_ai_vision_reasoning_effort,
     )
     if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing X-Gemini-Key header")
@@ -2498,6 +2534,9 @@ async def thumbnail_generate(
     x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
     x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
     x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
+    x_ai_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Reasoning-Effort"),
+    x_ai_analyze_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Analyze-Reasoning-Effort"),
+    x_ai_vision_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Vision-Reasoning-Effort"),
 ):
     """Generate YouTube thumbnails with Gemini image generation."""
     ai_config = build_ai_config(
@@ -2507,6 +2546,9 @@ async def thumbnail_generate(
         model=x_ai_model,
         vision_model=x_ai_vision_model,
         image_model=x_ai_image_model,
+        reasoning_effort=x_ai_reasoning_effort,
+        analyze_reasoning_effort=x_ai_analyze_reasoning_effort,
+        vision_reasoning_effort=x_ai_vision_reasoning_effort,
     )
     if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing X-Gemini-Key header")
@@ -2807,6 +2849,9 @@ async def thumbnail_describe(
     x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
     x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
     x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
+    x_ai_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Reasoning-Effort"),
+    x_ai_analyze_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Analyze-Reasoning-Effort"),
+    x_ai_vision_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Vision-Reasoning-Effort"),
 ):
     """Generate a YouTube description with chapters from the transcript."""
     ai_config = build_ai_config(
@@ -2816,6 +2861,9 @@ async def thumbnail_describe(
         model=x_ai_model,
         vision_model=x_ai_vision_model,
         image_model=x_ai_image_model,
+        reasoning_effort=x_ai_reasoning_effort,
+        analyze_reasoning_effort=x_ai_analyze_reasoning_effort,
+        vision_reasoning_effort=x_ai_vision_reasoning_effort,
     )
     if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing X-Gemini-Key header")
@@ -3021,6 +3069,9 @@ async def saasshorts_analyze(
     x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
     x_ai_vision_model: Optional[str] = Header(None, alias="X-AI-Vision-Model"),
     x_ai_image_model: Optional[str] = Header(None, alias="X-AI-Image-Model"),
+    x_ai_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Reasoning-Effort"),
+    x_ai_analyze_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Analyze-Reasoning-Effort"),
+    x_ai_vision_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Vision-Reasoning-Effort"),
 ):
     """Analyze a URL or manual description and generate video scripts."""
     ai_config = build_ai_config(
@@ -3030,6 +3081,9 @@ async def saasshorts_analyze(
         model=x_ai_model,
         vision_model=x_ai_vision_model,
         image_model=x_ai_image_model,
+        reasoning_effort=x_ai_reasoning_effort,
+        analyze_reasoning_effort=x_ai_analyze_reasoning_effort,
+        vision_reasoning_effort=x_ai_vision_reasoning_effort,
     )
     if ai_config.is_gemini() and not ai_config.api_key:
         raise HTTPException(status_code=400, detail="Missing Gemini API Key")

@@ -20,6 +20,12 @@ export default function AISettingsPanel({
   setAiVisionModel,
   aiImageModel,
   setAiImageModel,
+  aiTextEffort = 'auto',
+  setAiTextEffort = () => {},
+  aiAnalyzeEffort = 'auto',
+  setAiAnalyzeEffort = () => {},
+  aiVisionEffort = 'auto',
+  setAiVisionEffort = () => {},
   lmStudioAvailable,
   lmStudioModels,
   codexStatus = { connected: false, pending: false, requiresReconnect: false },
@@ -62,6 +68,34 @@ export default function AISettingsPanel({
       </select>
     </label>
   );
+
+  const renderCodexEffortSelect = (label, modelId, value, onChange) => {
+    const selectedModelId = modelId === 'auto' || modelId === 'default'
+      ? codexModels.defaultModel
+      : modelId;
+    const model = codexTextOptions.find((entry) => entry.id === selectedModelId);
+    const efforts = model?.efforts || [];
+    return (
+      <label className="block" key={label}>
+        <span className="block text-sm text-zinc-400 mb-2">{label}</span>
+        <select
+          aria-label={label}
+          value={value}
+          onChange={(e) => {
+            setAiQualityPreset('custom');
+            onChange(e.target.value);
+          }}
+          className="input-field"
+          disabled={codexModelDisabled || efforts.length === 0}
+        >
+          <option value="auto">Auto (model default)</option>
+          {efforts.map((effort) => (
+            <option key={effort.id} value={effort.id} title={effort.description}>{effort.label}</option>
+          ))}
+        </select>
+      </label>
+    );
+  };
 
   return (
     <div className="glass-panel p-6 mb-8">
@@ -184,8 +218,11 @@ export default function AISettingsPanel({
               </button>
             </div>
             {renderCodexModelSelect('Text Model', aiTextModel, setAiTextModel, codexTextOptions)}
+            {renderCodexEffortSelect('Text Effort', aiTextModel, aiTextEffort, setAiTextEffort)}
             {renderCodexModelSelect('Clip Analysis Model', aiAnalyzeModel, setAiAnalyzeModel, codexTextOptions)}
+            {renderCodexEffortSelect('Clip Analysis Effort', aiAnalyzeModel, aiAnalyzeEffort, setAiAnalyzeEffort)}
             {renderCodexModelSelect('Vision Model', aiVisionModel, setAiVisionModel, codexVisionOptions)}
+            {renderCodexEffortSelect('Vision Effort', aiVisionModel, aiVisionEffort, setAiVisionEffort)}
           </>
         ) : !textOptions ? (
           <>

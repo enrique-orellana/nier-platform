@@ -155,9 +155,18 @@ describe('AISettingsPanel', () => {
         lmStudioModels={{ textModels: [], visionModels: [] }}
         codexStatus={{ connected: true, pending: false, requiresReconnect: false }}
         codexModels={{
-          models: [{ id: 'gpt-5.4', label: 'GPT-5.4', supportsVision: true }],
+          models: [{
+            id: 'gpt-5.4',
+            label: 'GPT-5.4',
+            supportsVision: true,
+            efforts: [{ id: 'high', label: 'High', description: 'Deep' }],
+            defaultEffort: 'high',
+          }],
           defaultModel: 'gpt-5.4',
         }}
+        aiTextEffort="auto"
+        aiAnalyzeEffort="auto"
+        aiVisionEffort="auto"
         onRefreshCodexModels={onRefreshCodexModels}
         onConnectCodex={vi.fn()}
         onDisconnectCodex={vi.fn()}
@@ -165,6 +174,8 @@ describe('AISettingsPanel', () => {
     );
 
     expect(screen.getByRole('combobox', { name: /Text Model/i })).toHaveValue('auto');
+    expect(screen.getByRole('combobox', { name: /Text Effort/i })).toHaveValue('auto');
+    expect(screen.getAllByRole('option', { name: 'High' })).toHaveLength(3);
     expect(screen.getAllByRole('option', { name: 'GPT-5.4' })).toHaveLength(3);
     const refreshButton = screen.getByRole('button', { name: /Refresh models/i });
     expect(refreshButton).toBeEnabled();

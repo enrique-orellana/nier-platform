@@ -11,6 +11,19 @@ def test_load_ai_config_recognizes_openai_codex_without_api_key():
     assert config.api_key == ""
 
 
+def test_load_ai_config_reads_codex_reasoning_efforts():
+    config = ai_client.load_ai_config({
+        "X-AI-Provider": "openai-codex",
+        "X-AI-Reasoning-Effort": "high",
+        "X-AI-Analyze-Reasoning-Effort": "xhigh",
+        "X-AI-Vision-Reasoning-Effort": "medium",
+    })
+
+    assert config.reasoning_effort == "high"
+    assert config.analyze_reasoning_effort == "xhigh"
+    assert config.vision_reasoning_effort == "medium"
+
+
 def test_unsupported_provider_still_fails_fast():
     with pytest.raises(ValueError, match="Unsupported AI provider"):
         ai_client.chat_completion(ai_client.AIConfig(provider="unknown"), "hello")
@@ -99,7 +112,17 @@ class FakeCodexCatalogClient:
 def test_codex_model_discovery_normalizes_available_models(monkeypatch):
     FakeCodexCatalogClient.responses = [FakeCodexCatalogResponse(200, {
         "models": [
-            {"slug": "gpt-5.4", "title": "GPT-5.4", "input_modalities": ["text", "image"], "visibility": "list"},
+            {
+                "slug": "gpt-5.4",
+                "title": "GPT-5.4",
+                "input_modalities": ["text", "image"],
+                "visibility": "list",
+                "default_reasoning_level": "medium",
+                "supported_reasoning_levels": [
+                    {"effort": "low", "description": "Fast"},
+                    {"effort": "high", "description": "Deep"},
+                ],
+            },
             {"id": "hidden-model", "display_name": "Hidden", "visibility": "hidden"},
             {"slug": "", "title": "Invalid"},
         ],
@@ -116,11 +139,16 @@ def test_codex_model_discovery_normalizes_available_models(monkeypatch):
             "id": "gpt-5.4",
             "label": "GPT-5.4",
             "supportsVision": True,
+            "efforts": [
+                {"id": "low", "label": "Low", "description": "Fast"},
+                {"id": "high", "label": "High", "description": "Deep"},
+            ],
+            "defaultEffort": "medium",
         }],
         "defaultModel": "gpt-5.4",
     }
     assert FakeCodexCatalogClient.last_url == "https://chatgpt.com/backend-api/codex/models"
-    assert FakeCodexCatalogClient.last_params == {"client_version": "0.142.3"}
+    assert FakeCodexCatalogClient.last_params == {"client_version": "0.144.1"}
     assert FakeCodexCatalogClient.last_headers["Authorization"] == "Bearer access"
     assert FakeCodexCatalogClient.last_headers["ChatGPT-Account-ID"] == "account"
 
@@ -159,6 +187,22 @@ def test_codex_transport_aggregates_response_output_text_deltas(monkeypatch):
     assert FakeCodexStreamClient.last_payload["model"] == ai_client.CODEX_DEFAULT_MODEL
     assert FakeCodexStreamClient.last_payload["stream"] is True
     assert FakeCodexStreamClient.last_payload["store"] is False
+
+
+def test_codex_transport_sends_selected_reasoning_effort(monkeypatch):
+    config = ai_client.AIConfig(
+        provider="openai-codex",
+        text_model="gpt-5.6-luna",
+        reasoning_effort="high",
+    )
+    monkeypatch.setattr(ai_client, "get_access_token", lambda: "access")
+    monkeypatch.setattr(ai_client, "get_codex_account_id", lambda: "account")
+    monkeypatch.setattr(ai_client.httpx, "Client", FakeCodexStreamClient)
+
+    ai_client.chat_completion(config, "Return JSON", json_mode=True)
+
+    assert FakeCodexStreamClient.last_payload["model"] == "gpt-5.6-luna"
+    assert FakeCodexStreamClient.last_payload["reasoning"] == {"effort": "high"}
 
 
 def test_codex_transport_refreshes_once_after_auth_rejection(monkeypatch):
