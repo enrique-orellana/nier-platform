@@ -48,7 +48,7 @@ const localCuesFromTrack = (track) => (track?.cues || track?.captions || []).map
 }));
 
 const manifestToLocalEditorState = (sourceManifest, trackId) => {
-  const source = sourceManifest || {};
+  const source = manifestWithTranscriptCaptions(sourceManifest || {}, null);
   const tracks = Array.isArray(source.subtitle_tracks) ? source.subtitle_tracks : [];
   const activeTrack = tracks.find((track) => track.id === trackId) || tracks[0];
   const hook = source.layers?.hook;
@@ -164,7 +164,6 @@ export default function FullScreenEditor({
   const hydrateManifest = useCallback(
     async (baseManifest) => {
       if (
-        baseManifest?.timeline?.transcript?.segments?.length ||
         baseManifest?.subtitle_tracks?.length ||
         !jobId
       )

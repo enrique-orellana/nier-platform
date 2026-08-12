@@ -160,13 +160,25 @@ describe('FullScreenEditor', () => {
         expect(screen.getByRole('button', { name: 'Original it' })).toBeInTheDocument();
     });
 
+    it('preloads generated transcript subtitles in the local editor timeline', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(['video'], { type: 'video/mp4' }) }));
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: vi.fn(() => 'blob:generated-clip') });
+        const transcriptManifest = {
+            timeline: { source_video_url: 'https://example.test/video.mp4', trim: { start_sec: 10, end_sec: 14 }, transcript: { language: 'it', segments: [{ start: 10.5, end: 11.5, text: 'Ciao' }] } },
+            layers: {},
+            subtitle_tracks: [],
+        };
+        render(<FullScreenEditor useLocalEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, video_url: transcriptManifest.timeline.source_video_url }} initialManifest={transcriptManifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Ciao' })).toBeInTheDocument());
+    });
+
     it('hydrates subtitles from the clip transcript endpoint when a legacy version has no subtitle track', async () => {
         vi.stubGlobal('fetch', vi.fn(async (url) => {
             if (String(url).endsWith('/versions')) {
                 return { ok: true, json: async () => ({ current_version_id: 'v3', versions: [{ version_id: 'v3', status: 'done' }] }) };
             }
             if (String(url).endsWith('/versions/v3')) {
-                return { ok: true, json: async () => ({ version: { version_id: 'v3', status: 'done' }, manifest: { timeline: { source_video_url: '/videos/clip.mp4', trim: { start_sec: 0, end_sec: 4 } }, subtitle_tracks: [], layers: {} } }) };
+                return { ok: true, json: async () => ({ version: { version_id: 'v3', status: 'done' }, manifest: { timeline: { source_video_url: '/videos/clip.mp4', trim: { start_sec: 10, end_sec: 14 }, transcript: { language: 'it', segments: [{ start: 10.5, end: 11.5, text: 'Source transcript' }] } }, subtitle_tracks: [], layers: {} } }) };
             }
             if (String(url).endsWith('/transcript')) {
                 return { ok: true, json: async () => ({ language: 'it', durationSec: 4, captions: [{ text: 'Ciao', startMs: 500, endMs: 1500 }] }) };

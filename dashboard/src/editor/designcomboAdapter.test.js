@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { editorStateToManifest, manifestToEditorState, manifestToRenderProps } from './designcomboAdapter';
+import { editorStateToManifest, manifestToEditorState, manifestToRenderProps, manifestWithTranscriptCaptions } from './designcomboAdapter';
 import { createSubtitleCue } from './timelineModel';
 
 const manifest = {
@@ -64,6 +64,24 @@ describe('designcomboAdapter', () => {
         const next = editorStateToManifest(state, source);
         expect(next.timeline.transcript.segments[0]).toMatchObject({ text: 'Hello', start: 0.5, end: 1.5 });
         expect(source.timeline.transcript.segments[0].text).toBe('Ciao');
+    });
+
+    it('materializes clip-relative transcript captions when a generated manifest has only the source transcript', () => {
+        const source = {
+            timeline: {
+                trim: { start_sec: 1758.5, end_sec: 1818.5 },
+                transcript: { language: 'es', segments: [{ start: 1758.84, end: 1759.96, text: '¡Hostia, el laberinto, tú!' }] },
+            },
+            layers: {},
+            subtitle_tracks: [],
+        };
+        const next = manifestWithTranscriptCaptions(source, {
+            language: 'es',
+            captions: [{ text: '¡Hostia,', startMs: 340, endMs: 680 }],
+        });
+        expect(next.subtitle_tracks[0]).toMatchObject({ id: 'original', language: 'es', origin: 'original' });
+        expect(next.subtitle_tracks[0].cues[0]).toMatchObject({ text: '¡Hostia,', startMs: 340, endMs: 680 });
+        expect(next.active_subtitle_track_id).toBe('original');
     });
 
     it('serializes a newly created cue into cues and captions', () => {

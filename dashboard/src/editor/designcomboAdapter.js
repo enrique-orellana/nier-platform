@@ -23,24 +23,96 @@ export function manifestToRenderProps(manifest = {}, { activeSubtitleTrackId = m
     };
 }
 
+const transcriptCuesRelativeToClip = (manifest) => {
+    const transcript = manifest?.timeline?.transcript;
+    if (!transcript?.segments?.length) return [];
+    const trimStart = Number(manifest.timeline?.trim?.start_sec || 0);
+    const trimEnd = Number(manifest.timeline?.trim?.end_sec ?? Number.POSITIVE_INFINITY);
+    return transcript.segments.flatMap((segment) => {
+        const segmentStart = Number(segment.start || 0);
+        const segmentEnd = Number(segment.end ?? segment.start ?? 0);
+        const start = Math.max(segmentStart, trimStart);
+        const end = Math.min(segmentEnd, trimEnd);
+        if (end <= start) return [];
+        const captions = (segment.words || []).flatMap((word) => {
+            const wordStart = Math.max(Number(word.start || 0), trimStart);
+            const wordEnd = Math.min(Number(word.end ?? word.start ?? 0), trimEnd);
+            if (wordEnd <= wordStart) return [];
+            return [{
+                text: word.word || word.text || '',
+                startMs: Math.round((wordStart - trimStart) * 1000),
+                endMs: Math.round((wordEnd - trimStart) * 1000),
+            }];
+        });
+        return [{
+            text: segment.text || captions.map((caption) => caption.text).join(' '),
+            startMs: Math.round((start - trimStart) * 1000),
+            endMs: Math.round((end - trimStart) * 1000),
+            ...(captions.length ? { captions } : {}),
+        }];
+    });
+};
+
+const transcriptTrack = (manifest, transcript) => {
+    const endpointCues = transcript?.captions?.length
+        ? transcript.captions.map((caption) => ({
+            text: caption.text || '',
+            startMs: Number(caption.startMs || 0),
+            endMs: Number(caption.endMs || caption.startMs || 0),
+            captions: [{
+                text: caption.text || '',
+                startMs: Number(caption.startMs || 0),
+                endMs: Number(caption.endMs || caption.startMs || 0),
+            }],
+        }))
+        : transcriptCuesRelativeToClip(manifest);
+    if (!endpointCues.length) return null;
+    const language = transcript?.language || manifest?.timeline?.transcript?.language || 'und';
+    return {
+        id: 'original',
+        language,
+        label: 'Original',
+        origin: 'original',
+        cues: endpointCues,
+        captions: endpointCues.flatMap((cue) => cue.captions || [{ text: cue.text, startMs: cue.startMs, endMs: cue.endMs }]),
+    };
+};
+
 export function manifestWithTranscriptCaptions(manifest, transcript) {
-    if (!transcript?.captions?.length || manifest?.timeline?.transcript?.segments?.length) return manifest;
     if (Array.isArray(manifest?.subtitle_tracks) && manifest.subtitle_tracks.length) return manifest;
-    const segments = transcript.captions.map((caption) => ({
-        start: Number(caption.startMs || 0) / 1000,
-        end: Number(caption.endMs || caption.startMs || 0) / 1000,
-        text: caption.text || '',
-        words: [{
-            start: Number(caption.startMs || 0) / 1000,
-            end: Number(caption.endMs || caption.startMs || 0) / 1000,
-            word: caption.text || '',
-        }],
-    }));
+    const track = transcriptTrack(manifest, transcript);
+    if (!track) return manifest;
+    const captions = track.captions || [];
     return {
         ...manifest,
+        subtitle_tracks: [track],
+        active_subtitle_track_id: manifest.active_subtitle_track_id || track.id,
         timeline: {
             ...(manifest?.timeline || {}),
-            transcript: { language: transcript.language || 'und', segments },
+            ...(manifest?.timeline?.transcript?.segments?.length ? {} : {
+                transcript: {
+                    language: track.language,
+                    segments: captions.map((caption) => ({
+                        start: Number(caption.startMs || 0) / 1000,
+                        end: Number(caption.endMs || caption.startMs || 0) / 1000,
+                        text: caption.text || '',
+                        words: [{
+                            start: Number(caption.startMs || 0) / 1000,
+                            end: Number(caption.endMs || caption.startMs || 0) / 1000,
+                            word: caption.text || '',
+                        }],
+                    })),
+                },
+            }),
+        },
+        layers: {
+            ...(manifest?.layers || {}),
+            subtitles: {
+                ...(manifest?.layers?.subtitles || {}),
+                language: track.language,
+                cues: track.cues,
+                captions,
+            },
         },
     };
 }
