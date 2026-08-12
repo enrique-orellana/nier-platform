@@ -161,6 +161,12 @@ def resolve_clip_video_url(bucket_name, job_id, base_name, clip, clip_index):
         clip_filename = f"{base_name}_clip_{clip_index + 1}.mp4"
 
     clip_key = f"{job_id}/{clip_filename}"
+    s3_client = get_s3_client()
+    if s3_client and not _s3_object_exists(s3_client, bucket_name, clip_key):
+        stem, extension = os.path.splitext(clip_filename)
+        temp_clip_key = f"{job_id}/{stem}_temp_video{extension}"
+        if _s3_object_exists(s3_client, bucket_name, temp_clip_key):
+            clip_key = temp_clip_key
     return generate_presigned_url(bucket_name, clip_key, expiration=7200) or stored_url
 
 def list_all_clips(bucket_name=None, limit=50, force_refresh=False):
@@ -543,7 +549,11 @@ def upload_job_artifacts(directory, job_id):
 
     for filename in os.listdir(directory):
         # Upload .mp4 clips and the metadata JSON
-        if (filename.endswith(".mp4") or filename.endswith(".json")) and not filename.startswith("temp_"):
+        if (
+            (filename.endswith(".mp4") or filename.endswith(".json"))
+            and not filename.startswith("temp_")
+            and "_temp_video" not in filename
+        ):
             file_path = os.path.join(directory, filename)
             s3_key = f"{job_id}/{filename}"
             upload_file_to_s3(file_path, bucket_name, s3_key)

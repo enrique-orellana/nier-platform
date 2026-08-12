@@ -12,7 +12,7 @@ import asyncio
 from dotenv import load_dotenv
 from typing import Dict, Optional, List, Any
 from contextlib import asynccontextmanager
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Header, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -1333,6 +1333,14 @@ async def proxy_translation_status(translation_id: str):
 
 # --- Video Proxy (solves MinIO CORS for Remotion Player) ---
 
+def _build_inline_content_disposition(filename: str) -> str:
+    """Build a Latin-1-safe inline disposition with a UTF-8 filename fallback."""
+    ascii_filename = filename.encode("ascii", "ignore").decode("ascii") or "video.mp4"
+    ascii_filename = ascii_filename.replace('"', "'").replace("\\", "_")
+    encoded_filename = quote(filename, safe="")
+    return f'inline; filename="{ascii_filename}"; filename*=UTF-8\'\'{encoded_filename}'
+
+
 @app.get("/api/video-proxy")
 @app.get("/api/video-proxy/{filename:path}")
 async def video_proxy(request: Request, url: str = Query(...), filename: str | None = None):
@@ -1395,7 +1403,7 @@ async def video_proxy(request: Request, url: str = Query(...), filename: str | N
         if "etag" in upstream.headers:
             response_headers["ETag"] = upstream.headers["etag"]
         if filename:
-            response_headers["Content-Disposition"] = f'inline; filename="{filename}"'
+            response_headers["Content-Disposition"] = _build_inline_content_disposition(filename)
 
         return StreamingResponse(
             iter([upstream.content]),

@@ -1,10 +1,12 @@
 import time
+import atexit
 import cv2
 import scenedetect
 import subprocess
 import argparse
 import re
 import sys
+import tempfile
 from scenedetect import open_video, SceneManager
 from scenedetect.detectors import ContentDetector
 from ultralytics import YOLO
@@ -28,6 +30,7 @@ from media_probe import probe_media
 from render_manifest import register_asset, save_manifest_atomic
 from crop_track import CropKeyframe, CropRect, CropScene, CropTrack
 from clip_timeline import build_audio_trim_filter, resolve_clip_frame_range
+from video_decode import build_decode_compatibility_command, requires_decode_compatibility
 
 # Load environment variables
 load_dotenv()
@@ -450,6 +453,34 @@ def get_video_resolution(video_path):
     return width, height
 
 
+def prepare_opencv_video(input_video: str) -> str:
+    """Transcode AV1 sources once because this OpenCV build cannot decode them."""
+    source_media = probe_media(input_video)
+    if not requires_decode_compatibility(source_media.codec):
+        return input_video
+
+    file_descriptor, working_video = tempfile.mkstemp(prefix="openshorts-av1-", suffix=".mp4")
+    os.close(file_descriptor)
+    try:
+        subprocess.run(
+            build_decode_compatibility_command(input_video, working_video),
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        working_media = probe_media(working_video)
+        if working_media.codec != "h264" or working_media.duration_seconds <= 0:
+            raise RuntimeError("AV1 compatibility transcode produced an invalid working video")
+    except Exception:
+        if os.path.exists(working_video):
+            os.remove(working_video)
+        raise
+
+    atexit.register(lambda: os.path.exists(working_video) and os.remove(working_video))
+    print(f"   AV1 source detected; using H.264 working copy: {working_video}")
+    return working_video
+
+
 def sanitize_filename(filename):
     """Remove invalid characters from filename."""
     filename = re.sub(r'[<>:"/\\|?*#]', '', filename)
@@ -663,6 +694,7 @@ def process_video_to_vertical(input_video, final_output_video, start_sec=None, e
 
     cap = cv2.VideoCapture(input_video)
     frame_number = 0
+    processed_frames = 0
     current_scene_index = 0
     
     # Pre-calculate scene boundaries
@@ -747,6 +779,7 @@ def process_video_to_vertical(input_video, final_output_video, start_sec=None, e
 
             ffmpeg_process.stdin.write(output_frame.tobytes())
             frame_number += 1
+            processed_frames += 1
             pbar.update(1)
     
     ffmpeg_process.stdin.close()
@@ -757,6 +790,9 @@ def process_video_to_vertical(input_video, final_output_video, start_sec=None, e
     if ffmpeg_process.returncode != 0:
         print("\n   ❌ FFmpeg frame processing failed.")
         print("   Stderr:", stderr_output)
+        return False
+    if processed_frames == 0:
+        print("\n   ❌ No decodable video frames were produced.")
         return False
 
     print("\n   🔊 Step 5: Extracting audio...")
@@ -788,10 +824,14 @@ def process_video_to_vertical(input_video, final_output_video, start_sec=None, e
         
     try:
         subprocess.run(merge_command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        probe_media(final_output_video)
         print(f"   ✅ Clip saved to {final_output_video}")
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, ValueError) as e:
         print("\n   ❌ Final merge failed.")
-        print("   Stderr:", e.stderr.decode())
+        if isinstance(e, subprocess.CalledProcessError):
+            print("   Stderr:", e.stderr.decode())
+        else:
+            print("   Output validation:", e)
         return False
 
     # Clean up temp files
@@ -1235,19 +1275,20 @@ if __name__ == '__main__':
         print(f"❌ Input file not found: {input_video}")
         exit(1)
 
+    processing_video = prepare_opencv_video(input_video)
     manifest_source_path, source_asset, source_media = _prepare_manifest_source(input_video, output_dir)
 
     # 2. Decision: Analyze clips or process whole?
     if args.skip_analysis:
         print("⏩ Skipping analysis, processing entire video...")
         output_file = args.output if args.output else os.path.join(output_dir, f"{video_title}_vertical.mp4")
-        process_video_to_vertical(input_video, output_file)
+        process_video_to_vertical(processing_video, output_file)
     else:
         # 3. Transcribe
-        transcript = transcribe_video(input_video)
+        transcript = transcribe_video(processing_video)
         
         # Get duration
-        cap = cv2.VideoCapture(input_video)
+        cap = cv2.VideoCapture(processing_video)
         fps = cap.get(cv2.CAP_PROP_FPS)
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         duration = frame_count / fps
@@ -1259,7 +1300,7 @@ if __name__ == '__main__':
         if not clips_data or 'shorts' not in clips_data:
             print("❌ Failed to identify clips. Converting whole video as fallback.")
             output_file = os.path.join(output_dir, f"{video_title}_vertical.mp4")
-            process_video_to_vertical(input_video, output_file)
+            process_video_to_vertical(processing_video, output_file)
         else:
             print(f"🔥 Found {len(clips_data['shorts'])} viral clips!")
             
@@ -1294,7 +1335,7 @@ if __name__ == '__main__':
                 # Decode the source timeline once, trimming video frames and
                 # audio from the same frame-aligned clock.
                 success = process_video_to_vertical(
-                    input_video,
+                    processing_video,
                     clip_final_path,
                     start_sec=start,
                     end_sec=end,
