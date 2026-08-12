@@ -100,6 +100,7 @@ describe('LocalEditorTab', () => {
         const player = screen.getByTestId('local-editor-player');
         expect(player).toBeInTheDocument();
         expect(player.parentElement).toHaveClass('lg:justify-start');
+        expect(player.parentElement).toHaveClass('lg:grid-cols-[220px_minmax(0,1fr)]');
     });
 
     it('shows timeline controls after selecting a video', async () => {
