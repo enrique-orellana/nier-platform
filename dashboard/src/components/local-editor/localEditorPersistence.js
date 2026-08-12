@@ -11,9 +11,14 @@ export const EDITOR_PROJECT_VIDEO_STORE_NAME = 'videos';
 export const EDITOR_ACTIVE_PROJECT_KEY = 'openshorts_local_editor_active_project_v1';
 export const EDITOR_PROJECT_MIGRATION_KEY = 'openshorts_local_editor_projects_migrated_v1';
 
-export const createEmptyEditorHistory = () => ({
+export const createEmptyEditorHistory = (preferences = {}) => ({
     past: [],
-    present: { subtitleCues: [], subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE }, subtitleLanguage: 'en', hook: null },
+    present: {
+        subtitleCues: [],
+        subtitleStyle: normalizeSubtitleStyle(preferences?.subtitleStyle || DEFAULT_SUBTITLE_STYLE),
+        subtitleLanguage: String(preferences?.subtitleLanguage || 'en').toLowerCase(),
+        hook: null,
+    },
     future: [],
 });
 

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
     EDITOR_PROJECT_DB_NAME,
     EDITOR_VIDEO_DB_NAME,
+    createEmptyEditorHistory,
     createStoredProject,
     deleteStoredProject,
     getActiveProjectId,
@@ -40,6 +41,19 @@ describe('local editor project persistence', () => {
         localStorage.clear();
         await deleteDatabase(EDITOR_PROJECT_DB_NAME);
         await deleteDatabase(EDITOR_VIDEO_DB_NAME);
+    });
+
+    it('creates an empty history from remembered settings without copying content', () => {
+        const history = createEmptyEditorHistory({
+            subtitleStyle: { position: 'top', fontSize: 40 },
+            subtitleLanguage: 'fr',
+            hookDefaults: { position: 'center' },
+        });
+
+        expect(history.present.subtitleStyle).toMatchObject({ position: 'top', fontSize: 40 });
+        expect(history.present.subtitleLanguage).toBe('fr');
+        expect(history.present.subtitleCues).toEqual([]);
+        expect(history.present.hook).toBeNull();
     });
 
     it('creates, lists, loads, renames, and deletes a stored project', async () => {
