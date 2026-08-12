@@ -495,6 +495,7 @@ export default function FullScreenEditor({
           initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
           initialEditorState={localDraft}
           initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}`}
+          clipMetadata={clip}
           onStateChange={setLocalDraft}
           persistHistory={false}
           onClose={onClose}

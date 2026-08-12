@@ -77,6 +77,29 @@ describe('LocalEditorTab', () => {
         expect(screen.getByText(/project\.mp4/)).toBeInTheDocument();
     });
 
+    it('shows generated clip metadata beside the project video', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:project-clip');
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            blob: async () => new Blob(['video'], { type: 'video/mp4' }),
+        }));
+
+        render(<LocalEditorTab
+            initialVideoUrl="/api/video-proxy/project.mp4"
+            initialVideoName="project.mp4"
+            clipMetadata={{
+                start: 12,
+                end: 51,
+                video_title_for_youtube_short: 'La foto que según él parece Juan Guarnizo',
+                video_description_for_tiktok: 'Una chica de Internet tiene una foto de cuerpo entero y le pide ayuda.',
+            }}
+        />);
+
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'La foto que según él parece Juan Guarnizo' })).toBeInTheDocument());
+        expect(screen.getByText('39s')).toBeInTheDocument();
+        expect(screen.getByTestId('local-editor-player')).toBeInTheDocument();
+    });
+
     it('shows timeline controls after selecting a video', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
         render(<LocalEditorTab />);

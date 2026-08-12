@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Download, FastForward, FileText, Film, FolderOpen, Languages, Loader2, Maximize2, Minimize2, Pause, Play, Plus, Redo2, Repeat, Rewind, RotateCcw, Save, SkipBack, SkipForward, Square, Undo2, Upload, X } from 'lucide-react';
 import LocalEditorTimeline from './LocalEditorTimeline';
+import ClipMetadataPanel from './ClipMetadataPanel';
 import SubtitleCueTable from './SubtitleCueTable';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock } from './localEditorExport';
@@ -302,6 +303,7 @@ export default function LocalEditorTab({
     sidePanel = null,
     footer = null,
     persistHistory = true,
+    clipMetadata = null,
 }) {
     const videoRef = useRef(null);
     const playerRef = useRef(null);
@@ -1023,7 +1025,9 @@ export default function LocalEditorTab({
             </div>}
             <div className="grid gap-5 p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <main className="min-w-0 space-y-5">
-                    <div ref={playerRef} data-testid="local-editor-player" tabIndex={0} role="region" aria-label="Video preview. Use Space or K to play or pause, arrow keys to seek, M to mute, and F for fullscreen." aria-keyshortcuts="Space K ArrowLeft ArrowRight Home End M F" onKeyDown={handlePlayerKeyDown} className={isFullscreen ? 'fixed inset-0 z-50 flex items-center justify-center bg-black p-4' : 'mx-auto flex h-[calc(100vh-180px)] max-h-[72vh] w-full max-w-[360px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl'}>
+                    <div className={clipMetadata ? 'grid items-start gap-4 lg:grid-cols-[220px_minmax(0,360px)] lg:justify-center' : ''}>
+                        <ClipMetadataPanel clip={clipMetadata} />
+                        <div ref={playerRef} data-testid="local-editor-player" tabIndex={0} role="region" aria-label="Video preview. Use Space or K to play or pause, arrow keys to seek, M to mute, and F for fullscreen." aria-keyshortcuts="Space K ArrowLeft ArrowRight Home End M F" onKeyDown={handlePlayerKeyDown} className={isFullscreen ? 'fixed inset-0 z-50 flex items-center justify-center bg-black p-4' : 'mx-auto flex h-[calc(100vh-180px)] max-h-[72vh] w-full max-w-[360px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl'}>
                         <div className="relative h-full max-h-full w-auto max-w-full aspect-[9/16]">
                             <video ref={videoRef} src={videoUrl} controls={false} className={`h-full w-full ${shouldCropVideo ? 'object-cover' : 'object-contain'}`} onLoadedMetadata={handleMetadata} onLoadedData={detectVideoFraming} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onTimeUpdate={handleVideoTimeUpdate} />
                             <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className="absolute right-3 top-3 z-20 rounded-lg border border-white/20 bg-black/60 p-2 text-white shadow-lg backdrop-blur hover:bg-black/80">{isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
@@ -1048,6 +1052,7 @@ export default function LocalEditorTab({
                                 <button type="button" aria-label={videoViewMode === 'auto' ? (autoCrop ? 'Fit video' : 'Fill video') : videoViewMode === 'fill' ? 'Fit video' : 'Auto fit video'} title="Change video fit mode" onClick={cycleVideoViewMode} className="rounded px-1.5 py-1 text-[10px] font-semibold hover:bg-white/10 hover:text-white">{videoViewLabel}</button>
                                 <span className="ml-1 min-w-[74px] text-center font-mono text-[10px] text-zinc-400">{formatClock(playheadMs)} / {formatClock(durationMs)}</span>
                             </div>
+                        </div>
                         </div>
                     </div>
                     <div className="rounded-xl border border-white/10 bg-[#101014] p-2">
