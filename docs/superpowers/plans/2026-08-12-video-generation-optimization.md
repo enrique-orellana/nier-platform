@@ -16,12 +16,14 @@
 - Create: `video_rendering.py` — decoder seek helper, clip render metrics, and direct-seek audio command construction.
 - Create: `video_output_validation.py` — final MP4 validation against the existing master export policy.
 - Modify: `main.py:380-850, 1260-1335` — build source analysis once, pass it into clip rendering, seek decoder ranges, use direct audio extraction, and emit metrics.
+- Modify: `app.py:520-625` — expose only validated clip artifacts in partial and completed job results.
 - Modify: `clip_timeline.py:27-62` — retain frame-aligned trim semantics and expose the duration values needed by direct audio extraction.
 - Modify: `s3_uploader.py:541-560` — upload only validated final artifacts and retain temporary-file exclusions.
 - Test: `tests/test_video_analysis.py` — source-analysis serialization, cache hits, cache invalidation, and one-time analysis callbacks.
 - Test: `tests/test_video_rendering.py` — decoder seeking, frame accounting, and direct audio command construction.
 - Test: `tests/test_video_output_validation.py` — valid/invalid output behavior and policy checks.
 - Test: `tests/test_main_generation_pipeline.py` — shared source-analysis object is passed to all clips and analysis callbacks run once.
+- Test: `tests/test_video_artifact_readiness.py` — policy-backed and legacy artifact readiness checks.
 - Test: `tests/test_s3_clip_urls.py` — existing artifact upload behavior remains protected.
 
 ## Task 1: Add the source-analysis model and cache tests

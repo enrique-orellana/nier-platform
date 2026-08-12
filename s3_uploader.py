@@ -2,6 +2,7 @@ import os
 import re
 import tempfile
 import zipfile
+import json
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 load_dotenv()
@@ -9,6 +10,7 @@ import boto3
 from botocore.exceptions import ClientError
 from botocore.config import Config
 import logging
+from video_output_validation import validate_clip_output
 
 # Configure silent logging for boto3 and botocore
 logging.getLogger('boto3').setLevel(logging.CRITICAL)
@@ -538,6 +540,37 @@ def list_video_gallery(limit=50, force_refresh=False):
     return videos[:limit] if limit else videos
 
 
+def _load_clip_output_policies(directory):
+    policies = {}
+    for filename in os.listdir(directory):
+        if not filename.endswith("_metadata.json"):
+            continue
+        try:
+            with open(os.path.join(directory, filename), "r", encoding="utf-8") as handle:
+                metadata = json.load(handle)
+        except (OSError, TypeError, ValueError):
+            continue
+
+        base_name = filename[:-len("_metadata.json")]
+        for index, clip in enumerate(metadata.get("shorts", [])):
+            if not isinstance(clip, dict):
+                continue
+            video_filename = clip.get("video_filename") or f"{base_name}_clip_{index + 1}.mp4"
+            expected = (
+                clip.get("output_width"),
+                clip.get("output_height"),
+                clip.get("output_fps"),
+            )
+            if all(value is not None for value in expected):
+                policies[video_filename] = {
+                    "width": int(expected[0]),
+                    "height": int(expected[1]),
+                    "fps": float(expected[2]),
+                    "source_has_audio": bool(clip.get("source_has_audio", False)),
+                }
+    return policies
+
+
 def upload_job_artifacts(directory, job_id):
     """
     Upload all generated clips and metadata for a job to S3.
@@ -547,14 +580,29 @@ def upload_job_artifacts(directory, job_id):
     if not os.path.exists(directory):
         return
 
+    output_policies = _load_clip_output_policies(directory)
     for filename in os.listdir(directory):
         # Upload .mp4 clips and the metadata JSON
         if (
             (filename.endswith(".mp4") or filename.endswith(".json"))
             and not filename.startswith("temp_")
             and "_temp_video" not in filename
+            and filename != "_source_analysis.json"
         ):
             file_path = os.path.join(directory, filename)
+            policy = output_policies.get(filename)
+            if filename.endswith(".mp4") and policy:
+                try:
+                    validate_clip_output(
+                        file_path,
+                        expected_width=policy["width"],
+                        expected_height=policy["height"],
+                        expected_fps=policy["fps"],
+                        source_has_audio=policy["source_has_audio"],
+                    )
+                except (OSError, TypeError, ValueError) as error:
+                    logger.warning("Skipping invalid clip artifact %s: %s", filename, error)
+                    continue
             s3_key = f"{job_id}/{filename}"
             upload_file_to_s3(file_path, bucket_name, s3_key)
 

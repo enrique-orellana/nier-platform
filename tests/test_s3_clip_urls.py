@@ -71,6 +71,27 @@ class S3ClipUrlTests(unittest.TestCase):
         self.assertIn("job-1/metadata.json", uploaded_names)
         self.assertNotIn("job-1/clip_temp_video.mp4", uploaded_names)
 
+    def test_upload_job_artifacts_skips_clip_that_fails_output_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "clip.mp4").write_bytes(b"broken")
+            Path(directory, "source_metadata.json").write_text(
+                '{"shorts": [{"video_filename": "clip.mp4", '
+                '"output_width": 608, "output_height": 1080, '
+                '"output_fps": 30, "source_has_audio": true}]}',
+                encoding="utf-8",
+            )
+
+            with patch.object(
+                s3_uploader,
+                "validate_clip_output",
+                side_effect=ValueError("invalid clip"),
+            ):
+                with patch.object(s3_uploader, "upload_file_to_s3") as upload:
+                    s3_uploader.upload_job_artifacts(directory, "job-1")
+
+        uploaded_names = [call.args[2] for call in upload.call_args_list]
+        self.assertNotIn("job-1/clip.mp4", uploaded_names)
+
 
 if __name__ == "__main__":
     unittest.main()

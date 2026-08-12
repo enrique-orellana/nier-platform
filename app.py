@@ -35,6 +35,8 @@ from local_editor_subtitles import (
     word_captions_from_transcript,
     write_local_editor_srt,
 )
+from media_probe import probe_media
+from video_output_validation import validate_clip_output
 
 load_dotenv()
 
@@ -517,6 +519,43 @@ def enqueue_output(out, job_id):
     finally:
         out.close()
 
+def _clip_artifact_is_valid(path: str, clip: dict) -> bool:
+    """Return whether a generated clip is safe to expose as ready."""
+    if not os.path.isfile(path) or os.path.getsize(path) <= 0:
+        return False
+
+    expected = (
+        clip.get("output_width"),
+        clip.get("output_height"),
+        clip.get("output_fps"),
+    )
+    if all(value is not None for value in expected):
+        try:
+            validate_clip_output(
+                path,
+                expected_width=int(expected[0]),
+                expected_height=int(expected[1]),
+                expected_fps=float(expected[2]),
+                source_has_audio=bool(clip.get("source_has_audio", False)),
+            )
+            return True
+        except (OSError, TypeError, ValueError):
+            return False
+
+    # Legacy metadata predates the export-policy fields. Still require a
+    # decodable, positive H.264 media file before exposing it.
+    try:
+        media = probe_media(path)
+    except (OSError, TypeError, ValueError):
+        return False
+    return (
+        media.codec.lower() == "h264"
+        and media.duration_seconds > 0
+        and (media.frame_count is None or media.frame_count > 0)
+        and media.size_bytes > 0
+    )
+
+
 async def run_job(job_id, job_data):
     """Executes the subprocess for a specific job."""
     
@@ -567,11 +606,9 @@ async def run_job(job_id, job_data):
                         # Check which clips actually exist on disk
                         ready_clips = []
                         for i, clip in enumerate(clips):
-                             clip_filename = f"{base_name}_clip_{i+1}.mp4"
+                             clip_filename = clip.get("video_filename") or f"{base_name}_clip_{i+1}.mp4"
                              clip_path = os.path.join(output_dir, clip_filename)
-                             if os.path.exists(clip_path) and os.path.getsize(clip_path) > 0:
-                                 # Checking if file is growing? For now assume if it exists and main.py moves it there, it's done.
-                                 # main.py writes to temp_... then moves to final name. So presence means ready!
+                             if _clip_artifact_is_valid(clip_path, clip):
                                  clip['video_url'] = f"/videos/{job_id}/{clip_filename}"
                                  ready_clips.append(clip)
                         
@@ -602,11 +639,18 @@ async def run_job(job_id, job_data):
                 clips = data.get('shorts', [])
                 cost_analysis = data.get('cost_analysis')
 
+                ready_clips = []
                 for i, clip in enumerate(clips):
-                     clip_filename = f"{base_name}_clip_{i+1}.mp4"
-                     clip['video_url'] = f"/videos/{job_id}/{clip_filename}"
+                     clip_filename = clip.get("video_filename") or f"{base_name}_clip_{i+1}.mp4"
+                     clip_path = os.path.join(output_dir, clip_filename)
+                     if _clip_artifact_is_valid(clip_path, clip):
+                         clip['video_url'] = f"/videos/{job_id}/{clip_filename}"
+                         ready_clips.append(clip)
 
-                jobs[job_id]['result'] = {'clips': clips, 'cost_analysis': cost_analysis}
+                jobs[job_id]['result'] = {'clips': ready_clips, 'cost_analysis': cost_analysis}
+                if not ready_clips:
+                    jobs[job_id]['status'] = 'failed'
+                    jobs[job_id]['logs'].append("No validated video clips generated.")
             else:
                  jobs[job_id]['status'] = 'failed'
                  jobs[job_id]['logs'].append("No metadata file generated.")
@@ -620,7 +664,8 @@ async def run_job(job_id, job_data):
             except Exception as upload_error:
                 jobs[job_id]['logs'].append(f"Artifact upload warning: {upload_error}")
 
-            jobs[job_id]['status'] = 'completed'
+            if jobs[job_id].get('status') != 'failed':
+                jobs[job_id]['status'] = 'completed'
         else:
             jobs[job_id]['status'] = 'failed'
             jobs[job_id]['logs'].append(f"Process failed with exit code {returncode}")

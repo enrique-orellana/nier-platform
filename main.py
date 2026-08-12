@@ -1,22 +1,45 @@
 import time
 import atexit
 import cv2
-import scenedetect
 import subprocess
 import argparse
 import re
 import sys
 import tempfile
-from scenedetect import open_video, SceneManager
-from scenedetect.detectors import ContentDetector
-from ultralytics import YOLO
-import torch
 import os
 import shutil
 import numpy as np
-from tqdm import tqdm
-import yt_dlp
-import mediapipe as mp
+
+try:
+    from tqdm import tqdm
+except ImportError:  # pragma: no cover - production installs tqdm
+    class _TqdmFallback:
+        def __init__(self, iterable=None, **_kwargs):
+            self.iterable = iterable
+
+        def __iter__(self):
+            return iter(self.iterable or ())
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def update(self, _count=1):
+            return None
+
+    tqdm = _TqdmFallback
+
+try:
+    import yt_dlp
+except ImportError:  # pragma: no cover - required only for URL ingestion
+    yt_dlp = None
+
+try:
+    import mediapipe as mp
+except ImportError:  # pragma: no cover - required only for tracking renders
+    mp = None
 # import whisper (replaced by faster_whisper inside function)
 from dotenv import load_dotenv
 import json
@@ -25,12 +48,15 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='google.protobuf')
 from ai_client import load_ai_config, chat_json
-from master_policy import master_video_encode_args, master_audio_encode_args, choose_master_spec
+from master_policy import master_video_encode_args, choose_master_spec
 from media_probe import probe_media
 from render_manifest import register_asset, save_manifest_atomic
 from crop_track import CropKeyframe, CropRect, CropScene, CropTrack
-from clip_timeline import build_audio_trim_filter, resolve_clip_frame_range
+from clip_timeline import resolve_clip_frame_range
 from video_decode import build_decode_compatibility_command, requires_decode_compatibility
+from video_analysis import SourceAnalysis, load_or_build_source_analysis
+from video_output_validation import validate_clip_output
+from video_rendering import build_audio_extract_command, seek_capture_to_frame
 
 # Load environment variables
 load_dotenv()
@@ -81,13 +107,15 @@ OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by pre
 }}
 """
 
-# Load the YOLO model once (Keep for backup or scene analysis if needed)
-model = YOLO('yolov8n.pt')
+# Load the YOLO model once, only if the face detector needs its fallback.
+model = None
 
 # --- MediaPipe Setup ---
 # Use standard Face Detection (BlazeFace) for speed
-mp_face_detection = mp.solutions.face_detection
-face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
+face_detection = None
+if mp is not None:
+    mp_face_detection = mp.solutions.face_detection
+    face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
 
 class SmoothedCameraman:
     """
@@ -294,6 +322,9 @@ def detect_face_candidates(frame):
     """
     Returns list of all detected faces using lightweight FaceDetection.
     """
+    if face_detection is None:
+        raise RuntimeError("MediaPipe is required for face tracking")
+
     height, width, _ = frame.shape
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = face_detection.process(rgb_frame)
@@ -322,7 +353,12 @@ def detect_person_yolo(frame):
     Fallback: Detect largest person using YOLO when face detection fails.
     Returns [x, y, w, h] of the person's 'upper body' approximation.
     """
-    # Use the globally loaded model
+    global model
+    if model is None:
+        from ultralytics import YOLO
+
+        model = YOLO("yolov8n.pt")
+
     results = model(frame, verbose=False, classes=[0]) # class 0 is person
     
     if not results:
@@ -398,11 +434,13 @@ def analyze_scenes_strategy(video_path, scenes):
         return ['TRACK'] * len(scenes)
         
     for start, end in tqdm(scenes, desc="   Analyzing Scenes"):
+        start_frame = int(getattr(start, "frame_num", start))
+        end_frame = int(getattr(end, "frame_num", end))
         # Sample 3 frames (start, middle, end)
         frames_to_check = [
-            start.frame_num + 5,
-            int((start.frame_num + end.frame_num) / 2),
-            end.frame_num - 5
+            start_frame + 5,
+            int((start_frame + end_frame) / 2),
+            end_frame - 5
         ]
         
         face_counts = []
@@ -435,6 +473,12 @@ def analyze_scenes_strategy(video_path, scenes):
     return strategies
 
 def detect_scenes(video_path):
+    try:
+        from scenedetect import open_video, SceneManager
+        from scenedetect.detectors import ContentDetector
+    except ImportError as error:
+        raise RuntimeError("PySceneDetect is required for scene analysis") from error
+
     video = open_video(video_path)
     scene_manager = SceneManager()
     scene_manager.add_detector(ContentDetector())
@@ -481,6 +525,58 @@ def prepare_opencv_video(input_video: str) -> str:
     return working_video
 
 
+def build_source_analysis_for_job(input_video: str, output_dir: str) -> SourceAnalysis:
+    """Build or load the expensive source analysis shared by all clip renders."""
+    source_path = Path(input_video).resolve()
+    source_media = probe_media(source_path)
+    capture = cv2.VideoCapture(str(source_path))
+    try:
+        is_opened = getattr(capture, "isOpened", lambda: True)
+        if not is_opened():
+            raise RuntimeError(f"Could not open video file {source_path}")
+        source_fps = float(capture.get(cv2.CAP_PROP_FPS) or source_media.fps)
+        total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or source_media.frame_count or 0)
+        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or source_media.width)
+        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or source_media.height)
+    finally:
+        capture.release()
+
+    if source_fps <= 0 or total_frames <= 0 or width <= 0 or height <= 0:
+        raise ValueError("source video metadata is incomplete or invalid")
+
+    stat = source_path.stat()
+    source_fingerprint = {
+        "path": str(source_path),
+        "size": int(stat.st_size),
+        "mtime_ns": int(stat.st_mtime_ns),
+        "codec": source_media.codec,
+        "fps": source_fps,
+        "frame_count": total_frames,
+        "width": width,
+        "height": height,
+    }
+
+    def scene_builder():
+        scenes, _detected_fps = detect_scenes(str(source_path))
+        if scenes:
+            return scenes
+        return [(0, total_frames)]
+
+    def strategy_builder(scenes):
+        return analyze_scenes_strategy(str(source_path), scenes)
+
+    return load_or_build_source_analysis(
+        cache_path=Path(output_dir) / "_source_analysis.json",
+        source_fingerprint=source_fingerprint,
+        source_fps=source_fps,
+        total_frames=total_frames,
+        width=width,
+        height=height,
+        scene_builder=scene_builder,
+        strategy_builder=strategy_builder,
+    )
+
+
 def sanitize_filename(filename):
     """Remove invalid characters from filename."""
     filename = re.sub(r'[<>:"/\\|?*#]', '', filename)
@@ -489,6 +585,9 @@ def sanitize_filename(filename):
 
 
 def download_youtube_video(url, output_dir="."):
+    if yt_dlp is None:
+        raise RuntimeError("yt-dlp is required for URL ingestion")
+
     """
     Downloads a YouTube video using yt-dlp.
     Returns the path to the downloaded video and the video title.
@@ -617,7 +716,15 @@ Technical Details: {str(e)}
     
     return downloaded_file, sanitized_title
 
-def process_video_to_vertical(input_video, final_output_video, start_sec=None, end_sec=None):
+def process_video_to_vertical(
+    input_video,
+    final_output_video,
+    start_sec=None,
+    end_sec=None,
+    *,
+    source_analysis: SourceAnalysis,
+    source_media=None,
+):
     """
     Core logic to convert horizontal video to vertical using scene detection and Active Speaker Tracking (MediaPipe).
     """
@@ -634,15 +741,14 @@ def process_video_to_vertical(input_video, final_output_video, start_sec=None, e
     if os.path.exists(final_output_video): os.remove(final_output_video)
 
     print(f"🎬 Processing clip: {input_video}")
-    print("   Step 1: Detecting scenes...")
-    scenes, detected_fps = detect_scenes(input_video)
-    source_fps = float(detected_fps)
+    source_fps = float(source_analysis.source_fps)
     fps = min(source_fps, 60.0)
     frame_stride = max(1, round(source_fps / fps))
 
-    source_cap = cv2.VideoCapture(input_video)
-    total_frames = int(source_cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    source_cap.release()
+    total_frames = int(source_analysis.total_frames)
+    if source_media is None:
+        source_media = probe_media(input_video)
+    source_has_audio = source_media.audio is not None
     trim = resolve_clip_frame_range(
         start_sec,
         end_sec,
@@ -654,19 +760,15 @@ def process_video_to_vertical(input_video, final_output_video, start_sec=None, e
         f"({trim.start_sec:.6f}s-{trim.end_sec:.6f}s)"
     )
     
-    if not scenes:
-        print("   ❌ No scenes were detected. Using full video as one scene.")
-        # If scene detection fails or finds nothing, treat whole video as one scene
-        cap = cv2.VideoCapture(input_video)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        cap.release()
-        from scenedetect import FrameTimecode
-        scenes = [(FrameTimecode(0, source_fps), FrameTimecode(total_frames, source_fps))]
+    scenes = source_analysis.scene_boundaries
+    scene_boundaries = source_analysis.scene_boundaries
+    scene_strategies = source_analysis.scene_strategies
 
     print(f"   ✅ Found {len(scenes)} scenes.")
 
     print("\n   🧠 Step 2: Preparing Active Tracking...")
-    original_width, original_height = get_video_resolution(input_video)
+    original_width = int(source_analysis.width)
+    original_height = int(source_analysis.height)
     
     OUTPUT_HEIGHT = original_height
     OUTPUT_WIDTH = int(OUTPUT_HEIGHT * ASPECT_RATIO)
@@ -676,12 +778,7 @@ def process_video_to_vertical(input_video, final_output_video, start_sec=None, e
     # Initialize Cameraman
     cameraman = SmoothedCameraman(OUTPUT_WIDTH, OUTPUT_HEIGHT, original_width, original_height)
     
-    # --- New Strategy: Per-Scene Analysis ---
-    print("\n   🤖 Step 3: Analyzing Scenes for Strategy (Single vs Group)...")
-    scene_strategies = analyze_scenes_strategy(input_video, scenes)
-    # scene_strategies is a list of 'TRACK' or 'General' corresponding to scenes
-    
-    print("\n   ✂️ Step 4: Processing video frames...")
+    print("\n   ✂️ Step 2: Processing video frames...")
     
     command = [
         'ffmpeg', '-y', '-f', 'rawvideo', '-vcodec', 'rawvideo',
@@ -690,17 +787,10 @@ def process_video_to_vertical(input_video, final_output_video, start_sec=None, e
         '-an', temp_video_output
     ]
 
-    ffmpeg_process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-
     cap = cv2.VideoCapture(input_video)
-    frame_number = 0
+    frame_number, discarded_preroll_frames = seek_capture_to_frame(cap, trim.start_frame)
     processed_frames = 0
     current_scene_index = 0
-    
-    # Pre-calculate scene boundaries
-    scene_boundaries = []
-    for s_start, s_end in scenes:
-        scene_boundaries.append((s_start.frame_num, s_end.frame_num))
 
     while (
         current_scene_index + 1 < len(scene_boundaries)
@@ -711,18 +801,13 @@ def process_video_to_vertical(input_video, final_output_video, start_sec=None, e
     # Global tracker for single-person shots
     speaker_tracker = SpeakerTracker(cooldown_frames=30)
 
+    ffmpeg_process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
     with tqdm(total=trim.frame_count, desc="   Processing", file=sys.stdout) as pbar:
-        while cap.isOpened():
+        while cap.isOpened() and frame_number < trim.end_frame:
             ret, frame = cap.read()
             if not ret:
                 break
-
-            if frame_number >= trim.end_frame:
-                break
-
-            if frame_number < trim.start_frame:
-                frame_number += 1
-                continue
 
             if (frame_number - trim.start_frame) % frame_stride != 0:
                 frame_number += 1
@@ -796,16 +881,16 @@ def process_video_to_vertical(input_video, final_output_video, start_sec=None, e
         return False
 
     print("\n   🔊 Step 5: Extracting audio...")
-    audio_extract_command = [
-        'ffmpeg', '-y', '-i', input_video, '-vn',
-        '-af', build_audio_trim_filter(trim),
-        *master_audio_encode_args(),
-        temp_audio_output,
-    ]
+    audio_extract_command = build_audio_extract_command(
+        input_video, temp_audio_output, trim
+    )
     try:
         subprocess.run(audio_extract_command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     except subprocess.CalledProcessError:
-        print("\n   ❌ Audio extraction failed (maybe no audio?). Proceeding without audio.")
+        if source_has_audio:
+            print("\n   ❌ Required audio extraction failed.")
+        else:
+            print("\n   ℹ️ Source has no audio; proceeding without audio.")
         pass
 
     print("\n   ✨ Step 6: Merging...")
@@ -824,7 +909,13 @@ def process_video_to_vertical(input_video, final_output_video, start_sec=None, e
         
     try:
         subprocess.run(merge_command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        probe_media(final_output_video)
+        validate_clip_output(
+            final_output_video,
+            expected_width=OUTPUT_WIDTH,
+            expected_height=OUTPUT_HEIGHT,
+            expected_fps=fps,
+            source_has_audio=source_has_audio,
+        )
         print(f"   ✅ Clip saved to {final_output_video}")
     except (subprocess.CalledProcessError, ValueError) as e:
         print("\n   ❌ Final merge failed.")
@@ -832,6 +923,8 @@ def process_video_to_vertical(input_video, final_output_video, start_sec=None, e
             print("   Stderr:", e.stderr.decode())
         else:
             print("   Output validation:", e)
+        if os.path.exists(final_output_video):
+            os.remove(final_output_video)
         return False
 
     # Clean up temp files
@@ -896,6 +989,58 @@ def _write_clip_manifest(
     manifest_path = os.path.join(output_dir, "manifests", f"clip_{clip_index}.json")
     save_manifest_atomic(Path(manifest_path), manifest)
     return os.path.relpath(manifest_path, output_dir).replace(os.sep, "/")
+
+
+def render_clip_plan(
+    *,
+    input_video: str,
+    output_dir: str,
+    video_title: str,
+    clips: list[dict],
+    source_analysis: SourceAnalysis,
+    transcript: dict,
+    source_asset: dict,
+    source_media,
+) -> list[dict]:
+    """Render a clip plan using one immutable source analysis object."""
+    rendered_clips = []
+    source_video_filename = source_asset.get("relative_path", "")
+    source_video_url = f"/videos/{os.path.basename(output_dir)}/{source_video_filename}"
+    master_spec = choose_master_spec(source_media, strategy="crop")
+
+    for index, clip in enumerate(clips, start=1):
+        start = clip["start"]
+        end = clip["end"]
+        clip_filename = f"{video_title}_clip_{index}.mp4"
+        clip_final_path = os.path.join(output_dir, clip_filename)
+
+        manifest_path = _write_clip_manifest(
+            output_dir, video_title, index, clip, source_asset, source_media, transcript
+        )
+        clip["manifest_path"] = manifest_path
+        clip["source_video_filename"] = source_video_filename
+        clip["source_video_url"] = source_video_url
+        clip["video_filename"] = clip_filename
+        clip["output_width"] = master_spec.width
+        clip["output_height"] = master_spec.height
+        clip["output_fps"] = master_spec.fps
+        clip["source_has_audio"] = source_media.audio is not None
+
+        print(f"\nProcessing Clip {index}: {start}s - {end}s")
+        print(f"   Title: {clip.get('video_title_for_youtube_short', 'No Title')}")
+        success = process_video_to_vertical(
+            input_video,
+            clip_final_path,
+            start_sec=start,
+            end_sec=end,
+            source_analysis=source_analysis,
+            source_media=source_media,
+        )
+        if success:
+            rendered_clips.append(clip)
+
+    return rendered_clips
+
 
 def transcribe_video(video_path):
     print("🎙️  Transcribing video with Faster-Whisper (CPU Optimized)...")
@@ -1277,22 +1422,24 @@ if __name__ == '__main__':
 
     processing_video = prepare_opencv_video(input_video)
     manifest_source_path, source_asset, source_media = _prepare_manifest_source(input_video, output_dir)
+    source_analysis = build_source_analysis_for_job(processing_video, output_dir)
 
     # 2. Decision: Analyze clips or process whole?
     if args.skip_analysis:
         print("⏩ Skipping analysis, processing entire video...")
         output_file = args.output if args.output else os.path.join(output_dir, f"{video_title}_vertical.mp4")
-        process_video_to_vertical(processing_video, output_file)
+        process_video_to_vertical(
+            processing_video,
+            output_file,
+            source_analysis=source_analysis,
+            source_media=source_media,
+        )
     else:
         # 3. Transcribe
         transcript = transcribe_video(processing_video)
         
         # Get duration
-        cap = cv2.VideoCapture(processing_video)
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration = frame_count / fps
-        cap.release()
+        duration = source_analysis.total_frames / source_analysis.source_fps
 
         # 4. Gemini Analysis
         clips_data = get_viral_clips(transcript, duration, target_clips=target_clips)
@@ -1300,7 +1447,12 @@ if __name__ == '__main__':
         if not clips_data or 'shorts' not in clips_data:
             print("❌ Failed to identify clips. Converting whole video as fallback.")
             output_file = os.path.join(output_dir, f"{video_title}_vertical.mp4")
-            process_video_to_vertical(processing_video, output_file)
+            process_video_to_vertical(
+                processing_video,
+                output_file,
+                source_analysis=source_analysis,
+                source_media=source_media,
+            )
         else:
             print(f"🔥 Found {len(clips_data['shorts'])} viral clips!")
             
@@ -1311,38 +1463,17 @@ if __name__ == '__main__':
                 json.dump(clips_data, f, indent=2)
             print(f"   Saved metadata to {metadata_file}")
 
-            # 5. Process each clip
-            for i, clip in enumerate(clips_data['shorts']):
-                start = clip['start']
-                end = clip['end']
-                print(f"\n🎬 Processing Clip {i+1}: {start}s - {end}s")
-                print(f"   Title: {clip.get('video_title_for_youtube_short', 'No Title')}")
-
-                manifest_path = _write_clip_manifest(
-                    output_dir, video_title, i + 1, clip, source_asset, source_media, transcript
-                )
-                clip["manifest_path"] = manifest_path
-                clip["source_video_filename"] = os.path.relpath(manifest_source_path, output_dir).replace(os.sep, "/")
-                clip["source_video_url"] = f"/videos/{os.path.basename(output_dir)}/{clip['source_video_filename']}"
-                master_spec = choose_master_spec(source_media, strategy="crop")
-                clip["output_width"] = master_spec.width
-                clip["output_height"] = master_spec.height
-                clip["output_fps"] = master_spec.fps
-                
-                clip_filename = f"{video_title}_clip_{i+1}.mp4"
-                clip_final_path = os.path.join(output_dir, clip_filename)
-
-                # Decode the source timeline once, trimming video frames and
-                # audio from the same frame-aligned clock.
-                success = process_video_to_vertical(
-                    processing_video,
-                    clip_final_path,
-                    start_sec=start,
-                    end_sec=end,
-                )
-                
-                if success:
-                    print(f"   ✅ Clip {i+1} ready: {clip_final_path}")
+            # 5. Process each clip from the shared source analysis.
+            clips_data["shorts"] = render_clip_plan(
+                input_video=processing_video,
+                output_dir=output_dir,
+                video_title=video_title,
+                clips=clips_data["shorts"],
+                source_analysis=source_analysis,
+                transcript=transcript,
+                source_asset=source_asset,
+                source_media=source_media,
+            )
                 
             with open(metadata_file, 'w', encoding='utf-8') as f:
                 json.dump(clips_data, f, indent=2)
