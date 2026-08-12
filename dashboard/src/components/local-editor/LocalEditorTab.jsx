@@ -10,10 +10,11 @@ import { detectEmbeddedSideBars, getFilledFrameDimensions } from './localEditorV
 import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
 import { groupCaptionsIntoBlocks } from '../../remotion/lib/captions';
-import { HOOK_FONT_FAMILY, getHookAnimationStyle, getHookBoxStyle, getHookPositionStyle } from '../../remotion/lib/hookVisual';
+import { getHookAnimationStyle, getHookBoxStyle, getHookPositionStyle } from '../../remotion/lib/hookVisual';
 import LocalEditorProjects from './LocalEditorProjects';
 import { getLocalAiHeaders } from './localEditorAi';
-import { createEmptyEditorHistory, createStoredProject, deleteStoredProject, EDITOR_HISTORY_LIMIT, getActiveProjectId, listStoredProjects, loadStoredProject, migrateLegacyProject, readEditorHistory, renameStoredProject, saveEditorHistory, saveStoredProject, setActiveProjectId } from './localEditorPersistence';
+import { createEmptyEditorHistory, createStoredProject, deleteStoredProject, EDITOR_HISTORY_LIMIT, EDITOR_HISTORY_STORAGE_KEY, getActiveProjectId, listStoredProjects, loadStoredProject, migrateLegacyProject, readEditorHistory, renameStoredProject, saveEditorHistory, saveStoredProject, setActiveProjectId } from './localEditorPersistence';
+import { readEditorPreferences, saveEditorPreferences, updateEditorPreferencesFromState } from './localEditorPreferences';
 import {
     DEFAULT_SUBTITLE_STYLE,
     HOOK_ENTRANCE_OPTIONS,
@@ -299,9 +300,15 @@ export default function LocalEditorTab({
     const [videoUrl, setVideoUrl] = useState('');
     const [durationMs, setDurationMs] = useState(DEFAULT_DURATION_MS);
     const [playheadMs, setPlayheadMs] = useState(0);
+    const editorPreferencesRef = useRef(readEditorPreferences());
     const [editHistory, setEditHistory] = useState(() => {
-        const history = createEmptyEditorHistory();
-        return initialEditorState ? { ...history, present: { ...history.present, ...initialEditorState } } : readEditorHistory();
+        const history = createEmptyEditorHistory(editorPreferencesRef.current);
+        if (initialEditorState) return { ...history, present: { ...history.present, ...initialEditorState } };
+        try {
+            return localStorage.getItem(EDITOR_HISTORY_STORAGE_KEY) ? readEditorHistory() : history;
+        } catch {
+            return history;
+        }
     });
     const [selected, setSelected] = useState(null);
     const [pendingSubtitle, setPendingSubtitle] = useState(null);
@@ -337,7 +344,7 @@ export default function LocalEditorTab({
     const appliedInitialStateKeyRef = useRef(null);
     const projectSaveTimerRef = useRef(null);
     const legacyHistoryPresentRef = useRef((() => {
-        try { return Boolean(localStorage.getItem('openshorts_local_editor_state_v1')); } catch { return false; }
+        try { return Boolean(localStorage.getItem(EDITOR_HISTORY_STORAGE_KEY)); } catch { return false; }
     })());
     useEffect(() => {
         editHistoryRef.current = editHistory;
@@ -369,7 +376,7 @@ export default function LocalEditorTab({
         if (!initialEditorState || initialStateKey === null || appliedInitialStateKeyRef.current === initialStateKey) return;
         appliedInitialStateKeyRef.current = initialStateKey;
         setEditHistory((current) => ({
-            ...createEmptyEditorHistory(),
+            ...createEmptyEditorHistory(editorPreferencesRef.current),
             present: { ...current.present, ...initialEditorState },
         }));
         setSelected(null);
@@ -431,6 +438,11 @@ export default function LocalEditorTab({
         }
         return { past: [...current.past, current.present].slice(-EDITOR_HISTORY_LIMIT), present: next, future: [] };
     });
+    const rememberEditorSettings = (state) => {
+        const next = updateEditorPreferencesFromState(editorPreferencesRef.current, state);
+        editorPreferencesRef.current = next;
+        saveEditorPreferences(next);
+    };
     const undo = () => setEditHistory((current) => {
         if (!current.past.length) return current;
         const previous = current.past[current.past.length - 1];
@@ -558,7 +570,19 @@ export default function LocalEditorTab({
     const cycleVideoViewMode = () => setVideoViewMode((current) => current === 'auto' ? 'fill' : current === 'fill' ? 'fit' : 'auto');
 
     const updateSubtitle = (cue, options) => commitEdit((current) => ({ ...current, subtitleCues: current.subtitleCues.map((item) => item.id === cue.id ? syncSubtitleCue(item, clampCue(cue, durationMs)) : item) }), options);
-    const updateHook = (nextHook, options) => commitEdit((current) => ({ ...current, hook: clampCue(nextHook, durationMs) }), options);
+    const updateHook = (nextHook, options) => {
+        const normalizedHook = clampCue(nextHook, durationMs);
+        rememberEditorSettings({ ...editHistoryRef.current.present, hook: normalizedHook });
+        return commitEdit((current) => ({ ...current, hook: normalizedHook }), options);
+    };
+    const updateSubtitleStyle = (nextStyle) => {
+        rememberEditorSettings({ ...editHistoryRef.current.present, subtitleStyle: nextStyle });
+        commitEdit((current) => ({ ...current, subtitleStyle: nextStyle }));
+    };
+    const updateSubtitleLanguage = (nextLanguage) => {
+        rememberEditorSettings({ ...editHistoryRef.current.present, subtitleLanguage: nextLanguage });
+        commitEdit((current) => ({ ...current, subtitleLanguage: nextLanguage }));
+    };
 
     const handleTimelineSelect = (cue, type) => setSelected({ id: cue.id, type });
     const beginTimelineEdit = () => { timelineDragRef.current = { recorded: false }; };
@@ -678,7 +702,9 @@ export default function LocalEditorTab({
 
     const addHook = () => {
         if (hook && !window.confirm('Replace the current viral hook?')) return;
-        const nextHook = { id: 'hook', text: 'Your viral hook', startMs: 0, endMs: Math.min(2500, durationMs), position: 'top', size: 'M', entranceAnimation: 'spring', color: '#ffffff', fontSize: 48, background: '#111111', fontFamily: HOOK_FONT_FAMILY };
+        const { durationMs: hookDurationMs, ...hookDefaults } = editorPreferencesRef.current.hookDefaults;
+        const nextHook = { id: 'hook', text: 'Your viral hook', startMs: 0, endMs: Math.min(hookDurationMs, durationMs), ...hookDefaults };
+        rememberEditorSettings({ ...editHistoryRef.current.present, hook: nextHook });
         commitEdit((current) => ({ ...current, hook: nextHook }));
         setSelected({ id: 'hook', type: 'hook' });
         setHookOpen(true);
@@ -869,7 +895,7 @@ export default function LocalEditorTab({
         objectUrlRef.current = '';
         setVideoFile(null);
         setVideoUrl('');
-        setEditHistory(createEmptyEditorHistory());
+        setEditHistory(createEmptyEditorHistory(editorPreferencesRef.current));
         setSelected(null);
         setPendingSubtitle(null);
         setPlayheadMs(0);
@@ -1071,7 +1097,7 @@ export default function LocalEditorTab({
                                 <div className="space-y-3 p-3.5">
                                     <div className="grid grid-cols-2 gap-2">
                                         <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Source
-                                            <div className="relative mt-1.5"><select aria-label="Subtitle source language" value={subtitleLanguage} onChange={(event) => commitEdit((current) => ({ ...current, subtitleLanguage: event.target.value }))} disabled={translatingSubtitles} style={{ colorScheme: 'dark' }} className="w-full appearance-none rounded-lg border border-white/10 bg-white/[.06] px-3 py-2.5 pr-8 text-xs font-medium normal-case tracking-normal text-zinc-100 outline-none transition-colors hover:border-white/20 focus:border-cyan-300/50">{Object.entries(SUBTITLE_LANGUAGES).map(([code, name]) => <option key={code} value={code} style={{ backgroundColor: '#171e21', color: '#f4f4f5' }}>{name}</option>)}</select><ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500" /></div>
+                                            <div className="relative mt-1.5"><select aria-label="Subtitle source language" value={subtitleLanguage} onChange={(event) => updateSubtitleLanguage(event.target.value)} disabled={translatingSubtitles} style={{ colorScheme: 'dark' }} className="w-full appearance-none rounded-lg border border-white/10 bg-white/[.06] px-3 py-2.5 pr-8 text-xs font-medium normal-case tracking-normal text-zinc-100 outline-none transition-colors hover:border-white/20 focus:border-cyan-300/50">{Object.entries(SUBTITLE_LANGUAGES).map(([code, name]) => <option key={code} value={code} style={{ backgroundColor: '#171e21', color: '#f4f4f5' }}>{name}</option>)}</select><ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500" /></div>
                                         </label>
                                         <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Target
                                             <div className="relative mt-1.5"><select aria-label="Translation target language" value={translationTarget} onChange={(event) => setTranslationTarget(event.target.value)} disabled={translatingSubtitles} style={{ colorScheme: 'dark' }} className="w-full appearance-none rounded-lg border border-white/10 bg-white/[.06] px-3 py-2.5 pr-8 text-xs font-medium normal-case tracking-normal text-zinc-100 outline-none transition-colors hover:border-white/20 focus:border-cyan-300/50">{Object.entries(SUBTITLE_LANGUAGES).map(([code, name]) => <option key={code} value={code} disabled={code === subtitleLanguage} style={{ backgroundColor: '#171e21', color: code === subtitleLanguage ? '#a1a1aa' : '#f4f4f5' }}>{name}{code === subtitleLanguage ? ' (source)' : ''}</option>)}</select><ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500" /></div>
@@ -1080,7 +1106,7 @@ export default function LocalEditorTab({
                                     <button type="button" aria-label="Translate subtitles" onClick={translateSubtitles} disabled={translatingSubtitles || !subtitleCues.length || translationTarget === subtitleLanguage} className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-cyan-400 to-sky-500 px-3 py-2.5 text-xs font-bold text-white shadow-[0_8px_18px_rgba(34,211,238,0.16)] transition-all hover:from-cyan-300 hover:to-sky-400 hover:shadow-[0_10px_24px_rgba(34,211,238,0.24)] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none">{translatingSubtitles ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}{translatingSubtitles ? 'Translating…' : 'Translate subtitles'}</button>
                                 </div>
                             </div>
-                            <SubtitleStyleInspector style={subtitleStyle} onChange={(nextStyle) => commitEdit((current) => ({ ...current, subtitleStyle: nextStyle }))} onRemove={removeSubtitles} hasCues={subtitleCues.length > 0} />
+                            <SubtitleStyleInspector style={subtitleStyle} onChange={updateSubtitleStyle} onRemove={removeSubtitles} hasCues={subtitleCues.length > 0} />
                         </div>}
                     </section>
                     <section className="rounded-xl border border-white/10 bg-white/[.02] p-4">

@@ -5,6 +5,7 @@ import { StrictMode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalEditorTab from './LocalEditorTab';
 import { DEFAULT_SUBTITLE_STYLE } from './localEditorStyles';
+import { EDITOR_PREFERENCES_STORAGE_KEY } from './localEditorPreferences';
 import { EDITOR_PROJECT_DB_NAME, EDITOR_VIDEO_DB_NAME, createStoredProject, listStoredProjects } from './localEditorPersistence';
 
 vi.mock('./AudioWaveform', () => ({
@@ -138,6 +139,88 @@ describe('LocalEditorTab', () => {
         expect(screen.getAllByText('Viral Hook').length).toBeGreaterThan(0);
         expect(screen.getByTestId('local-editor-audio-track')).toBeInTheDocument();
         expect(screen.getByTestId('audio-waveform')).toHaveAttribute('data-video-url', 'blob:demo');
+    });
+
+    it('applies remembered settings to a new editor without copying content', async () => {
+        localStorage.setItem(EDITOR_PREFERENCES_STORAGE_KEY, JSON.stringify({
+            version: 1,
+            subtitleStyle: { fontSize: 42 },
+            subtitleLanguage: 'fr',
+            hookDefaults: { position: 'center', size: 'L', entranceAnimation: 'fade', durationMs: 4000, fontSize: 60 },
+        }));
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
+
+        expect(screen.getByLabelText('Subtitle font size')).toHaveValue(42);
+        expect(screen.getByLabelText('Subtitle source language')).toHaveValue('fr');
+        expect(screen.queryByLabelText('Subtitle text')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add Viral Hook' }));
+        expect(screen.getByLabelText('Hook text')).toHaveValue('Your viral hook');
+        expect(screen.getByRole('button', { name: 'Center' })).toHaveClass('border-white');
+        expect(screen.getByRole('button', { name: 'Large' })).toHaveClass('border-white');
+        expect(screen.getByRole('button', { name: 'Fade' })).toHaveClass('border-white');
+    });
+
+    it('saves changed settings without storing subtitle or hook content', async () => {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+
+        render(<LocalEditorTab />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
+        fireEvent.change(screen.getByLabelText('Subtitle font size'), { target: { value: '44' } });
+        fireEvent.change(screen.getByLabelText('Subtitle source language'), { target: { value: 'it' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Add subtitle cue' }));
+        fireEvent.change(screen.getByLabelText('Subtitle text'), { target: { value: 'private subtitle' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Add Viral Hook' }));
+        fireEvent.change(screen.getByLabelText('Hook text'), { target: { value: 'private hook text' } });
+        const hookPanel = document.getElementById('viral-hook-settings-panel');
+        fireEvent.click(within(hookPanel).getByRole('button', { name: 'Bottom' }));
+
+        const stored = JSON.parse(localStorage.getItem(EDITOR_PREFERENCES_STORAGE_KEY));
+        expect(stored.subtitleStyle.fontSize).toBe(44);
+        expect(stored.subtitleLanguage).toBe('it');
+        expect(stored.hookDefaults.position).toBe('bottom');
+        expect(stored).not.toHaveProperty('subtitleCues');
+        expect(stored.hookDefaults).not.toHaveProperty('text');
+        expect(JSON.stringify(stored)).not.toContain('private subtitle');
+        expect(JSON.stringify(stored)).not.toContain('private hook text');
+    });
+
+    it('keeps existing project settings authoritative over remembered defaults', async () => {
+        localStorage.setItem(EDITOR_PREFERENCES_STORAGE_KEY, JSON.stringify({
+            version: 1,
+            subtitleStyle: { fontSize: 42 },
+            subtitleLanguage: 'fr',
+            hookDefaults: { position: 'center', size: 'L', entranceAnimation: 'fade' },
+        }));
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
+        const initialEditorState = {
+            subtitleCues: [{ id: 'existing-cue', text: 'Existing subtitle', startMs: 0, endMs: 1000 }],
+            subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE, fontSize: 18 },
+            subtitleLanguage: 'it',
+            hook: { id: 'hook', text: 'Existing hook', startMs: 0, endMs: 2000, position: 'bottom', size: 'S', entranceAnimation: 'none', color: '#ffffff', fontSize: 30, background: '#111111', fontFamily: 'Arial' },
+        };
+
+        render(<LocalEditorTab initialEditorState={initialEditorState} initialStateKey="existing-project-1" />);
+        fireEvent.change(screen.getByLabelText(/upload video/i), { target: { files: [makeVideoFile()] } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /toggle subtitles settings/i }));
+        expect(screen.getByLabelText('Subtitle font size')).toHaveValue(18);
+        expect(screen.getByLabelText('Subtitle source language')).toHaveValue('it');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Existing hook' }));
+        fireEvent.click(screen.getByRole('button', { name: /toggle viral hook settings/i }));
+        expect(screen.getByLabelText('Hook text')).toHaveValue('Existing hook');
+        const hookPanel = document.getElementById('viral-hook-settings-panel');
+        expect(within(hookPanel).getByRole('button', { name: 'Bottom' })).toHaveClass('border-white');
+        expect(within(hookPanel).getByRole('button', { name: 'Small' })).toHaveClass('border-white');
+        expect(within(hookPanel).getByRole('button', { name: 'None' })).toHaveClass('border-white');
     });
 
     it('switches between the subtitle timeline and cue table', async () => {
