@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import FullScreenEditor from './FullScreenEditor';
 
+const renderVersionMocks = vi.hoisted(() => ({ saveAndRenderVersion: vi.fn() }));
+vi.mock('../../editor/renderVersion', () => renderVersionMocks);
 vi.mock('../../components/RemotionPreview', () => ({ default: ({ currentFrame = 0 }) => <div data-testid="remotion-player-frame">{currentFrame}</div> }));
 
 const manifest = {
@@ -12,7 +14,10 @@ const manifest = {
 };
 
 describe('FullScreenEditor', () => {
-    afterEach(() => vi.unstubAllGlobals());
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        renderVersionMocks.saveAndRenderVersion.mockReset();
+    });
 
     it('renders the editor workspace and advances the preview one frame', () => {
         render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, output_width: 1080, output_height: 1920, video_url: manifest.timeline.source_video_url }} initialManifest={manifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
@@ -110,6 +115,54 @@ describe('FullScreenEditor', () => {
         expect(actionsRegion.closest('aside')).toHaveAttribute('aria-label', 'Inspector');
         expect(screen.getByText(/version history/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /save as new version/i })).toBeInTheDocument();
+    });
+
+    it('saves generated hashtags in the new version manifest', async () => {
+        renderVersionMocks.saveAndRenderVersion.mockResolvedValue({ status: 'done', outputUrl: '/videos/job/generated.mp4', version: { version_id: 'v2', status: 'done' } });
+        vi.stubGlobal('fetch', vi.fn((url) => String(url).includes('/api/local-editor/hashtags')
+            ? Promise.resolve({ ok: true, json: async () => ({ hashtags: ['#editedclip'] }) })
+            : Promise.resolve({ ok: true, blob: async () => new Blob(['video'], { type: 'video/mp4' }) })));
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: vi.fn(() => 'blob:project-video') });
+
+        render(<FullScreenEditor
+            useLocalEditor
+            jobId="job"
+            clipIndex={0}
+            clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url, video_title_for_youtube_short: 'Título', video_description_for_tiktok: 'Caption' }}
+            initialManifest={manifest}
+            initialVersion={{ version_id: 'v1', status: 'done' }}
+            onClose={vi.fn()}
+        />);
+
+        await waitFor(() => expect(screen.getByRole('button', { name: /generate hashtags/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /generate hashtags/i }));
+        await waitFor(() => expect(screen.getByRole('group', { name: 'Hashtags' })).toHaveTextContent('#editedclip'));
+        fireEvent.click(screen.getByRole('button', { name: /save as new version/i }));
+
+        await waitFor(() => expect(renderVersionMocks.saveAndRenderVersion).toHaveBeenCalledWith(expect.objectContaining({
+            manifest: expect.objectContaining({ publishing_metadata: { hashtags: ['#editedclip'] } }),
+        })));
+    });
+
+    it('restores saved hashtags from the version manifest', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            blob: async () => new Blob(['video'], { type: 'video/mp4' }),
+        }));
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: vi.fn(() => 'blob:saved-hashtags') });
+
+        render(<FullScreenEditor
+            useLocalEditor
+            jobId="job"
+            clipIndex={0}
+            clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url, video_title_for_youtube_short: 'Título', video_description_for_tiktok: 'Caption' }}
+            initialManifest={{ ...manifest, publishing_metadata: { hashtags: ['#savedtag'] } }}
+            initialVersion={{ version_id: 'v1', status: 'done' }}
+            onClose={vi.fn()}
+        />);
+
+        await waitFor(() => expect(screen.getByRole('group', { name: 'Hashtags' })).toHaveTextContent('#savedtag'));
+        expect(screen.queryByText('#shorts')).not.toBeInTheDocument();
     });
 
     it('exposes a draft session that accumulates effects and optional subtitle tracks', async () => {

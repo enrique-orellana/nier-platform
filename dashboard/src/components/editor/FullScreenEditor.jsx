@@ -37,6 +37,19 @@ const defaultSubtitleTrackId = (nextManifest) =>
   nextManifest?.subtitle_tracks?.[0]?.id ||
   (nextManifest?.timeline?.transcript?.segments?.length ? "original" : null);
 
+const publishingMetadataFrom = (sourceManifest, clip) => {
+  const savedHashtags = sourceManifest?.publishing_metadata?.hashtags;
+  const clipHashtags = clip?.hashtags;
+  return {
+    ...(sourceManifest?.publishing_metadata || {}),
+    hashtags: Array.isArray(savedHashtags) && savedHashtags.length
+      ? savedHashtags
+      : Array.isArray(clipHashtags) && clipHashtags.length
+        ? clipHashtags
+        : ["#shorts", "#viral"],
+  };
+};
+
 const localCuesFromTrack = (track) => (track?.cues || track?.captions || []).map((cue, index) => ({
   id: cue.id || `${track?.id || "subtitle"}-${index}`,
   type: "subtitle",
@@ -135,6 +148,7 @@ export default function FullScreenEditor({
 }) {
   const [version, setVersion] = useState(initialVersion);
   const [manifest, setManifest] = useState(initialManifest);
+  const [publishingMetadata, setPublishingMetadata] = useState(() => publishingMetadataFrom(initialManifest, clip));
   const [versions, setVersions] = useState(
     initialVersion ? [initialVersion] : [],
   );
@@ -205,6 +219,7 @@ export default function FullScreenEditor({
       setVersions(history.versions || []);
       setVersion(payload.version);
       setManifest(hydratedManifest);
+      setPublishingMetadata(publishingMetadataFrom(hydratedManifest, clip));
       setEditorState(
         manifestToEditorState(hydratedManifest, { fps: clip.output_fps || 30 }),
       );
@@ -235,8 +250,8 @@ export default function FullScreenEditor({
   }, [activeTrackId, clip.video_url, editorState, initialManifest, manifest]);
 
   const currentManifest = useMemo(
-    () => ({ ...editorStateToManifest(editorState, manifest || initialManifest || {}), active_subtitle_track_id: activeTrackId || null }),
-    [activeTrackId, editorState, initialManifest, manifest],
+    () => ({ ...editorStateToManifest(editorState, manifest || initialManifest || {}), active_subtitle_track_id: activeTrackId || null, publishing_metadata: publishingMetadata }),
+    [activeTrackId, editorState, initialManifest, manifest, publishingMetadata],
   );
   const projectManifest = useMemo(
     () => (useLocalEditor ? localEditorStateToManifest(currentManifest, localDraft, activeTrackId) : currentManifest),
@@ -367,6 +382,7 @@ export default function FullScreenEditor({
       setVersion(payload.version || nextVersion);
       onVersionChange?.(payload.version?.version_id || nextVersion.version_id);
       setManifest(hydratedManifest);
+      setPublishingMetadata(publishingMetadataFrom(hydratedManifest, clip));
       setEditorState(
         manifestToEditorState(hydratedManifest, { fps: clip.output_fps || 30 }),
       );
@@ -416,6 +432,7 @@ export default function FullScreenEditor({
       setVersion(payload.version);
       onVersionChange?.(payload.version?.version_id);
       setManifest(hydratedManifest);
+      setPublishingMetadata(publishingMetadataFrom(hydratedManifest, clip));
       setEditorState(manifestToEditorState(hydratedManifest, { fps }));
       const nextTrackId = defaultSubtitleTrackId(hydratedManifest);
       setActiveTrackId(nextTrackId);
@@ -458,7 +475,7 @@ export default function FullScreenEditor({
         result.error || "Render failed. The previous version is still active.",
       );
     setBusy(false);
-  }, [activeTrackId, busy, clip.output_height, clip.output_width, clipIndex, editorState.durationFrames, fps, inputProps, jobId, onRendered, onVersionChange, projectInputProps, projectManifest, useLocalEditor, version]);
+  }, [activeTrackId, busy, clip.output_height, clip.output_width, clipIndex, editorState.durationFrames, fps, inputProps, jobId, onRendered, onVersionChange, projectInputProps, projectManifest, publishingMetadata, useLocalEditor, version]);
 
   const downloadVersion = async () => {
     if (!version?.output_url || version.status !== "done") return;
@@ -495,7 +512,8 @@ export default function FullScreenEditor({
           initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
           initialEditorState={localDraft}
           initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}`}
-          clipMetadata={clip}
+          clipMetadata={{ ...clip, hashtags: publishingMetadata.hashtags }}
+          onHashtagsChange={(hashtags) => setPublishingMetadata((current) => ({ ...current, hashtags }))}
           onStateChange={setLocalDraft}
           persistHistory={false}
           onClose={onClose}
