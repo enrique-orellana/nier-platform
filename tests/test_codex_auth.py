@@ -149,7 +149,7 @@ def test_refresh_credentials_preserves_refresh_token_when_response_omits_replace
 
 
 @patch("codex_auth.httpx.Client", FakeCodexAuthClient)
-def test_refresh_credentials_clears_invalid_credentials(tmp_path):
+def test_refresh_credentials_preserves_credentials_when_refresh_is_rejected(tmp_path):
     FakeCodexAuthClient.responses = [FakeResponse(401)]
     store = CodexCredentialStore(tmp_path / "codex-auth.json")
     store.save(CodexCredentials("old-access", "old-refresh", "old-id", "account", 0))
@@ -157,4 +157,22 @@ def test_refresh_credentials_clears_invalid_credentials(tmp_path):
     with pytest.raises(CodexReauthRequired):
         refresh_credentials(store)
 
-    assert store.load() is None
+    assert store.load().refresh_token == "old-refresh"
+
+
+def test_refresh_credentials_keeps_newer_credentials_written_by_another_worker(tmp_path):
+    auth_path = tmp_path / "codex-auth.json"
+    store = CodexCredentialStore(auth_path)
+    store.save(CodexCredentials("old-access", "old-refresh", "old-id", "account", 0))
+    store.save(CodexCredentials(
+        "new-access",
+        "new-refresh",
+        "new-id",
+        "account",
+        4_000_000_000,
+    ))
+
+    refreshed = refresh_credentials(store)
+
+    assert refreshed.access_token == "new-access"
+    assert store.load().refresh_token == "new-refresh"

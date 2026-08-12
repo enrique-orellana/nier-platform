@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 import httpx
+from filelock import FileLock, Timeout as FileLockTimeout
 
 
 CODEX_AUTH_BASE_URL = "https://auth.openai.com"
@@ -19,6 +20,7 @@ OAUTH_TOKEN_URL = f"{CODEX_AUTH_BASE_URL}/oauth/token"
 DEVICE_VERIFICATION_URL = f"{CODEX_AUTH_BASE_URL}/codex/device"
 DEVICE_REDIRECT_URI = f"{CODEX_AUTH_BASE_URL}/deviceauth/callback"
 CODEX_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 120
+CODEX_REFRESH_LOCK_TIMEOUT_SECONDS = 30
 DEVICE_AUTH_TIMEOUT_SECONDS = 15 * 60
 
 
@@ -98,6 +100,10 @@ class CodexCredentialStore:
 
     def save(self, credentials: CodexCredentials) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.refresh_lock().acquire(timeout=CODEX_REFRESH_LOCK_TIMEOUT_SECONDS):
+            self._save_unlocked(credentials)
+
+    def _save_unlocked(self, credentials: CodexCredentials) -> None:
         temporary_path = self.path.with_name(f".{self.path.name}.tmp")
         temporary_path.write_text(
             json.dumps(asdict(credentials), separators=(",", ":")),
@@ -117,22 +123,29 @@ class CodexCredentialStore:
         refresh_token: Optional[str] = None,
         id_token: Optional[str] = None,
     ) -> None:
-        current = self.load()
-        if current is None:
-            raise RuntimeError("No stored Codex credentials are available.")
-        self.save(CodexCredentials(
-            access_token=access_token,
-            refresh_token=refresh_token or current.refresh_token,
-            id_token=id_token or current.id_token,
-            account_id=current.account_id,
-            expires_at=expires_at,
-        ))
+        with self.refresh_lock().acquire(timeout=CODEX_REFRESH_LOCK_TIMEOUT_SECONDS):
+            current = self.load()
+            if current is None:
+                raise RuntimeError("No stored Codex credentials are available.")
+            self._save_unlocked(CodexCredentials(
+                access_token=access_token,
+                refresh_token=refresh_token or current.refresh_token,
+                id_token=id_token or current.id_token,
+                account_id=current.account_id,
+                expires_at=expires_at,
+            ))
 
     def clear(self) -> None:
-        try:
-            self.path.unlink()
-        except FileNotFoundError:
-            pass
+        if not self.path.exists():
+            return
+        with self.refresh_lock().acquire(timeout=CODEX_REFRESH_LOCK_TIMEOUT_SECONDS):
+            try:
+                self.path.unlink()
+            except FileNotFoundError:
+                pass
+
+    def refresh_lock(self) -> FileLock:
+        return FileLock(str(self.path.with_name(f".{self.path.name}.refresh.lock")))
 
     def status(self) -> dict[str, bool]:
         return {"connected": self.load() is not None, "pending": False}
@@ -324,29 +337,47 @@ def refresh_credentials(
     *,
     client: Optional[httpx.Client] = None,
 ) -> CodexCredentials:
-    current = store.load()
-    if current is None:
-        raise CodexReauthRequired("Connect ChatGPT before using the Codex provider.")
+    try:
+        with store.refresh_lock().acquire(timeout=CODEX_REFRESH_LOCK_TIMEOUT_SECONDS):
+            # Refresh tokens may rotate. Re-read after acquiring the lock so a
+            # second worker reuses the credentials written by the first worker.
+            current = store.load()
+            if current is None:
+                raise CodexReauthRequired("Connect ChatGPT before using the Codex provider.")
+            if current.expires_at > time.time() + CODEX_ACCESS_TOKEN_REFRESH_SKEW_SECONDS:
+                return current
 
-    with _client_context(client) as auth_client:
-        response = auth_client.post(
-            OAUTH_TOKEN_URL,
-            data={
-                "grant_type": "refresh_token",
-                "refresh_token": current.refresh_token,
-                "client_id": CODEX_CLIENT_ID,
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-    if response.status_code in {401, 403}:
-        store.clear()
-        raise CodexReauthRequired("ChatGPT authorization was revoked. Reconnect ChatGPT.")
-    if response.status_code != 200:
-        raise CodexAuthError("Unable to refresh ChatGPT authorization.")
+            with _client_context(client) as auth_client:
+                response = auth_client.post(
+                    OAUTH_TOKEN_URL,
+                    data={
+                        "grant_type": "refresh_token",
+                        "refresh_token": current.refresh_token,
+                        "client_id": CODEX_CLIENT_ID,
+                    },
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+            if response.status_code in {401, 403}:
+                # A concurrent worker may have rotated the refresh token before
+                # this response arrived. Preserve and reuse that newer file.
+                latest = store.load()
+                if (
+                    latest is not None
+                    and latest.access_token != current.access_token
+                    and latest.expires_at > time.time() + CODEX_ACCESS_TOKEN_REFRESH_SKEW_SECONDS
+                ):
+                    return latest
+                # Never delete the last known-good credentials on an auth
+                # rejection. The user can explicitly reconnect and replace them.
+                raise CodexReauthRequired("ChatGPT authorization was revoked. Reconnect ChatGPT.")
+            if response.status_code != 200:
+                raise CodexAuthError("Unable to refresh ChatGPT authorization.")
 
-    refreshed = _credentials_from_token_response(response.json(), previous=current)
-    store.save(refreshed)
-    return refreshed
+            refreshed = _credentials_from_token_response(response.json(), previous=current)
+            store._save_unlocked(refreshed)
+            return refreshed
+    except FileLockTimeout as exc:
+        raise CodexAuthError("Another Codex request is refreshing ChatGPT authorization.") from exc
 
 
 def get_access_token(
