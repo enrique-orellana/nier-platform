@@ -52,6 +52,7 @@ class MediaProbe:
     rotation: int
     size_bytes: int
     audio: AudioProbe | None
+    frame_count: int | None = None
 
 
 def _number(value: Any, default: float = 0.0) -> float:
@@ -66,6 +67,15 @@ def _int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _optional_int(value: Any) -> int | None:
+    if value in (None, "", "N/A"):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def parse_probe_payload(payload: Mapping[str, Any], path: str = "") -> MediaProbe:
@@ -126,6 +136,7 @@ def parse_probe_payload(payload: Mapping[str, Any], path: str = "") -> MediaProb
         rotation=rotation,
         size_bytes=_int((payload.get("format") or {}).get("size")),
         audio=audio,
+        frame_count=_optional_int(video.get("nb_frames")),
     )
 
 
