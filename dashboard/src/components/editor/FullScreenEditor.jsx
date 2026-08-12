@@ -232,6 +232,7 @@ export default function FullScreenEditor({
       cancelled = true;
     };
   }, [
+    clip,
     clip.output_fps,
     clipIndex,
     hydrateManifest,
@@ -475,7 +476,7 @@ export default function FullScreenEditor({
         result.error || "Render failed. The previous version is still active.",
       );
     setBusy(false);
-  }, [activeTrackId, busy, clip.output_height, clip.output_width, clipIndex, editorState.durationFrames, fps, inputProps, jobId, onRendered, onVersionChange, projectInputProps, projectManifest, publishingMetadata, useLocalEditor, version]);
+  }, [activeTrackId, busy, clip.output_height, clip.output_width, clipIndex, editorState.durationFrames, fps, inputProps, jobId, onRendered, onVersionChange, projectInputProps, projectManifest, useLocalEditor, version]);
 
   const downloadVersion = async () => {
     if (!version?.output_url || version.status !== "done") return;
