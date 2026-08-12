@@ -69,3 +69,12 @@ def build_audio_trim_filter(trim: ClipFrameRange) -> str:
         f"atrim=start={trim.start_sec:.6f}:end={trim.end_sec:.6f},"
         "asetpts=PTS-STARTPTS"
     )
+
+
+def build_audio_seek_filter(trim: ClipFrameRange) -> str:
+    """Build a PTS-resetting filter for audio already seeked to the clip start."""
+
+    return (
+        f"atrim=start=0:end={trim.duration_sec:.6f},"
+        "asetpts=PTS-STARTPTS"
+    )
