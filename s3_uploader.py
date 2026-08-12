@@ -131,6 +131,58 @@ def get_s3_client():
 
     return _make_s3_client(access_key, secret_key, region, endpoint_url)
 
+
+CLIP_STATUS_VERSION = 1
+CLIP_STATUS_SIDECAR = "clip_statuses.json"
+
+
+def _clip_status_key(job_id):
+    return f"{job_id}/{CLIP_STATUS_SIDECAR}"
+
+
+def _empty_clip_status_document():
+    return {"version": CLIP_STATUS_VERSION, "clips": {}}
+
+
+def load_clip_statuses(job_id, bucket_name=None):
+    bucket_name = bucket_name or os.environ.get("AWS_S3_BUCKET", "my-clips-bucket")
+    client = get_s3_client()
+    if not client:
+        raise RuntimeError("S3 storage is unavailable")
+
+    try:
+        response = client.get_object(Bucket=bucket_name, Key=_clip_status_key(job_id))
+    except ClientError as error:
+        code = str(error.response.get("Error", {}).get("Code", ""))
+        if code in {"404", "NoSuchKey", "NotFound"}:
+            return _empty_clip_status_document()
+        raise
+
+    document = json.loads(response["Body"].read().decode("utf-8"))
+    if (
+        not isinstance(document, dict)
+        or document.get("version") != CLIP_STATUS_VERSION
+        or not isinstance(document.get("clips"), dict)
+    ):
+        raise ValueError("Invalid clip status sidecar")
+    return {"version": CLIP_STATUS_VERSION, "clips": document["clips"]}
+
+
+def save_clip_statuses(job_id, clips, bucket_name=None):
+    bucket_name = bucket_name or os.environ.get("AWS_S3_BUCKET", "my-clips-bucket")
+    client = get_s3_client()
+    if not client:
+        raise RuntimeError("S3 storage is unavailable")
+
+    document = {"version": CLIP_STATUS_VERSION, "clips": clips}
+    client.put_object(
+        Bucket=bucket_name,
+        Key=_clip_status_key(job_id),
+        Body=json.dumps(document, ensure_ascii=False, indent=2).encode("utf-8"),
+        ContentType="application/json",
+    )
+    return document
+
 def generate_presigned_url(bucket_name, object_key, expiration=3600):
     """Generate a presigned URL to share an S3 object."""
     access_key = os.environ.get('AWS_ACCESS_KEY_ID')
