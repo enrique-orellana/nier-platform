@@ -97,7 +97,9 @@ describe('LocalEditorTab', () => {
 
         await waitFor(() => expect(screen.getByRole('heading', { name: 'La foto que según él parece Juan Guarnizo' })).toBeInTheDocument());
         expect(screen.getByText('39s')).toBeInTheDocument();
-        expect(screen.getByTestId('local-editor-player')).toBeInTheDocument();
+        const player = screen.getByTestId('local-editor-player');
+        expect(player).toBeInTheDocument();
+        expect(player.parentElement).toHaveClass('lg:justify-start');
     });
 
     it('shows timeline controls after selecting a video', async () => {
