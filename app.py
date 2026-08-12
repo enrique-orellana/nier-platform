@@ -49,6 +49,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 MAX_CONCURRENT_JOBS = int(os.environ.get("MAX_CONCURRENT_JOBS", "5"))
 MAX_FILE_SIZE_MB = 2048  # 2GB limit
 JOB_RETENTION_SECONDS = 3600  # 1 hour retention
+PERSISTENT_OUTPUT_DIRECTORY_NAMES = {".openshorts"}
 DISABLE_YOUTUBE_URL = os.environ.get("DISABLE_YOUTUBE_URL", "false").lower() in ("1", "true", "yes")
 
 # Application State
@@ -58,6 +59,12 @@ thumbnail_sessions: Dict[str, Dict] = {}
 publish_jobs: Dict[str, Dict] = {}  # {publish_id: {status, result, error}}
 # Semester to limit concurrency to MAX_CONCURRENT_JOBS
 concurrency_semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
+
+
+def is_expirable_output_directory(path: Path, output_dir: Path | str) -> bool:
+    """Return whether an output child directory may be purged as an old job."""
+    del output_dir
+    return path.is_dir() and path.name not in PERSISTENT_OUTPUT_DIRECTORY_NAMES
 
 
 def build_ai_config(
@@ -376,7 +383,7 @@ async def cleanup_jobs():
             # Check OUTPUT_DIR
             for job_id in os.listdir(OUTPUT_DIR):
                 job_path = os.path.join(OUTPUT_DIR, job_id)
-                if os.path.isdir(job_path):
+                if is_expirable_output_directory(Path(job_path), OUTPUT_DIR):
                     if now - os.path.getmtime(job_path) > JOB_RETENTION_SECONDS:
                         print(f"🧹 Purging old job: {job_id}")
                         shutil.rmtree(job_path, ignore_errors=True)
