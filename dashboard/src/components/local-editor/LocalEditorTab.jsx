@@ -286,6 +286,7 @@ export default function LocalEditorTab({
     footer = null,
     persistHistory = true,
     clipMetadata = null,
+    onHashtagsChange = null,
 }) {
     const videoRef = useRef(null);
     const playerRef = useRef(null);
@@ -1008,7 +1009,7 @@ export default function LocalEditorTab({
             <div className="grid gap-5 p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <main className="min-w-0 space-y-5">
                     <div className={clipMetadata ? 'grid items-start gap-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:justify-start' : ''}>
-                        <ClipMetadataPanel clip={clipMetadata} />
+                        <ClipMetadataPanel clip={clipMetadata} subtitleCues={subtitleCues} hashtags={clipMetadata?.hashtags} onHashtagsChange={onHashtagsChange} />
                         <div ref={playerRef} data-testid="local-editor-player" tabIndex={0} role="region" aria-label="Video preview. Use Space or K to play or pause, arrow keys to seek, M to mute, and F for fullscreen." aria-keyshortcuts="Space K ArrowLeft ArrowRight Home End M F" onKeyDown={handlePlayerKeyDown} className={isFullscreen ? 'fixed inset-0 z-50 flex items-center justify-center bg-black p-4' : 'mx-auto flex h-[calc(100vh-180px)] max-h-[72vh] w-full max-w-[360px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl'}>
                         <div className="relative h-full max-h-full w-auto max-w-full aspect-[9/16]">
                             <video ref={videoRef} src={videoUrl} controls={false} className={`h-full w-full ${shouldCropVideo ? 'object-cover' : 'object-contain'}`} onLoadedMetadata={handleMetadata} onLoadedData={detectVideoFraming} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onTimeUpdate={handleVideoTimeUpdate} />

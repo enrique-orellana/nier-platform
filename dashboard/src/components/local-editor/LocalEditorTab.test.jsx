@@ -103,6 +103,31 @@ describe('LocalEditorTab', () => {
         expect(player.parentElement).toHaveClass('lg:grid-cols-[220px_minmax(0,1fr)]');
     });
 
+    it('uses current edited subtitle cues when generating hashtags', async () => {
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['video'], { type: 'video/mp4' }) })
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ hashtags: ['#editedclip'] }) });
+        vi.stubGlobal('fetch', fetchMock);
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:project-clip');
+
+        render(<LocalEditorTab
+            initialVideoUrl="/api/video-proxy/project.mp4"
+            initialEditorState={{
+                subtitleCues: [{ id: 'a', text: 'Primera frase' }, { id: 'b', text: 'Segunda frase' }],
+                subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+                subtitleLanguage: 'es',
+                hook: null,
+            }}
+            initialStateKey="hashtags-test"
+            clipMetadata={{ video_title_for_youtube_short: 'Título', video_description_for_tiktok: 'Caption' }}
+        />);
+
+        await waitFor(() => expect(screen.getByRole('button', { name: /generate hashtags/i })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /generate hashtags/i }));
+        await waitFor(() => expect(screen.getByRole('group', { name: 'Hashtags' })).toHaveTextContent('#editedclip'));
+        expect(JSON.parse(fetchMock.mock.calls[1][1].body).subtitle_text).toBe('Primera frase Segunda frase');
+    });
+
     it('shows timeline controls after selecting a video', async () => {
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo');
         render(<LocalEditorTab />);
