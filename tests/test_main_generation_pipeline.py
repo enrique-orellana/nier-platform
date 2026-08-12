@@ -71,6 +71,24 @@ class MainGenerationPipelineTests(unittest.TestCase):
         scene_calls.assert_called_once_with(str(source_path))
         strategy_calls.assert_called_once()
 
+    def test_empty_scene_detection_uses_one_full_source_scene(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source_path = Path(directory) / "source.mp4"
+            output_dir = Path(directory) / "output"
+            source_path.write_bytes(b"source")
+            output_dir.mkdir()
+
+            with patch.object(main, "probe_media", return_value=source_media()), patch.object(
+                main.cv2, "VideoCapture", return_value=FakeCapture()
+            ), patch.object(main, "detect_scenes", return_value=([], 30.0)), patch.object(
+                main, "analyze_scenes_strategy", return_value=["GENERAL"]
+            ) as strategy:
+                analysis = main.build_source_analysis_for_job(str(source_path), str(output_dir))
+
+        self.assertEqual(analysis.scene_boundaries, [(0, 300)])
+        self.assertEqual(analysis.scene_strategies, ["GENERAL"])
+        strategy.assert_called_once_with(str(source_path), [(0, 300)])
+
     def test_render_clip_plan_passes_one_analysis_to_every_clip(self):
         analysis = SourceAnalysis(
             source_fingerprint={"size": 1},
