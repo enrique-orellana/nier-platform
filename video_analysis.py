@@ -159,6 +159,7 @@ def load_or_build_source_analysis(
     height: int,
     scene_builder: Callable[[], list[Any]],
     strategy_builder: Callable[[list[Any]], list[str]],
+    cache_status_callback: Callable[[str], None] | None = None,
 ) -> SourceAnalysis:
     """Load matching source analysis or build and atomically cache it."""
     cache_path = Path(cache_path)
@@ -171,7 +172,12 @@ def load_or_build_source_analysis(
         width=width,
         height=height,
     ):
+        if cache_status_callback is not None:
+            cache_status_callback("hit")
         return cached
+
+    if cache_status_callback is not None:
+        cache_status_callback("miss")
 
     scenes = scene_builder()
     boundaries = _normalize_scene_boundaries(scenes)

@@ -57,6 +57,7 @@ from video_decode import build_decode_compatibility_command, requires_decode_com
 from video_analysis import SourceAnalysis, load_or_build_source_analysis
 from video_output_validation import validate_clip_output
 from video_rendering import build_audio_extract_command, seek_capture_to_frame
+from video_metrics import JobVideoMetrics
 
 # Load environment variables
 load_dotenv()
@@ -525,7 +526,12 @@ def prepare_opencv_video(input_video: str) -> str:
     return working_video
 
 
-def build_source_analysis_for_job(input_video: str, output_dir: str) -> SourceAnalysis:
+def build_source_analysis_for_job(
+    input_video: str,
+    output_dir: str,
+    *,
+    metrics: JobVideoMetrics | None = None,
+) -> SourceAnalysis:
     """Build or load the expensive source analysis shared by all clip renders."""
     source_path = Path(input_video).resolve()
     source_media = probe_media(source_path)
@@ -565,16 +571,23 @@ def build_source_analysis_for_job(input_video: str, output_dir: str) -> SourceAn
     def strategy_builder(scenes):
         return analyze_scenes_strategy(str(source_path), scenes)
 
-    return load_or_build_source_analysis(
-        cache_path=Path(output_dir) / "_source_analysis.json",
-        source_fingerprint=source_fingerprint,
-        source_fps=source_fps,
-        total_frames=total_frames,
-        width=width,
-        height=height,
-        scene_builder=scene_builder,
-        strategy_builder=strategy_builder,
-    )
+    load_kwargs = {
+        "cache_path": Path(output_dir) / "_source_analysis.json",
+        "source_fingerprint": source_fingerprint,
+        "source_fps": source_fps,
+        "total_frames": total_frames,
+        "width": width,
+        "height": height,
+        "scene_builder": scene_builder,
+        "strategy_builder": strategy_builder,
+    }
+    if metrics is not None:
+        load_kwargs["cache_status_callback"] = lambda status: metrics.set_cache_status(
+            "source_analysis", status
+        )
+        with metrics.timed("scene_analysis"):
+            return load_or_build_source_analysis(**load_kwargs)
+    return load_or_build_source_analysis(**load_kwargs)
 
 
 def sanitize_filename(filename):
@@ -724,6 +737,7 @@ def process_video_to_vertical(
     *,
     source_analysis: SourceAnalysis,
     source_media=None,
+    metrics: JobVideoMetrics | None = None,
 ):
     """
     Core logic to convert horizontal video to vertical using scene detection and Active Speaker Tracking (MediaPipe).
@@ -788,7 +802,12 @@ def process_video_to_vertical(
     ]
 
     cap = cv2.VideoCapture(input_video)
+    seek_started = time.monotonic()
     frame_number, discarded_preroll_frames = seek_capture_to_frame(cap, trim.start_frame)
+    if metrics is not None:
+        metrics.add_duration("seek_preroll", time.monotonic() - seek_started)
+        metrics.increment("decoded_preroll_frames", discarded_preroll_frames)
+        metrics.increment("clips_started")
     processed_frames = 0
     current_scene_index = 0
 
@@ -803,11 +822,14 @@ def process_video_to_vertical(
 
     ffmpeg_process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
+    frame_processing_started = time.monotonic()
     with tqdm(total=trim.frame_count, desc="   Processing", file=sys.stdout) as pbar:
         while cap.isOpened() and frame_number < trim.end_frame:
             ret, frame = cap.read()
             if not ret:
                 break
+            if metrics is not None:
+                metrics.increment("decoded_frames")
 
             if (frame_number - trim.start_frame) % frame_stride != 0:
                 frame_number += 1
@@ -865,7 +887,14 @@ def process_video_to_vertical(
             ffmpeg_process.stdin.write(output_frame.tobytes())
             frame_number += 1
             processed_frames += 1
+            if metrics is not None:
+                metrics.increment("output_frames")
             pbar.update(1)
+
+    if metrics is not None:
+        metrics.add_duration(
+            "frame_processing", time.monotonic() - frame_processing_started
+        )
     
     ffmpeg_process.stdin.close()
     stderr_output = ffmpeg_process.stderr.read().decode()
@@ -884,6 +913,7 @@ def process_video_to_vertical(
     audio_extract_command = build_audio_extract_command(
         input_video, temp_audio_output, trim
     )
+    audio_started = time.monotonic()
     try:
         subprocess.run(audio_extract_command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     except subprocess.CalledProcessError:
@@ -892,6 +922,8 @@ def process_video_to_vertical(
         else:
             print("\n   ℹ️ Source has no audio; proceeding without audio.")
         pass
+    if metrics is not None:
+        metrics.add_duration("audio", time.monotonic() - audio_started)
 
     print("\n   ✨ Step 6: Merging...")
     if os.path.exists(temp_audio_output):
@@ -907,8 +939,10 @@ def process_video_to_vertical(
             '-map', '0:v:0', '-c:v', 'copy', '-movflags', '+faststart', final_output_video
         ]
         
+    merge_started = time.monotonic()
     try:
         subprocess.run(merge_command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        validation_started = time.monotonic()
         validate_clip_output(
             final_output_video,
             expected_width=OUTPUT_WIDTH,
@@ -916,6 +950,10 @@ def process_video_to_vertical(
             expected_fps=fps,
             source_has_audio=source_has_audio,
         )
+        if metrics is not None:
+            metrics.add_duration("validation", time.monotonic() - validation_started)
+            metrics.increment("validated_clips")
+            metrics.increment("output_bytes", os.path.getsize(final_output_video))
         print(f"   ✅ Clip saved to {final_output_video}")
     except (subprocess.CalledProcessError, ValueError) as e:
         print("\n   ❌ Final merge failed.")
@@ -926,6 +964,9 @@ def process_video_to_vertical(
         if os.path.exists(final_output_video):
             os.remove(final_output_video)
         return False
+
+    if metrics is not None:
+        metrics.add_duration("encode_and_merge", time.monotonic() - merge_started)
 
     # Clean up temp files
     if os.path.exists(temp_video_output): os.remove(temp_video_output)
@@ -1001,6 +1042,7 @@ def render_clip_plan(
     transcript: dict,
     source_asset: dict,
     source_media,
+    metrics: JobVideoMetrics | None = None,
 ) -> list[dict]:
     """Render a clip plan using one immutable source analysis object."""
     rendered_clips = []
@@ -1035,6 +1077,7 @@ def render_clip_plan(
             end_sec=end,
             source_analysis=source_analysis,
             source_media=source_media,
+            metrics=metrics,
         )
         if success:
             rendered_clips.append(clip)
@@ -1377,6 +1420,7 @@ if __name__ == '__main__':
     target_clips = min(max(3, args.target_clips), 15)
 
     script_start_time = time.time()
+    job_metrics = JobVideoMetrics()
     
     def _ensure_dir(path: str) -> str:
         """Create directory if missing and return the same path."""
@@ -1420,9 +1464,12 @@ if __name__ == '__main__':
         print(f"❌ Input file not found: {input_video}")
         exit(1)
 
-    processing_video = prepare_opencv_video(input_video)
-    manifest_source_path, source_asset, source_media = _prepare_manifest_source(input_video, output_dir)
-    source_analysis = build_source_analysis_for_job(processing_video, output_dir)
+    with job_metrics.timed("source_preparation"):
+        processing_video = prepare_opencv_video(input_video)
+        manifest_source_path, source_asset, source_media = _prepare_manifest_source(input_video, output_dir)
+    source_analysis = build_source_analysis_for_job(
+        processing_video, output_dir, metrics=job_metrics
+    )
 
     # 2. Decision: Analyze clips or process whole?
     if args.skip_analysis:
@@ -1433,16 +1480,19 @@ if __name__ == '__main__':
             output_file,
             source_analysis=source_analysis,
             source_media=source_media,
+            metrics=job_metrics,
         )
     else:
         # 3. Transcribe
-        transcript = transcribe_video(processing_video)
+        with job_metrics.timed("transcription"):
+            transcript = transcribe_video(processing_video)
         
         # Get duration
         duration = source_analysis.total_frames / source_analysis.source_fps
 
         # 4. Gemini Analysis
-        clips_data = get_viral_clips(transcript, duration, target_clips=target_clips)
+        with job_metrics.timed("ai_planning"):
+            clips_data = get_viral_clips(transcript, duration, target_clips=target_clips)
         
         if not clips_data or 'shorts' not in clips_data:
             print("❌ Failed to identify clips. Converting whole video as fallback.")
@@ -1452,6 +1502,7 @@ if __name__ == '__main__':
                 output_file,
                 source_analysis=source_analysis,
                 source_media=source_media,
+                metrics=job_metrics,
             )
         else:
             print(f"🔥 Found {len(clips_data['shorts'])} viral clips!")
@@ -1473,6 +1524,7 @@ if __name__ == '__main__':
                 transcript=transcript,
                 source_asset=source_asset,
                 source_media=source_media,
+                metrics=job_metrics,
             )
                 
             with open(metadata_file, 'w', encoding='utf-8') as f:
@@ -1483,5 +1535,7 @@ if __name__ == '__main__':
         os.remove(input_video)
         print(f"🗑️  Cleaned up downloaded video.")
 
+    job_metrics.add_duration("total_wall_clock", time.time() - script_start_time)
+    job_metrics.write_json(os.path.join(output_dir, "generation_metrics.json"))
     total_time = time.time() - script_start_time
     print(f"\n⏱️  Total execution time: {total_time:.2f}s")
