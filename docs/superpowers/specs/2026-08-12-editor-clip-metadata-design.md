@@ -10,7 +10,7 @@ Use a compact metadata panel on the left of the editor's main workspace. The vid
 
 - the generated clip title;
 - the clip duration, formatted in seconds/minutes as appropriate;
-- `#shorts` and `#viral` tags;
+- `#shorts` and `#viral` tags grouped together in a subtle bordered box;
 - the generated YouTube title;
 - the generated social caption.
 

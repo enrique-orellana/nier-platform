@@ -9,6 +9,7 @@ import glob
 from pathlib import Path
 import time
 import asyncio
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from typing import Dict, Optional, List, Any
 from contextlib import asynccontextmanager
@@ -20,7 +21,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from render_manifest import load_manifest, save_manifest_atomic, verify_manifest_assets, calculate_revision, master_is_current
 from version_store import VersionStore
-from s3_uploader import upload_job_artifacts, delete_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
+from s3_uploader import upload_job_artifacts, delete_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client, load_clip_statuses, save_clip_statuses
 from ai_client import AIConfig, load_ai_config, ai_config_to_env, discover_codex_models, discover_lmstudio_models, chat_json
 from codex_auth import (
     CodexAuthError,
@@ -504,6 +505,19 @@ app.mount("/thumbnails", StaticFiles(directory=THUMBNAILS_DIR), name="thumbnails
 
 class ProcessRequest(BaseModel):
     url: str
+
+
+CLIP_WORKFLOW_STATUSES = {
+    "not_reviewed",
+    "reviewing",
+    "editing",
+    "edited",
+    "published",
+}
+
+
+class ClipStatusRequest(BaseModel):
+    status: str
 
 def enqueue_output(out, job_id):
     """Reads output from a subprocess and appends it to jobs logs."""
@@ -2810,6 +2824,52 @@ async def list_project_history(limit: int = Query(48, ge=1, le=100), refresh: bo
         return {"projects": projects, "total": len(projects)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/projects/{job_id}/statuses")
+async def get_project_clip_statuses(job_id: str):
+    job = _get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, load_clip_statuses, job_id)
+    except ValueError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.patch("/api/projects/{job_id}/clips/{clip_index}/status")
+async def update_project_clip_status(job_id: str, clip_index: int, request: ClipStatusRequest):
+    job = _get_job(job_id)
+    clips = (job or {}).get("result", {}).get("clips", [])
+    if not job:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if clip_index < 0 or clip_index >= len(clips):
+        raise HTTPException(status_code=404, detail="Clip not found")
+    if request.status not in CLIP_WORKFLOW_STATUSES:
+        raise HTTPException(status_code=422, detail="Invalid clip status")
+
+    try:
+        loop = asyncio.get_running_loop()
+        document = await loop.run_in_executor(None, load_clip_statuses, job_id)
+        updated_at = datetime.now(timezone.utc).isoformat()
+        clips_by_index = dict(document["clips"])
+        clips_by_index[str(clip_index)] = {
+            "status": request.status,
+            "updated_at": updated_at,
+        }
+        await loop.run_in_executor(None, save_clip_statuses, job_id, clips_by_index)
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+    return {
+        "job_id": job_id,
+        "clip_index": clip_index,
+        "status": request.status,
+        "updated_at": updated_at,
+    }
 
 
 @app.delete("/api/projects/{job_id}")
