@@ -3,6 +3,7 @@ import { getApiUrl } from '../config';
 import HookModal from './HookModal';
 import SubtitleModal from './SubtitleModal';
 import TranslateModal from './TranslateModal';
+import ClipWorkflowStatus from './ClipWorkflowStatus';
 import FullScreenEditor from './editor/FullScreenEditor';
 
 // Route MinIO presigned URLs through the backend proxy to fix CORS/loopback issues.
@@ -37,7 +38,7 @@ import CardContent from './ResultCard/CardContent';
 import CardActions from './ResultCard/CardActions';
 import PostModal from './ResultCard/PostModal';
 
-export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange }) {
+export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange }) {
     const [showModal, setShowModal] = useState(false);
     const [showSubtitleModal, setShowSubtitleModal] = useState(false);
     const videoRef = React.useRef(null);
@@ -566,6 +567,11 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
             />
 
             <div className="flex-1 p-5 flex flex-col bg-[#121214] overflow-hidden min-w-0">
+                <ClipWorkflowStatus
+                    status={workflowStatus}
+                    saving={workflowStatusSaving}
+                    onChange={onWorkflowStatusChange}
+                />
                 <CardContent clip={clip} />
 
                 <CardActions

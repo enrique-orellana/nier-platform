@@ -2,6 +2,7 @@ import { ChevronLeft, FolderOpen, Loader2, Play, RefreshCw, Search, Trash2 } fro
 import { useCallback, useEffect, useState } from 'react';
 import { getApiUrl } from '../config';
 import { toProxiedVideoUrl } from '../lib/videoUrls';
+import { CLIP_WORKFLOW_STATUSES } from './clipWorkflowStatuses';
 import ResultCard from './ResultCard';
 
 function formatDate(value) {
@@ -77,6 +78,9 @@ export default function ProjectLibrary({
   const [selectedProject, setSelectedProject] = useState(null);
   const [projectClips, setProjectClips] = useState([]);
   const [isLoadingClips, setIsLoadingClips] = useState(false);
+  const [clipStatuses, setClipStatuses] = useState({});
+  const [statusError, setStatusError] = useState('');
+  const [savingStatusIndex, setSavingStatusIndex] = useState(null);
 
   const loadProjects = useCallback(async () => {
     setIsLoading(true);
@@ -123,10 +127,34 @@ export default function ProjectLibrary({
     }
   }, []);
 
+  const loadProjectStatuses = useCallback(async (project) => {
+    const jobId = project?.job_id || project?.session_id || project?.id;
+    if (!jobId) {
+      setClipStatuses({});
+      return;
+    }
+
+    setStatusError('');
+    try {
+      const res = await fetch(getApiUrl(`/api/projects/${encodeURIComponent(jobId)}/statuses`));
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const payload = await res.json();
+      setClipStatuses(payload.clips && typeof payload.clips === 'object' ? payload.clips : {});
+    } catch (e) {
+      console.error('Error loading project clip statuses:', e);
+      setClipStatuses({});
+      setStatusError(e.message || 'Could not load clip statuses.');
+    }
+  }, []);
+
   useEffect(() => {
     if (!projectId) {
       setSelectedProject(null);
       setProjectClips([]);
+      setClipStatuses({});
+      setStatusError('');
       return;
     }
 
@@ -137,14 +165,26 @@ export default function ProjectLibrary({
 
     setSelectedProject(matchingProject);
     setProjectClips(Array.isArray(matchingProject.clips) ? matchingProject.clips : []);
+    setClipStatuses({});
+    setStatusError('');
     if (!matchingProject.clips?.length) loadProjectClips(matchingProject);
   }, [loadProjectClips, projectId, projects]);
+
+  useEffect(() => {
+    if (!selectedProject) {
+      setClipStatuses({});
+      return;
+    }
+    loadProjectStatuses(selectedProject).catch(() => {});
+  }, [loadProjectStatuses, selectedProject]);
 
   const handleViewProject = (project) => {
     const id = project?.job_id || project?.session_id || project?.id;
     onOpenProject?.(id);
     setSelectedProject(project);
     setProjectClips(Array.isArray(project?.clips) ? project.clips : []);
+    setClipStatuses({});
+    setStatusError('');
     if (!project?.clips?.length) {
       loadProjectClips(project);
     }
@@ -185,6 +225,57 @@ export default function ProjectLibrary({
   const normalizedProjectClips = projectClips.map((clip, index) =>
     normalizeClipForResultCard(clip, index, selectedProject?.job_id || selectedProject?.session_id || selectedProject?.id)
   );
+
+  const statusForClip = (clip, index) => {
+    const clipIndex = clip.index ?? index;
+    return clipStatuses[String(clipIndex)]?.status || 'not_reviewed';
+  };
+
+  const handleClipStatusChange = async (clipIndex, nextStatus) => {
+    const key = String(clipIndex);
+    const previous = clipStatuses[key];
+    const jobId = selectedProject?.job_id || selectedProject?.session_id || selectedProject?.id;
+    if (!jobId) return;
+
+    setStatusError('');
+    setClipStatuses((current) => ({
+      ...current,
+      [key]: { ...(current[key] || {}), status: nextStatus },
+    }));
+    setSavingStatusIndex(key);
+
+    try {
+      const response = await fetch(getApiUrl(`/api/projects/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipIndex)}/status`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const payload = await response.json();
+      setClipStatuses((current) => ({
+        ...current,
+        [key]: { status: payload.status, updated_at: payload.updated_at },
+      }));
+    } catch (error) {
+      setClipStatuses((current) => {
+        const restored = { ...current };
+        if (previous) restored[key] = previous;
+        else delete restored[key];
+        return restored;
+      });
+      setStatusError(error.message || 'Could not save clip status.');
+    } finally {
+      setSavingStatusIndex(null);
+    }
+  };
+
+  const statusSummary = CLIP_WORKFLOW_STATUSES
+    .map(({ value, label }) => {
+      const count = normalizedProjectClips.filter((clip, index) => statusForClip(clip, index) === value).length;
+      return count ? `${count} ${label.toLowerCase()}` : null;
+    })
+    .filter(Boolean)
+    .join(' · ');
 
   const filteredProjects = projects.filter((project) => {
     const haystack = [
@@ -246,7 +337,7 @@ export default function ProjectLibrary({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                 <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/5">
                   <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-0.5">Clips</p>
                   <p className="text-lg font-bold text-white leading-none">{projectClips.length}</p>
@@ -265,6 +356,10 @@ export default function ProjectLibrary({
                   <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-0.5">Source</p>
                   <p className="text-sm font-bold text-white leading-none">S3 History</p>
                 </div>
+                <div className="col-span-2 sm:col-span-1 px-4 py-2 rounded-xl bg-white/5 border border-white/5">
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-0.5">Workflow</p>
+                  <p className="text-xs font-bold text-white leading-tight">{statusSummary || 'No clips yet'}</p>
+                </div>
               </div>
             </div>
 
@@ -277,6 +372,11 @@ export default function ProjectLibrary({
             <p className="text-sm text-zinc-500">
               Historical clip generation results rendered the same way as the live generator.
             </p>
+            {statusError && (
+              <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-sm text-red-200">
+                {statusError}
+              </div>
+            )}
           </div>
 
           {/* Clips Gallery */}
@@ -315,6 +415,9 @@ export default function ProjectLibrary({
                     aiApiKey={aiApiKey}
                     getAiHeaders={getAiHeaders}
                     onPlay={() => {}}
+                    workflowStatus={statusForClip(clip, index)}
+                    workflowStatusSaving={savingStatusIndex === String(clip.index ?? index)}
+                    onWorkflowStatusChange={(nextStatus) => handleClipStatusChange(clip.index ?? index, nextStatus)}
                     editorOpen={editorOpen && (clip.index ?? index) === editorClipIndex}
                     editorVersionId={versionId}
                     onEditorOpen={() => onOpenEditor?.(selectedProject.job_id || selectedProject.session_id || selectedProject.id, clip.index ?? index, versionId)}
