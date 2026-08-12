@@ -4,6 +4,7 @@ import uuid
 import subprocess
 import threading
 import json
+import re
 import shutil
 import glob
 from pathlib import Path
@@ -988,6 +989,31 @@ class SubtitleTrackTranslationRequest(BaseModel):
     tracks: Optional[list[dict]] = None
 
 
+class LocalEditorHashtagRequest(BaseModel):
+    title: str = ""
+    caption: str = ""
+    subtitle_text: str = ""
+
+
+def normalize_generated_hashtags(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+
+    normalized = []
+    seen = set()
+    for item in value:
+        tag = re.sub(r"^#+", "", str(item or "").strip())
+        tag = re.sub(r"\s+", "", tag)
+        tag = re.sub(r"[^\wÀ-ÖØ-öø-ÿ-]", "", tag, flags=re.UNICODE)
+        if not tag or tag.casefold() in seen:
+            continue
+        seen.add(tag.casefold())
+        normalized.append(f"#{tag}")
+        if len(normalized) == 12:
+            break
+    return normalized
+
+
 def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) -> None:
     """Update the in-memory job record and persisted metadata for a clip URL."""
     job = _get_job(job_id)
@@ -1622,6 +1648,70 @@ async def translate_local_editor_subtitles(
         return JSONResponse(status_code=response.status_code, content=response.json())
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Translation service unavailable: {exc}") from exc
+
+
+@app.post("/api/local-editor/hashtags")
+async def generate_local_editor_hashtags(
+    req: LocalEditorHashtagRequest,
+    x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key"),
+    x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
+    x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
+    x_ai_base_url: Optional[str] = Header(None, alias="X-AI-Base-Url"),
+    x_ai_model: Optional[str] = Header(None, alias="X-AI-Model"),
+    x_ai_analyze_model: Optional[str] = Header(None, alias="X-AI-Analyze-Model"),
+    x_ai_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Reasoning-Effort"),
+    x_ai_analyze_reasoning_effort: Optional[str] = Header(None, alias="X-AI-Analyze-Reasoning-Effort"),
+):
+    title = req.title.strip()
+    caption = req.caption.strip()
+    subtitle_text = req.subtitle_text.strip()
+    if not any((title, caption, subtitle_text)):
+        raise HTTPException(status_code=400, detail="Clip context is required to generate hashtags.")
+
+    config = build_ai_config(
+        provider=x_ai_provider or ("gemini" if (x_gemini_key or os.environ.get("GEMINI_API_KEY")) else None),
+        api_key=x_ai_api_key or x_gemini_key,
+        base_url=x_ai_base_url,
+        model=x_ai_model,
+        analyze_model=x_ai_analyze_model,
+        reasoning_effort=x_ai_reasoning_effort,
+        analyze_reasoning_effort=x_ai_analyze_reasoning_effort,
+    )
+    if config.is_gemini() and not config.api_key:
+        raise HTTPException(status_code=400, detail="Missing X-Gemini-Key header")
+
+    prompt = f"""Generate 8 to 12 highly relevant social-media hashtags for this short video.
+Return JSON only with this exact shape: {{"hashtags": ["#tag1", "#tag2"]}}.
+Use the same language as the source content. Do not return explanations, prose, or duplicates.
+
+TITLE:
+{title}
+
+CAPTION:
+{caption}
+
+CURRENT EDITED SUBTITLE TRANSCRIPT:
+{subtitle_text}
+"""
+
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: chat_json(
+                config,
+                prompt,
+                model=config.analyze_model or config.text_model,
+                reasoning_effort=config.analyze_reasoning_effort or config.reasoning_effort,
+                timeout=120,
+            ),
+        )
+        hashtags = normalize_generated_hashtags(result.get("hashtags") if isinstance(result, dict) else None)
+        if not hashtags:
+            raise ValueError("AI returned no usable hashtags")
+        return {"hashtags": hashtags}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Hashtag generation failed: {exc}") from exc
 
 
 @app.post("/api/clip/{job_id}/{clip_index}/versions/{version_id}/activate")
