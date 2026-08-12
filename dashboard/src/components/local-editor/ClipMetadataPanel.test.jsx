@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import ClipMetadataPanel from './ClipMetadataPanel';
 
 const clip = {
@@ -26,5 +26,41 @@ describe('ClipMetadataPanel', () => {
     it('omits itself when no generated metadata is available', () => {
         const { container } = render(<ClipMetadataPanel clip={{}} />);
         expect(container.firstChild).toBeNull();
+    });
+
+    it('replaces default hashtags using title, caption, and edited subtitles', async () => {
+        const onHashtagsChange = vi.fn();
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ hashtags: ['#gaming', '#historia', '#viral'] }),
+        }));
+
+        render(<ClipMetadataPanel clip={clip} subtitleCues={[{ text: 'Texto editado' }]} onHashtagsChange={onHashtagsChange} />);
+        fireEvent.click(screen.getByRole('button', { name: /generate hashtags/i }));
+
+        await waitFor(() => expect(onHashtagsChange).toHaveBeenCalledWith(['#gaming', '#historia', '#viral']));
+        expect(screen.getByRole('group', { name: 'Hashtags' })).toHaveTextContent('#gaming');
+        expect(screen.queryByText('#shorts')).not.toBeInTheDocument();
+        expect(fetch).toHaveBeenCalledWith('/api/local-editor/hashtags', expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({
+                title: clip.video_title_for_youtube_short,
+                caption: clip.video_description_for_tiktok,
+                subtitle_text: 'Texto editado',
+            }),
+        }));
+    });
+
+    it('preserves existing hashtags and shows an inline error', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: false,
+            json: async () => ({ detail: 'Provider unavailable' }),
+        }));
+
+        render(<ClipMetadataPanel clip={clip} />);
+        fireEvent.click(screen.getByRole('button', { name: /generate hashtags/i }));
+
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Provider unavailable'));
+        expect(screen.getByRole('group', { name: 'Hashtags' })).toHaveTextContent('#shorts');
     });
 });
