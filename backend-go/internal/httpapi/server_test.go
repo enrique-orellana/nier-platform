@@ -512,6 +512,52 @@ func TestClipTranscriptRouteReadsWordTimingFromMetadata(t *testing.T) {
 	}
 }
 
+func TestProjectClipStatusesUseGoSidecarContract(t *testing.T) {
+	outputDir := t.TempDir()
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"clips":[{"title":"First"}]}`)); err != nil {
+		t.Fatalf("set result: %v", err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/projects/"+job.ID+"/clips/0/status", strings.NewReader(`{"status":"editing"}`))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(patchRes, patchReq)
+	if patchRes.Code != http.StatusOK || !strings.Contains(patchRes.Body.String(), `"status":"editing"`) {
+		t.Fatalf("unexpected status update: %d %s", patchRes.Code, patchRes.Body.String())
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/projects/"+job.ID+"/statuses", nil)
+	getRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(getRes, getReq)
+	if getRes.Code != http.StatusOK || !strings.Contains(getRes.Body.String(), `"0"`) || !strings.Contains(getRes.Body.String(), `"editing"`) {
+		t.Fatalf("unexpected statuses response: %d %s", getRes.Code, getRes.Body.String())
+	}
+}
+
+func TestProjectHistoryReadsLocalMetadataForGoJobs(t *testing.T) {
+	outputDir := t.TempDir()
+	metadataPath := filepath.Join(outputDir, "job-1", "source_metadata.json")
+	if err := os.MkdirAll(filepath.Dir(metadataPath), 0o755); err != nil {
+		t.Fatalf("create project directory: %v", err)
+	}
+	if err := os.WriteFile(metadataPath, []byte(`{"shorts":[{"title":"First clip","video_filename":"clip.mp4"}]}`), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+	server := NewServer(config.Config{OutputDir: outputDir})
+	req := httptest.NewRequest(http.MethodGet, "/api/projects/history?limit=48", nil)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"job_id":"job-1"`) || !strings.Contains(res.Body.String(), `"video_url":"/videos/job-1/clip.mp4"`) {
+		t.Fatalf("unexpected project history response: %d %s", res.Code, res.Body.String())
+	}
+}
+
 func TestStatusReturnsNotFoundForUnknownJob(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/status/missing-job", nil)
