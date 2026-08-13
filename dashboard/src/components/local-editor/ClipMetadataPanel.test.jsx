@@ -7,6 +7,12 @@ const clip = {
     end: 51,
     video_title_for_youtube_short: 'La foto que según él parece Juan Guarnizo',
     video_description_for_tiktok: 'Una chica de Internet tiene una foto de cuerpo entero y le pide ayuda.',
+    source_context: {
+        who: ['Streamer'],
+        what: 'Launch event',
+        where: 'Rome',
+        source_summary: 'Streamer discusses a launch event in Rome.',
+    },
 };
 
 describe('ClipMetadataPanel', () => {
@@ -47,6 +53,7 @@ describe('ClipMetadataPanel', () => {
                 title: clip.video_title_for_youtube_short,
                 caption: clip.video_description_for_tiktok,
                 subtitle_text: 'Texto editado',
+                source_context: clip.source_context,
             }),
         }));
     });

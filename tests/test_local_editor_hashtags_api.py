@@ -18,6 +18,12 @@ def test_generates_normalized_hashtags_from_clip_context(monkeypatch):
             "title": "Mi clip",
             "caption": "Una historia inesperada",
             "subtitle_text": "La conversación completa del clip",
+            "source_context": {
+                "who": ["Streamer"],
+                "what": "Launch event",
+                "where": "Rome",
+                "source_summary": "Streamer discusses a launch event in Rome.",
+            },
         },
     )
 
@@ -29,6 +35,8 @@ def test_generates_normalized_hashtags_from_clip_context(monkeypatch):
     assert len(tags) == 12
     assert "Mi clip" in seen["prompt"]
     assert "La conversación completa del clip" in seen["prompt"]
+    assert "ORIGINAL SOURCE CONTEXT" in seen["prompt"]
+    assert "Streamer" in seen["prompt"]
 
 
 def test_rejects_empty_clip_context(monkeypatch):

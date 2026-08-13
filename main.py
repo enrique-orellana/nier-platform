@@ -86,6 +86,10 @@ If possible, aim to return about TARGET_CLIP_COUNT clips. Do not stop early unle
 
 VIDEO_DURATION_SECONDS: {video_duration}
 
+ORIGINAL SOURCE CONTEXT (grounded facts only; may be unavailable):
+{source_context}
+Use this context to improve titles, descriptions, and hooks. Do not invent identities, locations, dates, events, or entities that are not supported by the context or transcript.
+
 TRANSCRIPT_TEXT (raw):
 {transcript_text}
 
@@ -598,6 +602,199 @@ def sanitize_filename(filename):
     filename = re.sub(r'[<>:"/\\|?*#]', '', filename)
     filename = filename.replace(' ', '_')
     return filename[:100]
+
+
+SOURCE_CONTEXT_KEYS = (
+    "who",
+    "what",
+    "where",
+    "when",
+    "entities",
+    "source_summary",
+    "confidence",
+)
+SOURCE_CONTEXT_MAX_TEXT = 1200
+SOURCE_CONTEXT_MAX_DESCRIPTION = 2400
+SOURCE_CONTEXT_MAX_LIST_ITEMS = 20
+
+
+def _bounded_text(value, limit=SOURCE_CONTEXT_MAX_TEXT):
+    text = str(value or "").strip()
+    return text[:limit]
+
+
+def _bounded_list(value, limit=SOURCE_CONTEXT_MAX_LIST_ITEMS, item_limit=160):
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [_bounded_text(item, item_limit) for item in value if str(item or "").strip()][:limit]
+
+
+def _normalize_source_metadata(info, source_url):
+    """Keep only bounded, serializable metadata useful for source context."""
+    if not isinstance(info, dict):
+        raise ValueError("Source metadata extractor returned an invalid payload")
+
+    extractor = str(info.get("extractor_key") or info.get("extractor") or "").strip().lower()
+    if "twitch" in extractor:
+        platform = "twitch"
+    elif "youtube" in extractor or "youtu" in extractor:
+        platform = "youtube"
+    else:
+        platform = extractor or "unknown"
+
+    metadata = {
+        "platform": platform,
+        "id": _bounded_text(info.get("id"), 160),
+        "title": _bounded_text(info.get("title")),
+        "channel": _bounded_text(info.get("channel") or info.get("uploader")),
+        "description": _bounded_text(info.get("description"), SOURCE_CONTEXT_MAX_DESCRIPTION),
+        "upload_date": _bounded_text(info.get("upload_date"), 32),
+        "categories": _bounded_list(info.get("categories"), 10, 120),
+        "tags": _bounded_list(info.get("tags"), SOURCE_CONTEXT_MAX_LIST_ITEMS, 120),
+        "view_count": info.get("view_count"),
+        "duration": info.get("duration"),
+        "thumbnail": _bounded_text(info.get("thumbnail"), 500),
+        "webpage_url": _bounded_text(info.get("webpage_url") or source_url, 1000),
+        "source_url": _bounded_text(source_url, 1000),
+    }
+    if not isinstance(metadata["view_count"], (int, float)):
+        metadata["view_count"] = None
+    if not isinstance(metadata["duration"], (int, float)):
+        metadata["duration"] = None
+    return metadata
+
+
+def fetch_source_metadata(source_url):
+    """Read YouTube/Twitch metadata without downloading source media."""
+    if yt_dlp is None:
+        raise RuntimeError("yt-dlp is required for source metadata lookup")
+
+    options = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "noplaylist": True,
+        "cachedir": False,
+    }
+    with yt_dlp.YoutubeDL(options) as ydl:
+        info = ydl.extract_info(source_url, download=False)
+    return _normalize_source_metadata(info, source_url)
+
+
+def _default_source_context(source_metadata):
+    channel = source_metadata.get("channel", "") if isinstance(source_metadata, dict) else ""
+    title = source_metadata.get("title", "") if isinstance(source_metadata, dict) else ""
+    upload_date = source_metadata.get("upload_date", "") if isinstance(source_metadata, dict) else ""
+    categories = source_metadata.get("categories", []) if isinstance(source_metadata, dict) else []
+    tags = source_metadata.get("tags", []) if isinstance(source_metadata, dict) else []
+    description = source_metadata.get("description", "") if isinstance(source_metadata, dict) else ""
+    return {
+        "who": [channel] if channel else [],
+        "what": title,
+        "where": "",
+        "when": upload_date,
+        "entities": _bounded_list([*categories, *tags], 20, 120),
+        "source_summary": _bounded_text(description or title),
+        "confidence": "low",
+    }
+
+
+def normalize_source_context(value):
+    """Normalize model output to the small persisted source-context schema."""
+    value = value if isinstance(value, dict) else {}
+    confidence = str(value.get("confidence") or "low").strip().lower()
+    if confidence not in {"high", "medium", "low"}:
+        confidence = "low"
+    return {
+        "who": _bounded_list(value.get("who")),
+        "what": _bounded_text(value.get("what")),
+        "where": _bounded_text(value.get("where")),
+        "when": _bounded_text(value.get("when"), 120),
+        "entities": _bounded_list(value.get("entities")),
+        "source_summary": _bounded_text(value.get("source_summary"), SOURCE_CONTEXT_MAX_DESCRIPTION),
+        "confidence": confidence,
+    }
+
+
+def synthesize_source_context(source_metadata, transcript_result):
+    """Use the configured AI provider to summarize grounded source facts."""
+    ai_config = load_ai_config()
+    prompt = f"""Identify the who, what, where, and when of a source video using only the supplied platform metadata and transcript.
+Return JSON only with exactly these keys: {json.dumps(SOURCE_CONTEXT_KEYS)}.
+Use arrays for who and entities. Use empty strings or empty arrays when a fact is not supported.
+Do not invent identities, locations, dates, events, or relationships. Keep confidence conservative.
+
+SOURCE METADATA:
+{json.dumps(source_metadata, ensure_ascii=False)}
+
+TRANSCRIPT:
+{_bounded_text((transcript_result or {}).get('text'), 6000)}
+"""
+    model_name = ai_config.analyze_model or ai_config.text_model or ("gemini-2.5-flash" if ai_config.is_gemini() else "")
+    result = chat_json(
+        ai_config,
+        prompt,
+        model=model_name,
+        reasoning_effort=ai_config.analyze_reasoning_effort,
+    )
+    return normalize_source_context(result)
+
+
+def collect_source_context(source_url, source_metadata, transcript_result):
+    """Build persisted source context while keeping clip generation best-effort."""
+    record = {
+        "source_url": source_url,
+        "source_metadata": source_metadata,
+        "source_context": None,
+        "source_context_status": "unavailable",
+        "source_context_error": None,
+    }
+    try:
+        record["source_context"] = synthesize_source_context(source_metadata, transcript_result)
+        record["source_context_status"] = "available"
+    except Exception as exc:
+        record["source_context"] = _default_source_context(source_metadata)
+        record["source_context_status"] = "synthesis_unavailable"
+        record["source_context_error"] = _bounded_text(exc, 500)
+        print(f"⚠️ Source context synthesis warning: {exc}")
+    return record
+
+
+def prepare_source_context(source_url, transcript_result):
+    """Fetch source metadata and synthesize context without failing the job."""
+    if not source_url:
+        return {
+            "source_url": None,
+            "source_metadata": None,
+            "source_context": None,
+            "source_context_status": "not_requested",
+            "source_context_error": None,
+        }
+    try:
+        source_metadata = fetch_source_metadata(source_url)
+    except Exception as exc:
+        print(f"⚠️ Source metadata lookup warning: {exc}")
+        return {
+            "source_url": source_url,
+            "source_metadata": None,
+            "source_context": None,
+            "source_context_status": "metadata_unavailable",
+            "source_context_error": _bounded_text(exc, 500),
+        }
+    return collect_source_context(source_url, source_metadata, transcript_result)
+
+
+def attach_source_context_to_clip_plan(clips_data, source_context_record):
+    """Persist source fields at job level and on each generated clip."""
+    if not isinstance(clips_data, dict):
+        return clips_data
+    for key in ("source_url", "source_metadata", "source_context", "source_context_status", "source_context_error"):
+        clips_data[key] = source_context_record.get(key)
+    for clip in clips_data.get("shorts", []):
+        if isinstance(clip, dict):
+            clip["source_url"] = source_context_record.get("source_url")
+            clip["source_context"] = source_context_record.get("source_context")
+    return clips_data
 
 
 def resolve_direct_video_url(url: str) -> str:
@@ -1351,7 +1548,7 @@ def _stretch_clip_window(start, end, total_duration, *, min_duration=15.0, targe
 
     return round(new_start, 3), round(new_end, 3)
 
-def get_viral_clips(transcript_result, video_duration, target_clips=6):
+def get_viral_clips(transcript_result, video_duration, target_clips=6, source_context=None):
     ai_config = load_ai_config()
     print(f"🤖  Analyzing with {ai_config.normalized_provider()}...")
 
@@ -1372,6 +1569,7 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6):
     prompt = GEMINI_PROMPT_TEMPLATE.format(
         video_duration=video_duration,
         target_clips=target_clips,
+        source_context=json.dumps(normalize_source_context(source_context), ensure_ascii=False) if source_context else "No original source context was provided.",
         transcript_text=json.dumps(transcript_result['text']),
         words_json=json.dumps(words)
     )
@@ -1473,6 +1671,7 @@ if __name__ == '__main__':
     input_group.add_argument('-i', '--input', type=str, help="Path to the input video file.")
     input_group.add_argument('-u', '--url', type=str, help="YouTube URL to download and process.")
     input_group.add_argument('--direct-url', type=str, help="Direct HTTP(S) video URL to download and process.")
+    parser.add_argument('--source-url', type=str, help="Original HTTPS YouTube or Twitch page used for metadata context only.")
     
     parser.add_argument('-o', '--output', type=str, help="Output directory or file (if processing whole video).")
     parser.add_argument('--keep-original', action='store_true', help="Keep the downloaded YouTube video.")
@@ -1552,13 +1751,20 @@ if __name__ == '__main__':
         # 3. Transcribe
         with job_metrics.timed("transcription"):
             transcript = transcribe_video(processing_video)
+
+        source_context_record = prepare_source_context(args.source_url, transcript)
         
         # Get duration
         duration = source_analysis.total_frames / source_analysis.source_fps
 
         # 4. Gemini Analysis
         with job_metrics.timed("ai_planning"):
-            clips_data = get_viral_clips(transcript, duration, target_clips=target_clips)
+            clips_data = get_viral_clips(
+                transcript,
+                duration,
+                target_clips=target_clips,
+                source_context=source_context_record.get("source_context"),
+            )
         
         if not clips_data or 'shorts' not in clips_data:
             print("❌ Failed to identify clips. Converting whole video as fallback.")
@@ -1575,6 +1781,7 @@ if __name__ == '__main__':
             
             # Save metadata
             clips_data['transcript'] = transcript # Save full transcript for subtitles
+            attach_source_context_to_clip_plan(clips_data, source_context_record)
             metadata_file = os.path.join(output_dir, f"{video_title}_metadata.json")
             with open(metadata_file, 'w') as f:
                 json.dump(clips_data, f, indent=2)

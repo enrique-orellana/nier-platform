@@ -9,6 +9,7 @@ export default function MediaInput({
 }) {
     const [mode, setMode] = useState('url'); // 'url' | 'file'
     const [url, setUrl] = useState('');
+    const [sourceUrl, setSourceUrl] = useState('');
     const [file, setFile] = useState(null);
     const [acknowledged, setAcknowledged] = useState(false);
 
@@ -16,9 +17,9 @@ export default function MediaInput({
         e.preventDefault();
         if (!acknowledged) return;
         if (mode === 'url' && url) {
-            onProcess({ type: 'url', payload: url, acknowledged: true });
+            onProcess({ type: 'url', payload: url, sourceUrl: sourceUrl.trim(), acknowledged: true });
         } else if (mode === 'file' && file) {
-            onProcess({ type: 'file', payload: file, acknowledged: true });
+            onProcess({ type: 'file', payload: file, sourceUrl: sourceUrl.trim(), acknowledged: true });
         }
     };
 
@@ -104,6 +105,23 @@ export default function MediaInput({
                         )}
                     </div>
                 )}
+
+                <div className="mt-5 space-y-2">
+                    <label htmlFor="original-source-url" className="text-xs uppercase tracking-[0.2em] text-zinc-500">
+                        Original Source URL <span className="normal-case tracking-normal text-zinc-600">(optional)</span>
+                    </label>
+                    <input
+                        id="original-source-url"
+                        type="url"
+                        value={sourceUrl}
+                        onChange={(e) => setSourceUrl(e.target.value)}
+                        placeholder="https://www.twitch.tv/videos/2842570758"
+                        className="input-field"
+                    />
+                    <p className="text-xs text-zinc-500">
+                        Add the original YouTube or Twitch page to improve creator, topic, event, and location accuracy. It is used for context only, not to download the processing video.
+                    </p>
+                </div>
 
                 <div className="mt-5">
                     <label className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-zinc-500 mb-2">

@@ -41,7 +41,12 @@ export default function ClipMetadataPanel({ clip = {}, subtitleCues = [], hashta
             const response = await fetch(getApiUrl('/api/local-editor/hashtags'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...getLocalAiHeaders() },
-                body: JSON.stringify({ title, caption, subtitle_text: subtitleTextFromCues(subtitleCues) }),
+                body: JSON.stringify({
+                    title,
+                    caption,
+                    subtitle_text: subtitleTextFromCues(subtitleCues),
+                    source_context: metadata.source_context || null,
+                }),
             });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(payload.detail || 'Could not generate hashtags.');

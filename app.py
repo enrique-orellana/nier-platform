@@ -65,6 +65,31 @@ publish_jobs: Dict[str, Dict] = {}  # {publish_id: {status, result, error}}
 concurrency_semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
 
 
+def validate_original_source_url(value: Optional[str]) -> Optional[str]:
+    """Validate and normalize an optional YouTube/Twitch source page URL."""
+    if value is None or not str(value).strip():
+        return None
+
+    candidate = str(value).strip()
+    parsed = urlsplit(candidate)
+    hostname = (parsed.hostname or "").lower().rstrip(".")
+    youtube_hosts = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"}
+    is_youtube = hostname in youtube_hosts
+    is_twitch = hostname == "twitch.tv" or hostname.endswith(".twitch.tv")
+    if (
+        parsed.scheme.lower() != "https"
+        or not hostname
+        or parsed.username
+        or parsed.password
+        or not (is_youtube or is_twitch)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Original source URL must be an HTTPS YouTube or Twitch URL",
+        )
+    return candidate
+
+
 def is_expirable_output_directory(path: Path, output_dir: Path | str) -> bool:
     """Return whether an output child directory may be purged as an old job."""
     del output_dir
@@ -152,6 +177,29 @@ def _relocate_root_job_artifacts(job_id: str, job_output_dir: str) -> bool:
         return False
 
 
+def build_job_result(data: dict, ready_clips: list[dict], cost_analysis):
+    """Build one result shape for live jobs and persisted-artifact reloads."""
+    source_context = data.get("source_context")
+    source_url = data.get("source_url")
+    enriched_clips = []
+    for clip in ready_clips:
+        enriched = dict(clip)
+        if not enriched.get("source_url"):
+            enriched["source_url"] = source_url
+        if enriched.get("source_context") is None:
+            enriched["source_context"] = source_context
+        enriched_clips.append(enriched)
+    return {
+        "clips": enriched_clips,
+        "cost_analysis": cost_analysis,
+        "source_url": source_url,
+        "source_metadata": data.get("source_metadata"),
+        "source_context": source_context,
+        "source_context_status": data.get("source_context_status"),
+        "source_context_error": data.get("source_context_error"),
+    }
+
+
 def _rehydrate_job_from_disk(job_id: str) -> Optional[Dict]:
     """Rebuild a minimal job record from persisted output artifacts."""
     output_dir = os.path.join(OUTPUT_DIR, job_id)
@@ -181,10 +229,7 @@ def _rehydrate_job_from_disk(job_id: str) -> Optional[Dict]:
     return {
         "status": "completed",
         "logs": [f"Job rehydrated from persisted artifacts: {job_id}"],
-        "result": {
-            "clips": clips,
-            "cost_analysis": data.get("cost_analysis"),
-        },
+        "result": build_job_result(data, clips, data.get("cost_analysis")),
         "output_dir": output_dir,
         "metadata_path": metadata_path,
     }
@@ -276,10 +321,7 @@ def _rehydrate_job_from_s3(job_id: str) -> Optional[Dict]:
         return {
             "status": "completed",
             "logs": [f"Job rehydrated from S3 artifacts: {job_id}"],
-            "result": {
-                "clips": clips,
-                "cost_analysis": data.get("cost_analysis"),
-            },
+            "result": build_job_result(data, clips, data.get("cost_analysis")),
             "output_dir": output_dir,
             "metadata_path": metadata_path,
         }
@@ -628,7 +670,7 @@ async def run_job(job_id, job_data):
                                  ready_clips.append(clip)
                         
                         if ready_clips:
-                             jobs[job_id]['result'] = {'clips': ready_clips, 'cost_analysis': cost_analysis}
+                             jobs[job_id]['result'] = build_job_result(data, ready_clips, cost_analysis)
             except Exception as e:
                 # Ignore read errors during processing
                 pass
@@ -662,7 +704,7 @@ async def run_job(job_id, job_data):
                          clip['video_url'] = f"/videos/{job_id}/{clip_filename}"
                          ready_clips.append(clip)
 
-                jobs[job_id]['result'] = {'clips': ready_clips, 'cost_analysis': cost_analysis}
+                jobs[job_id]['result'] = build_job_result(data, ready_clips, cost_analysis)
                 if not ready_clips:
                     jobs[job_id]['status'] = 'failed'
                     jobs[job_id]['logs'].append("No validated video clips generated.")
@@ -828,6 +870,7 @@ async def process_endpoint(
     request: Request,
     file: Optional[UploadFile] = File(None),
     url: Optional[str] = Form(None),
+    source_url: Optional[str] = Form(None),
     acknowledged: Optional[str] = Form(None),
     clip_count: int = Query(6, ge=3, le=15),
     x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
@@ -857,6 +900,7 @@ async def process_endpoint(
     if "application/json" in content_type:
         body = await request.json()
         url = body.get("url")
+        source_url = body.get("source_url")
         ack_flag = bool(body.get("acknowledged"))
 
     if not url and not file:
@@ -871,6 +915,8 @@ async def process_endpoint(
         if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
             raise HTTPException(status_code=400, detail="Video URL must use http:// or https://")
 
+    source_url = validate_original_source_url(source_url)
+
     # Capture attestation context for legal record (IP + timestamp + UA)
     client_ip = request.client.host if request.client else "unknown"
     fwd = request.headers.get("x-forwarded-for")
@@ -883,6 +929,7 @@ async def process_endpoint(
         "user_agent": user_agent,
         "timestamp": time.time(),
         "source": "url" if url else "file",
+        "source_url": source_url,
     }
 
     job_id = str(uuid.uuid4())
@@ -913,6 +960,9 @@ async def process_endpoint(
                 buffer.write(content)
 
         cmd.extend(["-i", input_path])
+
+    if source_url:
+        cmd.extend(["--source-url", source_url])
 
     # Keep source media available for manifest-driven rerenders and master exports.
     cmd.extend(["--target-clips", str(clip_count), "--keep-original"])
@@ -996,6 +1046,34 @@ class LocalEditorHashtagRequest(BaseModel):
     title: str = ""
     caption: str = ""
     subtitle_text: str = ""
+    source_context: Optional[Dict[str, Any]] = None
+
+
+def normalize_source_context_for_prompt(value: object) -> dict:
+    """Keep persisted source context small and safe to include in an AI prompt."""
+    if not isinstance(value, dict):
+        return {}
+
+    def bounded_text(item: object, limit: int = 1200) -> str:
+        return str(item or "").strip()[:limit]
+
+    def bounded_list(item: object) -> list[str]:
+        if not isinstance(item, list):
+            return []
+        return [bounded_text(entry, 160) for entry in item if str(entry or "").strip()][:20]
+
+    confidence = bounded_text(value.get("confidence"), 20).lower()
+    if confidence not in {"high", "medium", "low"}:
+        confidence = "low"
+    return {
+        "who": bounded_list(value.get("who")),
+        "what": bounded_text(value.get("what")),
+        "where": bounded_text(value.get("where")),
+        "when": bounded_text(value.get("when"), 120),
+        "entities": bounded_list(value.get("entities")),
+        "source_summary": bounded_text(value.get("source_summary"), 2400),
+        "confidence": confidence,
+    }
 
 
 def normalize_generated_hashtags(value: object) -> list[str]:
@@ -1668,6 +1746,7 @@ async def generate_local_editor_hashtags(
     title = req.title.strip()
     caption = req.caption.strip()
     subtitle_text = req.subtitle_text.strip()
+    source_context = normalize_source_context_for_prompt(req.source_context)
     if not any((title, caption, subtitle_text)):
         raise HTTPException(status_code=400, detail="Clip context is required to generate hashtags.")
 
@@ -1695,6 +1774,10 @@ CAPTION:
 
 CURRENT EDITED SUBTITLE TRANSCRIPT:
 {subtitle_text}
+
+ORIGINAL SOURCE CONTEXT (grounded facts only; may be unavailable):
+{json.dumps(source_context, ensure_ascii=False) if source_context else "No original source context was provided."}
+Use source facts for relevant hashtags only. Do not invent identities, locations, dates, events, or entities.
 """
 
     try:
