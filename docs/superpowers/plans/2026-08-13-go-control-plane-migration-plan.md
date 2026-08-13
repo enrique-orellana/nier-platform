@@ -69,27 +69,27 @@ git commit -m "feat: scaffold Go control plane API"
 - Create: `backend-go/internal/jobs/store.go`
 - Create: `backend-go/internal/jobs/store_test.go`
 
-- [ ] **Step 1: Write failing repository tests**
+- [x] **Step 1: Write failing repository tests**
 
 Test creation of a queued job, lookup by ID, transition from queued to processing to completed, rejection of an invalid transition, and preservation of append-only log order.
 
-- [ ] **Step 2: Run the focused tests and verify the expected missing-symbol failure**
+- [x] **Step 2: Run the focused tests and verify the expected missing-symbol failure**
 
 Run: `cd backend-go; go test ./internal/jobs`
 
 Expected: FAIL because the domain and repository types are not implemented.
 
-- [ ] **Step 3: Implement domain types and in-memory repository**
+- [x] **Step 3: Implement domain types and in-memory repository**
 
 Define `JobStatus` values `queued`, `processing`, `completed`, and `failed`; define `Job`, `JobLog`, and `CreateJobInput`; implement a concurrency-safe `Store` interface with `Create`, `Get`, `Transition`, and `AppendLog`.
 
-- [ ] **Step 4: Run all Go tests**
+- [x] **Step 4: Run all Go tests**
 
 Run: `cd backend-go; go test -race ./...`
 
 Expected: all tests pass with no race reports.
 
-- [ ] **Step 5: Commit the repository boundary**
+- [x] **Step 5: Commit the repository boundary**
 
 ```powershell
 git add backend-go/internal/domain backend-go/internal/jobs
