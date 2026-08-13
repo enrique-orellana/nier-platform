@@ -103,31 +103,31 @@ git commit -m "feat: add typed job repository boundary"
 - Modify: `backend-go/internal/httpapi/server_test.go`
 - Modify: `backend-go/internal/domain/job.go`
 
-- [ ] **Step 1: Write failing API contract tests**
+- [x] **Step 1: Write failing API contract tests**
 
 Test JSON submission to `/api/process` with `url` and `acknowledged=true` returns HTTP 202 and a UUID `job_id`. Test `/api/status/{job_id}` returns `status`, `logs`, and `result`. Test missing acknowledgement returns HTTP 400 with the same `detail` field used by FastAPI.
 
-- [ ] **Step 2: Run focused tests and verify they fail**
+- [x] **Step 2: Run focused tests and verify they fail**
 
 Run: `cd backend-go; go test ./internal/httpapi -run 'TestProcess|TestStatus' -v`
 
 Expected: FAIL because the compatibility routes are not registered.
 
-- [ ] **Step 3: Implement request validation and job creation**
+- [x] **Step 3: Implement request validation and job creation**
 
 Accept JSON and `application/x-www-form-urlencoded` input for the first slice. Require exactly one `url`, require `acknowledged=true`, validate `http`/`https`, create a queued job, and return `{"job_id":"...","status":"queued"}`. Keep worker execution out of the handler.
 
-- [ ] **Step 4: Implement status serialization**
+- [x] **Step 4: Implement status serialization**
 
 Return `{"status":...,"logs":[...],"result":...}` and use HTTP 404 with `{"detail":"Job not found"}` for unknown IDs.
 
-- [ ] **Step 5: Run all Go tests**
+- [x] **Step 5: Run all Go tests**
 
 Run: `cd backend-go; go test -race ./...`
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit the compatibility slice**
+- [x] **Step 6: Commit the compatibility slice**
 
 ```powershell
 git add backend-go/internal/domain backend-go/internal/httpapi
