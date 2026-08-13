@@ -15,7 +15,7 @@ Replace the Clip Generator's YouTube URL ingestion with direct HTTP(S) video URL
 
 - `/api/process` continues to accept a URL or uploaded file, but URL ingestion now means a direct `http://` or `https://` media URL.
 - The queued worker downloads the URL to the job output directory before running the existing clip-generation pipeline.
-- The download is streamed in chunks, follows redirects, times out, and enforces the existing 500 MB upload/download limit without buffering the complete object in memory.
+- The download is streamed in chunks, follows redirects, times out, and enforces the backend's existing `MAX_FILE_SIZE_MB` limit without buffering the complete object in memory.
 - The destination filename comes from the URL path when safe, with an `.mp4` fallback when the URL is presigned or has no useful filename.
 - `localhost` and loopback hostnames in the submitted URL are rewritten to the configured `AWS_S3_ENDPOINT_URL` host when that setting is present, preserving the object path and query string. This allows browser-facing local URLs to work when the backend runs in Docker or Kubernetes.
 - Invalid schemes, unreachable objects, HTTP errors, and oversized downloads produce clear job errors.
