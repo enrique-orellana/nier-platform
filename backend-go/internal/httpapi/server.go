@@ -62,6 +62,7 @@ func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs
 	mux.HandleFunc("/api/translate/languages", server.translationLanguages)
 	mux.HandleFunc("/api/ai/lmstudio/discover", server.discoverLMStudio)
 	mux.HandleFunc("/api/local-editor/translate", server.createTranslation)
+	mux.HandleFunc("/api/local-editor/transcribe", server.transcribeLocalEditor)
 	mux.HandleFunc("/api/translation/", server.translationStatus)
 	mux.HandleFunc("/api/clip/", server.clipRoutes)
 	return server
@@ -509,6 +510,34 @@ func (s *Server) createTranslation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"translationId": job.ID, "status": "queued"})
 }
 
+func (s *Server) transcribeLocalEditor(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	if s.translationRunner == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"detail": "Python worker is not configured"})
+		return
+	}
+	sourcePath, err := s.saveUploadedFile(r, "file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	defer os.Remove(sourcePath)
+	result, err := s.translationRunner.Run(r.Context(), "local-editor-transcription", "transcribe", map[string]any{"source_path": sourcePath}, translationHeaders(r))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": fmt.Sprintf("Subtitle generation failed: %s", err)})
+		return
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(result, &payload); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Invalid transcription worker result"})
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
 func (s *Server) runTranslation(id string) {
 	ctx := context.Background()
 	job, ok := s.store.Get(ctx, id)
@@ -542,6 +571,37 @@ func (s *Server) runTranslation(id string) {
 		return
 	}
 	_, _ = s.store.Transition(ctx, id, domain.JobStatusCompleted, "")
+}
+
+func (s *Server) saveUploadedFile(r *http.Request, field string) (string, error) {
+	file, header, err := r.FormFile(field)
+	if err != nil {
+		return "", errors.New("Please upload a video file.")
+	}
+	defer file.Close()
+	root := s.config.OutputDir
+	if root == "" {
+		root = "output"
+	}
+	uploadDir := filepath.Join(root, ".uploads")
+	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
+		return "", errors.New("could not create upload directory")
+	}
+	temporary, err := os.CreateTemp(uploadDir, "local-editor-*"+filepath.Ext(filepath.Base(header.Filename)))
+	if err != nil {
+		return "", errors.New("could not create upload file")
+	}
+	path := temporary.Name()
+	if _, err := io.Copy(temporary, file); err != nil {
+		_ = temporary.Close()
+		_ = os.Remove(path)
+		return "", errors.New("could not save uploaded file")
+	}
+	if err := temporary.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", errors.New("could not close uploaded file")
+	}
+	return path, nil
 }
 
 func (s *Server) translationStatus(w http.ResponseWriter, r *http.Request) {

@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -10,6 +11,18 @@ import (
 
 type fakeWorker struct {
 	err error
+}
+
+type resultWorker struct{}
+
+func (resultWorker) Run(_ context.Context, _ domain.Job, _ string, onLog func(string)) error {
+	onLog("worker output")
+	return nil
+}
+
+func (resultWorker) RunResult(_ context.Context, _ domain.Job, _ string, onLog func(string)) ([]byte, error) {
+	onLog("worker output")
+	return json.RawMessage(`{"clips":[{"title":"First"}]}`), nil
 }
 
 func (w fakeWorker) Run(_ context.Context, _ domain.Job, _ string, onLog func(string)) error {
@@ -68,5 +81,21 @@ func TestRunnerMarksFailedJobAndReturnsWorkerError(t *testing.T) {
 	}
 	if failed.Status != domain.JobStatusFailed || failed.Error != workerErr.Error() {
 		t.Fatalf("unexpected failed job: %#v", failed)
+	}
+}
+
+func TestRunnerPersistsResultFromResultWorker(t *testing.T) {
+	store := NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	runner := Runner{Store: store, Worker: resultWorker{}}
+	if err := runner.RunOnce(context.Background(), job.ID); err != nil {
+		t.Fatalf("run job: %v", err)
+	}
+	completed, _ := store.Get(context.Background(), job.ID)
+	if string(completed.Result) != `{"clips":[{"title":"First"}]}` {
+		t.Fatalf("unexpected job result: %s", completed.Result)
 	}
 }

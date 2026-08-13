@@ -35,6 +35,15 @@ func (completingTranslation) Run(_ context.Context, _ string, _ string, _ map[st
 	return json.RawMessage(`{"track":{"id":"es","label":"ES"}}`), nil
 }
 
+type transcribingOperation struct{}
+
+func (transcribingOperation) Run(_ context.Context, _ string, operation string, payload map[string]any, _ map[string]string) (json.RawMessage, error) {
+	if operation != "transcribe" || payload["source_path"] == "" {
+		return nil, fmt.Errorf("unexpected transcription request: %s %#v", operation, payload)
+	}
+	return json.RawMessage(`{"language":"en","captions":[],"segments":[]}`), nil
+}
+
 func TestHealthReturnsOK(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -461,6 +470,27 @@ func TestProcessAcceptsMultipartVideoAndStoresWorkerSourcePath(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("uploaded source was not saved: %v", err)
+	}
+}
+
+func TestLocalEditorTranscribeUsesPythonWorkerOperation(t *testing.T) {
+	outputDir := t.TempDir()
+	server := NewServerWithDependencies(config.Config{OutputDir: outputDir}, jobs.NewMemoryStore(), nil, transcribingOperation{})
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	file, err := writer.CreateFormFile("file", "local.mp4")
+	if err != nil {
+		t.Fatalf("create file part: %v", err)
+	}
+	_, _ = file.Write([]byte("fake-video"))
+	_ = writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/local-editor/transcribe", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"language":"en"`) {
+		t.Fatalf("unexpected transcription response: %d %s", res.Code, res.Body.String())
 	}
 }
 

@@ -11,6 +11,10 @@ type JobWorker interface {
 	Run(context.Context, domain.Job, string, func(string)) error
 }
 
+type ResultWorker interface {
+	RunResult(context.Context, domain.Job, string, func(string)) ([]byte, error)
+}
+
 type Runner struct {
 	Store  Store
 	Worker JobWorker
@@ -39,14 +43,21 @@ func (r Runner) RunOnce(ctx context.Context, jobID string) error {
 	if outputDir == "" {
 		outputDir = "output/" + job.ID
 	}
-	workerErr := r.Worker.Run(ctx, job, outputDir, func(message string) {
+	var result []byte
+	var workerErr error
+	logCallback := func(message string) {
 		if logErr != nil {
 			return
 		}
 		if err := r.Store.AppendLog(ctx, jobID, message); err != nil {
 			logErr = err
 		}
-	})
+	}
+	if resultWorker, ok := r.Worker.(ResultWorker); ok {
+		result, workerErr = resultWorker.RunResult(ctx, job, outputDir, logCallback)
+	} else {
+		workerErr = r.Worker.Run(ctx, job, outputDir, logCallback)
+	}
 	if logErr != nil && workerErr == nil {
 		workerErr = logErr
 	}
@@ -57,6 +68,11 @@ func (r Runner) RunOnce(ctx context.Context, jobID string) error {
 			return fmt.Errorf("mark job failed: %w", transitionErr)
 		}
 		return workerErr
+	}
+	if len(result) > 0 {
+		if err := r.Store.SetResult(ctx, jobID, result); err != nil {
+			return err
+		}
 	}
 	_, err := r.Store.Transition(ctx, jobID, domain.JobStatusCompleted, "")
 	return err

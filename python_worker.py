@@ -111,6 +111,24 @@ def handle_request(request: Mapping[str, Any]) -> None:
             track = perform_translation(request.get("payload") or {}, request.get("headers") or {})
             _emit({"id": request_id, "type": "result", "result": {"track": track}})
             return
+        if operation == "transcribe":
+            from local_editor_subtitles import word_captions_from_transcript
+            from subtitles import build_subtitle_segments, transcribe_audio
+
+            source_path = str((request.get("payload") or {}).get("source_path") or "").strip()
+            if not source_path:
+                raise ValueError("transcription source path is required")
+            transcript = transcribe_audio(source_path)
+            _emit({
+                "id": request_id,
+                "type": "result",
+                "result": {
+                    "language": transcript.get("language", "und"),
+                    "captions": word_captions_from_transcript(transcript),
+                    "segments": build_subtitle_segments(transcript, 0, float("inf")),
+                },
+            })
+            return
         if operation != "clip_generation":
             raise ValueError(f"unsupported operation: {operation}")
         _emit({"id": request_id, "type": "started", "operation": operation})

@@ -82,11 +82,16 @@ type PythonWorkerAdapter struct {
 }
 
 func (a PythonWorkerAdapter) Run(ctx context.Context, job domain.Job, outputDir string, onLog func(string)) error {
+	_, err := a.RunResult(ctx, job, outputDir, onLog)
+	return err
+}
+
+func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outputDir string, onLog func(string)) ([]byte, error) {
 	if job.ID == "" {
-		return errors.New("job ID is required")
+		return nil, errors.New("job ID is required")
 	}
 	if outputDir == "" {
-		return errors.New("job output directory is required")
+		return nil, errors.New("job output directory is required")
 	}
 	runner := a.Runner
 	if runner == nil {
@@ -119,6 +124,7 @@ func (a PythonWorkerAdapter) Run(ctx context.Context, job domain.Job, outputDir 
 		request["source_context_url"] = sourceContext
 	}
 	var protocolErr error
+	var result []byte
 	runErr := runner.RunProtocol(ctx, CommandSpec{
 		Name: pythonBinary,
 		Args: []string{"-u", workerScript},
@@ -127,14 +133,20 @@ func (a PythonWorkerAdapter) Run(ctx context.Context, job domain.Job, outputDir 
 		if event.Type == "error" && protocolErr == nil {
 			protocolErr = errors.New(event.Error)
 		}
+		if event.Type == "result" {
+			result = append(result[:0], event.Result...)
+		}
 		if event.Type == "log" && onLog != nil {
 			onLog(event.Message)
 		}
 	})
 	if runErr != nil {
-		return runErr
+		return nil, runErr
 	}
-	return protocolErr
+	if protocolErr != nil {
+		return nil, protocolErr
+	}
+	return result, nil
 }
 
 var _ io.Writer = (*lineSink)(nil)
