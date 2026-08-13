@@ -1,8 +1,10 @@
 import json
+import shutil
+from pathlib import Path
 
 import pytest
 
-from python_worker import build_clip_generation_command, parse_request
+from python_worker import build_clip_generation_command, load_generation_result, parse_request
 
 
 def test_parse_request_requires_id_and_operation():
@@ -52,3 +54,20 @@ def test_build_clip_generation_command_rejects_missing_source():
 
     with pytest.raises(ValueError, match="exactly one source"):
         build_clip_generation_command(request)
+
+
+def test_load_generation_result_reads_metadata_for_go_status_api():
+    output_dir = Path(".cache") / "python-worker-test"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        (output_dir / "source_metadata.json").write_text(
+            json.dumps({"shorts": [{"title": "First clip"}], "cost_analysis": {"total": 1.2}}),
+            encoding="utf-8",
+        )
+
+        assert load_generation_result(str(output_dir)) == {
+            "clips": [{"title": "First clip"}],
+            "cost_analysis": {"total": 1.2},
+        }
+    finally:
+        shutil.rmtree(output_dir, ignore_errors=True)

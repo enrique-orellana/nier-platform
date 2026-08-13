@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/mutonby/openshorts/backend-go/internal/config"
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
 	"github.com/mutonby/openshorts/backend-go/internal/jobs"
+	"github.com/mutonby/openshorts/backend-go/internal/manifests"
 )
 
 type completingWorker struct{}
@@ -356,6 +358,30 @@ func TestLMStudioDiscoveryReturnsNormalizedModels(t *testing.T) {
 	server.Handler().ServeHTTP(res, req)
 	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"available":true`) || !strings.Contains(res.Body.String(), `"id":"local-model"`) || !strings.Contains(res.Body.String(), `"supportsVision":true`) {
 		t.Fatalf("unexpected LM Studio response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestClipManifestRoutesReadAndPatchAtomically(t *testing.T) {
+	outputDir := t.TempDir()
+	manifestPath := filepath.Join(outputDir, "job-1", "clip_0", "manifest.json")
+	if _, err := manifests.SaveAtomic(manifestPath, map[string]any{"schema_version": 1, "layers": map[string]any{"hook": nil}}); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	server := NewServer(config.Config{OutputDir: outputDir})
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/clip/job-1/0/manifest", nil)
+	getRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(getRes, getReq)
+	if getRes.Code != http.StatusOK || !strings.Contains(getRes.Body.String(), `"revision"`) {
+		t.Fatalf("unexpected manifest response: %d %s", getRes.Code, getRes.Body.String())
+	}
+
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/clip/job-1/0/manifest", strings.NewReader(`{"layers":{"hook":{"text":"Stop"}}}`))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(patchRes, patchReq)
+	if patchRes.Code != http.StatusOK || !strings.Contains(patchRes.Body.String(), `"text":"Stop"`) || !strings.Contains(patchRes.Body.String(), `"master_current":false`) {
+		t.Fatalf("unexpected patched manifest response: %d %s", patchRes.Code, patchRes.Body.String())
 	}
 }
 

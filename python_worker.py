@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 
@@ -59,12 +60,24 @@ def build_clip_generation_command(request: Mapping[str, Any]) -> list[str]:
     return command
 
 
+def load_generation_result(output_dir: str) -> dict[str, Any]:
+    metadata_files = sorted(Path(output_dir).glob("*_metadata.json"))
+    if not metadata_files:
+        raise FileNotFoundError("No metadata file generated")
+    with metadata_files[0].open("r", encoding="utf-8") as source:
+        data = json.load(source)
+    return {
+        "clips": data.get("shorts", []),
+        "cost_analysis": data.get("cost_analysis"),
+    }
+
+
 def _emit(event: Mapping[str, Any]) -> None:
     sys.stdout.write(json.dumps(dict(event), ensure_ascii=False) + "\n")
     sys.stdout.flush()
 
 
-def _run_clip_generation(request: Mapping[str, Any]) -> int:
+def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any] | None]:
     command = build_clip_generation_command(request)
     environment = os.environ.copy()
     for key, value in (request.get("environment") or {}).items():
@@ -82,7 +95,10 @@ def _run_clip_generation(request: Mapping[str, Any]) -> int:
     assert process.stdout is not None
     for line in process.stdout:
         _emit({"id": request["id"], "type": "log", "message": line.rstrip("\r\n")})
-    return process.wait()
+    exit_code = process.wait()
+    if exit_code != 0:
+        return exit_code, None
+    return exit_code, load_generation_result(str(request.get("output_dir") or ""))
 
 
 def handle_request(request: Mapping[str, Any]) -> None:
@@ -98,11 +114,11 @@ def handle_request(request: Mapping[str, Any]) -> None:
         if operation != "clip_generation":
             raise ValueError(f"unsupported operation: {operation}")
         _emit({"id": request_id, "type": "started", "operation": operation})
-        exit_code = _run_clip_generation(request)
+        exit_code, result = _run_clip_generation(request)
         if exit_code != 0:
             _emit({"id": request_id, "type": "error", "error": f"worker exited with status {exit_code}"})
             return
-        _emit({"id": request_id, "type": "result", "result": {"output_dir": request.get("output_dir")}})
+        _emit({"id": request_id, "type": "result", "result": result or {}})
     except Exception as exc:  # the protocol must always return a terminal event
         _emit({"id": request_id, "type": "error", "error": str(exc)})
 

@@ -18,6 +18,7 @@ import (
 	"github.com/mutonby/openshorts/backend-go/internal/config"
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
 	"github.com/mutonby/openshorts/backend-go/internal/jobs"
+	"github.com/mutonby/openshorts/backend-go/internal/manifests"
 	"github.com/mutonby/openshorts/backend-go/internal/versions"
 )
 
@@ -552,7 +553,7 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 		return
 	}
-	if len(segments) < 1 || segments[0] != "versions" {
+	if len(segments) < 1 || (segments[0] != "versions" && segments[0] != "manifest") {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 		return
 	}
@@ -563,9 +564,9 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
-	case r.Method == http.MethodGet && len(segments) == 1:
+	case r.Method == http.MethodGet && len(segments) == 1 && segments[0] == "versions":
 		s.listVersions(w, store)
-	case r.Method == http.MethodPost && len(segments) == 1:
+	case r.Method == http.MethodPost && len(segments) == 1 && segments[0] == "versions":
 		s.createVersion(w, r, store)
 	case r.Method == http.MethodPost && len(segments) == 2 && segments[1] == "branch":
 		s.branchVersion(w, r, store)
@@ -577,6 +578,10 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 		s.completeVersion(w, r, store, segments[1])
 	case r.Method == http.MethodPost && len(segments) == 3 && segments[2] == "activate":
 		s.activateVersion(w, store, segments[1])
+	case r.Method == http.MethodGet && len(segments) == 1 && segments[0] == "manifest":
+		s.getManifest(w, jobID, clipIndex)
+	case r.Method == http.MethodPatch && len(segments) == 1 && segments[0] == "manifest":
+		s.patchManifest(w, r, jobID, clipIndex)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 	}
@@ -794,6 +799,120 @@ func (s *Server) activateVersion(w http.ResponseWriter, store *versions.Store, v
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"version": promoted, "current_version_id": promoted.VersionID})
+}
+
+func (s *Server) manifestPath(jobID string, clipIndex int) (string, error) {
+	root := s.config.OutputDir
+	if root == "" {
+		root = "output"
+	}
+	root, err := filepath.Abs(filepath.Join(root, jobID))
+	if err != nil {
+		return "", err
+	}
+	if job, ok := s.store.Get(context.Background(), jobID); ok && len(job.Result) > 0 {
+		var result struct {
+			Clips []map[string]any `json:"clips"`
+		}
+		if json.Unmarshal(job.Result, &result) == nil && clipIndex < len(result.Clips) {
+			if relative, ok := result.Clips[clipIndex]["manifest_path"].(string); ok && relative != "" {
+				candidate := filepath.Join(root, filepath.FromSlash(relative))
+				if safePath(root, candidate) {
+					return candidate, nil
+				}
+				return "", errors.New("invalid clip manifest path")
+			}
+		}
+	}
+	for _, candidate := range []string{
+		filepath.Join(root, fmt.Sprintf("clip_%d", clipIndex), "manifest.json"),
+		filepath.Join(root, fmt.Sprintf("manifest_%d.json", clipIndex)),
+	} {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	return "", os.ErrNotExist
+}
+
+func safePath(root, candidate string) bool {
+	rootAbs, rootErr := filepath.Abs(root)
+	candidateAbs, candidateErr := filepath.Abs(candidate)
+	if rootErr != nil || candidateErr != nil {
+		return false
+	}
+	relative, err := filepath.Rel(rootAbs, candidateAbs)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+func (s *Server) getManifest(w http.ResponseWriter, jobID string, clipIndex int) {
+	path, err := s.manifestPath(jobID, clipIndex)
+	if errors.Is(err, os.ErrNotExist) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Clip has no render manifest"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	manifest, err := manifests.Load(path)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	revision, err := manifests.CalculateRevision(manifest)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	masterCurrent := false
+	if master, ok := manifest["master"]; ok && master != nil {
+		masterCurrent = true
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"manifest": manifest, "revision": revision, "master_current": masterCurrent})
+}
+
+func (s *Server) patchManifest(w http.ResponseWriter, r *http.Request, jobID string, clipIndex int) {
+	path, err := s.manifestPath(jobID, clipIndex)
+	if errors.Is(err, os.ErrNotExist) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Clip has no render manifest"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	manifest, err := manifests.Load(path)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	var request struct {
+		Layers map[string]any `json:"layers"`
+		Audio  map[string]any `json:"audio"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+	if request.Layers != nil {
+		manifest["layers"] = request.Layers
+	}
+	if request.Audio != nil {
+		layers, _ := manifest["layers"].(map[string]any)
+		if layers == nil {
+			layers = make(map[string]any)
+		}
+		layers["audio"] = request.Audio
+		manifest["layers"] = layers
+	}
+	manifest["master"] = nil
+	revision, err := manifests.SaveAtomic(path, manifest)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "manifest": manifest, "revision": revision, "master_current": false})
 }
 
 func decodeProcessRequest(r *http.Request) (processRequest, error) {
