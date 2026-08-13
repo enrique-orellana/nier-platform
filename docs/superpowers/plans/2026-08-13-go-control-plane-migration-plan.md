@@ -183,31 +183,31 @@ git commit -m "feat: add Python media worker adapter"
 - Create: `backend-go/internal/versions/store_test.go`
 - Create: `backend-go/migrations/001_jobs.sql`
 
-- [ ] **Step 1: Write failing compatibility tests**
+- [x] **Step 1: Write failing compatibility tests**
 
 Test that canonical manifest hashing excludes transient keys exactly as `render_manifest.py` does, test SHA-256 file hashing, test immutable version parent validation, and test allowed render statuses `pending`, `rendering`, `done`, and `failed`.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 Run: `cd backend-go; go test ./internal/manifests ./internal/versions -v`
 
 Expected: FAIL because compatibility implementations do not exist.
 
-- [ ] **Step 3: Implement manifest and version primitives**
+- [x] **Step 3: Implement manifest and version primitives**
 
 Use deterministic JSON encoding for revision inputs, UUID version IDs, atomic file writes, and path checks that reject paths escaping a job directory.
 
-- [ ] **Step 4: Add the initial PostgreSQL schema**
+- [x] **Step 4: Add the initial PostgreSQL schema**
 
 Create tables for `jobs`, `job_logs`, `job_results`, `clip_versions`, `clip_statuses`, and `publish_jobs`, including status constraints, timestamps, and indexes on job status and project identity.
 
-- [ ] **Step 5: Run Go tests and Python regression tests**
+- [x] **Step 5: Run Go tests and Python regression tests**
 
 Run: `cd backend-go; go test -race ./...`; then `python -m pytest -q`.
 
-Expected: all tests pass.
+The Go race suite passes. The Python suite was attempted and reached 33 passing tests before the host denied pytest temporary-directory access; this is an environment limitation rather than a failure in the changed Go files.
 
-- [ ] **Step 6: Commit compatibility primitives**
+- [x] **Step 6: Commit compatibility primitives**
 
 ```powershell
 git add backend-go/internal/manifests backend-go/internal/versions backend-go/migrations
