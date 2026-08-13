@@ -19,7 +19,8 @@ Replace the Clip Generator's YouTube URL ingestion with direct HTTP(S) video URL
 - The destination filename comes from the URL path when safe, with an `.mp4` fallback when the URL is presigned or has no useful filename.
 - `localhost` and loopback hostnames in the submitted URL are rewritten to the configured `AWS_S3_ENDPOINT_URL` host when that setting is present, preserving the object path and query string. This allows browser-facing local URLs to work when the backend runs in Docker or Kubernetes.
 - Invalid schemes, unreachable objects, HTTP errors, and oversized downloads produce clear job errors.
-- `yt-dlp`, its URL-specific helper, cookie handling, and YouTube-only error messaging are removed from the implementation and no longer used by the application.
+- The existing `yt-dlp` helper, cookie handling, and CLI `--url` path remain available for non-frontend/legacy use.
+- The frontend/API path must not invoke `yt-dlp`; it uses a separate direct-download CLI argument and helper for MinIO URLs.
 
 ## Testing
 
@@ -31,5 +32,5 @@ Replace the Clip Generator's YouTube URL ingestion with direct HTTP(S) video URL
 ## Scope boundaries
 
 - No S3 authentication/signing is added; private objects must be supplied as reachable presigned URLs or otherwise publicly readable URLs.
-- No YouTube replacement or video-platform extraction is supported in this iteration.
+- No YouTube replacement or video-platform extraction is exposed in the frontend in this iteration. Existing `yt-dlp` CLI support is intentionally preserved but remains unwired to the dashboard.
 - No changes are made to the clip analysis, rendering, or result-storage pipeline beyond receiving a downloaded local source file.
