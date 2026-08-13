@@ -10,6 +10,8 @@ import json
 import os
 import subprocess
 import sys
+import time
+import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -101,6 +103,332 @@ def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any
     return exit_code, load_generation_result(str(request.get("output_dir") or ""))
 
 
+def _output_root(request: Mapping[str, Any]) -> Path:
+    root = Path(str(request.get("output_dir") or "output"))
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _job_paths(payload: Mapping[str, Any], root: Path) -> tuple[Path, dict[str, Any], int]:
+    job_id = str(payload.get("job_id") or "").strip()
+    clip_index = int(payload.get("clip_index") or 0)
+    if not job_id:
+        raise ValueError("job_id is required")
+    job_root = root / job_id
+    metadata_files = sorted(job_root.glob("*_metadata.json"))
+    if not metadata_files:
+        raise FileNotFoundError("Metadata not found")
+    with metadata_files[0].open("r", encoding="utf-8") as source:
+        metadata = json.load(source)
+    clips = metadata.get("shorts") or []
+    if clip_index < 0 or clip_index >= len(clips):
+        raise IndexError("Clip not found")
+    clip = clips[clip_index]
+    filename = str(payload.get("input_filename") or "").strip()
+    if not filename:
+        video_url = str(clip.get("video_url") or "")
+        filename = Path(video_url.split("?")[0]).name if video_url else str(clip.get("video_filename") or "")
+    if not filename or Path(filename).name != filename:
+        raise ValueError("Invalid input filename")
+    input_path = job_root / filename
+    if not input_path.is_file():
+        raise FileNotFoundError("Video file not found")
+    return input_path, metadata, clip_index
+
+
+def _persist_clip_url(job_root: Path, metadata: dict[str, Any], clip_index: int, url: str) -> None:
+    metadata.setdefault("shorts", [])[clip_index]["video_url"] = url
+    metadata_files = sorted(job_root.glob("*_metadata.json"))
+    if metadata_files:
+        metadata_files[0].write_text(json.dumps(metadata, indent=4, ensure_ascii=False), encoding="utf-8")
+
+
+def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
+    payload = request.get("payload") or {}
+    action = str(payload.get("action") or "")
+    root = _output_root(request)
+
+    if action == "minio_objects":
+        from minio_sources import list_source_objects
+        return list_source_objects(payload.get("search", ""), int(payload.get("limit") or 50), payload.get("continuation_token"))
+
+    if action == "clip_video_url":
+        job_root, metadata, clip_index = None, None, int(payload.get("clip_index") or 0)
+        job_root_path = root / str(payload.get("job_id") or "")
+        metadata_files = sorted(job_root_path.glob("*_metadata.json"))
+        if not metadata_files:
+            raise FileNotFoundError("Metadata not found")
+        metadata = json.loads(metadata_files[0].read_text(encoding="utf-8"))
+        if clip_index < 0 or clip_index >= len(metadata.get("shorts") or []):
+            raise IndexError("Clip not found")
+        url = str(payload.get("new_video_url") or "").strip()
+        if not url:
+            raise ValueError("new_video_url is required")
+        _persist_clip_url(job_root_path, metadata, clip_index, url)
+        return {"success": True, "job_id": payload["job_id"], "clip_index": clip_index, "video_url": url}
+
+    if action in {"subtitle", "hook", "translate"}:
+        input_path, metadata, clip_index = _job_paths(payload, root)
+        job_id = str(payload["job_id"])
+        job_root = root / job_id
+        if action == "subtitle":
+            from subtitles import burn_subtitles, generate_srt, generate_srt_from_video
+            output_name = f"subtitled_{input_path.name}"
+            srt_path = job_root / f"subs_{clip_index}_{int(time.time())}.srt"
+            output_path = job_root / output_name
+            transcript = metadata.get("transcript")
+            clip = metadata["shorts"][clip_index]
+            if input_path.name.startswith("translated_"):
+                ok = generate_srt_from_video(str(input_path), str(srt_path))
+            else:
+                ok = generate_srt(transcript, clip.get("start", 0), clip.get("end", 0), str(srt_path))
+            if not ok:
+                raise ValueError("No words found for this clip range.")
+            burn_subtitles(str(input_path), str(srt_path), str(output_path), alignment=payload.get("position", "bottom"), fontsize=int(payload.get("font_size") or 16), font_name=str(payload.get("font_name") or "Verdana"), font_color=str(payload.get("font_color") or "#FFFFFF"), border_color=str(payload.get("border_color") or "#000000"), border_width=int(payload.get("border_width") or 2), bg_color=str(payload.get("bg_color") or "#000000"), bg_opacity=float(payload.get("bg_opacity") or 0))
+            srt_path.unlink(missing_ok=True)
+        elif action == "hook":
+            from hooks import add_hook_to_video
+            output_name = f"hook_{input_path.name}"
+            output_path = job_root / output_name
+            scale = {"S": 0.8, "M": 1.0, "L": 1.3}.get(str(payload.get("size") or "M"), 1.0)
+            add_hook_to_video(str(input_path), str(payload.get("text") or ""), str(output_path), position=str(payload.get("position") or "top"), font_scale=scale)
+        else:
+            from translate import translate_video
+            target = str(payload.get("target_language") or "").strip()
+            if not target or not str(request.get("headers", {}).get("X-ElevenLabs-Key") or ""):
+                raise ValueError("Missing X-ElevenLabs-Key header")
+            output_name = f"translated_{target}_{input_path.stem}{input_path.suffix}"
+            output_path = job_root / output_name
+            translate_video(str(input_path), str(output_path), target, str(request["headers"]["X-ElevenLabs-Key"]), payload.get("source_language"))
+        url = f"/videos/{job_id}/{output_name}"
+        _persist_clip_url(job_root, metadata, clip_index, url)
+        return {"success": True, "new_video_url": url}
+
+    if action == "edit":
+        input_path, metadata, clip_index = _job_paths(payload, root)
+        from editor import VideoEditor
+        from ai_client import load_ai_config
+        config = load_ai_config(request.get("headers") or {})
+        editor = VideoEditor(api_key_or_config=config)
+        output_name = f"edited_{input_path.name}"
+        output_path = input_path.parent / output_name
+        safe_input = input_path.parent / f"temp_input_{uuid.uuid4().hex}.mp4"
+        safe_output = input_path.parent / f"temp_output_{uuid.uuid4().hex}.mp4"
+        try:
+            import shutil
+            shutil.copy(input_path, safe_input)
+            video = editor.upload_video(str(safe_input))
+            plan = editor.get_ffmpeg_filter(video, 0, transcript=metadata.get("transcript"))
+            editor.apply_edits(str(safe_input), str(safe_output), plan)
+            shutil.move(str(safe_output), str(output_path))
+        finally:
+            safe_input.unlink(missing_ok=True); safe_output.unlink(missing_ok=True)
+        url = f"/videos/{payload['job_id']}/{output_name}"
+        return {"success": True, "new_video_url": url, "edit_plan": plan}
+
+    if action == "effects":
+        input_path, metadata, _ = _job_paths(payload, root)
+        from ai_client import load_ai_config
+        from editor import VideoEditor
+        editor = VideoEditor(api_key_or_config=load_ai_config(request.get("headers") or {}))
+        return {"effects": editor.get_effects_config(editor.upload_video(str(input_path)), 0, transcript=metadata.get("transcript"))}
+
+    if action == "subtitle_track_translate":
+        from translation_worker import perform_translation
+        body = dict(payload)
+        body.pop("action", None)
+        return perform_translation(body, request.get("headers") or {})
+
+    if action == "social_post":
+        import httpx
+        input_path, metadata, clip_index = _job_paths(payload, root)
+        clip = metadata["shorts"][clip_index]
+        api_key = str(payload.get("api_key") or "")
+        if not api_key:
+            raise ValueError("api_key is required")
+        platforms = payload.get("platforms") or []
+        title = payload.get("title") or clip.get("title") or "Viral Short"
+        description = payload.get("description") or clip.get("video_description_for_instagram") or clip.get("video_description_for_tiktok") or "Check this out!"
+        data = {"user": payload.get("user_id"), "title": title, "platform[]": platforms, "async_upload": "true"}
+        if payload.get("scheduled_date"):
+            data["scheduled_date"] = payload["scheduled_date"]
+            data["timezone"] = payload.get("timezone") or "UTC"
+        if "tiktok" in platforms: data["tiktok_title"] = description
+        if "instagram" in platforms: data.update({"instagram_title": description, "media_type": "REELS"})
+        if "youtube" in platforms: data.update({"youtube_title": payload.get("title") or clip.get("video_title_for_youtube_short", title), "youtube_description": description, "privacyStatus": "public"})
+        with input_path.open("rb") as video:
+            response = httpx.post("https://api.upload-post.com/api/upload", headers={"Authorization": f"Apikey {api_key}"}, data=data, files={"video": (input_path.name, video, "video/mp4")}, timeout=120)
+        if response.status_code not in {200, 201, 202}:
+            raise RuntimeError(f"Vendor API Error: {response.text}")
+        return response.json()
+
+    if action.startswith("thumbnail_"):
+        from thumbnail import analyze_video_for_titles, generate_thumbnail, refine_titles
+        state_path = root / ".thumbnail_sessions.json"
+        state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.is_file() else {}
+        session_id = str(payload.get("session_id") or uuid.uuid4())
+        session = state.setdefault(session_id, {"conversation": []})
+        if action == "thumbnail_upload":
+            video_path = str(payload.get("file_path") or "")
+            if video_path:
+                session["video_path"] = video_path
+                try:
+                    from main import transcribe_video
+                    transcript = transcribe_video(video_path)
+                    session.update({"transcript": transcript, "transcript_ready": True, "transcript_segments": transcript.get("segments", []), "language": transcript.get("language", "en")})
+                except Exception as exc:
+                    session["transcript_error"] = str(exc)
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            return {"session_id": session_id}
+        if action == "thumbnail_analyze":
+            video_path = str(payload.get("video_path") or "")
+            result = analyze_video_for_titles(request.get("headers") or {}, video_path, session.get("transcript"))
+            session.update({"context": result.get("transcript_summary", ""), "titles": result.get("titles", []), "language": result.get("language", "en"), "video_path": video_path, "transcript_segments": result.get("segments", []), "video_duration": result.get("video_duration", 0)})
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            return {"session_id": session_id, "titles": result.get("titles", []), "context": result.get("transcript_summary", ""), "language": result.get("language", "en"), "recommended": result.get("recommended", [])}
+        if action == "thumbnail_titles":
+            if payload.get("title"):
+                session["titles"] = [payload["title"]]
+            else:
+                session["conversation"].append({"role": "user", "content": payload.get("message", "")})
+                result = refine_titles(request.get("headers") or {}, session.get("context", ""), payload.get("message", ""), session["conversation"])
+                session["titles"] = result.get("titles", [])
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            return {"session_id": session_id, "titles": session.get("titles", [])}
+        if action == "thumbnail_generate":
+            count = min(max(1, int(payload.get("count") or 3)), 6)
+            thumbnails = generate_thumbnail(request.get("headers") or {}, payload.get("title", ""), session_id, payload.get("face_path"), payload.get("background_path"), payload.get("extra_prompt", ""), count, session.get("context", ""))
+            session["generated_thumbnails"] = thumbnails
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            return {"thumbnails": thumbnails}
+
+    if action.startswith("thumbnail_project") or action in {"thumbnail_projects", "thumbnail_describe", "thumbnail_publish", "thumbnail_publish_status"}:
+        from s3_uploader import (delete_thumbnail_project, delete_thumbnail_project_file, get_thumbnail_project,
+                                 list_thumbnail_projects, migrate_legacy_thumbnail_projects,
+                                 update_thumbnail_project, update_thumbnail_project_file, upload_thumbnail_project)
+        if action == "thumbnail_projects":
+            return {"projects": list_thumbnail_projects(limit=int(payload.get("limit") or 24)), "total": len(list_thumbnail_projects(limit=int(payload.get("limit") or 24)))}
+        if action == "thumbnail_project_save":
+            session_path = root / ".thumbnail_sessions.json"
+            state = json.loads(session_path.read_text(encoding="utf-8")) if session_path.is_file() else {}
+            session = state.get(str(payload.get("session_id") or ""))
+            if session is None:
+                raise FileNotFoundError("Session not found")
+            return upload_thumbnail_project(str(payload["session_id"]), session, title=payload.get("title"), description=payload.get("description"), thumbnail_urls=payload.get("thumbnail_urls") or [], selected_thumbnail=payload.get("selected_thumbnail"))
+        if action == "thumbnail_project_update":
+            return update_thumbnail_project(str(payload["session_id"]), str(payload["project_slug"]), title=payload.get("title"), description=payload.get("description"), selected_thumbnail=payload.get("selected_thumbnail"))
+        if action == "thumbnail_project_file_update":
+            return update_thumbnail_project_file(str(payload["session_id"]), str(payload["project_slug"]), str(payload["file_path"]), str(payload.get("content") or ""))
+        if action == "thumbnail_project_file_delete":
+            return delete_thumbnail_project_file(str(payload["session_id"]), str(payload["project_slug"]), str(payload["file_path"]))
+        if action == "thumbnail_project_delete":
+            return delete_thumbnail_project(str(payload["session_id"]), str(payload["project_slug"]))
+        if action == "thumbnail_projects_migrate_legacy":
+            return migrate_legacy_thumbnail_projects(bool(payload.get("dry_run", False)), bool(payload.get("delete_source", True)))
+        if action == "thumbnail_describe":
+            from thumbnail import generate_youtube_description
+            session_path = root / ".thumbnail_sessions.json"
+            state = json.loads(session_path.read_text(encoding="utf-8")) if session_path.is_file() else {}
+            session = state.get(str(payload.get("session_id") or ""))
+            if not session or not session.get("transcript_segments"):
+                raise ValueError("No transcript segments available. Please analyze a video first.")
+            result = generate_youtube_description(request.get("headers") or {}, str(payload.get("title") or ""), session["transcript_segments"], session.get("language", "en"), session.get("video_duration", 0))
+            session["description"] = result.get("description", "")
+            session_path.write_text(json.dumps(state), encoding="utf-8")
+            return result
+        if action == "thumbnail_publish":
+            return {"publish_id": str(uuid.uuid4()), "status": "queued"}
+        if action == "thumbnail_publish_status":
+            return {"status": "unknown"}
+
+    if action.startswith("saas_"):
+        headers = request.get("headers") or {}
+        from ai_client import load_ai_config
+        from saasshorts import (DEFAULT_VOICES, analyze_saas, generate_actor_images, generate_full_video, generate_scripts,
+                                get_elevenlabs_voices, research_saas_online, scrape_website)
+        if action == "saas_analyze":
+            url = str(payload.get("url") or "").strip()
+            description = str(payload.get("description") or "").strip()
+            if not url and not description:
+                raise ValueError("Provide a URL or a product description")
+            ai_config = load_ai_config(headers)
+            if url:
+                scraped = scrape_website(url)
+                research = research_saas_online(url, ai_config, scraped_data=scraped)
+                analysis = analyze_saas(scraped, ai_config, web_research=research)
+            else:
+                research = None
+                analysis = {"product_name": description.split(",")[0][:60], "description": description, "value_proposition": description, "target_audience": "general audience", "key_features": [description], "pain_points": [], "tone": "casual and authentic"}
+            scripts = generate_scripts(analysis, ai_config, int(payload.get("num_scripts") or 3), str(payload.get("style") or "ugc"), str(payload.get("language") or "en"), str(payload.get("actor_gender") or "female"))
+            return {"analysis": analysis, "scripts": scripts, "web_research": research}
+        if action == "saas_actor_upload":
+            source = Path(str(payload.get("file_path") or ""))
+            if not source.is_file(): raise FileNotFoundError("Actor image not found")
+            directory = root / "actor_uploads"; directory.mkdir(parents=True, exist_ok=True)
+            name = f"custom_{uuid.uuid4().hex[:8]}.png"; target = directory / name
+            target.write_bytes(source.read_bytes())
+            return {"url": f"/videos/actor_uploads/{name}"}
+        if action == "saas_actor_options":
+            key = str(headers.get("X-Fal-Key") or "")
+            if not key: raise ValueError("Missing fal.ai API Key")
+            actor_dir = root / f"saas_actors_{uuid.uuid4().hex}"; actor_dir.mkdir(parents=True, exist_ok=True)
+            paths = generate_actor_images(str(payload.get("actor_description") or ""), key, str(actor_dir), "actor", int(payload.get("num_options") or 3), product_description=payload.get("product_description"))
+            return {"images": [f"/videos/{p.relative_to(root).as_posix()}" for p in paths]}
+        if action == "saas_gallery":
+            from s3_uploader import list_video_gallery
+            videos = list_video_gallery(int(payload.get("limit") or 50))
+            return {"videos": videos, "total": len(videos)}
+        if action == "saas_actor_gallery":
+            from s3_uploader import list_actor_gallery
+            return {"images": list_actor_gallery()}
+        if action == "saas_voices":
+            key = str(headers.get("X-ElevenLabs-Key") or "")
+            voices = get_elevenlabs_voices(key) if key else []
+            return {"voices": voices or [{"voice_id": voice_id, "name": name, "category": "default"} for name, voice_id in DEFAULT_VOICES.items()], "source": "elevenlabs" if voices else "defaults"}
+        if action == "saas_generate":
+            fal_key = str(headers.get("X-Fal-Key") or ""); eleven_key = str(headers.get("X-ElevenLabs-Key") or "")
+            if not fal_key or not eleven_key: raise ValueError("Missing fal.ai or ElevenLabs API Key")
+            job_id = str(payload.get("retry_job_id") or uuid.uuid4())
+            job_dir = root / f"saas_{job_id}"; job_dir.mkdir(parents=True, exist_ok=True)
+            config = {"fal_key": fal_key, "elevenlabs_key": eleven_key, "voice_id": payload.get("voice_id") or "21m00Tcm4TlvDq8ikWAM", "actor_description": payload.get("actor_description"), "video_mode": payload.get("video_mode") or "lowcost"}
+            result = generate_full_video(payload.get("script") or {}, config, str(job_dir), lambda _: None)
+            response = {"job_id": job_id, "status": "completed", "result": {"video_url": f"/videos/saas_{job_id}/{result['video_filename']}", "video_filename": result["video_filename"], "duration": result.get("duration", 0), "cost_estimate": result.get("cost_estimate", {}), "script": payload.get("script") or {}}}
+            (root / f".saas_{job_id}.json").write_text(json.dumps(response, ensure_ascii=False), encoding="utf-8")
+            return response
+        if action == "saas_status":
+            path = root / f".saas_{payload.get('job_id')}.json"
+            if not path.is_file():
+                raise FileNotFoundError("SaaSShorts job not found")
+            return json.loads(path.read_text(encoding="utf-8"))
+        if action == "saas_post":
+            record_path = root / f".saas_{payload.get('job_id')}.json"
+            if not record_path.is_file(): raise FileNotFoundError("SaaSShorts job not found")
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            video_url = str(record.get("result", {}).get("video_url") or "")
+            video_path = root / video_url.removeprefix("/videos/")
+            if not video_path.is_file(): raise FileNotFoundError("SaaSShorts video not found")
+            import httpx
+            platforms = payload.get("platforms") or []
+            title = payload.get("title") or record.get("result", {}).get("script", {}).get("title", "Viral Short")
+            description = payload.get("description") or record.get("result", {}).get("script", {}).get("caption", "Check this out!")
+            data = {"user": payload.get("user_id"), "title": title, "platform[]": platforms, "async_upload": "true"}
+            if "youtube" in platforms: data.update({"youtube_title": title, "youtube_description": description, "privacyStatus": "public"})
+            with video_path.open("rb") as video:
+                response = httpx.post("https://api.upload-post.com/api/upload", headers={"Authorization": f"Apikey {payload.get('api_key')}"}, data=data, files={"video": (video_path.name, video, "video/mp4")}, timeout=120)
+            if response.status_code not in {200, 201, 202}: raise RuntimeError(f"Vendor API Error: {response.text}")
+            return response.json()
+
+    if action == "saas_voices":
+        from saasshorts import DEFAULT_VOICES, get_elevenlabs_voices
+        key = str(request.get("headers", {}).get("X-ElevenLabs-Key") or "")
+        voices = get_elevenlabs_voices(key) if key else []
+        if voices:
+            return {"voices": voices, "source": "elevenlabs"}
+        return {"voices": [{"voice_id": voice_id, "name": name, "category": "default"} for name, voice_id in DEFAULT_VOICES.items()], "source": "defaults"}
+
+    raise ValueError(f"unsupported legacy action: {action}")
+
+
 def handle_request(request: Mapping[str, Any]) -> None:
     request_id = str(request["id"])
     operation = str(request["operation"])
@@ -132,7 +460,10 @@ def handle_request(request: Mapping[str, Any]) -> None:
         if operation == "codex_status":
             from codex_auth import default_codex_store
 
-            _emit({"id": request_id, "type": "result", "result": default_codex_store().status()})
+            pending_path = Path(str(request.get("output_dir") or "output")) / ".codex-pending.json"
+            status = default_codex_store().status()
+            status["pending"] = pending_path.is_file()
+            _emit({"id": request_id, "type": "result", "result": status})
             return
         if operation == "codex_disconnect":
             from codex_auth import default_codex_store
@@ -149,6 +480,36 @@ def handle_request(request: Mapping[str, Any]) -> None:
                 "models": discovered.get("models", []),
                 "defaultModel": discovered.get("defaultModel", ""),
             }})
+            return
+        if operation == "codex_connect":
+            from codex_auth import start_device_login
+
+            root = _output_root(request)
+            pending = start_device_login().pending
+            (root / ".codex-pending.json").write_text(json.dumps({"device_auth_id": pending.device_auth_id, "user_code": pending.user_code, "interval_seconds": pending.interval_seconds, "started_at": pending.started_at}), encoding="utf-8")
+            _emit({"id": request_id, "type": "result", "result": {"status": "pending", "verificationUrl": "https://auth.openai.com/codex/device", "userCode": pending.user_code, "intervalSeconds": pending.interval_seconds}})
+            return
+        if operation == "codex_poll":
+            from codex_auth import PendingDeviceLogin, default_codex_store, poll_device_login_once
+
+            root = _output_root(request)
+            pending_path = root / ".codex-pending.json"
+            if not pending_path.is_file():
+                _emit({"id": request_id, "type": "result", "result": default_codex_store().status()})
+                return
+            pending_data = json.loads(pending_path.read_text(encoding="utf-8"))
+            pending = PendingDeviceLogin(device_auth_id=pending_data["device_auth_id"], user_code=pending_data["user_code"], interval_seconds=int(pending_data.get("interval_seconds", 5)), started_at=float(pending_data["started_at"]))
+            result = poll_device_login_once(pending)
+            if result.status == "connected" and result.credentials is not None:
+                default_codex_store().save(result.credentials)
+                pending_path.unlink(missing_ok=True)
+                value = {"status": "connected", "connected": True, "pending": False}
+            elif result.status in {"expired", "error"}:
+                pending_path.unlink(missing_ok=True)
+                value = {"status": result.status, "connected": False, "pending": False, "error": result.error}
+            else:
+                value = {"status": "pending", "connected": False, "pending": True}
+            _emit({"id": request_id, "type": "result", "result": value})
             return
         if operation == "hashtags":
             from ai_client import chat_json, load_ai_config
@@ -209,6 +570,9 @@ def handle_request(request: Mapping[str, Any]) -> None:
                 _emit({"id": request_id, "type": "result", "result": {"outputUrl": f"/videos/{job_id}/{output_name}"}})
             finally:
                 srt_path.unlink(missing_ok=True)
+            return
+        if operation == "legacy_api":
+            _emit({"id": request_id, "type": "result", "result": _legacy_api(request)})
             return
         if operation != "clip_generation":
             raise ValueError(f"unsupported operation: {operation}")

@@ -3,63 +3,6 @@ kind: Namespace
 metadata:
   name: openshorts
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: openshorts-control-plane
-  namespace: openshorts
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: openshorts-control-plane
-  template:
-    metadata:
-      labels:
-        app: openshorts-control-plane
-    spec:
-      containers:
-        - name: control-plane
-          image: openshorts-control-plane:local
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 8000
-          envFrom:
-            - configMapRef:
-                name: openshorts-config
-          env:
-            - name: PORT
-              value: "8000"
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 2
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 5
-            periodSeconds: 20
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-      terminationGracePeriodSeconds: 30
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: openshorts-control-plane
-  namespace: openshorts
-spec:
-  selector:
-    app: openshorts-control-plane
-  ports:
-    - name: http
-      port: 8001
-      targetPort: 8000
----
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -104,7 +47,6 @@ data:
   AWS_S3_PUBLIC_ENDPOINT_URL: http://minio.openshorts.127.0.0.1.nip.io
   AWS_S3_FORCE_PATH_STYLE: "true"
   RENDER_SERVICE_URL: http://openshorts-renderer.openshorts.svc.cluster.local:3100
-  TRANSLATION_SERVICE_URL: http://openshorts-translation.openshorts.svc.cluster.local:3200
   OPENSHORTS_CODEX_AUTH_FILE: /app/output/.openshorts/codex-auth.json
   PORT: "3100"
   OUTPUT_DIR: /output
@@ -152,13 +94,13 @@ spec:
               mountPath: /app/uploads
           readinessProbe:
             httpGet:
-              path: /openapi.json
+              path: /health
               port: 8000
             initialDelaySeconds: 20
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /openapi.json
+              path: /health
               port: 8000
             initialDelaySeconds: 30
             periodSeconds: 20
@@ -192,76 +134,6 @@ spec:
     - name: http
       port: 8000
       targetPort: 8000
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: openshorts-translation
-  namespace: openshorts
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: openshorts-translation
-  template:
-    metadata:
-      labels:
-        app: openshorts-translation
-    spec:
-      containers:
-        - name: translation
-          image: openshorts-backend:local
-          imagePullPolicy: IfNotPresent
-          command: ["uvicorn", "translation_service:app", "--host", "0.0.0.0", "--port", "3200"]
-          ports:
-            - containerPort: 3200
-          envFrom:
-            - configMapRef:
-                name: openshorts-config
-          volumeMounts:
-            - name: workdir
-              mountPath: /app/output
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 3200
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 3200
-            initialDelaySeconds: 15
-            periodSeconds: 20
-          resources:
-            requests:
-              cpu: "250m"
-              memory: "512Mi"
-            limits:
-              cpu: "1000m"
-              memory: "2Gi"
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            runAsUser: 1000
-      volumes:
-        - name: workdir
-          persistentVolumeClaim:
-            claimName: openshorts-workdir
-      terminationGracePeriodSeconds: 30
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: openshorts-translation
-  namespace: openshorts
-spec:
-  selector:
-    app: openshorts-translation
-  ports:
-    - name: http
-      port: 3200
-      targetPort: 3200
 ---
 apiVersion: apps/v1
 kind: Deployment

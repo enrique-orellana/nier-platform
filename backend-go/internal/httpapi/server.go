@@ -53,6 +53,8 @@ func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs
 	mux := http.NewServeMux()
 	server := &Server{config: cfg, mux: mux, store: store, runner: runner, translationRunner: translationRunner, versionStores: make(map[string]*versions.Store)}
 	mux.HandleFunc("/health", server.health)
+	mux.HandleFunc("/videos/", server.staticOutput)
+	mux.HandleFunc("/thumbnails/", server.staticThumbnail)
 	mux.HandleFunc("/api/config", server.runtimeConfig)
 	mux.HandleFunc("/api/process", server.process)
 	mux.HandleFunc("/api/status/", server.status)
@@ -63,6 +65,8 @@ func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs
 	mux.HandleFunc("/api/translate/languages", server.translationLanguages)
 	mux.HandleFunc("/api/ai/lmstudio/discover", server.discoverLMStudio)
 	mux.HandleFunc("/api/ai/openai-codex/status", server.codexRoute)
+	mux.HandleFunc("/api/ai/openai-codex/connect", server.codexRoute)
+	mux.HandleFunc("/api/ai/openai-codex/poll", server.codexRoute)
 	mux.HandleFunc("/api/ai/openai-codex/disconnect", server.codexRoute)
 	mux.HandleFunc("/api/ai/openai-codex/models", server.codexRoute)
 	mux.HandleFunc("/api/social/user", server.socialUser)
@@ -72,6 +76,15 @@ func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs
 	mux.HandleFunc("/api/local-editor/render", server.renderLocalEditor)
 	mux.HandleFunc("/api/local-editor/burn-subtitles", server.burnLocalEditorSubtitles)
 	mux.HandleFunc("/api/translation/", server.translationStatus)
+	mux.HandleFunc("/api/minio/objects", server.legacyJSONRoute("minio_objects"))
+	mux.HandleFunc("/api/effects/generate", server.legacyJSONRoute("effects"))
+	mux.HandleFunc("/api/subtitle", server.legacyJSONRoute("subtitle"))
+	mux.HandleFunc("/api/edit", server.legacyJSONRoute("edit"))
+	mux.HandleFunc("/api/hook", server.legacyJSONRoute("hook"))
+	mux.HandleFunc("/api/translate", server.legacyJSONRoute("translate"))
+	mux.HandleFunc("/api/social/post", server.legacyJSONRoute("social_post"))
+	mux.HandleFunc("/api/thumbnail/", server.thumbnailRoute)
+	mux.HandleFunc("/api/saasshorts/", server.saasRoute)
 	mux.HandleFunc("/api/clip/", server.clipRoutes)
 	mux.HandleFunc("/api/projects/", server.projectRoutes)
 	mux.HandleFunc("/api/projects/history", server.projectHistory)
@@ -92,6 +105,37 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) staticOutput(w http.ResponseWriter, r *http.Request) {
+	s.serveStatic(w, r, strings.TrimPrefix(r.URL.Path, "/videos/"), s.config.OutputDir)
+}
+
+func (s *Server) staticThumbnail(w http.ResponseWriter, r *http.Request) {
+	root := filepath.Join(s.config.OutputDir, "thumbnails")
+	s.serveStatic(w, r, strings.TrimPrefix(r.URL.Path, "/thumbnails/"), root)
+}
+
+func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request, relative, root string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	if relative == "" || strings.Contains(relative, "\\") {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
+		return
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
+		return
+	}
+	candidate := filepath.Join(rootAbs, filepath.FromSlash(relative))
+	if !safePath(rootAbs, candidate) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"detail": "Invalid path"})
+		return
+	}
+	http.ServeFile(w, r, candidate)
 }
 
 func (s *Server) renderProxy(w http.ResponseWriter, r *http.Request) {
@@ -316,6 +360,12 @@ func (s *Server) codexRoute(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		operation = "codex_models"
+	case "/api/ai/openai-codex/connect":
+		if r.Method != http.MethodPost { writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"}); return }
+		operation = "codex_connect"
+	case "/api/ai/openai-codex/poll":
+		if r.Method != http.MethodPost { writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"}); return }
+		operation = "codex_poll"
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 		return
@@ -324,7 +374,7 @@ func (s *Server) codexRoute(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotImplemented, map[string]string{"detail": "Python worker is not configured"})
 		return
 	}
-	result, err := s.translationRunner.Run(r.Context(), "codex-"+operation, operation, nil, nil)
+	result, err := s.translationRunner.Run(r.Context(), "codex-"+operation, operation, map[string]any{"output_dir": s.config.OutputDir}, nil)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
 		return
@@ -945,7 +995,7 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 		return
 	}
-	if len(segments) < 1 || (segments[0] != "versions" && segments[0] != "manifest" && segments[0] != "transcript") {
+	if len(segments) < 1 || (segments[0] != "versions" && segments[0] != "manifest" && segments[0] != "transcript" && segments[0] != "video-url") {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 		return
 	}
@@ -956,6 +1006,10 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
+	case r.Method == http.MethodPost && len(segments) == 1 && segments[0] == "video-url":
+		s.legacyJSONRouteWithExtras("clip_video_url", map[string]any{"job_id": jobID, "clip_index": clipIndex})(w, r)
+	case r.Method == http.MethodPost && len(segments) == 4 && segments[0] == "versions" && segments[2] == "subtitle-tracks" && segments[3] == "translate":
+		s.legacyJSONRouteWithExtras("subtitle_track_translate", map[string]any{"job_id": jobID, "clip_index": clipIndex, "version_id": segments[1]})(w, r)
 	case r.Method == http.MethodGet && len(segments) == 1 && segments[0] == "versions":
 		s.listVersions(w, store)
 	case r.Method == http.MethodPost && len(segments) == 1 && segments[0] == "versions":
@@ -1600,6 +1654,173 @@ func (s *Server) deleteProject(w http.ResponseWriter, jobID string) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "job_id": jobID, "s3_deleted_count": 0})
+}
+
+func (s *Server) legacyJSONRoute(action string) http.HandlerFunc {
+	return s.legacyJSONRouteWithExtras(action, nil)
+}
+
+func (s *Server) legacyJSONRouteWithExtras(action string, extras map[string]any) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost && r.Method != http.MethodGet {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+			return
+		}
+		if s.translationRunner == nil {
+			writeJSON(w, http.StatusNotImplemented, map[string]string{"detail": "Python worker is not configured"})
+			return
+		}
+		payload := make(map[string]any)
+		if r.Method == http.MethodPost && r.Body != nil {
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil && err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+				return
+			}
+		}
+		for key, value := range extras {
+			payload[key] = value
+		}
+		if action == "minio_objects" {
+			payload["search"] = r.URL.Query().Get("search")
+			payload["limit"] = r.URL.Query().Get("limit")
+			payload["continuation_token"] = r.URL.Query().Get("continuation_token")
+		}
+		payload["action"] = action
+		payload["output_dir"] = s.config.OutputDir
+		result, err := s.translationRunner.Run(r.Context(), action+"-"+fmt.Sprint(payload["job_id"]), "legacy_api", payload, translationHeaders(r))
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(result)
+	}
+}
+
+func (s *Server) thumbnailRoute(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/thumbnail/"), "/"), "/")
+	action := parts[0]
+	extras := map[string]any{}
+	if action == "projects" && len(parts) > 1 {
+		switch {
+		case parts[1] == "migrate-legacy": action = "projects_migrate_legacy"
+		case len(parts) >= 4 && parts[3] == "files":
+			if r.Method == http.MethodPatch { action = "project_file_update" } else { action = "project_file_delete" }
+			extras["session_id"], extras["project_slug"], extras["file_path"] = parts[1], parts[2], strings.Join(parts[4:], "/")
+		case len(parts) >= 3:
+			if r.Method == http.MethodPatch { action = "project_update" } else { action = "project_delete" }
+			extras["session_id"], extras["project_slug"] = parts[1], parts[2]
+		}
+	}
+	if action == "save" { action = "project_save" }
+	if action == "publish" && len(parts) == 3 && parts[1] == "status" { action = "publish_status"; extras["publish_id"] = parts[2] }
+	if action == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
+		return
+	}
+	if r.Method == http.MethodGet {
+		payload := map[string]any{"action": "thumbnail_" + action, "output_dir": s.config.OutputDir, "limit": r.URL.Query().Get("limit")}
+		for key, value := range extras { payload[key] = value }
+		s.legacyWorkerPayload(w, r, "thumbnail_"+action, payload)
+		return
+	}
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+		if err := r.ParseMultipartForm(64 << 20); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid multipart request"})
+			return
+		}
+		payload := map[string]any{"action": "thumbnail_" + action, "output_dir": s.config.OutputDir}
+		for key, value := range extras { payload[key] = value }
+		if err := os.MkdirAll(filepath.Join(s.config.OutputDir, ".uploads"), 0o755); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not create upload directory"})
+			return
+		}
+		for key, values := range r.MultipartForm.Value {
+			if len(values) > 0 {
+				payload[key] = values[0]
+			}
+		}
+		for field, headers := range r.MultipartForm.File {
+			if len(headers) == 0 {
+				continue
+			}
+			file, err := headers[0].Open()
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Could not read uploaded file"})
+				return
+			}
+			temporary, err := os.CreateTemp(filepath.Join(s.config.OutputDir, ".uploads"), "thumbnail-")
+			if err != nil {
+				_ = file.Close()
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not save uploaded file"})
+				return
+			}
+			_, copyErr := io.Copy(temporary, file)
+			_ = file.Close()
+			_ = temporary.Close()
+			if copyErr != nil {
+				_ = os.Remove(temporary.Name())
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not save uploaded file"})
+				return
+			}
+			payload[field+"_path"] = temporary.Name()
+			if action == "upload" && field == "file" {
+				payload["file_path"] = temporary.Name()
+			}
+			if action == "analyze" && field == "file" {
+				payload["video_path"] = temporary.Name()
+			}
+		}
+		s.legacyWorkerPayload(w, r, "thumbnail_"+action, payload)
+		return
+	}
+	s.legacyJSONRouteWithExtras("thumbnail_"+action, extras)(w, r)
+}
+
+func (s *Server) saasRoute(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/saasshorts/"), "/"), "/")
+	action := strings.ReplaceAll(parts[0], "-", "_")
+	extras := map[string]any{}
+	if action == "status" && len(parts) == 2 { action = "status"; extras["job_id"] = parts[1] }
+	if action == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
+		return
+	}
+	if r.Method == http.MethodGet {
+		payload := map[string]any{"action": "saas_" + action, "output_dir": s.config.OutputDir}
+		for key, value := range extras { payload[key] = value }
+		if value := r.URL.Query().Get("limit"); value != "" {
+			payload["limit"] = value
+		}
+		s.legacyWorkerPayload(w, r, "saas_"+action, payload)
+		return
+	}
+	if action == "actor_upload" && strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+		if err := r.ParseMultipartForm(64 << 20); err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid multipart request"}); return }
+		files := r.MultipartForm.File["file"]
+		if len(files) == 0 { writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "File is required"}); return }
+		if err := os.MkdirAll(filepath.Join(s.config.OutputDir, ".uploads"), 0o755); err != nil { writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()}); return }
+		file, err := files[0].Open(); if err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Could not read uploaded file"}); return }
+		temporary, err := os.CreateTemp(filepath.Join(s.config.OutputDir, ".uploads"), "actor-"); if err != nil { _ = file.Close(); writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()}); return }
+		_, copyErr := io.Copy(temporary, file); _ = file.Close(); _ = temporary.Close(); if copyErr != nil { writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": copyErr.Error()}); return }
+		s.legacyWorkerPayload(w, r, "saas_actor_upload", map[string]any{"action": "saas_actor_upload", "output_dir": s.config.OutputDir, "file_path": temporary.Name()})
+		return
+	}
+	s.legacyJSONRouteWithExtras("saas_"+action, extras)(w, r)
+}
+
+func (s *Server) legacyWorkerPayload(w http.ResponseWriter, r *http.Request, id string, payload map[string]any) {
+	if s.translationRunner == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"detail": "Python worker is not configured"})
+		return
+	}
+	result, err := s.translationRunner.Run(r.Context(), id, "legacy_api", payload, translationHeaders(r))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(result)
 }
 
 func maxFloat(left, right float64) float64 {

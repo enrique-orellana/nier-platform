@@ -1,15 +1,4 @@
 services:
-  control-plane:
-    build: ./backend-go
-    container_name: openshorts-control-plane
-    ports:
-      - "8001:8000"
-    environment:
-      - PORT=8000
-      - MAX_CONCURRENT_JOBS=5
-      - RENDER_SERVICE_URL=http://renderer:3100
-    restart: unless-stopped
-
   backend:
     build: .
     container_name: openshorts-backend

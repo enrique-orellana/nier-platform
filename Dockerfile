@@ -18,6 +18,14 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install -r requirements.txt
 
+FROM golang:1.26-alpine AS go-builder
+
+WORKDIR /go-src
+COPY backend-go/go.mod ./
+COPY backend-go/cmd ./cmd
+COPY backend-go/internal ./internal
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/openshorts-api ./cmd/api
+
 # Final stage
 FROM python:3.11-slim
 
@@ -41,6 +49,7 @@ ENV PYTHONUNBUFFERED=1
 
 # Copy uv binary into final stage
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=go-builder /out/openshorts-api /usr/local/bin/openshorts-api
 
 # Always upgrade yt-dlp to latest (YouTube bot-detection changes frequently)
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -67,8 +76,8 @@ RUN python -c "from faster_whisper import WhisperModel; WhisperModel('large-v3',
 # Copy application code (doing this last maximizes layer cache hits)
 COPY --chown=appuser:appuser . .
 
-# Expose FastAPI port
+# Expose the Go control-plane port
 EXPOSE 8000
 
-# Run FastAPI app
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Go owns HTTP; Python remains an internal worker launched by the control plane.
+CMD ["/usr/local/bin/openshorts-api"]
