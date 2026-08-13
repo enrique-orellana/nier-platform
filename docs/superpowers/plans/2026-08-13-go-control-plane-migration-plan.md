@@ -222,23 +222,25 @@ git commit -m "feat: preserve manifest and version contracts"
 - Modify: `k8s/openshorts.yaml`
 - Create: `backend-go/README.md`
 
-- [ ] **Step 1: Write deployment smoke checks**
+- [x] **Step 1: Write deployment smoke checks**
 
 Add a Go test that starts the API on an ephemeral listener and verifies `/health`; add a container command documented in `backend-go/README.md` that runs the same endpoint check.
 
-- [ ] **Step 2: Implement the Go image and local compose service**
+- [x] **Step 2: Implement the Go image and local compose service**
 
 Use a multi-stage Go build, run as a non-root user, expose port 8001 initially, and add a compose service named `control-plane` without changing the existing backend service.
 
-- [ ] **Step 3: Add Kubernetes canary deployment**
+- [x] **Step 3: Add Kubernetes canary deployment**
 
 Add a `openshorts-control-plane` deployment and service on port 8001 with health probes. Keep FastAPI as the active `/api` ingress target until contract tests and shadow traffic validate the Go service.
 
-- [ ] **Step 4: Run build and regression checks**
+- [x] **Step 4: Run build and regression checks**
 
 Run: `cd backend-go; go test ./...; go build ./cmd/api`; then run `python -m pytest -q`, `npm test -- --run` in `dashboard`, and `npm test -- --run` in `render-service`.
 
-- [ ] **Step 5: Commit deployment scaffolding**
+Go, dashboard, renderer, and `docker compose config` pass. Python remains blocked by the host pytest temp-directory ACL described in Task 5. Kubernetes dry-run was unavailable because the installed kubectl client references a missing `docker-desktop` context.
+
+- [x] **Step 5: Commit deployment scaffolding**
 
 ```powershell
 git add backend-go Dockerfile docker-compose.yml k8s/openshorts.yaml
