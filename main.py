@@ -48,7 +48,7 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='google.protobuf')
 from ai_client import load_ai_config, chat_json
-from master_policy import master_video_encode_args, choose_master_spec
+from master_policy import master_video_encode_args, choose_master_spec, master_video_filter
 from media_probe import probe_media
 from render_manifest import register_asset, save_manifest_atomic
 from crop_track import CropKeyframe, CropRect, CropScene, CropTrack
@@ -797,7 +797,8 @@ def process_video_to_vertical(
     command = [
         'ffmpeg', '-y', '-f', 'rawvideo', '-vcodec', 'rawvideo',
         '-s', f'{OUTPUT_WIDTH}x{OUTPUT_HEIGHT}', '-pix_fmt', 'bgr24',
-        '-r', str(fps), '-i', '-', *master_video_encode_args(include_audio=False),
+        '-r', str(fps), '-i', '-', '-vf', master_video_filter(),
+        *master_video_encode_args(include_audio=False, fps=fps),
         '-an', temp_video_output
     ]
 

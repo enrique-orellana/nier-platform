@@ -16,13 +16,13 @@ def video(width, height, fps, transfer="bt709"):
 
 
 class MasterPolicyTests(unittest.TestCase):
-    def test_landscape_crop_is_not_upscaled(self):
+    def test_landscape_crop_uses_canonical_social_canvas(self):
         spec = choose_master_spec(video(1920, 1080, 30), strategy="crop")
-        self.assertEqual((spec.width, spec.height), (608, 1080))
+        self.assertEqual((spec.width, spec.height), (1080, 1920))
 
     def test_native_portrait_4k_is_preserved(self):
         spec = choose_master_spec(video(2160, 3840, 60), strategy="crop")
-        self.assertEqual((spec.width, spec.height), (2160, 3840))
+        self.assertEqual((spec.width, spec.height), (1080, 1920))
         self.assertEqual(spec.fps, 60)
 
     def test_fps_is_preserved_and_capped(self):
@@ -39,19 +39,25 @@ class MasterPolicyTests(unittest.TestCase):
         self.assertEqual(spec.crf, 14)
         self.assertEqual(spec.preset, "veryslow")
         self.assertEqual(spec.pixel_format, "yuv420p")
-        self.assertEqual(spec.audio_bitrate, "320k")
+        self.assertEqual(spec.audio_bitrate, "192k")
 
     def test_ffmpeg_contract_is_centralized(self):
         args = master_video_encode_args()
         self.assertEqual(args[args.index("-crf") + 1], "14")
         self.assertEqual(args[args.index("-preset") + 1], "veryslow")
-        self.assertEqual(args[args.index("-b:a") + 1], "320k")
+        self.assertEqual(args[args.index("-b:a") + 1], "192k")
+        self.assertEqual(args[args.index("-ac") + 1], "2")
+        self.assertEqual(args[args.index("-colorspace") + 1], "bt709")
+
+    def test_ffmpeg_contract_can_fix_gop_to_two_seconds(self):
+        args = master_video_encode_args(fps=30)
+        self.assertEqual(args[args.index("-g") + 1], "60")
 
     def test_standalone_audio_contract_is_centralized(self):
         args = master_audio_encode_args()
         self.assertEqual(args[args.index("-c:a") + 1], "aac")
         self.assertEqual(args[args.index("-ar") + 1], "48000")
-        self.assertEqual(args[args.index("-b:a") + 1], "320k")
+        self.assertEqual(args[args.index("-b:a") + 1], "192k")
 
 
 if __name__ == "__main__":

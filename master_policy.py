@@ -1,4 +1,4 @@
-"""Mandatory master export policy and honest output-size calculation."""
+"""Mandatory master export policy for publishable social-video masters."""
 
 from __future__ import annotations
 
@@ -41,6 +41,9 @@ def _even(value: int) -> int:
 
 
 def _output_dimensions(media: MediaProbe, strategy: str, policy: dict) -> tuple[int, int]:
+    if strategy == "crop":
+        return _even(int(policy["output_width"])), _even(int(policy["output_height"]))
+
     max_width = int(policy["max_width"])
     max_height = int(policy["max_height"])
     source_width = min(media.display_width, max_width)
@@ -81,25 +84,50 @@ def choose_master_spec(media: MediaProbe, strategy: str = "crop") -> MasterSpec:
     )
 
 
-def master_video_encode_args(include_audio: bool = True) -> list[str]:
+def master_video_encode_args(include_audio: bool = True, fps: float | None = None) -> list[str]:
     """Return the single mandatory H.264/MP4 encode contract for FFmpeg paths."""
     policy = load_master_policy()
     args = [
         "-c:v", "libx264",
         "-profile:v", str(policy["profile"]),
+        "-level:v", str(policy["h264_level"]),
         "-preset", str(policy["preset"]),
         "-crf", str(policy["crf"]),
         "-pix_fmt", str(policy["pixel_format"]),
+        "-color_range", str(policy["color_range"]),
+        "-colorspace", str(policy["color_space"]),
+        "-color_trc", str(policy["color_transfer"]),
+        "-color_primaries", str(policy["color_primaries"]),
+        "-video_track_timescale", "90000",
     ]
+    if fps is not None and fps > 0:
+        gop = max(1, round(float(fps) * float(policy["gop_seconds"])))
+        args.extend([
+            "-g", str(gop),
+            "-keyint_min", str(gop),
+            "-sc_threshold", "0",
+            "-flags:v", "+cgop",
+        ])
     if include_audio:
         args.extend([
             "-c:a", str(policy["audio_codec"]),
             "-ar", str(policy["audio_sample_rate"]),
+            "-ac", str(policy["audio_channels"]),
             "-b:a", str(policy["audio_bitrate"]),
         ])
     if policy.get("faststart"):
         args.extend(["-movflags", "+faststart"])
     return args
+
+
+def master_video_filter(filter_string: str = "") -> str:
+    """Append square-pixel BT.709 SDR normalization to a video filter chain."""
+    filters = [filter_string] if filter_string else []
+    if not any("setsar=" in item for item in filters):
+        filters.append("setsar=1")
+    if not any("colorspace=" in item for item in filters):
+        filters.append("colorspace=all=bt709:iall=bt709:range=tv:irange=tv")
+    return ",".join(filters)
 
 
 def master_audio_encode_args() -> list[str]:
@@ -108,5 +136,6 @@ def master_audio_encode_args() -> list[str]:
     return [
         "-c:a", str(policy["audio_codec"]),
         "-ar", str(policy["audio_sample_rate"]),
+        "-ac", str(policy["audio_channels"]),
         "-b:a", str(policy["audio_bitrate"]),
     ]

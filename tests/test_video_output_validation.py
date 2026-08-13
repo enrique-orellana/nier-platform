@@ -34,10 +34,14 @@ def probed_media(
         color_primaries="bt709",
         rotation=0,
         size_bytes=size_bytes,
-        audio=AudioProbe("aac", 48000, 2, "stereo", duration)
+        audio=AudioProbe("aac", 48000, 2, "stereo", duration, 192000)
         if audio
         else None,
         frame_count=frame_count,
+        sample_aspect_ratio="1:1",
+        display_aspect_ratio="9:16",
+        time_base="1/90000",
+        bit_rate=5_000_000,
     )
 
 

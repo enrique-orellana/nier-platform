@@ -1,7 +1,7 @@
 import os
 import re
 import subprocess
-from master_policy import master_video_encode_args
+from master_policy import master_video_encode_args, master_video_filter
 
 
 SENTENCE_END_RE = re.compile(r"[.!?…]+(?:[\"'’”»)\]]+)?$")
@@ -217,9 +217,8 @@ def burn_subtitles(video_path, srt_path, output_path, alignment=2, fontsize=16,
     cmd = [
         'ffmpeg', '-y',
         '-i', video_path,
-        '-vf', f"subtitles='{safe_srt_path}':force_style='{style_string}'",
-        '-c:a', 'copy',
-        *master_video_encode_args(include_audio=False),
+        '-vf', master_video_filter(f"subtitles='{safe_srt_path}':force_style='{style_string}'"),
+        *master_video_encode_args(include_audio=True),
         output_path
     ]
 

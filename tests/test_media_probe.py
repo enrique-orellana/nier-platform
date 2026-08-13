@@ -15,6 +15,9 @@ class MediaProbeTests(unittest.TestCase):
                     "width": 3840,
                     "height": 2160,
                     "sample_aspect_ratio": "1:1",
+                    "display_aspect_ratio": "9:16",
+                    "time_base": "1/90000",
+                    "bit_rate": "5000000",
                     "r_frame_rate": "60000/1001",
                     "avg_frame_rate": "60000/1001",
                     "pix_fmt": "yuv420p",
@@ -31,6 +34,7 @@ class MediaProbeTests(unittest.TestCase):
                     "sample_rate": "48000",
                     "channels": 2,
                     "channel_layout": "stereo",
+                    "bit_rate": "192000",
                 },
             ],
             "format": {"duration": "12.512", "size": "1234567"},
@@ -40,6 +44,10 @@ class MediaProbeTests(unittest.TestCase):
         self.assertAlmostEqual(media.fps, 59.94005994)
         self.assertEqual(media.color_transfer, "bt709")
         self.assertEqual(media.audio.sample_rate, 48000)
+        self.assertEqual(media.audio.bitrate, 192000)
+        self.assertEqual(media.sample_aspect_ratio, "1:1")
+        self.assertEqual(media.display_aspect_ratio, "9:16")
+        self.assertEqual(media.time_base, "1/90000")
         self.assertEqual(media.duration_seconds, 12.512)
 
     def test_rejects_payload_without_video(self):

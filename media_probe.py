@@ -30,6 +30,7 @@ class AudioProbe:
     channels: int
     channel_layout: str
     duration_seconds: float | None = None
+    bitrate: int = 0
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,10 @@ class MediaProbe:
     size_bytes: int
     audio: AudioProbe | None
     frame_count: int | None = None
+    sample_aspect_ratio: str = ""
+    display_aspect_ratio: str = ""
+    time_base: str = ""
+    bit_rate: int = 0
 
 
 def _number(value: Any, default: float = 0.0) -> float:
@@ -115,6 +120,7 @@ def parse_probe_payload(payload: Mapping[str, Any], path: str = "") -> MediaProb
             channels=_int(audio_stream.get("channels")),
             channel_layout=str(audio_stream.get("channel_layout") or ""),
             duration_seconds=audio_duration if audio_duration > 0 else None,
+            bitrate=_int(audio_stream.get("bit_rate")),
         )
 
     return MediaProbe(
@@ -137,6 +143,10 @@ def parse_probe_payload(payload: Mapping[str, Any], path: str = "") -> MediaProb
         size_bytes=_int((payload.get("format") or {}).get("size")),
         audio=audio,
         frame_count=_optional_int(video.get("nb_frames")),
+        sample_aspect_ratio=str(video.get("sample_aspect_ratio") or ""),
+        display_aspect_ratio=str(video.get("display_aspect_ratio") or ""),
+        time_base=str(video.get("time_base") or ""),
+        bit_rate=_int(video.get("bit_rate")),
     )
 
 

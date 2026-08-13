@@ -22,7 +22,7 @@ from urllib.parse import urljoin
 from typing import Optional, List, Dict, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ai_client import AIConfig, load_ai_config, chat_json
-from master_policy import master_video_encode_args, choose_master_spec
+from master_policy import master_video_encode_args, choose_master_spec, master_video_filter
 from media_probe import probe_media
 
 
@@ -998,7 +998,7 @@ def generate_broll(
         "ffmpeg", "-y",
         "-loop", "1", "-i", img_path,          # Input 0: image
         "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",  # Input 1: silent audio
-        "-vf", zoompan_filter,
+        "-vf", master_video_filter(zoompan_filter),
         "-t", str(dur_secs),
         "-map", "0:v", "-map", "1:a",
         *master_video_encode_args(include_audio=True),
@@ -1176,7 +1176,7 @@ def composite_video(
             "Alignment=2,Fontname=Arial Black,Fontsize=24,PrimaryColour=&H00FFFFFF,"
             "OutlineColour=&H00000000,BorderStyle=1,Outline=4,Shadow=0,MarginV=120,Bold=-1"
         )
-        sub_filter = f"subtitles='{safe_sub}':force_style='{sub_style}'"
+        sub_filter = master_video_filter(f"subtitles='{safe_sub}':force_style='{sub_style}'")
 
     if not broll_clips:
         # Simple: talking head + subtitles only
@@ -1237,10 +1237,10 @@ def composite_video(
     # Normalize all segments to the primary source's honest master canvas and FPS.
     primary_media = probe_media(talking_head_path)
     primary_spec = choose_master_spec(primary_media, strategy="crop")
-    norm = (
+    norm = master_video_filter(
         f"scale={primary_spec.width}:{primary_spec.height}:force_original_aspect_ratio=decrease,"
         f"pad={primary_spec.width}:{primary_spec.height}:(ow-iw)/2:(oh-ih)/2,"
-        f"fps={primary_spec.fps:g},setsar=1"
+        f"fps={primary_spec.fps:g}"
     )
 
     for j, seg in enumerate(segments):

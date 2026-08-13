@@ -6,7 +6,7 @@ import time
 from google import genai
 from google.genai import types
 from ai_client import AIConfig, load_ai_config, chat_json
-from master_policy import master_video_encode_args
+from master_policy import master_video_encode_args, master_video_filter
 
 class VideoEditor:
     def __init__(self, api_key):
@@ -303,7 +303,7 @@ class VideoEditor:
         
         if not filter_data or "filter_string" not in filter_data:
             print("⚠️ No filter string found. Copying original.")
-            subprocess.run(['ffmpeg', '-y', '-i', input_path, '-c', 'copy', output_path])
+            subprocess.run(['ffmpeg', '-y', '-i', input_path, '-vf', master_video_filter(), *master_video_encode_args(include_audio=True), output_path], check=True)
             return
 
         filter_string = filter_data["filter_string"]
@@ -341,9 +341,8 @@ class VideoEditor:
         cmd = [
             'ffmpeg', '-y',
             '-i', input_path,
-            '-vf', filter_string,
-            *master_video_encode_args(include_audio=False),
-            '-c:a', 'copy',
+            '-vf', master_video_filter(filter_string),
+            *master_video_encode_args(include_audio=True),
             output_path
         ]
         
@@ -556,7 +555,7 @@ class VideoEditor:
 
     def apply_edits(self, input_path, output_path, filter_data):
         if not filter_data or "filter_string" not in filter_data:
-            subprocess.run(['ffmpeg', '-y', '-i', input_path, '-c', 'copy', '-movflags', '+faststart', output_path])
+            subprocess.run(['ffmpeg', '-y', '-i', input_path, '-vf', master_video_filter(), *master_video_encode_args(include_audio=True), output_path], check=True)
             return
 
         filter_string = filter_data["filter_string"]
@@ -571,7 +570,7 @@ class VideoEditor:
         if w and h:
             sanitized = self._enforce_zoompan_output_size(sanitized, w, h)
 
-        subprocess.run(['ffmpeg', '-y', '-i', input_path, '-vf', sanitized, *master_video_encode_args(include_audio=True), output_path], check=True)
+        subprocess.run(['ffmpeg', '-y', '-i', input_path, '-vf', master_video_filter(sanitized), *master_video_encode_args(include_audio=True), output_path], check=True)
 
 
 if __name__ == "__main__":

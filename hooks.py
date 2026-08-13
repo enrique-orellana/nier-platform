@@ -3,7 +3,7 @@ import textwrap
 import subprocess
 import urllib.request
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from master_policy import master_video_encode_args
+from master_policy import master_video_encode_args, master_video_filter
 try:
     from pilmoji import Pilmoji
 except ImportError:
@@ -246,9 +246,8 @@ def add_hook_to_video(video_path, text, output_path, position="top", font_scale=
             'ffmpeg', '-y',
             '-i', video_path,
             '-i', img_path,
-            '-filter_complex', f"[0:v][1:v]overlay={overlay_x}:{overlay_y}",
-            '-c:a', 'copy',
-            *master_video_encode_args(include_audio=False),
+            '-filter_complex', f"[0:v][1:v]{master_video_filter(f'overlay={overlay_x}:{overlay_y}')}",
+            *master_video_encode_args(include_audio=True),
             output_path
         ]
         
