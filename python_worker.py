@@ -183,6 +183,33 @@ def handle_request(request: Mapping[str, Any]) -> None:
                 raise ValueError("AI returned no usable hashtags")
             _emit({"id": request_id, "type": "result", "result": {"hashtags": hashtags[:12]}})
             return
+        if operation == "burn_subtitles":
+            import uuid
+
+            from local_editor_subtitles import subtitle_style_to_ffmpeg_options, write_local_editor_srt
+            from subtitles import burn_subtitles
+
+            payload = request.get("payload") or {}
+            source_path = str(payload.get("source_path") or "").strip()
+            job_id = str(payload.get("job_id") or "").strip()
+            if not source_path or not job_id:
+                raise ValueError("subtitle burn source and job are required")
+            source = Path(source_path)
+            output_dir = source.parent
+            suffix = uuid.uuid4().hex[:10]
+            srt_path = output_dir / f"local-editor-subtitles-{suffix}.srt"
+            output_name = f"subtitled_{source.stem}_{suffix}.mp4"
+            output_path = output_dir / output_name
+            try:
+                write_local_editor_srt(payload.get("subtitle_cues") or [], srt_path)
+                options = subtitle_style_to_ffmpeg_options(payload.get("subtitle_style") or {})
+                burn_subtitles(str(source), str(srt_path), str(output_path), **options)
+                if not output_path.is_file():
+                    raise RuntimeError("FFmpeg completed without producing a subtitle export.")
+                _emit({"id": request_id, "type": "result", "result": {"outputUrl": f"/videos/{job_id}/{output_name}"}})
+            finally:
+                srt_path.unlink(missing_ok=True)
+            return
         if operation != "clip_generation":
             raise ValueError(f"unsupported operation: {operation}")
         _emit({"id": request_id, "type": "started", "operation": operation})

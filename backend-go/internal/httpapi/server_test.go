@@ -68,6 +68,15 @@ func (hashtagOperation) Run(_ context.Context, _ string, operation string, _ map
 	return json.RawMessage(`{"hashtags":["#one","#two"]}`), nil
 }
 
+type burnOperation struct{}
+
+func (burnOperation) Run(_ context.Context, _ string, operation string, payload map[string]any, _ map[string]string) (json.RawMessage, error) {
+	if operation != "burn_subtitles" || payload["source_path"] == "" {
+		return nil, fmt.Errorf("unexpected burn request: %s %#v", operation, payload)
+	}
+	return json.RawMessage(`{"outputUrl":"/videos/local-editor-1/subtitled_source.mp4"}`), nil
+}
+
 func TestHealthReturnsOK(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -611,6 +620,58 @@ func TestLocalEditorHashtagsUseGoWorkerBoundary(t *testing.T) {
 	server.Handler().ServeHTTP(res, req)
 	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"#one"`) {
 		t.Fatalf("unexpected hashtag response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestLocalEditorRenderStoresSourceAndStartsRenderer(t *testing.T) {
+	renderer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/render" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"renderId":"render-local-1","status":"queued"}`))
+	}))
+	defer renderer.Close()
+	outputDir := t.TempDir()
+	server := NewServer(config.Config{OutputDir: outputDir, RenderServiceURL: renderer.URL})
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	file, err := writer.CreateFormFile("file", "local.mp4")
+	if err != nil {
+		t.Fatalf("create file part: %v", err)
+	}
+	_, _ = file.Write([]byte("fake-video"))
+	_ = writer.WriteField("props", `{"durationInFrames":30,"fps":30,"width":1080,"height":1920}`)
+	_ = writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/local-editor/render", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusAccepted || !strings.Contains(res.Body.String(), `"renderId":"render-local-1"`) || !strings.Contains(res.Body.String(), `"jobId":"local-editor-`) {
+		t.Fatalf("unexpected local render response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestLocalEditorBurnSubtitlesUsesPythonWorker(t *testing.T) {
+	outputDir := t.TempDir()
+	jobDir := filepath.Join(outputDir, "local-editor-1")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatalf("create local editor directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "source.mp4"), []byte("fake-video"), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+	server := NewServerWithDependencies(config.Config{OutputDir: outputDir}, jobs.NewMemoryStore(), nil, burnOperation{})
+	body := `{"job_id":"local-editor-1","input_filename":"source.mp4","subtitle_cues":[{"start":0,"end":1,"text":"Hello"}],"subtitle_style":{}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/local-editor/burn-subtitles", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"outputUrl"`) {
+		t.Fatalf("unexpected subtitle burn response: %d %s", res.Code, res.Body.String())
 	}
 }
 

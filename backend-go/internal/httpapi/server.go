@@ -68,6 +68,8 @@ func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs
 	mux.HandleFunc("/api/local-editor/translate", server.createTranslation)
 	mux.HandleFunc("/api/local-editor/transcribe", server.transcribeLocalEditor)
 	mux.HandleFunc("/api/local-editor/hashtags", server.generateHashtags)
+	mux.HandleFunc("/api/local-editor/render", server.renderLocalEditor)
+	mux.HandleFunc("/api/local-editor/burn-subtitles", server.burnLocalEditorSubtitles)
 	mux.HandleFunc("/api/translation/", server.translationStatus)
 	mux.HandleFunc("/api/clip/", server.clipRoutes)
 	mux.HandleFunc("/api/projects/", server.projectRoutes)
@@ -617,6 +619,150 @@ func (s *Server) generateHashtags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) renderLocalEditor(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	propsJSON := r.FormValue("props")
+	var props map[string]any
+	if err := json.Unmarshal([]byte(propsJSON), &props); err != nil || props == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid render properties."})
+		return
+	}
+	for _, key := range []string{"durationInFrames", "fps", "width", "height"} {
+		if _, ok := props[key]; !ok {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Render properties are missing video metadata."})
+			return
+		}
+	}
+	temporaryPath, err := s.saveUploadedFile(r, "file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	root := s.config.OutputDir
+	if root == "" {
+		root = "output"
+	}
+	jobID := fmt.Sprintf("local-editor-%d", time.Now().UnixNano())
+	jobOutputDir := filepath.Join(root, jobID)
+	if err := os.MkdirAll(jobOutputDir, 0o755); err != nil {
+		_ = os.Remove(temporaryPath)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
+		return
+	}
+	sourceName := "source" + filepath.Ext(temporaryPath)
+	sourcePath := filepath.Join(jobOutputDir, sourceName)
+	if err := os.Rename(temporaryPath, sourcePath); err != nil {
+		_ = os.Remove(temporaryPath)
+		_ = os.RemoveAll(jobOutputDir)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
+		return
+	}
+	props["videoUrl"] = "/videos/" + jobID + "/" + sourceName
+	body, _ := json.Marshal(map[string]any{"jobId": jobID, "clipIndex": 0, "props": props})
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, strings.TrimRight(s.config.RenderServiceURL, "/")+"/render", strings.NewReader(string(body)))
+	if err != nil {
+		_ = os.RemoveAll(jobOutputDir)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
+		return
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := (&http.Client{Timeout: 30 * time.Second}).Do(request)
+	if err != nil {
+		_ = os.RemoveAll(jobOutputDir)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Could not start local video render: %s", err)})
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		_ = os.RemoveAll(jobOutputDir)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Could not start local video render"})
+		return
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil || payload["renderId"] == nil {
+		_ = os.RemoveAll(jobOutputDir)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Render service did not return a render ID."})
+		return
+	}
+	payload["jobId"] = jobID
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func (s *Server) burnLocalEditorSubtitles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	if s.translationRunner == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"detail": "Python worker is not configured"})
+		return
+	}
+	var request struct {
+		JobID         string           `json:"job_id"`
+		InputFilename string           `json:"input_filename"`
+		SubtitleCues  []map[string]any `json:"subtitle_cues"`
+		SubtitleStyle map[string]any   `json:"subtitle_style"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+	if !strings.HasPrefix(request.JobID, "local-editor-") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid local editor render job."})
+		return
+	}
+	if filepath.Base(request.InputFilename) != request.InputFilename || !hasVideoExtension(request.InputFilename) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid local editor render filename."})
+		return
+	}
+	if len(request.SubtitleCues) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "At least one subtitle cue is required."})
+		return
+	}
+	root := s.config.OutputDir
+	if root == "" {
+		root = "output"
+	}
+	jobRoot, _ := filepath.Abs(filepath.Join(root, request.JobID))
+	inputPath, _ := filepath.Abs(filepath.Join(jobRoot, request.InputFilename))
+	if !safePath(jobRoot, inputPath) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid local editor render filename."})
+		return
+	}
+	if _, err := os.Stat(inputPath); errors.Is(err, os.ErrNotExist) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Local editor render was not found."})
+		return
+	}
+	result, err := s.translationRunner.Run(r.Context(), "burn-"+request.JobID, "burn_subtitles", map[string]any{
+		"job_id": request.JobID, "source_path": inputPath, "input_filename": request.InputFilename,
+		"subtitle_cues": request.SubtitleCues, "subtitle_style": request.SubtitleStyle,
+	}, nil)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": fmt.Sprintf("Could not burn local subtitles: %s", err)})
+		return
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(result, &payload); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Invalid subtitle worker result"})
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func hasVideoExtension(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	for _, allowed := range []string{".mp4", ".m4v", ".mov", ".webm", ".mkv"} {
+		if ext == allowed {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) runTranslation(id string) {
