@@ -39,6 +39,7 @@ from local_editor_subtitles import (
 )
 from media_probe import probe_media
 from video_output_validation import validate_clip_output
+from minio_sources import list_source_objects
 
 load_dotenv()
 
@@ -864,6 +865,20 @@ async def get_config():
         "youtubeUrlEnabled": not DISABLE_YOUTUBE_URL,
         "lmStudioConfig": startup_lmstudio_discovery
     }
+
+
+@app.get("/api/minio/objects")
+async def list_minio_objects(
+    search: str = Query("", max_length=200),
+    limit: int = Query(50, ge=1, le=100),
+    continuation_token: Optional[str] = Query(None, max_length=2048),
+):
+    try:
+        return list_source_objects(search, limit, continuation_token)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 @app.post("/api/process")
 async def process_endpoint(
