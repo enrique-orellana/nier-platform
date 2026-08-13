@@ -3,7 +3,10 @@ package integrations
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 type S3API interface {
 	ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
 	DeleteObjects(context.Context, *s3.DeleteObjectsInput, ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
+	GetObject(context.Context, *s3.GetObjectInput, ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
 type S3Config struct {
@@ -151,6 +155,49 @@ func (s *S3Store) DeletePrefix(ctx context.Context, prefix string) (int, error) 
 		token = output.NextContinuationToken
 	}
 	return deleted, nil
+}
+
+func (s *S3Store) DownloadSourceObject(ctx context.Context, bucket, key, destination string, maxBytes int64) error {
+	if s.Client == nil || s.SourceBucket == "" {
+		return fmt.Errorf("S3 source store is not configured")
+	}
+	if bucket != s.SourceBucket || key == "" || strings.Contains(key, "\\") || strings.Contains(key, "..") {
+		return fmt.Errorf("invalid source object")
+	}
+	output, err := s.Client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
+	if err != nil {
+		return err
+	}
+	defer output.Body.Close()
+	if maxBytes <= 0 {
+		maxBytes = 16 * 1024 * 1024 * 1024
+	}
+	if output.ContentLength != nil && *output.ContentLength > maxBytes {
+		return fmt.Errorf("source object exceeds configured file size limit")
+	}
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(destination), ".source-*")
+	if err != nil {
+		return err
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	limited := io.LimitReader(output.Body, maxBytes+1)
+	written, err := io.Copy(temporary, limited)
+	if err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if written > maxBytes {
+		_ = temporary.Close()
+		return fmt.Errorf("source object exceeds configured file size limit")
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryName, destination)
 }
 
 func int32Ptr(value int32) *int32 { return &value }

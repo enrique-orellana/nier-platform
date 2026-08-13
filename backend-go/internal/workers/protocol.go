@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
 )
@@ -23,6 +24,10 @@ type ProtocolEvent struct {
 
 type ProtocolRunner interface {
 	RunProtocol(context.Context, CommandSpec, map[string]any, func(ProtocolEvent)) error
+}
+
+type SourceDownloader interface {
+	DownloadSourceObject(context.Context, string, string, string, int64) error
 }
 
 type ExecProtocolRunner struct{}
@@ -76,9 +81,11 @@ func (ExecProtocolRunner) RunProtocol(ctx context.Context, spec CommandSpec, req
 }
 
 type PythonWorkerAdapter struct {
-	PythonBinary string
-	WorkerScript string
-	Runner       ProtocolRunner
+	PythonBinary     string
+	WorkerScript     string
+	Runner           ProtocolRunner
+	SourceDownloader SourceDownloader
+	SourceMaxBytes   int64
 }
 
 func (a PythonWorkerAdapter) Run(ctx context.Context, job domain.Job, outputDir string, onLog func(string)) error {
@@ -114,8 +121,22 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 	if job.SourceURL != "" {
 		request["source_url"] = job.SourceURL
 	}
-	if sourceObject, ok := job.Metadata["source_object"]; ok {
-		request["source_object"] = sourceObject
+	if sourceObject, ok := job.Metadata["source_object"].(map[string]any); ok {
+		if a.SourceDownloader == nil {
+			request["source_object"] = sourceObject
+		} else {
+			bucket, _ := sourceObject["bucket"].(string)
+			key, _ := sourceObject["key"].(string)
+			destination := filepath.Join(outputDir, "source"+filepath.Ext(filepath.Base(key)))
+			maxBytes := a.SourceMaxBytes
+			if maxBytes <= 0 {
+				maxBytes = 16 * 1024 * 1024 * 1024
+			}
+			if err := a.SourceDownloader.DownloadSourceObject(ctx, bucket, key, destination, maxBytes); err != nil {
+				return nil, err
+			}
+			request["source_path"] = destination
+		}
 	}
 	if sourcePath, ok := job.Metadata["source_path"].(string); ok && sourcePath != "" {
 		request["source_path"] = sourcePath

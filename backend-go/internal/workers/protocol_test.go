@@ -3,6 +3,7 @@ package workers
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"testing"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
@@ -25,6 +26,13 @@ type errorEventRunner struct{}
 
 func (errorEventRunner) RunProtocol(_ context.Context, _ CommandSpec, _ map[string]any, onEvent func(ProtocolEvent)) error {
 	onEvent(ProtocolEvent{Type: "error", Error: "worker rejected request"})
+	return nil
+}
+
+type recordingSourceDownloader struct{ bucket, key, destination string }
+
+func (d *recordingSourceDownloader) DownloadSourceObject(_ context.Context, bucket, key, destination string, _ int64) error {
+	d.bucket, d.key, d.destination = bucket, key, destination
 	return nil
 }
 
@@ -63,6 +71,22 @@ func TestPythonWorkerAdapterSendsNonURLSourcesAndContext(t *testing.T) {
 	}
 	if runner.request["source_path"] != "/tmp/source.mp4" || runner.request["source_context_url"] != "https://youtube.com/watch?v=2" {
 		t.Fatalf("missing file/context fields: %#v", runner.request)
+	}
+}
+
+func TestPythonWorkerAdapterDownloadsSourceObjectsBeforeStartingPython(t *testing.T) {
+	runner := &recordingProtocolRunner{}
+	downloader := &recordingSourceDownloader{}
+	adapter := PythonWorkerAdapter{Runner: runner, SourceDownloader: downloader}
+	job := domain.Job{ID: "job-source", Metadata: map[string]any{"source_object": map[string]any{"bucket": "youtube-downloads", "key": "folder/source.mp4"}}}
+	if err := adapter.Run(context.Background(), job, "output/job-source", nil); err != nil {
+		t.Fatal(err)
+	}
+	if downloader.bucket != "youtube-downloads" || downloader.key != "folder/source.mp4" {
+		t.Fatalf("unexpected download: %#v", downloader)
+	}
+	if runner.request["source_path"] != filepath.Join("output/job-source", "source.mp4") || runner.request["source_object"] != nil {
+		t.Fatalf("unexpected worker request: %#v", runner.request)
 	}
 }
 

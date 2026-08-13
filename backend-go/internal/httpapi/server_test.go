@@ -776,6 +776,54 @@ func TestSubtitleRouteBurnsWithGoFFmpegRunner(t *testing.T) {
 	}
 }
 
+func TestTranslateRouteUsesGoElevenLabsClient(t *testing.T) {
+	vendor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/dubbing":
+			_, _ = w.Write([]byte(`{"dubbing_id":"dub-1"}`))
+		case "/v1/dubbing/dub-1":
+			_, _ = w.Write([]byte(`{"status":"dubbed"}`))
+		case "/v1/dubbing/dub-1/audio/es":
+			_, _ = w.Write([]byte("translated"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer vendor.Close()
+	outputDir := t.TempDir()
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobDir := filepath.Join(outputDir, job.ID)
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "clip.mp4"), []byte("source"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	metadata := `{"shorts":[{"start":0,"end":1}]}`
+	if err := os.WriteFile(filepath.Join(jobDir, "clip_metadata.json"), []byte(metadata), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"clips":[{"video_url":"/videos/`+job.ID+`/clip.mp4"}]}`)); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: outputDir, ElevenLabsURL: vendor.URL + "/v1"}, store)
+	req := httptest.NewRequest(http.MethodPost, "/api/translate", strings.NewReader(`{"job_id":"`+job.ID+`","clip_index":0,"target_language":"es"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-ElevenLabs-Key", "secret")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"new_video_url"`) {
+		t.Fatalf("unexpected translation response: %d %s", res.Code, res.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(jobDir, "translated_es_clip.mp4")); err != nil {
+		t.Fatalf("translated output missing: %v", err)
+	}
+}
+
 func TestStatusReturnsNotFoundForUnknownJob(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/status/missing-job", nil)

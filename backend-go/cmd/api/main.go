@@ -12,6 +12,7 @@ import (
 
 	"github.com/mutonby/openshorts/backend-go/internal/config"
 	"github.com/mutonby/openshorts/backend-go/internal/httpapi"
+	"github.com/mutonby/openshorts/backend-go/internal/integrations"
 	"github.com/mutonby/openshorts/backend-go/internal/jobs"
 	"github.com/mutonby/openshorts/backend-go/internal/workers"
 )
@@ -23,11 +24,21 @@ func main() {
 	}
 
 	store := jobs.NewMemoryStore()
+	var sourceDownloader workers.SourceDownloader
+	if cfg.S3Bucket != "" || cfg.S3Endpoint != "" {
+		sourceStore, storeErr := integrations.NewS3Store(context.Background(), integrations.S3Config{Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, ForcePathStyle: cfg.S3ForcePathStyle, Bucket: cfg.S3Bucket, SourceBucket: cfg.S3SourceBucket})
+		if storeErr != nil {
+			log.Printf("S3 source store unavailable: %v", storeErr)
+		} else {
+			sourceDownloader = sourceStore
+		}
+	}
 	runner := &jobs.Runner{
 		Store: store,
 		Worker: workers.PythonWorkerAdapter{
-			PythonBinary: os.Getenv("PYTHON_BINARY"),
-			WorkerScript: os.Getenv("PYTHON_WORKER_SCRIPT"),
+			PythonBinary:     os.Getenv("PYTHON_BINARY"),
+			WorkerScript:     os.Getenv("PYTHON_WORKER_SCRIPT"),
+			SourceDownloader: sourceDownloader,
 		},
 	}
 	translationClient := workers.PythonOperationClient{
