@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -55,6 +56,10 @@ func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs
 	mux.HandleFunc("/api/status/", server.status)
 	mux.HandleFunc("/api/render", server.renderProxy)
 	mux.HandleFunc("/api/render/", server.renderProxy)
+	mux.HandleFunc("/api/video-proxy", server.videoProxy)
+	mux.HandleFunc("/api/video-proxy/", server.videoProxy)
+	mux.HandleFunc("/api/translate/languages", server.translationLanguages)
+	mux.HandleFunc("/api/ai/lmstudio/discover", server.discoverLMStudio)
 	mux.HandleFunc("/api/local-editor/translate", server.createTranslation)
 	mux.HandleFunc("/api/translation/", server.translationStatus)
 	mux.HandleFunc("/api/clip/", server.clipRoutes)
@@ -114,11 +119,221 @@ func (s *Server) renderProxy(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, response.Body)
 }
 
+func (s *Server) videoProxy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	target := r.URL.Query().Get("url")
+	parsedTarget, err := url.Parse(target)
+	if err != nil || parsedTarget.Scheme == "" || parsedTarget.Host == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "A valid video URL is required"})
+		return
+	}
+	publicEndpoint := os.Getenv("AWS_S3_PUBLIC_ENDPOINT_URL")
+	if publicEndpoint == "" {
+		publicEndpoint = os.Getenv("AWS_S3_PUBLIC_URL_BASE")
+	}
+	if publicEndpoint != "" {
+		allowed, parseErr := url.Parse(publicEndpoint)
+		if parseErr != nil || allowed.Host != parsedTarget.Host {
+			writeJSON(w, http.StatusForbidden, map[string]string{"detail": "Proxy only allowed for configured MinIO endpoint"})
+			return
+		}
+	}
+	upstreamHeaders := make(http.Header)
+	if value := r.Header.Get("Range"); value != "" {
+		upstreamHeaders.Set("Range", value)
+	}
+	internalEndpoint := os.Getenv("AWS_S3_ENDPOINT_URL")
+	if internalEndpoint != "" && publicEndpoint != "" {
+		internal, parseErr := url.Parse(internalEndpoint)
+		if parseErr == nil && internal.Host != "" {
+			originalHost := parsedTarget.Host
+			parsedTarget.Scheme = internal.Scheme
+			parsedTarget.Host = internal.Host
+			upstreamHeaders.Set("Host", originalHost)
+		}
+	}
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, parsedTarget.String(), nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Video proxy error"})
+		return
+	}
+	request.Header = upstreamHeaders
+	response, err := (&http.Client{Timeout: 30 * time.Second}).Do(request)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Video proxy error: %s", err)})
+		return
+	}
+	defer response.Body.Close()
+	for _, key := range []string{"Content-Type", "Content-Length", "Content-Range", "ETag"} {
+		if value := response.Header.Get(key); value != "" {
+			w.Header().Set(key, value)
+		}
+	}
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Expose-Headers", "Accept-Ranges, Content-Length, Content-Range, Content-Type, ETag")
+	filename := strings.TrimPrefix(r.URL.Path, "/api/video-proxy/")
+	if filename != "" {
+		w.Header().Set("Content-Disposition", inlineContentDisposition(filename))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, _ = io.Copy(w, response.Body)
+}
+
+func (s *Server) translationLanguages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"languages": map[string]string{
+		"en": "English", "es": "Spanish", "fr": "French", "de": "German", "it": "Italian",
+		"pt": "Portuguese", "pl": "Polish", "hi": "Hindi", "ja": "Japanese", "ko": "Korean",
+		"zh": "Chinese", "ar": "Arabic", "ru": "Russian", "tr": "Turkish", "nl": "Dutch",
+		"sv": "Swedish", "id": "Indonesian", "fil": "Filipino", "ms": "Malay", "vi": "Vietnamese",
+		"th": "Thai", "uk": "Ukrainian", "el": "Greek", "cs": "Czech", "fi": "Finnish",
+		"ro": "Romanian", "da": "Danish", "bg": "Bulgarian", "hr": "Croatian", "sk": "Slovak",
+		"ta": "Tamil",
+	}})
+}
+
+func (s *Server) discoverLMStudio(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	var request struct {
+		BaseURL string `json:"baseUrl"`
+		APIKey  string `json:"apiKey"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+	origin, err := serviceOrigin(request.BaseURL)
+	if err != nil {
+		writeJSON(w, http.StatusOK, lmStudioDiscoveryFailure(strings.TrimSpace(request.BaseURL)))
+		return
+	}
+	upstream, err := http.NewRequestWithContext(r.Context(), http.MethodGet, origin+"/api/v1/models", nil)
+	if err != nil {
+		writeJSON(w, http.StatusOK, lmStudioDiscoveryFailure(origin))
+		return
+	}
+	if strings.TrimSpace(request.APIKey) != "" {
+		upstream.Header.Set("Authorization", "Bearer "+strings.TrimSpace(request.APIKey))
+	}
+	response, err := (&http.Client{Timeout: 10 * time.Second}).Do(upstream)
+	if err != nil {
+		writeJSON(w, http.StatusOK, lmStudioDiscoveryFailure(origin))
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		writeJSON(w, http.StatusOK, lmStudioDiscoveryFailure(origin))
+		return
+	}
+	var payload struct {
+		Models []map[string]any `json:"models"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusOK, lmStudioDiscoveryFailure(origin))
+		return
+	}
+	models := make([]map[string]any, 0, len(payload.Models))
+	for _, raw := range payload.Models {
+		modelID := firstString(raw, "key", "id", "name")
+		if modelID == "" {
+			continue
+		}
+		capabilities, _ := raw["capabilities"].(map[string]any)
+		vision := boolValue(capabilities["vision"]) || boolValue(raw["supportsVision"])
+		loaded := false
+		if instances, ok := raw["loaded_instances"].([]any); ok {
+			loaded = len(instances) > 0
+		}
+		models = append(models, map[string]any{
+			"id":             modelID,
+			"label":          firstString(raw, "display_name", "displayName", "key", "id"),
+			"supportsText":   true,
+			"supportsVision": vision,
+			"isLoaded":       loaded,
+			"contextLength":  raw["max_context_length"],
+		})
+	}
+	if len(models) == 0 {
+		writeJSON(w, http.StatusOK, lmStudioDiscoveryFailure(origin))
+		return
+	}
+	visionModels := make([]map[string]any, 0)
+	for _, model := range models {
+		if model["supportsVision"] == true {
+			visionModels = append(visionModels, model)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"available":    true,
+		"provider":     "lmstudio",
+		"baseUrl":      origin,
+		"textModels":   models,
+		"visionModels": visionModels,
+	})
+}
+
+func serviceOrigin(value string) (string, error) {
+	parsed, err := url.Parse(strings.TrimRight(strings.TrimSpace(value), "/"))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", errors.New("invalid service URL")
+	}
+	parsed.Path, parsed.RawPath, parsed.RawQuery, parsed.Fragment = "", "", "", ""
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func lmStudioDiscoveryFailure(baseURL string) map[string]any {
+	return map[string]any{
+		"available":    false,
+		"provider":     "lmstudio",
+		"baseUrl":      baseURL,
+		"textModels":   []any{},
+		"visionModels": []any{},
+		"error":        "Unable to discover LM Studio models",
+	}
+}
+
+func firstString(value map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if text, ok := value[key].(string); ok && strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
+	}
+	return ""
+}
+
+func boolValue(value any) bool {
+	result, _ := value.(bool)
+	return result
+}
+
+func inlineContentDisposition(filename string) string {
+	ascii := "video.mp4"
+	for _, char := range filename {
+		if char >= 32 && char <= 126 {
+			ascii = strings.ReplaceAll(strings.ReplaceAll(filename, `"`, "'"), `\`, "_")
+			break
+		}
+	}
+	return fmt.Sprintf(`inline; filename="%s"; filename*=UTF-8''%s`, ascii, url.QueryEscape(filename))
+}
+
 func (s *Server) runtimeConfig(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"port":                s.config.Port,
 		"max_concurrent_jobs": s.config.MaxConcurrentJobs,
 		"render_service_url":  s.config.RenderServiceURL,
+		"youtubeUrlEnabled":   !s.config.DisableYouTubeURL,
+		"lmStudioConfig":      lmStudioDiscoveryFailure(""),
 	})
 }
 

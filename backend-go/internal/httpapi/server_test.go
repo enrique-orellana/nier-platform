@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -76,6 +77,9 @@ func TestConfigReturnsRuntimeSettings(t *testing.T) {
 	}
 	if payload.Port != 8123 || payload.MaxConcurrentJobs != 7 || payload.RenderServiceURL != "http://renderer:3100" {
 		t.Fatalf("unexpected config payload: %#v", payload)
+	}
+	if !strings.Contains(res.Body.String(), `"youtubeUrlEnabled":true`) || !strings.Contains(res.Body.String(), `"lmStudioConfig"`) {
+		t.Fatalf("config is missing frontend provider fields: %s", res.Body.String())
 	}
 }
 
@@ -299,6 +303,59 @@ func TestClipVersionRoutesPersistAndBranchManifests(t *testing.T) {
 	server.Handler().ServeHTTP(completeRes, completeReq)
 	if completeRes.Code != http.StatusOK || !strings.Contains(completeRes.Body.String(), `"current_version_id":"`+created.Version.VersionID+`"`) {
 		t.Fatalf("unexpected complete response: %d %s", completeRes.Code, completeRes.Body.String())
+	}
+}
+
+func TestVideoProxyForwardsRangeAndContentHeaders(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Range") != "bytes=10-19" {
+			t.Fatalf("expected range header, got %q", r.Header.Get("Range"))
+		}
+		w.Header().Set("Content-Type", "video/mp4")
+		w.Header().Set("Content-Range", "bytes 10-19/100")
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write([]byte("0123456789"))
+	}))
+	defer upstream.Close()
+
+	server := NewServer(config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/video-proxy?url="+url.QueryEscape(upstream.URL+"/video.mp4"), nil)
+	req.Header.Set("Range", "bytes=10-19")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusPartialContent || res.Header().Get("Content-Range") != "bytes 10-19/100" || res.Body.String() != "0123456789" {
+		t.Fatalf("unexpected proxy response: %d %#v %q", res.Code, res.Header(), res.Body.String())
+	}
+}
+
+func TestTranslationLanguagesReturnsSupportedCodes(t *testing.T) {
+	server := NewServer(config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/translate/languages", nil)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"es":"Spanish"`) || !strings.Contains(res.Body.String(), `"it":"Italian"`) {
+		t.Fatalf("unexpected languages response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestLMStudioDiscoveryReturnsNormalizedModels(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/models" {
+			t.Fatalf("unexpected discovery path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"models":[{"key":"local-model","display_name":"Local Model","capabilities":{"vision":true},"loaded_instances":[{}],"max_context_length":8192}]}`))
+	}))
+	defer provider.Close()
+
+	server := NewServer(config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/ai/lmstudio/discover", strings.NewReader(`{"baseUrl":"`+provider.URL+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"available":true`) || !strings.Contains(res.Body.String(), `"id":"local-model"`) || !strings.Contains(res.Body.String(), `"supportsVision":true`) {
+		t.Fatalf("unexpected LM Studio response: %d %s", res.Code, res.Body.String())
 	}
 }
 

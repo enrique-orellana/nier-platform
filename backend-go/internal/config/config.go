@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -18,6 +19,7 @@ type Config struct {
 	MaxConcurrentJobs int
 	RenderServiceURL  string
 	OutputDir         string
+	DisableYouTubeURL bool
 }
 
 func Load() (Config, error) {
@@ -47,6 +49,9 @@ func Load() (Config, error) {
 	}
 	if value := os.Getenv("OUTPUT_DIR"); value != "" {
 		cfg.OutputDir = value
+	}
+	if value := os.Getenv("DISABLE_YOUTUBE_URL"); value != "" {
+		cfg.DisableYouTubeURL = strings.EqualFold(value, "1") || strings.EqualFold(value, "true") || strings.EqualFold(value, "yes")
 	}
 
 	return cfg, nil
