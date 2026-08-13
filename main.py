@@ -1472,6 +1472,7 @@ if __name__ == '__main__':
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument('-i', '--input', type=str, help="Path to the input video file.")
     input_group.add_argument('-u', '--url', type=str, help="YouTube URL to download and process.")
+    input_group.add_argument('--direct-url', type=str, help="Direct HTTP(S) video URL to download and process.")
     
     parser.add_argument('-o', '--output', type=str, help="Output directory or file (if processing whole video).")
     parser.add_argument('--keep-original', action='store_true', help="Keep the downloaded YouTube video.")
@@ -1491,7 +1492,7 @@ if __name__ == '__main__':
         return path
     
     # 1. Get Input Video
-    if args.url:
+    if args.url or args.direct_url:
         # For multi-clip runs, treat --output as an OUTPUT DIRECTORY (create it if needed).
         # For whole-video runs (--skip-analysis), --output can be a file path.
         if args.output and not args.skip_analysis:
@@ -1505,7 +1506,10 @@ if __name__ == '__main__':
             else:
                 output_dir = "."
         
-        input_video, video_title = download_youtube_video(args.url, output_dir)
+        if args.url:
+            input_video, video_title = download_youtube_video(args.url, output_dir)
+        else:
+            input_video, video_title = download_direct_video(args.direct_url, output_dir)
     else:
         input_video = args.input
         video_title = os.path.splitext(os.path.basename(input_video))[0]

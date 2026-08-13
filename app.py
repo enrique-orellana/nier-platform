@@ -865,8 +865,11 @@ async def process_endpoint(
     if not ack_flag:
         raise HTTPException(status_code=400, detail="You must confirm you own the content or have rights to process it.")
 
-    if url and DISABLE_YOUTUBE_URL:
-        raise HTTPException(status_code=403, detail="YouTube URL ingest is disabled on this deployment. Please upload a file you own.")
+    if url:
+        url = url.strip()
+        parsed_url = urlsplit(url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            raise HTTPException(status_code=400, detail="Video URL must use http:// or https://")
 
     # Capture attestation context for legal record (IP + timestamp + UA)
     client_ip = request.client.host if request.client else "unknown"
@@ -891,7 +894,7 @@ async def process_endpoint(
     env = os.environ.copy()
     env.update(ai_config_to_env(ai_config))
     if url:
-        cmd.extend(["-u", url])
+        cmd.extend(["--direct-url", url])
     else:
         # Save uploaded file with size limit check
         input_path = os.path.join(UPLOAD_DIR, f"{job_id}_{file.filename}")
