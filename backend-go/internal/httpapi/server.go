@@ -62,8 +62,12 @@ func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs
 	mux.HandleFunc("/api/video-proxy/", server.videoProxy)
 	mux.HandleFunc("/api/translate/languages", server.translationLanguages)
 	mux.HandleFunc("/api/ai/lmstudio/discover", server.discoverLMStudio)
+	mux.HandleFunc("/api/ai/openai-codex/status", server.codexRoute)
+	mux.HandleFunc("/api/ai/openai-codex/disconnect", server.codexRoute)
+	mux.HandleFunc("/api/ai/openai-codex/models", server.codexRoute)
 	mux.HandleFunc("/api/local-editor/translate", server.createTranslation)
 	mux.HandleFunc("/api/local-editor/transcribe", server.transcribeLocalEditor)
+	mux.HandleFunc("/api/local-editor/hashtags", server.generateHashtags)
 	mux.HandleFunc("/api/translation/", server.translationStatus)
 	mux.HandleFunc("/api/clip/", server.clipRoutes)
 	mux.HandleFunc("/api/projects/", server.projectRoutes)
@@ -286,6 +290,48 @@ func (s *Server) discoverLMStudio(w http.ResponseWriter, r *http.Request) {
 		"textModels":   models,
 		"visionModels": visionModels,
 	})
+}
+
+func (s *Server) codexRoute(w http.ResponseWriter, r *http.Request) {
+	operation := ""
+	switch r.URL.Path {
+	case "/api/ai/openai-codex/status":
+		if r.Method != http.MethodGet {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+			return
+		}
+		operation = "codex_status"
+	case "/api/ai/openai-codex/disconnect":
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+			return
+		}
+		operation = "codex_disconnect"
+	case "/api/ai/openai-codex/models":
+		if r.Method != http.MethodGet {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+			return
+		}
+		operation = "codex_models"
+	default:
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
+		return
+	}
+	if s.translationRunner == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"detail": "Python worker is not configured"})
+		return
+	}
+	result, err := s.translationRunner.Run(r.Context(), "codex-"+operation, operation, nil, nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
+		return
+	}
+	var payload any
+	if err := json.Unmarshal(result, &payload); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Invalid Codex worker result"})
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func serviceOrigin(value string) (string, error) {
@@ -540,6 +586,37 @@ func (s *Server) transcribeLocalEditor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
+}
+
+func (s *Server) generateHashtags(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	if s.translationRunner == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"detail": "Python worker is not configured"})
+		return
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+	if strings.TrimSpace(fmt.Sprint(payload["title"])) == "" && strings.TrimSpace(fmt.Sprint(payload["caption"])) == "" && strings.TrimSpace(fmt.Sprint(payload["subtitle_text"])) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Clip context is required to generate hashtags."})
+		return
+	}
+	result, err := s.translationRunner.Run(r.Context(), "hashtags", "hashtags", payload, translationHeaders(r))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Hashtag generation failed: %s", err)})
+		return
+	}
+	var response map[string]any
+	if err := json.Unmarshal(result, &response); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Invalid hashtag worker result"})
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) runTranslation(id string) {

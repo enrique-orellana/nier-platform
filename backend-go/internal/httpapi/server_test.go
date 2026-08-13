@@ -44,6 +44,30 @@ func (transcribingOperation) Run(_ context.Context, _ string, operation string, 
 	return json.RawMessage(`{"language":"en","captions":[],"segments":[]}`), nil
 }
 
+type codexOperation struct{}
+
+func (codexOperation) Run(_ context.Context, _ string, operation string, _ map[string]any, _ map[string]string) (json.RawMessage, error) {
+	switch operation {
+	case "codex_status":
+		return json.RawMessage(`{"connected":true,"pending":false}`), nil
+	case "codex_disconnect":
+		return json.RawMessage(`{"connected":false,"pending":false}`), nil
+	case "codex_models":
+		return json.RawMessage(`{"models":[{"id":"gpt-test"}],"defaultModel":"gpt-test"}`), nil
+	default:
+		return nil, fmt.Errorf("unexpected operation %s", operation)
+	}
+}
+
+type hashtagOperation struct{}
+
+func (hashtagOperation) Run(_ context.Context, _ string, operation string, _ map[string]any, _ map[string]string) (json.RawMessage, error) {
+	if operation != "hashtags" {
+		return nil, fmt.Errorf("unexpected operation %s", operation)
+	}
+	return json.RawMessage(`{"hashtags":["#one","#two"]}`), nil
+}
+
 func TestHealthReturnsOK(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -555,6 +579,38 @@ func TestProjectHistoryReadsLocalMetadataForGoJobs(t *testing.T) {
 	server.Handler().ServeHTTP(res, req)
 	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"job_id":"job-1"`) || !strings.Contains(res.Body.String(), `"video_url":"/videos/job-1/clip.mp4"`) {
 		t.Fatalf("unexpected project history response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestCodexStatelessRoutesUseWorkerOperations(t *testing.T) {
+	server := NewServerWithDependencies(config.Config{}, jobs.NewMemoryStore(), nil, codexOperation{})
+	for _, test := range []struct {
+		method string
+		path   string
+		body   string
+		want   string
+	}{
+		{http.MethodGet, "/api/ai/openai-codex/status", "", `"connected":true`},
+		{http.MethodPost, "/api/ai/openai-codex/disconnect", "", `"connected":false`},
+		{http.MethodGet, "/api/ai/openai-codex/models", "", `"defaultModel":"gpt-test"`},
+	} {
+		req := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
+		res := httptest.NewRecorder()
+		server.Handler().ServeHTTP(res, req)
+		if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), test.want) {
+			t.Fatalf("unexpected %s %s response: %d %s", test.method, test.path, res.Code, res.Body.String())
+		}
+	}
+}
+
+func TestLocalEditorHashtagsUseGoWorkerBoundary(t *testing.T) {
+	server := NewServerWithDependencies(config.Config{}, jobs.NewMemoryStore(), nil, hashtagOperation{})
+	req := httptest.NewRequest(http.MethodPost, "/api/local-editor/hashtags", strings.NewReader(`{"title":"A title"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"#one"`) {
+		t.Fatalf("unexpected hashtag response: %d %s", res.Code, res.Body.String())
 	}
 }
 

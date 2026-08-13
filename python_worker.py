@@ -129,6 +129,60 @@ def handle_request(request: Mapping[str, Any]) -> None:
                 },
             })
             return
+        if operation == "codex_status":
+            from codex_auth import default_codex_store
+
+            _emit({"id": request_id, "type": "result", "result": default_codex_store().status()})
+            return
+        if operation == "codex_disconnect":
+            from codex_auth import default_codex_store
+
+            default_codex_store().clear()
+            _emit({"id": request_id, "type": "result", "result": {"connected": False, "pending": False}})
+            return
+        if operation == "codex_models":
+            from ai_client import discover_codex_models
+
+            discovered = discover_codex_models()
+            _emit({"id": request_id, "type": "result", "result": {
+                "provider": "openai-codex",
+                "models": discovered.get("models", []),
+                "defaultModel": discovered.get("defaultModel", ""),
+            }})
+            return
+        if operation == "hashtags":
+            from ai_client import chat_json, load_ai_config
+
+            payload = request.get("payload") or {}
+            headers = request.get("headers") or {}
+            config = load_ai_config(headers)
+            if config.is_gemini() and not config.api_key:
+                raise ValueError("Missing X-Gemini-Key header")
+            prompt = (
+                "Generate 8 to 12 relevant social-media hashtags. Return JSON only with "
+                '{"hashtags":["#tag1"]}. Use the source language and do not return duplicates.\n\n'
+                f"TITLE: {str(payload.get('title') or '').strip()}\n"
+                f"CAPTION: {str(payload.get('caption') or '').strip()}\n"
+                f"SUBTITLES: {str(payload.get('subtitle_text') or '').strip()}\n"
+                f"SOURCE CONTEXT: {json.dumps(payload.get('source_context') or {}, ensure_ascii=False)}"
+            )
+            response = chat_json(config, prompt, model=config.analyze_model or config.text_model)
+            hashtags = []
+            seen = set()
+            for value in response.get("hashtags", []) if isinstance(response, dict) else []:
+                tag = str(value).strip()
+                if not tag:
+                    continue
+                if not tag.startswith("#"):
+                    tag = "#" + tag
+                key = tag.lower()
+                if key not in seen:
+                    seen.add(key)
+                    hashtags.append(tag)
+            if not hashtags:
+                raise ValueError("AI returned no usable hashtags")
+            _emit({"id": request_id, "type": "result", "result": {"hashtags": hashtags[:12]}})
+            return
         if operation != "clip_generation":
             raise ValueError(f"unsupported operation: {operation}")
         _emit({"id": request_id, "type": "started", "operation": operation})
