@@ -9,6 +9,8 @@ import tempfile
 import os
 import shutil
 import numpy as np
+import httpx
+from urllib.parse import urlsplit, urlunsplit
 
 try:
     from tqdm import tqdm
@@ -64,6 +66,7 @@ load_dotenv()
 
 # --- Constants ---
 ASPECT_RATIO = 9 / 16
+DIRECT_VIDEO_MAX_BYTES = int(os.environ.get("MAX_FILE_SIZE_MB", "2048")) * 1024 * 1024
 
 GEMINI_PROMPT_TEMPLATE = """
 You are a senior short-form video editor. Read the ENTIRE transcript and word-level timestamps to choose the 3–15 MOST VIRAL moments for TikTok/IG Reels/YouTube Shorts. Each clip must be between 15 and 60 seconds long.
@@ -595,6 +598,64 @@ def sanitize_filename(filename):
     filename = re.sub(r'[<>:"/\\|?*#]', '', filename)
     filename = filename.replace(' ', '_')
     return filename[:100]
+
+
+def resolve_direct_video_url(url: str) -> str:
+    """Validate a direct media URL and map browser-loopback MinIO URLs internally."""
+    raw_url = (url or "").strip()
+    parsed = urlsplit(raw_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Video URL must use http:// or https://")
+
+    endpoint = os.environ.get("AWS_S3_ENDPOINT_URL", "").strip()
+    if endpoint and parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
+        internal = urlsplit(endpoint)
+        if internal.scheme in {"http", "https"} and internal.netloc:
+            return urlunsplit((internal.scheme, internal.netloc, parsed.path, parsed.query, parsed.fragment))
+
+    return raw_url
+
+
+def download_direct_video(url: str, output_dir: str = ".") -> tuple[str, str]:
+    """Stream a direct HTTP(S) video URL to a local file for clip processing."""
+    resolved_url = resolve_direct_video_url(url)
+    parsed = urlsplit(resolved_url)
+    requested_name = os.path.basename(parsed.path.rstrip("/"))
+    safe_name = sanitize_filename(requested_name) if requested_name else ""
+    if not safe_name or safe_name in {".", ".."}:
+        safe_name = "remote_video.mp4"
+    elif not Path(safe_name).suffix:
+        safe_name = f"{safe_name}.mp4"
+
+    title = Path(safe_name).stem or "remote_video"
+    os.makedirs(output_dir, exist_ok=True)
+    destination_path = os.path.join(output_dir, safe_name)
+    partial_path = f"{destination_path}.part"
+
+    try:
+        with httpx.stream("GET", resolved_url, follow_redirects=True, timeout=300.0) as response:
+            response.raise_for_status()
+            content_length = response.headers.get("content-length")
+            if content_length and int(content_length) > DIRECT_VIDEO_MAX_BYTES:
+                raise ValueError("Direct video URL exceeds the configured file size limit")
+
+            written_bytes = 0
+            with open(partial_path, "wb") as handle:
+                for chunk in response.iter_bytes(chunk_size=1024 * 1024):
+                    if not chunk:
+                        continue
+                    written_bytes += len(chunk)
+                    if written_bytes > DIRECT_VIDEO_MAX_BYTES:
+                        raise ValueError("Direct video URL exceeds the configured file size limit")
+                    handle.write(chunk)
+
+        os.replace(partial_path, destination_path)
+    except Exception:
+        if os.path.exists(partial_path):
+            os.remove(partial_path)
+        raise
+
+    return destination_path, title
 
 
 def download_youtube_video(url, output_dir="."):
