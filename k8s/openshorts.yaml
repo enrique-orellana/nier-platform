@@ -79,6 +79,11 @@ spec:
               value: "8000"
             - name: OUTPUT_DIR
               value: /app/output
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: openshorts-postgres
+                  key: DATABASE_URL
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
@@ -96,7 +101,7 @@ spec:
               mountPath: /app/uploads
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: 8000
             initialDelaySeconds: 20
             periodSeconds: 10
@@ -324,27 +329,6 @@ spec:
                 port:
                   number: 8000
           - path: /video
-            pathType: Prefix
-            backend:
-              service:
-                name: openshorts-backend
-                port:
-                  number: 8000
-          - path: /docs
-            pathType: Prefix
-            backend:
-              service:
-                name: openshorts-backend
-                port:
-                  number: 8000
-          - path: /openapi.json
-            pathType: Prefix
-            backend:
-              service:
-                name: openshorts-backend
-                port:
-                  number: 8000
-          - path: /redoc
             pathType: Prefix
             backend:
               service:

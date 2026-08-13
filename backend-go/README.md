@@ -1,8 +1,7 @@
 # OpenShorts Go control plane
 
-This service is the first migration slice of the OpenShorts backend. It owns
-the control-plane contracts while the existing FastAPI service remains the
-active production API.
+This service is the production HTTP control plane for OpenShorts. Python remains
+an internal worker for media and AI workloads; it is not an HTTP server.
 
 ## Local run
 
@@ -21,9 +20,14 @@ Invoke-WebRequest http://localhost:8000/health
 ## Configuration
 
 - `PORT`: HTTP port, default `8000`.
-- `MAX_CONCURRENT_JOBS`: future worker concurrency limit, default `5`.
+- `MAX_CONCURRENT_JOBS`: maximum concurrent Python jobs, default `5`.
 - `RENDER_SERVICE_URL`: renderer address, default `http://localhost:3100`.
+- `DATABASE_URL`: PostgreSQL connection URL. Required for durable production job state.
+- `PYTHON_BINARY`: Python executable for the internal worker, default `python`.
+- `PYTHON_WORKER_SCRIPT`: worker entrypoint, default `python_worker.py`.
 
-The Go service is currently a canary. Keep the existing FastAPI backend as
-the frontend's active `/api` target until the remaining route contracts and
-durable PostgreSQL repository are migrated.
+Without `DATABASE_URL`, local development falls back to in-memory job storage;
+all jobs are lost when the process exits. Production deployments must provide
+the URL (the Kubernetes manifest expects the `openshorts-postgres` secret with
+key `DATABASE_URL`) and use the `/ready` endpoint for readiness checks. OpenAPI endpoints
+from the former FastAPI service are not served by the Go control plane yet.

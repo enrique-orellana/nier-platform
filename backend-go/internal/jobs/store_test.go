@@ -103,3 +103,51 @@ func TestSetResultPersistsCompletedPayload(t *testing.T) {
 		t.Fatalf("unexpected result: %#v", loaded.Result)
 	}
 }
+
+func TestClaimMovesQueuedJobToProcessingOnce(t *testing.T) {
+	store := NewMemoryStore()
+	created, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	claimed, err := store.Claim(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("claim job: %v", err)
+	}
+	if claimed.Status != domain.JobStatusProcessing {
+		t.Fatalf("expected processing status, got %q", claimed.Status)
+	}
+	if _, err := store.Claim(context.Background(), created.ID); err == nil {
+		t.Fatal("expected a completed claim to be rejected")
+	}
+}
+
+func TestRecoverProcessingJobsAndListQueuedJobs(t *testing.T) {
+	store := NewMemoryStore()
+	queued, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "queued"})
+	if err != nil {
+		t.Fatalf("create queued job: %v", err)
+	}
+	processing, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "processing"})
+	if err != nil {
+		t.Fatalf("create processing job: %v", err)
+	}
+	if _, err := store.Claim(context.Background(), processing.ID); err != nil {
+		t.Fatalf("claim processing job: %v", err)
+	}
+	if err := store.RequeueProcessing(context.Background()); err != nil {
+		t.Fatalf("requeue processing jobs: %v", err)
+	}
+	queuedJobs, err := store.ListByStatus(context.Background(), domain.JobStatusQueued)
+	if err != nil {
+		t.Fatalf("list queued jobs: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, job := range queuedJobs {
+		seen[job.ID] = true
+	}
+	if len(queuedJobs) != 2 || !seen[queued.ID] || !seen[processing.ID] {
+		t.Fatalf("unexpected queued jobs: %#v", queuedJobs)
+	}
+}

@@ -22,6 +22,7 @@ FROM golang:1.26-alpine AS go-builder
 
 WORKDIR /go-src
 COPY backend-go/go.mod ./
+COPY backend-go/go.sum ./
 COPY backend-go/cmd ./cmd
 COPY backend-go/internal ./internal
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/openshorts-api ./cmd/api

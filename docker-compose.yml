@@ -1,4 +1,18 @@
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: openshorts-db
+    environment:
+      POSTGRES_DB: openshorts
+      POSTGRES_USER: openshorts
+      POSTGRES_PASSWORD: openshorts-local
+    volumes:
+      - openshorts-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openshorts -d openshorts"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
   backend:
     build: .
     container_name: openshorts-backend
@@ -11,11 +25,15 @@ services:
       - /app/__pycache__
       - ./output:/app/output
     environment:
+      - DATABASE_URL=postgres://openshorts:openshorts-local@db:5432/openshorts
       - AI_PROVIDER=ollama
       - AI_BASE_URL=http://host.docker.internal:11434
       - AI_MODEL=qwen3:latest
       - AI_VISION_MODEL=qwen2.5vl:latest
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
 
   frontend:
     build: ./dashboard
@@ -52,3 +70,6 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+
+volumes:
+  openshorts-db-data:

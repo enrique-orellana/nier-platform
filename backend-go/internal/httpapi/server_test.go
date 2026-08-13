@@ -129,6 +129,29 @@ func TestHealthReturnsOK(t *testing.T) {
 	}
 }
 
+func TestReadinessRequiresStartedScheduler(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	runner := &jobs.Runner{Store: store, Worker: completingWorker{}}
+	scheduler := jobs.NewScheduler(store, runner, 1)
+	server := NewServerWithDependenciesAndScheduler(config.Config{}, store, runner, completingTranslation{}, scheduler)
+
+	notReady := httptest.NewRecorder()
+	server.Handler().ServeHTTP(notReady, httptest.NewRequest(http.MethodGet, "/ready", nil))
+	if notReady.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected unstarted scheduler to be unavailable, got %d", notReady.Code)
+	}
+	if err := scheduler.Start(context.Background()); err != nil {
+		t.Fatalf("start scheduler: %v", err)
+	}
+	defer scheduler.Stop(context.Background())
+
+	ready := httptest.NewRecorder()
+	server.Handler().ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/ready", nil))
+	if ready.Code != http.StatusOK || !strings.Contains(ready.Body.String(), `"status":"ready"`) {
+		t.Fatalf("expected ready response, got %d %s", ready.Code, ready.Body.String())
+	}
+}
+
 func TestConfigReturnsRuntimeSettings(t *testing.T) {
 	cfg := config.Config{
 		Port:              8123,

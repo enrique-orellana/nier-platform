@@ -27,11 +27,8 @@ func (r Runner) RunOnce(ctx context.Context, jobID string) error {
 	if r.Worker == nil {
 		return fmt.Errorf("job worker is required")
 	}
-	job, ok := r.Store.Get(ctx, jobID)
-	if !ok {
-		return ErrJobNotFound
-	}
-	if _, err := r.Store.Transition(ctx, jobID, domain.JobStatusProcessing, ""); err != nil {
+	job, err := r.Store.Claim(ctx, jobID)
+	if err != nil {
 		return err
 	}
 	if err := r.Store.AppendLog(ctx, jobID, "Job started by worker."); err != nil {
@@ -74,6 +71,6 @@ func (r Runner) RunOnce(ctx context.Context, jobID string) error {
 			return err
 		}
 	}
-	_, err := r.Store.Transition(ctx, jobID, domain.JobStatusCompleted, "")
+	_, err = r.Store.Transition(ctx, jobID, domain.JobStatusCompleted, "")
 	return err
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 var (
 	ErrJobNotFound       = errors.New("job not found")
 	ErrInvalidTransition = errors.New("invalid job status transition")
+	ErrJobNotClaimable   = errors.New("job is not queued")
 )
 
 type Store interface {
@@ -23,6 +25,9 @@ type Store interface {
 	Transition(context.Context, string, domain.JobStatus, string) (domain.Job, error)
 	AppendLog(context.Context, string, string) error
 	SetResult(context.Context, string, []byte) error
+	Claim(context.Context, string) (domain.Job, error)
+	ListByStatus(context.Context, domain.JobStatus) ([]domain.Job, error)
+	RequeueProcessing(context.Context) error
 }
 
 type MemoryStore struct {
@@ -90,6 +95,57 @@ func (s *MemoryStore) Transition(_ context.Context, id string, next domain.JobSt
 	job.UpdatedAt = time.Now().UTC()
 	s.jobs[id] = job
 	return cloneJob(job), nil
+}
+
+func (s *MemoryStore) Claim(_ context.Context, id string) (domain.Job, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	job, ok := s.jobs[id]
+	if !ok {
+		return domain.Job{}, ErrJobNotFound
+	}
+	if job.Status != domain.JobStatusQueued {
+		return domain.Job{}, fmt.Errorf("%w: %s", ErrJobNotClaimable, job.Status)
+	}
+	job.Status = domain.JobStatusProcessing
+	job.Error = ""
+	job.UpdatedAt = time.Now().UTC()
+	s.jobs[id] = job
+	return cloneJob(job), nil
+}
+
+func (s *MemoryStore) ListByStatus(_ context.Context, status domain.JobStatus) ([]domain.Job, error) {
+	s.mu.RLock()
+	jobs := make([]domain.Job, 0)
+	for _, job := range s.jobs {
+		if job.Status == status {
+			jobs = append(jobs, cloneJob(job))
+		}
+	}
+	s.mu.RUnlock()
+	sort.Slice(jobs, func(i, j int) bool {
+		if jobs[i].CreatedAt.Equal(jobs[j].CreatedAt) {
+			return jobs[i].ID < jobs[j].ID
+		}
+		return jobs[i].CreatedAt.Before(jobs[j].CreatedAt)
+	})
+	return jobs, nil
+}
+
+func (s *MemoryStore) RequeueProcessing(_ context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, job := range s.jobs {
+		if job.Status != domain.JobStatusProcessing {
+			continue
+		}
+		job.Status = domain.JobStatusQueued
+		job.Error = ""
+		job.UpdatedAt = time.Now().UTC()
+		s.jobs[id] = job
+	}
+	return nil
 }
 
 func (s *MemoryStore) AppendLog(_ context.Context, id string, message string) error {

@@ -23,7 +23,22 @@ func main() {
 		log.Fatal(err)
 	}
 
-	store := jobs.NewMemoryStore()
+	var store jobs.Store
+	var closeStore func() error
+	if cfg.DatabaseURL != "" {
+		postgresStore, storeErr := jobs.OpenPostgresStore(context.Background(), cfg.DatabaseURL)
+		if storeErr != nil {
+			log.Fatalf("open postgres job store: %v", storeErr)
+		}
+		store = postgresStore
+		closeStore = postgresStore.Close
+	} else {
+		log.Print("DATABASE_URL is not configured; using in-memory job storage")
+		memoryStore := jobs.NewMemoryStore()
+		store = memoryStore
+		closeStore = func() error { return nil }
+	}
+	defer closeStore()
 	var sourceDownloader workers.SourceDownloader
 	if cfg.S3Bucket != "" || cfg.S3Endpoint != "" {
 		sourceStore, storeErr := integrations.NewS3Store(context.Background(), integrations.S3Config{Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, ForcePathStyle: cfg.S3ForcePathStyle, Bucket: cfg.S3Bucket, SourceBucket: cfg.S3SourceBucket})
@@ -41,13 +56,19 @@ func main() {
 			SourceDownloader: sourceDownloader,
 		},
 	}
+	runtimeContext, cancelRuntime := context.WithCancel(context.Background())
+	defer cancelRuntime()
+	scheduler := jobs.NewScheduler(store, runner, cfg.MaxConcurrentJobs)
+	if err := scheduler.Start(runtimeContext); err != nil {
+		log.Fatalf("start job scheduler: %v", err)
+	}
 	translationClient := workers.PythonOperationClient{
 		PythonBinary: os.Getenv("PYTHON_BINARY"),
 		WorkerScript: os.Getenv("PYTHON_WORKER_SCRIPT"),
 	}
 	server := &http.Server{
 		Addr:              cfg.Address(),
-		Handler:           httpapi.NewServerWithDependencies(cfg, store, runner, translationClient).Handler(),
+		Handler:           httpapi.NewServerWithDependenciesAndScheduler(cfg, store, runner, translationClient, scheduler).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -62,6 +83,7 @@ func main() {
 	select {
 	case err := <-serverErrors:
 		if !errors.Is(err, http.ErrServerClosed) {
+			_ = scheduler.Stop(context.Background())
 			log.Fatal(err)
 		}
 	case <-stop:
@@ -69,6 +91,9 @@ func main() {
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
+		}
+		if err := scheduler.Stop(ctx); err != nil {
+			log.Printf("stop job scheduler: %v", err)
 		}
 	}
 }

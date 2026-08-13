@@ -32,6 +32,7 @@ type Config struct {
 	S3SourceBucket    string
 	S3ForcePathStyle  bool
 	ElevenLabsURL     string
+	DatabaseURL       string
 }
 
 func Load() (Config, error) {
@@ -79,6 +80,7 @@ func Load() (Config, error) {
 		cfg.CodexAuthFile = fmt.Sprintf("%s/.openshorts/codex-auth.json", strings.TrimRight(cfg.OutputDir, `/\\`))
 	}
 	cfg.S3Endpoint = os.Getenv("AWS_S3_ENDPOINT_URL")
+	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
 	cfg.ElevenLabsURL = os.Getenv("ELEVENLABS_API_BASE_URL")
 	if cfg.ElevenLabsURL == "" {
 		cfg.ElevenLabsURL = "https://api.elevenlabs.io/v1"

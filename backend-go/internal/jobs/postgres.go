@@ -1,0 +1,270 @@
+package jobs
+
+import (
+	"context"
+	"database/sql"
+	_ "embed"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/mutonby/openshorts/backend-go/internal/domain"
+)
+
+//go:embed migrations/001_jobs.sql
+var jobsSchema string
+
+type PostgresStore struct {
+	db *sql.DB
+}
+
+func NewPostgresStore(db *sql.DB) (*PostgresStore, error) {
+	if db == nil {
+		return nil, errors.New("database is required")
+	}
+	return &PostgresStore{db: db}, nil
+}
+
+func OpenPostgresStore(ctx context.Context, databaseURL string) (*PostgresStore, error) {
+	if databaseURL == "" {
+		return nil, errors.New("database URL is required")
+	}
+	config, err := pgx.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse database URL: %w", err)
+	}
+	db := sql.OpenDB(stdlib.GetConnector(*config))
+	store, err := NewPostgresStore(db)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("ping database: %w", err)
+	}
+	if err := store.Migrate(ctx); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return store, nil
+}
+
+func (s *PostgresStore) Close() error { return s.db.Close() }
+
+func (s *PostgresStore) Migrate(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, jobsSchema); err != nil {
+		return fmt.Errorf("run jobs migration: %w", err)
+	}
+	return nil
+}
+
+func (s *PostgresStore) Create(ctx context.Context, input domain.CreateJobInput) (domain.Job, error) {
+	if input.Kind == "" {
+		return domain.Job{}, errors.New("job kind is required")
+	}
+	id, err := newID()
+	if err != nil {
+		return domain.Job{}, fmt.Errorf("generate job id: %w", err)
+	}
+	metadata, err := json.Marshal(input.Metadata)
+	if err != nil {
+		return domain.Job{}, fmt.Errorf("encode job metadata: %w", err)
+	}
+	if input.Metadata == nil {
+		metadata = []byte(`{}`)
+	}
+	var job domain.Job
+	err = s.db.QueryRowContext(ctx, `
+		INSERT INTO jobs (id, kind, status, source_url, clip_count, output_dir, metadata)
+		VALUES ($1, $2, 'queued', NULLIF($3, ''), COALESCE(NULLIF($4, 0), 6), $5, $6::jsonb)
+		RETURNING id, kind, status, COALESCE(source_url, ''), clip_count, output_dir, metadata, result, COALESCE(error, ''), created_at, updated_at
+	`, id, input.Kind, input.SourceURL, input.ClipCount, input.OutputDir, metadata).Scan(
+		&job.ID, &job.Kind, &job.Status, &job.SourceURL, &job.ClipCount, &job.OutputDir,
+		&metadata, &job.Result, &job.Error, &job.CreatedAt, &job.UpdatedAt,
+	)
+	if err != nil {
+		return domain.Job{}, fmt.Errorf("create job: %w", err)
+	}
+	job.Metadata = decodeMetadata(metadata)
+	return job, nil
+}
+
+func (s *PostgresStore) Get(ctx context.Context, id string) (domain.Job, bool) {
+	job, err := s.get(ctx, s.db, id)
+	if err != nil {
+		return domain.Job{}, false
+	}
+	return job, true
+}
+
+func (s *PostgresStore) Claim(ctx context.Context, id string) (domain.Job, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Job{}, err
+	}
+	defer tx.Rollback()
+	job, err := s.getForUpdate(ctx, tx, id)
+	if err != nil {
+		return domain.Job{}, err
+	}
+	if job.Status != domain.JobStatusQueued {
+		return domain.Job{}, fmt.Errorf("%w: %s", ErrJobNotClaimable, job.Status)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE jobs SET status = 'processing', error = NULL, updated_at = now() WHERE id = $1`, id); err != nil {
+		return domain.Job{}, err
+	}
+	job.Status = domain.JobStatusProcessing
+	job.Error = ""
+	job.UpdatedAt = time.Now().UTC()
+	if err := tx.Commit(); err != nil {
+		return domain.Job{}, err
+	}
+	return job, nil
+}
+
+func (s *PostgresStore) Transition(ctx context.Context, id string, next domain.JobStatus, message string) (domain.Job, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Job{}, err
+	}
+	defer tx.Rollback()
+	job, err := s.getForUpdate(ctx, tx, id)
+	if err != nil {
+		return domain.Job{}, err
+	}
+	if !allowedTransition(job.Status, next) {
+		return domain.Job{}, fmt.Errorf("%w: %s -> %s", ErrInvalidTransition, job.Status, next)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE jobs SET status = $2, error = NULLIF($3, ''), updated_at = now() WHERE id = $1`, id, next, message); err != nil {
+		return domain.Job{}, err
+	}
+	job.Status = next
+	job.Error = ""
+	if next == domain.JobStatusFailed {
+		job.Error = message
+	}
+	job.UpdatedAt = time.Now().UTC()
+	if err := tx.Commit(); err != nil {
+		return domain.Job{}, err
+	}
+	return job, nil
+}
+
+func (s *PostgresStore) AppendLog(ctx context.Context, id, message string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var exists bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM jobs WHERE id = $1 FOR UPDATE)`, id).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return ErrJobNotFound
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO job_logs (job_id, sequence, message) VALUES ($1, COALESCE((SELECT MAX(sequence) + 1 FROM job_logs WHERE job_id = $1), 1), $2)`, id, message)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE jobs SET updated_at = now() WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *PostgresStore) SetResult(ctx context.Context, id string, result []byte) error {
+	if _, err := s.db.ExecContext(ctx, `UPDATE jobs SET result = $2::jsonb, updated_at = now() WHERE id = $1`, id, result); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *PostgresStore) ListByStatus(ctx context.Context, status domain.JobStatus) ([]domain.Job, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, status, COALESCE(source_url, ''), clip_count, output_dir, metadata, result, COALESCE(error, ''), created_at, updated_at FROM jobs WHERE status = $1 ORDER BY created_at, id`, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	jobs := make([]domain.Job, 0)
+	for rows.Next() {
+		job, err := scanJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, job)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return jobs, nil
+}
+
+func (s *PostgresStore) RequeueProcessing(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE jobs SET status = 'queued', error = NULL, updated_at = now() WHERE status = 'processing'`)
+	return err
+}
+
+type sqlQueryer interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func (s *PostgresStore) get(ctx context.Context, queryer sqlQueryer, id string) (domain.Job, error) {
+	job, err := scanJob(queryer.QueryRowContext(ctx, `SELECT id, kind, status, COALESCE(source_url, ''), clip_count, output_dir, metadata, result, COALESCE(error, ''), created_at, updated_at FROM jobs WHERE id = $1`, id))
+	if err != nil {
+		return domain.Job{}, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT sequence, created_at, message FROM job_logs WHERE job_id = $1 ORDER BY sequence`, id)
+	if err != nil {
+		return domain.Job{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var entry domain.JobLog
+		if err := rows.Scan(&entry.Sequence, &entry.Timestamp, &entry.Message); err != nil {
+			return domain.Job{}, err
+		}
+		job.Logs = append(job.Logs, entry)
+	}
+	return job, rows.Err()
+}
+
+func (s *PostgresStore) getForUpdate(ctx context.Context, tx *sql.Tx, id string) (domain.Job, error) {
+	return scanJob(tx.QueryRowContext(ctx, `SELECT id, kind, status, COALESCE(source_url, ''), clip_count, output_dir, metadata, result, COALESCE(error, ''), created_at, updated_at FROM jobs WHERE id = $1 FOR UPDATE`, id))
+}
+
+type rowScanner interface{ Scan(...any) error }
+
+func scanJob(row rowScanner) (domain.Job, error) {
+	var job domain.Job
+	var status string
+	var metadata, result []byte
+	if err := row.Scan(&job.ID, &job.Kind, &status, &job.SourceURL, &job.ClipCount, &job.OutputDir, &metadata, &result, &job.Error, &job.CreatedAt, &job.UpdatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Job{}, ErrJobNotFound
+		}
+		return domain.Job{}, err
+	}
+	job.Status = domain.JobStatus(status)
+	job.Metadata = decodeMetadata(metadata)
+	job.Result = append([]byte(nil), result...)
+	return job, nil
+}
+
+func decodeMetadata(value []byte) map[string]any {
+	if len(value) == 0 {
+		return map[string]any{}
+	}
+	metadata := map[string]any{}
+	if json.Unmarshal(value, &metadata) != nil {
+		return map[string]any{}
+	}
+	return metadata
+}
+
+var _ Store = (*PostgresStore)(nil)

@@ -36,6 +36,7 @@ type Server struct {
 	mux               *http.ServeMux
 	store             jobs.Store
 	runner            *jobs.Runner
+	scheduler         *jobs.Scheduler
 	translationRunner OperationClient
 	codexAuth         *integrations.CodexAuth
 	mediaRunner       media.CommandRunner
@@ -57,8 +58,12 @@ func NewServerWithStoreAndRunner(cfg config.Config, store jobs.Store, runner *jo
 }
 
 func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs.Runner, translationRunner OperationClient) *Server {
+	return NewServerWithDependenciesAndScheduler(cfg, store, runner, translationRunner, nil)
+}
+
+func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, runner *jobs.Runner, translationRunner OperationClient, scheduler *jobs.Scheduler) *Server {
 	mux := http.NewServeMux()
-	server := &Server{config: cfg, mux: mux, store: store, runner: runner, translationRunner: translationRunner, versionStores: make(map[string]*versions.Store)}
+	server := &Server{config: cfg, mux: mux, store: store, runner: runner, scheduler: scheduler, translationRunner: translationRunner, versionStores: make(map[string]*versions.Store)}
 	server.mediaRunner = media.ExecCommandRunner{}
 	if cfg.S3Bucket != "" || cfg.S3Endpoint != "" {
 		server.s3Store, _ = integrations.NewS3Store(context.Background(), integrations.S3Config{Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, ForcePathStyle: cfg.S3ForcePathStyle, Bucket: cfg.S3Bucket, SourceBucket: cfg.S3SourceBucket})
@@ -67,6 +72,7 @@ func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs
 		server.codexAuth = integrations.NewCodexAuth(integrations.CodexConfig{StorePath: cfg.CodexAuthFile}, nil)
 	}
 	mux.HandleFunc("/health", server.health)
+	mux.HandleFunc("/ready", server.readiness)
 	mux.HandleFunc("/videos/", server.staticOutput)
 	mux.HandleFunc("/thumbnails/", server.staticThumbnail)
 	mux.HandleFunc("/gallery", server.galleryPage)
@@ -121,6 +127,14 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) readiness(w http.ResponseWriter, _ *http.Request) {
+	if s.store == nil || s.translationRunner == nil || (s.scheduler != nil && !s.scheduler.Started()) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
 func (s *Server) staticOutput(w http.ResponseWriter, r *http.Request) {
@@ -1049,7 +1063,13 @@ func (s *Server) process(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Failed to initialize job"})
 		return
 	}
-	if s.runner != nil {
+	if s.scheduler != nil {
+		if err := s.scheduler.Submit(r.Context(), job.ID); err != nil {
+			_, _ = s.store.Transition(r.Context(), job.ID, domain.JobStatusFailed, err.Error())
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"detail": "Job scheduler unavailable"})
+			return
+		}
+	} else if s.runner != nil {
 		go func() {
 			if err := s.runner.RunOnce(context.Background(), job.ID); err != nil {
 				// Runner persists the failure state and error in the job store.
