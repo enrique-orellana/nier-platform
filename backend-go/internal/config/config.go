@@ -22,6 +22,15 @@ type Config struct {
 	OutputDir         string
 	DisableYouTubeURL bool
 	UploadPostUserURL string
+	UploadPostURL     string
+	CodexAuthFile     string
+	S3Endpoint        string
+	S3Region          string
+	S3AccessKey       string
+	S3SecretKey       string
+	S3Bucket          string
+	S3SourceBucket    string
+	S3ForcePathStyle  bool
 }
 
 func Load() (Config, error) {
@@ -31,6 +40,7 @@ func Load() (Config, error) {
 		RenderServiceURL:  defaultRenderServiceURL,
 		OutputDir:         defaultOutputDir,
 		UploadPostUserURL: defaultUploadPostUserURL,
+		UploadPostURL:     "https://api.upload-post.com/api/upload",
 	}
 
 	if value := os.Getenv("PORT"); value != "" {
@@ -58,6 +68,26 @@ func Load() (Config, error) {
 	}
 	if value := os.Getenv("UPLOAD_POST_USER_URL"); value != "" {
 		cfg.UploadPostUserURL = value
+	}
+	if value := os.Getenv("UPLOAD_POST_URL"); value != "" {
+		cfg.UploadPostURL = value
+	}
+	if value := os.Getenv("OPENSHORTS_CODEX_AUTH_FILE"); value != "" {
+		cfg.CodexAuthFile = value
+	} else {
+		cfg.CodexAuthFile = fmt.Sprintf("%s/.openshorts/codex-auth.json", strings.TrimRight(cfg.OutputDir, `/\\`))
+	}
+	cfg.S3Endpoint = os.Getenv("AWS_S3_ENDPOINT_URL")
+	cfg.S3Region = os.Getenv("AWS_REGION")
+	cfg.S3AccessKey = os.Getenv("AWS_ACCESS_KEY_ID")
+	cfg.S3SecretKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
+	cfg.S3Bucket = os.Getenv("AWS_S3_BUCKET")
+	cfg.S3SourceBucket = os.Getenv("AWS_S3_SOURCE_BUCKET")
+	if cfg.S3SourceBucket == "" {
+		cfg.S3SourceBucket = "youtube-downloads"
+	}
+	if value := os.Getenv("AWS_S3_FORCE_PATH_STYLE"); value != "" {
+		cfg.S3ForcePathStyle = strings.EqualFold(value, "1") || strings.EqualFold(value, "true") || strings.EqualFold(value, "yes")
 	}
 
 	return cfg, nil

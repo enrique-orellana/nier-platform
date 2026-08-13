@@ -18,8 +18,10 @@ import (
 
 	"github.com/mutonby/openshorts/backend-go/internal/config"
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
+	"github.com/mutonby/openshorts/backend-go/internal/integrations"
 	"github.com/mutonby/openshorts/backend-go/internal/jobs"
 	"github.com/mutonby/openshorts/backend-go/internal/manifests"
+	"github.com/mutonby/openshorts/backend-go/internal/media"
 	"github.com/mutonby/openshorts/backend-go/internal/versions"
 )
 
@@ -33,6 +35,9 @@ type Server struct {
 	store             jobs.Store
 	runner            *jobs.Runner
 	translationRunner OperationClient
+	codexAuth         *integrations.CodexAuth
+	mediaRunner       media.CommandRunner
+	s3Store           *integrations.S3Store
 	versionMu         sync.Mutex
 	versionStores     map[string]*versions.Store
 }
@@ -52,6 +57,13 @@ func NewServerWithStoreAndRunner(cfg config.Config, store jobs.Store, runner *jo
 func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs.Runner, translationRunner OperationClient) *Server {
 	mux := http.NewServeMux()
 	server := &Server{config: cfg, mux: mux, store: store, runner: runner, translationRunner: translationRunner, versionStores: make(map[string]*versions.Store)}
+	server.mediaRunner = media.ExecCommandRunner{}
+	if cfg.S3Bucket != "" || cfg.S3Endpoint != "" {
+		server.s3Store, _ = integrations.NewS3Store(context.Background(), integrations.S3Config{Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, ForcePathStyle: cfg.S3ForcePathStyle, Bucket: cfg.S3Bucket, SourceBucket: cfg.S3SourceBucket})
+	}
+	if cfg.CodexAuthFile != "" {
+		server.codexAuth = integrations.NewCodexAuth(integrations.CodexConfig{StorePath: cfg.CodexAuthFile}, nil)
+	}
 	mux.HandleFunc("/health", server.health)
 	mux.HandleFunc("/videos/", server.staticOutput)
 	mux.HandleFunc("/thumbnails/", server.staticThumbnail)
@@ -76,13 +88,13 @@ func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs
 	mux.HandleFunc("/api/local-editor/render", server.renderLocalEditor)
 	mux.HandleFunc("/api/local-editor/burn-subtitles", server.burnLocalEditorSubtitles)
 	mux.HandleFunc("/api/translation/", server.translationStatus)
-	mux.HandleFunc("/api/minio/objects", server.legacyJSONRoute("minio_objects"))
+	mux.HandleFunc("/api/minio/objects", server.minioObjects)
 	mux.HandleFunc("/api/effects/generate", server.legacyJSONRoute("effects"))
-	mux.HandleFunc("/api/subtitle", server.legacyJSONRoute("subtitle"))
+	mux.HandleFunc("/api/subtitle", server.subtitle)
 	mux.HandleFunc("/api/edit", server.legacyJSONRoute("edit"))
 	mux.HandleFunc("/api/hook", server.legacyJSONRoute("hook"))
 	mux.HandleFunc("/api/translate", server.legacyJSONRoute("translate"))
-	mux.HandleFunc("/api/social/post", server.legacyJSONRoute("social_post"))
+	mux.HandleFunc("/api/social/post", server.socialPost)
 	mux.HandleFunc("/api/thumbnail/", server.thumbnailRoute)
 	mux.HandleFunc("/api/saasshorts/", server.saasRoute)
 	mux.HandleFunc("/api/clip/", server.clipRoutes)
@@ -361,13 +373,41 @@ func (s *Server) codexRoute(w http.ResponseWriter, r *http.Request) {
 		}
 		operation = "codex_models"
 	case "/api/ai/openai-codex/connect":
-		if r.Method != http.MethodPost { writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"}); return }
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+			return
+		}
 		operation = "codex_connect"
 	case "/api/ai/openai-codex/poll":
-		if r.Method != http.MethodPost { writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"}); return }
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+			return
+		}
 		operation = "codex_poll"
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
+		return
+	}
+	if s.codexAuth != nil && operation != "codex_models" {
+		var payload map[string]any
+		var err error
+		switch operation {
+		case "codex_status":
+			status := s.codexAuth.Status()
+			payload = map[string]any{"connected": status.Connected, "pending": status.Pending}
+		case "codex_connect":
+			payload, err = s.codexAuth.Connect(r.Context())
+		case "codex_poll":
+			payload, err = s.codexAuth.Poll(r.Context())
+		case "codex_disconnect":
+			err = s.codexAuth.Disconnect()
+			payload = map[string]any{"connected": false, "pending": false}
+		}
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, payload)
 		return
 	}
 	if s.translationRunner == nil {
@@ -401,50 +441,234 @@ func (s *Server) socialUser(w http.ResponseWriter, r *http.Request) {
 	if endpoint == "" {
 		endpoint = "https://api.upload-post.com/api/uploadposts/users"
 	}
-	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, endpoint, nil)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
-		return
-	}
-	request.Header.Set("Authorization", "Apikey "+apiKey)
-	response, err := (&http.Client{Timeout: 30 * time.Second}).Do(request)
+	profiles, err := (integrations.SocialClient{HTTP: &http.Client{Timeout: 30 * time.Second}}).FetchProfiles(r.Context(), endpoint, apiKey)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Failed to fetch user: %s", err)})
 		return
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		writeJSON(w, response.StatusCode, map[string]string{"detail": "Failed to fetch user"})
-		return
-	}
-	var data struct {
-		Profiles []struct {
-			Username       string         `json:"username"`
-			SocialAccounts map[string]any `json:"social_accounts"`
-		} `json:"profiles"`
-	}
-	if err := json.NewDecoder(response.Body).Decode(&data); err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Invalid user response"})
-		return
-	}
-	profiles := make([]map[string]any, 0, len(data.Profiles))
-	for _, profile := range data.Profiles {
-		if profile.Username == "" {
-			continue
-		}
-		connected := make([]string, 0)
-		for _, platform := range []string{"tiktok", "instagram", "youtube"} {
-			if _, ok := profile.SocialAccounts[platform]; ok {
-				connected = append(connected, platform)
-			}
-		}
-		profiles = append(profiles, map[string]any{"username": profile.Username, "connected": connected})
 	}
 	if len(profiles) == 0 {
 		writeJSON(w, http.StatusOK, map[string]any{"profiles": []any{}, "error": "No profiles found"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"profiles": profiles})
+}
+
+func (s *Server) minioObjects(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	if s.s3Store == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"detail": "MinIO credentials are not configured"})
+		return
+	}
+	limit := 50
+	if value := r.URL.Query().Get("limit"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "limit must be an integer"})
+			return
+		}
+		limit = parsed
+	}
+	page, err := s.s3Store.ListSourceObjects(r.Context(), r.URL.Query().Get("search"), limit, r.URL.Query().Get("continuation_token"))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, page)
+}
+
+func (s *Server) socialPost(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	var request struct {
+		JobID         string   `json:"job_id"`
+		ClipIndex     int      `json:"clip_index"`
+		APIKey        string   `json:"api_key"`
+		UserID        string   `json:"user_id"`
+		Platforms     []string `json:"platforms"`
+		Title         string   `json:"title"`
+		Description   string   `json:"description"`
+		ScheduledDate string   `json:"scheduled_date"`
+		Timezone      string   `json:"timezone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+	job, ok := s.store.Get(r.Context(), request.JobID)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Job not found"})
+		return
+	}
+	var result struct {
+		Clips []map[string]any `json:"clips"`
+	}
+	if err := json.Unmarshal(job.Result, &result); err != nil || request.ClipIndex < 0 || request.ClipIndex >= len(result.Clips) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Job result not available"})
+		return
+	}
+	clip := result.Clips[request.ClipIndex]
+	videoURL := firstString(clip, "video_url", "url")
+	filename := filepath.Base(strings.Split(strings.TrimPrefix(videoURL, "/videos/"), "?")[0])
+	if filename == "." || filename == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Video file not found"})
+		return
+	}
+	root := filepath.Join(s.config.OutputDir, request.JobID)
+	videoPath := filepath.Join(root, filename)
+	if !safePath(root, videoPath) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid video path"})
+		return
+	}
+	video, err := os.Open(videoPath)
+	if errors.Is(err, os.ErrNotExist) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Video file not found"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
+		return
+	}
+	defer video.Close()
+	if request.Title == "" {
+		request.Title = firstString(clip, "title", "video_title_for_youtube_short")
+		if request.Title == "" {
+			request.Title = "Viral Short"
+		}
+	}
+	if request.Description == "" {
+		request.Description = firstString(clip, "video_description_for_instagram", "video_description_for_tiktok")
+		if request.Description == "" {
+			request.Description = "Check this out!"
+		}
+	}
+	client := integrations.SocialClient{HTTP: &http.Client{Timeout: 120 * time.Second}, UploadURL: s.config.UploadPostURL}
+	payload, err := client.Publish(r.Context(), request.APIKey, filename, video, integrations.PublishRequest{UserID: request.UserID, Title: request.Title, Description: request.Description, Platforms: request.Platforms, ScheduledDate: request.ScheduledDate, Timezone: request.Timezone})
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	var request struct {
+		JobID           string  `json:"job_id"`
+		ClipIndex       int     `json:"clip_index"`
+		Position        string  `json:"position"`
+		FontSize        int     `json:"font_size"`
+		FontName        string  `json:"font_name"`
+		FontColor       string  `json:"font_color"`
+		BorderColor     string  `json:"border_color"`
+		BorderWidth     int     `json:"border_width"`
+		Background      string  `json:"bg_color"`
+		BackgroundAlpha float64 `json:"bg_opacity"`
+		InputFilename   string  `json:"input_filename"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+	job, ok := s.store.Get(r.Context(), request.JobID)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Job not found"})
+		return
+	}
+	var result struct {
+		Clips []map[string]any `json:"clips"`
+	}
+	if err := json.Unmarshal(job.Result, &result); err != nil || request.ClipIndex < 0 || request.ClipIndex >= len(result.Clips) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Job result not available"})
+		return
+	}
+	clip := result.Clips[request.ClipIndex]
+	filename := request.InputFilename
+	if filename == "" {
+		filename = filepath.Base(strings.Split(strings.TrimPrefix(firstString(clip, "video_url", "url"), "/videos/"), "?")[0])
+	}
+	root := filepath.Join(s.config.OutputDir, request.JobID)
+	inputPath := filepath.Join(root, filename)
+	if filename == "" || !safePath(root, inputPath) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid input filename"})
+		return
+	}
+	if _, err := os.Stat(inputPath); errors.Is(err, os.ErrNotExist) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Video file not found"})
+		return
+	}
+	metadataPath, err := firstMetadataPath(root)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Metadata not found"})
+		return
+	}
+	var metadata struct {
+		Transcript map[string]any `json:"transcript"`
+		Shorts     []struct {
+			Start float64 `json:"start"`
+			End   float64 `json:"end"`
+		} `json:"shorts"`
+	}
+	contents, err := os.ReadFile(metadataPath)
+	if err != nil || json.Unmarshal(contents, &metadata) != nil || request.ClipIndex >= len(metadata.Shorts) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid metadata"})
+		return
+	}
+	srt, err := media.BuildWordSRT(metadata.Transcript, metadata.Shorts[request.ClipIndex].Start, metadata.Shorts[request.ClipIndex].End)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	srtFile, err := os.CreateTemp(root, ".subtitle-*.srt")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
+		return
+	}
+	srtPath := srtFile.Name()
+	defer os.Remove(srtPath)
+	if _, err := srtFile.WriteString(srt); err != nil {
+		_ = srtFile.Close()
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
+		return
+	}
+	if err := srtFile.Close(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
+		return
+	}
+	outputFilename := "subtitled_" + filename
+	outputPath := filepath.Join(root, outputFilename)
+	if err := media.BurnSubtitles(r.Context(), s.mediaRunner, inputPath, srtPath, outputPath, media.SubtitleStyle{Alignment: request.Position, FontSize: request.FontSize}); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
+		return
+	}
+	if _, err := os.Stat(outputPath); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "FFmpeg did not produce an output video"})
+		return
+	}
+	videoURL := "/videos/" + request.JobID + "/" + outputFilename
+	result.Clips[request.ClipIndex]["video_url"] = videoURL
+	if encoded, marshalErr := json.Marshal(result); marshalErr == nil {
+		_ = s.store.SetResult(r.Context(), request.JobID, encoded)
+	}
+	metadataData := map[string]any{}
+	if json.Unmarshal(contents, &metadataData) == nil {
+		if shorts, ok := metadataData["shorts"].([]any); ok && request.ClipIndex < len(shorts) {
+			if item, ok := shorts[request.ClipIndex].(map[string]any); ok {
+				item["video_url"] = videoURL
+			}
+		}
+		if encoded, marshalErr := json.MarshalIndent(metadataData, "", "  "); marshalErr == nil {
+			_ = os.WriteFile(metadataPath, encoded, 0o644)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "new_video_url": videoURL})
 }
 
 func serviceOrigin(value string) (string, error) {
@@ -1441,7 +1665,7 @@ func (s *Server) projectRoutes(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPatch && len(parts) == 4 && parts[1] == "clips" && parts[3] == "status":
 		s.updateProjectStatus(w, r, job, parts[2])
 	case r.Method == http.MethodDelete && len(parts) == 1:
-		s.deleteProject(w, jobID)
+		s.deleteProject(w, r, jobID)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 	}
@@ -1644,7 +1868,7 @@ func (s *Server) writeProjectStatus(jobID string, document map[string]any) error
 	return os.Rename(temporaryName, path)
 }
 
-func (s *Server) deleteProject(w http.ResponseWriter, jobID string) {
+func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request, jobID string) {
 	root := s.config.OutputDir
 	if root == "" {
 		root = "output"
@@ -1653,7 +1877,24 @@ func (s *Server) deleteProject(w http.ResponseWriter, jobID string) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "job_id": jobID, "s3_deleted_count": 0})
+	s3Deleted := 0
+	if s.s3Store != nil {
+		deleted, err := s.s3Store.DeletePrefix(r.Context(), jobID+"/")
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
+			return
+		}
+		s3Deleted = deleted
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "job_id": jobID, "s3_deleted_count": s3Deleted})
+}
+
+func firstMetadataPath(root string) (string, error) {
+	files, err := filepath.Glob(filepath.Join(root, "*_metadata.json"))
+	if err != nil || len(files) == 0 {
+		return "", os.ErrNotExist
+	}
+	return files[0], nil
 }
 
 func (s *Server) legacyJSONRoute(action string) http.HandlerFunc {
@@ -1703,24 +1944,40 @@ func (s *Server) thumbnailRoute(w http.ResponseWriter, r *http.Request) {
 	extras := map[string]any{}
 	if action == "projects" && len(parts) > 1 {
 		switch {
-		case parts[1] == "migrate-legacy": action = "projects_migrate_legacy"
+		case parts[1] == "migrate-legacy":
+			action = "projects_migrate_legacy"
 		case len(parts) >= 4 && parts[3] == "files":
-			if r.Method == http.MethodPatch { action = "project_file_update" } else { action = "project_file_delete" }
+			if r.Method == http.MethodPatch {
+				action = "project_file_update"
+			} else {
+				action = "project_file_delete"
+			}
 			extras["session_id"], extras["project_slug"], extras["file_path"] = parts[1], parts[2], strings.Join(parts[4:], "/")
 		case len(parts) >= 3:
-			if r.Method == http.MethodPatch { action = "project_update" } else { action = "project_delete" }
+			if r.Method == http.MethodPatch {
+				action = "project_update"
+			} else {
+				action = "project_delete"
+			}
 			extras["session_id"], extras["project_slug"] = parts[1], parts[2]
 		}
 	}
-	if action == "save" { action = "project_save" }
-	if action == "publish" && len(parts) == 3 && parts[1] == "status" { action = "publish_status"; extras["publish_id"] = parts[2] }
+	if action == "save" {
+		action = "project_save"
+	}
+	if action == "publish" && len(parts) == 3 && parts[1] == "status" {
+		action = "publish_status"
+		extras["publish_id"] = parts[2]
+	}
 	if action == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 		return
 	}
 	if r.Method == http.MethodGet {
 		payload := map[string]any{"action": "thumbnail_" + action, "output_dir": s.config.OutputDir, "limit": r.URL.Query().Get("limit")}
-		for key, value := range extras { payload[key] = value }
+		for key, value := range extras {
+			payload[key] = value
+		}
 		s.legacyWorkerPayload(w, r, "thumbnail_"+action, payload)
 		return
 	}
@@ -1730,7 +1987,9 @@ func (s *Server) thumbnailRoute(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		payload := map[string]any{"action": "thumbnail_" + action, "output_dir": s.config.OutputDir}
-		for key, value := range extras { payload[key] = value }
+		for key, value := range extras {
+			payload[key] = value
+		}
 		if err := os.MkdirAll(filepath.Join(s.config.OutputDir, ".uploads"), 0o755); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not create upload directory"})
 			return
@@ -1781,14 +2040,19 @@ func (s *Server) saasRoute(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/saasshorts/"), "/"), "/")
 	action := strings.ReplaceAll(parts[0], "-", "_")
 	extras := map[string]any{}
-	if action == "status" && len(parts) == 2 { action = "status"; extras["job_id"] = parts[1] }
+	if action == "status" && len(parts) == 2 {
+		action = "status"
+		extras["job_id"] = parts[1]
+	}
 	if action == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 		return
 	}
 	if r.Method == http.MethodGet {
 		payload := map[string]any{"action": "saas_" + action, "output_dir": s.config.OutputDir}
-		for key, value := range extras { payload[key] = value }
+		for key, value := range extras {
+			payload[key] = value
+		}
 		if value := r.URL.Query().Get("limit"); value != "" {
 			payload["limit"] = value
 		}
@@ -1796,13 +2060,37 @@ func (s *Server) saasRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if action == "actor_upload" && strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
-		if err := r.ParseMultipartForm(64 << 20); err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid multipart request"}); return }
+		if err := r.ParseMultipartForm(64 << 20); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid multipart request"})
+			return
+		}
 		files := r.MultipartForm.File["file"]
-		if len(files) == 0 { writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "File is required"}); return }
-		if err := os.MkdirAll(filepath.Join(s.config.OutputDir, ".uploads"), 0o755); err != nil { writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()}); return }
-		file, err := files[0].Open(); if err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Could not read uploaded file"}); return }
-		temporary, err := os.CreateTemp(filepath.Join(s.config.OutputDir, ".uploads"), "actor-"); if err != nil { _ = file.Close(); writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()}); return }
-		_, copyErr := io.Copy(temporary, file); _ = file.Close(); _ = temporary.Close(); if copyErr != nil { writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": copyErr.Error()}); return }
+		if len(files) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "File is required"})
+			return
+		}
+		if err := os.MkdirAll(filepath.Join(s.config.OutputDir, ".uploads"), 0o755); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
+			return
+		}
+		file, err := files[0].Open()
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Could not read uploaded file"})
+			return
+		}
+		temporary, err := os.CreateTemp(filepath.Join(s.config.OutputDir, ".uploads"), "actor-")
+		if err != nil {
+			_ = file.Close()
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
+			return
+		}
+		_, copyErr := io.Copy(temporary, file)
+		_ = file.Close()
+		_ = temporary.Close()
+		if copyErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": copyErr.Error()})
+			return
+		}
 		s.legacyWorkerPayload(w, r, "saas_actor_upload", map[string]any{"action": "saas_actor_upload", "output_dir": s.config.OutputDir, "file_path": temporary.Name()})
 		return
 	}

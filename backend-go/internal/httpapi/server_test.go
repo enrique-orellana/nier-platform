@@ -77,6 +77,13 @@ func (burnOperation) Run(_ context.Context, _ string, operation string, payload 
 	return json.RawMessage(`{"outputUrl":"/videos/local-editor-1/subtitled_source.mp4"}`), nil
 }
 
+type subtitleCommandRunner struct{ args []string }
+
+func (r *subtitleCommandRunner) Run(_ context.Context, _ string, args ...string) error {
+	r.args = args
+	return os.WriteFile(args[len(args)-1], []byte("video"), 0o644)
+}
+
 func TestHealthReturnsOK(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -691,6 +698,81 @@ func TestSocialUserRouteProxiesProfilesToUploadPost(t *testing.T) {
 	server.Handler().ServeHTTP(res, req)
 	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"username":"creator"`) || !strings.Contains(res.Body.String(), `"youtube"`) {
 		t.Fatalf("unexpected social user response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestSocialPostRoutePublishesClipFromGo(t *testing.T) {
+	vendor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Apikey secret" {
+			t.Fatalf("unexpected authorization header: %q", r.Header.Get("Authorization"))
+		}
+		if err := r.ParseMultipartForm(1024 * 1024); err != nil {
+			t.Fatalf("parse multipart form: %v", err)
+		}
+		if r.FormValue("user") != "creator" || r.FormValue("platform[]") != "youtube" {
+			t.Fatalf("unexpected publish fields: %#v", r.Form)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success":true,"upload_id":"upload-1"}`))
+	}))
+	defer vendor.Close()
+
+	outputDir := t.TempDir()
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation", OutputDir: filepath.Join(outputDir, "job-1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobDir := filepath.Join(outputDir, job.ID)
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "clip.mp4"), []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"clips":[{"video_url":"/videos/`+job.ID+`/clip.mp4","title":"T"}]}`)); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: outputDir, UploadPostURL: vendor.URL}, store)
+	req := httptest.NewRequest(http.MethodPost, "/api/social/post", strings.NewReader(`{"job_id":"`+job.ID+`","clip_index":0,"api_key":"secret","user_id":"creator","platforms":["youtube"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"upload_id":"upload-1"`) {
+		t.Fatalf("unexpected social post response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestSubtitleRouteBurnsWithGoFFmpegRunner(t *testing.T) {
+	outputDir := t.TempDir()
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobDir := filepath.Join(outputDir, job.ID)
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "clip.mp4"), []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	metadata := `{"transcript":{"segments":[{"words":[{"word":"Hello","start":0,"end":1}]}]},"shorts":[{"start":0,"end":1}]}`
+	if err := os.WriteFile(filepath.Join(jobDir, "clip_metadata.json"), []byte(metadata), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"clips":[{"video_url":"/videos/`+job.ID+`/clip.mp4"}]}`)); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+	runner := &subtitleCommandRunner{}
+	server.mediaRunner = runner
+	req := httptest.NewRequest(http.MethodPost, "/api/subtitle", strings.NewReader(`{"job_id":"`+job.ID+`","clip_index":0}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"success":true`) || len(runner.args) == 0 {
+		t.Fatalf("unexpected subtitle response: %d %s args=%#v", res.Code, res.Body.String(), runner.args)
 	}
 }
 
