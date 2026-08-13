@@ -494,6 +494,24 @@ func TestLocalEditorTranscribeUsesPythonWorkerOperation(t *testing.T) {
 	}
 }
 
+func TestClipTranscriptRouteReadsWordTimingFromMetadata(t *testing.T) {
+	outputDir := t.TempDir()
+	metadataPath := filepath.Join(outputDir, "job-1", "source_metadata.json")
+	if err := os.MkdirAll(filepath.Dir(metadataPath), 0o755); err != nil {
+		t.Fatalf("create metadata directory: %v", err)
+	}
+	if err := os.WriteFile(metadataPath, []byte(`{"transcript":{"language":"en","segments":[{"words":[{"word":"Hello","start":1.2,"end":1.7}]}]},"shorts":[{"start":1,"end":3}]}`), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+	server := NewServer(config.Config{OutputDir: outputDir})
+	req := httptest.NewRequest(http.MethodGet, "/api/clip/job-1/0/transcript", nil)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"language":"en"`) || !strings.Contains(res.Body.String(), `"startMs":199`) {
+		t.Fatalf("unexpected transcript response: %d %s", res.Code, res.Body.String())
+	}
+}
+
 func TestStatusReturnsNotFoundForUnknownJob(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/status/missing-job", nil)

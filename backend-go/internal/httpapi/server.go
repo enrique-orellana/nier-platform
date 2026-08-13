@@ -657,7 +657,7 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 		return
 	}
-	if len(segments) < 1 || (segments[0] != "versions" && segments[0] != "manifest") {
+	if len(segments) < 1 || (segments[0] != "versions" && segments[0] != "manifest" && segments[0] != "transcript") {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 		return
 	}
@@ -686,6 +686,8 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 		s.getManifest(w, jobID, clipIndex)
 	case r.Method == http.MethodPatch && len(segments) == 1 && segments[0] == "manifest":
 		s.patchManifest(w, r, jobID, clipIndex)
+	case r.Method == http.MethodGet && len(segments) == 1 && segments[0] == "transcript":
+		s.clipTranscript(w, jobID, clipIndex)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 	}
@@ -1017,6 +1019,73 @@ func (s *Server) patchManifest(w http.ResponseWriter, r *http.Request, jobID str
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "manifest": manifest, "revision": revision, "master_current": false})
+}
+
+func (s *Server) clipTranscript(w http.ResponseWriter, jobID string, clipIndex int) {
+	root := s.config.OutputDir
+	if root == "" {
+		root = "output"
+	}
+	metadataFiles, err := filepath.Glob(filepath.Join(root, jobID, "*_metadata.json"))
+	if err != nil || len(metadataFiles) == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Metadata not found"})
+		return
+	}
+	contents, err := os.ReadFile(metadataFiles[0])
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Metadata not found"})
+		return
+	}
+	var data struct {
+		Transcript struct {
+			Language string `json:"language"`
+			Segments []struct {
+				Words []struct {
+					Word  string  `json:"word"`
+					Start float64 `json:"start"`
+					End   float64 `json:"end"`
+				} `json:"words"`
+			} `json:"segments"`
+		} `json:"transcript"`
+		Shorts []struct {
+			Start float64 `json:"start"`
+			End   float64 `json:"end"`
+		} `json:"shorts"`
+	}
+	if err := json.Unmarshal(contents, &data); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid metadata"})
+		return
+	}
+	if data.Transcript.Language == "" || len(data.Transcript.Segments) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Transcript not found in metadata"})
+		return
+	}
+	if clipIndex < 0 || clipIndex >= len(data.Shorts) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Clip not found"})
+		return
+	}
+	clipStart, clipEnd := data.Shorts[clipIndex].Start, data.Shorts[clipIndex].End
+	captions := make([]map[string]any, 0)
+	for _, segment := range data.Transcript.Segments {
+		for _, word := range segment.Words {
+			if word.End <= clipStart || word.Start >= clipEnd {
+				continue
+			}
+			captions = append(captions, map[string]any{
+				"text":    strings.TrimSpace(word.Word),
+				"startMs": int(maxFloat(0, word.Start-clipStart) * 1000),
+				"endMs":   int(maxFloat(0, word.End-clipStart) * 1000),
+			})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"captions": captions, "durationSec": clipEnd - clipStart, "language": data.Transcript.Language})
+}
+
+func maxFloat(left, right float64) float64 {
+	if left > right {
+		return left
+	}
+	return right
 }
 
 func (s *Server) decodeProcessRequest(r *http.Request) (processRequest, error) {
