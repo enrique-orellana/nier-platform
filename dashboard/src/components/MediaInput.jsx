@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Youtube, Upload, FileVideo, X } from 'lucide-react';
-import { getApiUrl } from '../config';
+import React, { useState } from 'react';
+import { Link, Upload, FileVideo, X } from 'lucide-react';
 
 export default function MediaInput({
     onProcess,
@@ -8,23 +7,10 @@ export default function MediaInput({
     targetClipCount,
     onTargetClipCountChange,
 }) {
-    const [youtubeUrlEnabled, setYoutubeUrlEnabled] = useState(true);
     const [mode, setMode] = useState('url'); // 'url' | 'file'
     const [url, setUrl] = useState('');
     const [file, setFile] = useState(null);
     const [acknowledged, setAcknowledged] = useState(false);
-
-    useEffect(() => {
-        fetch(getApiUrl('/api/config'))
-            .then((r) => r.ok ? r.json() : null)
-            .then((cfg) => {
-                if (cfg && cfg.youtubeUrlEnabled === false) {
-                    setYoutubeUrlEnabled(false);
-                    setMode('file');
-                }
-            })
-            .catch(() => {});
-    }, []);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -47,18 +33,16 @@ export default function MediaInput({
     return (
         <div className="bg-surface border border-white/5 rounded-2xl p-6 animate-[fadeIn_0.6s_ease-out]">
             <div className="flex gap-4 mb-6 border-b border-white/5 pb-4">
-                {youtubeUrlEnabled && (
-                    <button
-                        onClick={() => setMode('url')}
-                        className={`flex items-center gap-2 pb-2 px-2 transition-all ${mode === 'url'
-                            ? 'text-primary border-b-2 border-primary -mb-[17px]'
-                            : 'text-zinc-400 hover:text-white'
-                            }`}
-                    >
-                        <Youtube size={18} />
-                        YouTube URL
-                    </button>
-                )}
+                <button
+                    onClick={() => setMode('url')}
+                    className={`flex items-center gap-2 pb-2 px-2 transition-all ${mode === 'url'
+                        ? 'text-primary border-b-2 border-primary -mb-[17px]'
+                        : 'text-zinc-400 hover:text-white'
+                        }`}
+                >
+                    <Link size={18} />
+                    Local MinIO URL
+                </button>
                 <button
                     onClick={() => setMode('file')}
                     className={`flex items-center gap-2 pb-2 px-2 transition-all ${mode === 'file'
@@ -78,10 +62,13 @@ export default function MediaInput({
                             type="url"
                             value={url}
                             onChange={(e) => setUrl(e.target.value)}
-                            placeholder="https://www.youtube.com/watch?v=..."
+                            placeholder="http://localhost:9000/bucket/video.mp4"
                             className="input-field"
                             required
                         />
+                        <p className="text-xs text-zinc-500">
+                            Use a direct MinIO object URL reachable by the OpenShorts backend.
+                        </p>
                     </div>
                 ) : (
                     <div
