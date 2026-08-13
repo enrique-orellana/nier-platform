@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ type Server struct {
 	config config.Config
 	mux    *http.ServeMux
 	store  jobs.Store
+	runner *jobs.Runner
 }
 
 func NewServer(cfg config.Config) *Server {
@@ -25,8 +27,12 @@ func NewServer(cfg config.Config) *Server {
 }
 
 func NewServerWithStore(cfg config.Config, store jobs.Store) *Server {
+	return NewServerWithStoreAndRunner(cfg, store, nil)
+}
+
+func NewServerWithStoreAndRunner(cfg config.Config, store jobs.Store, runner *jobs.Runner) *Server {
 	mux := http.NewServeMux()
-	server := &Server{config: cfg, mux: mux, store: store}
+	server := &Server{config: cfg, mux: mux, store: store, runner: runner}
 	mux.HandleFunc("/health", server.health)
 	mux.HandleFunc("/api/config", server.runtimeConfig)
 	mux.HandleFunc("/api/process", server.process)
@@ -104,6 +110,13 @@ func (s *Server) process(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.AppendLog(r.Context(), job.ID, fmt.Sprintf("Job %s queued.", job.ID)); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Failed to initialize job"})
 		return
+	}
+	if s.runner != nil {
+		go func() {
+			if err := s.runner.RunOnce(context.Background(), job.ID); err != nil {
+				// Runner persists the failure state and error in the job store.
+			}
+		}()
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]string{

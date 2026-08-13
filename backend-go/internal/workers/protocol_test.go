@@ -1,0 +1,74 @@
+package workers
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+
+	"github.com/mutonby/openshorts/backend-go/internal/domain"
+)
+
+type recordingProtocolRunner struct {
+	spec    CommandSpec
+	request map[string]any
+}
+
+func (r *recordingProtocolRunner) RunProtocol(_ context.Context, spec CommandSpec, request map[string]any, onEvent func(ProtocolEvent)) error {
+	r.spec = spec
+	r.request = request
+	onEvent(ProtocolEvent{Type: "log", Message: "worker started"})
+	onEvent(ProtocolEvent{Type: "result", Result: json.RawMessage(`{"job_id":"job-1"}`)})
+	return nil
+}
+
+type errorEventRunner struct{}
+
+func (errorEventRunner) RunProtocol(_ context.Context, _ CommandSpec, _ map[string]any, onEvent func(ProtocolEvent)) error {
+	onEvent(ProtocolEvent{Type: "error", Error: "worker rejected request"})
+	return nil
+}
+
+func TestPythonWorkerAdapterReturnsProtocolError(t *testing.T) {
+	adapter := PythonWorkerAdapter{Runner: errorEventRunner{}}
+
+	err := adapter.Run(context.Background(), domain.Job{ID: "job-1", SourceURL: "https://example.com/video"}, "output/job-1", nil)
+	if err == nil || err.Error() != "worker rejected request" {
+		t.Fatalf("expected protocol failure, got %v", err)
+	}
+}
+
+func TestPythonWorkerAdapterSendsJSONLJobRequest(t *testing.T) {
+	runner := &recordingProtocolRunner{}
+	adapter := PythonWorkerAdapter{
+		PythonBinary: "python-test",
+		WorkerScript: "python_worker.py",
+		Runner:       runner,
+	}
+	job := domain.Job{ID: "job-1", SourceURL: "https://example.com/video.mp4", ClipCount: 4}
+	var logs []string
+
+	if err := adapter.Run(context.Background(), job, "output/job-1", func(message string) { logs = append(logs, message) }); err != nil {
+		t.Fatalf("run worker: %v", err)
+	}
+	if runner.spec.Name != "python-test" {
+		t.Fatalf("unexpected command: %#v", runner.spec)
+	}
+	expectedArgs := []string{"-u", "python_worker.py"}
+	if len(runner.spec.Args) != len(expectedArgs) {
+		t.Fatalf("unexpected args: %#v", runner.spec.Args)
+	}
+	for i, expected := range expectedArgs {
+		if runner.spec.Args[i] != expected {
+			t.Fatalf("arg %d: expected %q, got %q", i, expected, runner.spec.Args[i])
+		}
+	}
+	if runner.request["id"] != "job-1" || runner.request["operation"] != "clip_generation" {
+		t.Fatalf("unexpected worker request: %#v", runner.request)
+	}
+	if runner.request["source_url"] != job.SourceURL || runner.request["output_dir"] != "output/job-1" {
+		t.Fatalf("unexpected job inputs: %#v", runner.request)
+	}
+	if len(logs) != 1 || logs[0] != "worker started" {
+		t.Fatalf("unexpected logs: %#v", logs)
+	}
+}

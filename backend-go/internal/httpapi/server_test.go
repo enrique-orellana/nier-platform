@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,9 +9,19 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mutonby/openshorts/backend-go/internal/config"
+	"github.com/mutonby/openshorts/backend-go/internal/domain"
+	"github.com/mutonby/openshorts/backend-go/internal/jobs"
 )
+
+type completingWorker struct{}
+
+func (completingWorker) Run(_ context.Context, _ domain.Job, _ string, onLog func(string)) error {
+	onLog("python worker completed")
+	return nil
+}
 
 func TestHealthReturnsOK(t *testing.T) {
 	server := NewServer(config.Config{})
@@ -120,6 +131,39 @@ func TestProcessCreatesQueuedJob(t *testing.T) {
 	if statusPayload.Status != "queued" || len(statusPayload.Logs) != 1 || statusPayload.Result != nil {
 		t.Fatalf("unexpected status response: %#v", statusPayload)
 	}
+}
+
+func TestProcessStartsConfiguredWorker(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	runner := &jobs.Runner{Store: store, Worker: completingWorker{}}
+	server := NewServerWithStoreAndRunner(config.Config{}, store, runner)
+	req := httptest.NewRequest(http.MethodPost, "/api/process", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", res.Code, res.Body.String())
+	}
+	var payload struct {
+		JobID string `json:"job_id"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode process response: %v", err)
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		job, ok := store.Get(context.Background(), payload.JobID)
+		if ok && job.Status == domain.JobStatusCompleted {
+			if len(job.Logs) != 3 || job.Logs[2].Message != "python worker completed" {
+				t.Fatalf("unexpected worker logs: %#v", job.Logs)
+			}
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("job did not complete: %#v", payload)
 }
 
 func TestProcessRequiresRightsAcknowledgement(t *testing.T) {

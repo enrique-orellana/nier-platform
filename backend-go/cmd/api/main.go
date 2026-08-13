@@ -12,6 +12,8 @@ import (
 
 	"github.com/mutonby/openshorts/backend-go/internal/config"
 	"github.com/mutonby/openshorts/backend-go/internal/httpapi"
+	"github.com/mutonby/openshorts/backend-go/internal/jobs"
+	"github.com/mutonby/openshorts/backend-go/internal/workers"
 )
 
 func main() {
@@ -20,9 +22,17 @@ func main() {
 		log.Fatal(err)
 	}
 
+	store := jobs.NewMemoryStore()
+	runner := &jobs.Runner{
+		Store: store,
+		Worker: workers.PythonWorkerAdapter{
+			PythonBinary: os.Getenv("PYTHON_BINARY"),
+			WorkerScript: os.Getenv("PYTHON_WORKER_SCRIPT"),
+		},
+	}
 	server := &http.Server{
 		Addr:              cfg.Address(),
-		Handler:           httpapi.NewServer(cfg).Handler(),
+		Handler:           httpapi.NewServerWithStoreAndRunner(cfg, store, runner).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
