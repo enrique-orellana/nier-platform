@@ -89,6 +89,12 @@ def handle_request(request: Mapping[str, Any]) -> None:
     request_id = str(request["id"])
     operation = str(request["operation"])
     try:
+        if operation == "translation":
+            from translation_worker import perform_translation
+
+            track = perform_translation(request.get("payload") or {}, request.get("headers") or {})
+            _emit({"id": request_id, "type": "result", "result": {"track": track}})
+            return
         if operation != "clip_generation":
             raise ValueError(f"unsupported operation: {operation}")
         _emit({"id": request_id, "type": "started", "operation": operation})

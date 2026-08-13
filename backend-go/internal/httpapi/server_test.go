@@ -23,6 +23,12 @@ func (completingWorker) Run(_ context.Context, _ domain.Job, _ string, onLog fun
 	return nil
 }
 
+type completingTranslation struct{}
+
+func (completingTranslation) Run(_ context.Context, _ string, _ string, _ map[string]any, _ map[string]string) (json.RawMessage, error) {
+	return json.RawMessage(`{"track":{"id":"es","label":"ES"}}`), nil
+}
+
 func TestHealthReturnsOK(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -164,6 +170,88 @@ func TestProcessStartsConfiguredWorker(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("job did not complete: %#v", payload)
+}
+
+func TestLocalEditorTranslationUsesGoJobAndPythonOperationBoundary(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	server := NewServerWithDependencies(config.Config{}, store, nil, completingTranslation{})
+	req := httptest.NewRequest(http.MethodPost, "/api/local-editor/translate", strings.NewReader(`{"target_language":"es","tracks":[{"id":"original","language":"en","cues":[{"text":"Hello"}]}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", res.Code, res.Body.String())
+	}
+	var created struct {
+		ID     string `json:"translationId"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.ID == "" || created.Status != "queued" {
+		t.Fatalf("unexpected create response: %#v", created)
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		statusReq := httptest.NewRequest(http.MethodGet, "/api/translation/"+created.ID, nil)
+		statusRes := httptest.NewRecorder()
+		server.Handler().ServeHTTP(statusRes, statusReq)
+		if statusRes.Code == http.StatusOK {
+			var status struct {
+				Status string `json:"status"`
+				Track  struct {
+					ID string `json:"id"`
+				} `json:"track"`
+			}
+			if err := json.Unmarshal(statusRes.Body.Bytes(), &status); err != nil {
+				t.Fatalf("decode status response: %v", err)
+			}
+			if status.Status == "done" {
+				if status.Track.ID != "es" {
+					t.Fatalf("unexpected translated track: %#v", status)
+				}
+				return
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("translation did not complete")
+}
+
+func TestRenderRoutesProxyToRendererService(t *testing.T) {
+	renderer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/render" && r.Method == http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"renderId":"render-1","status":"queued"}`))
+			return
+		}
+		if r.URL.Path == "/render/render-1" && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"renderId":"render-1","status":"done"}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer renderer.Close()
+
+	server := NewServer(config.Config{RenderServiceURL: renderer.URL})
+	createReq := httptest.NewRequest(http.MethodPost, "/api/render", strings.NewReader(`{"props":{"videoUrl":"/api/video-proxy?url=https://example.com/video.mp4"}}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(createRes, createReq)
+	if createRes.Code != http.StatusOK || !strings.Contains(createRes.Body.String(), `"renderId":"render-1"`) {
+		t.Fatalf("unexpected render response: %d %s", createRes.Code, createRes.Body.String())
+	}
+
+	statusReq := httptest.NewRequest(http.MethodGet, "/api/render/render-1", nil)
+	statusRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(statusRes, statusReq)
+	if statusRes.Code != http.StatusOK || !strings.Contains(statusRes.Body.String(), `"status":"done"`) {
+		t.Fatalf("unexpected render status: %d %s", statusRes.Code, statusRes.Body.String())
+	}
 }
 
 func TestProcessRequiresRightsAcknowledgement(t *testing.T) {

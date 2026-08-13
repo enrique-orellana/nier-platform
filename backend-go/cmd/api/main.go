@@ -30,9 +30,13 @@ func main() {
 			WorkerScript: os.Getenv("PYTHON_WORKER_SCRIPT"),
 		},
 	}
+	translationClient := workers.PythonOperationClient{
+		PythonBinary: os.Getenv("PYTHON_BINARY"),
+		WorkerScript: os.Getenv("PYTHON_WORKER_SCRIPT"),
+	}
 	server := &http.Server{
 		Addr:              cfg.Address(),
-		Handler:           httpapi.NewServerWithStoreAndRunner(cfg, store, runner).Handler(),
+		Handler:           httpapi.NewServerWithDependencies(cfg, store, runner, translationClient).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

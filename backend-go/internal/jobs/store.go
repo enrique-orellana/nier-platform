@@ -22,6 +22,7 @@ type Store interface {
 	Get(context.Context, string) (domain.Job, bool)
 	Transition(context.Context, string, domain.JobStatus, string) (domain.Job, error)
 	AppendLog(context.Context, string, string) error
+	SetResult(context.Context, string, []byte) error
 }
 
 type MemoryStore struct {
@@ -104,6 +105,20 @@ func (s *MemoryStore) AppendLog(_ context.Context, id string, message string) er
 		Timestamp: time.Now().UTC(),
 		Message:   message,
 	})
+	job.UpdatedAt = time.Now().UTC()
+	s.jobs[id] = job
+	return nil
+}
+
+func (s *MemoryStore) SetResult(_ context.Context, id string, result []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	job, ok := s.jobs[id]
+	if !ok {
+		return ErrJobNotFound
+	}
+	job.Result = append([]byte(nil), result...)
 	job.UpdatedAt = time.Now().UTC()
 	s.jobs[id] = job
 	return nil

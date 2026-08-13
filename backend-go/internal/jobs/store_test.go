@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
@@ -84,5 +85,21 @@ func TestAppendLogPreservesOrder(t *testing.T) {
 	}
 	if len(loaded.Logs) != 3 || loaded.Logs[0].Message != "queued" || loaded.Logs[2].Message != "finished" {
 		t.Fatalf("logs were not preserved: %#v", loaded.Logs)
+	}
+}
+
+func TestSetResultPersistsCompletedPayload(t *testing.T) {
+	store := NewMemoryStore()
+	created, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "translation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	payload := json.RawMessage(`{"track":{"id":"es"}}`)
+	if err := store.SetResult(context.Background(), created.ID, payload); err != nil {
+		t.Fatalf("set result: %v", err)
+	}
+	loaded, ok := store.Get(context.Background(), created.ID)
+	if !ok || string(loaded.Result) != string(payload) {
+		t.Fatalf("unexpected result: %#v", loaded.Result)
 	}
 }
