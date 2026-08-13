@@ -95,7 +95,7 @@ All generated videos and avatars are saved to a public gallery with SEO pages fo
 
 ### Infrastructure
 - S3 cloud backup (private bucket for clips, public bucket for gallery/avatars)
-- SEO gallery pages served by FastAPI with JSON-LD structured data
+- Go control plane serves API and media routes; the Python process is used only as an internal ML/media worker
 - Shared avatar gallery across all users
 - Async job queue with configurable concurrency
 
@@ -242,7 +242,7 @@ build commands, the `openshorts.yaml` bundle, and a remote-deploy update flow.
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Python 3.11, FastAPI, google-genai, faster-whisper, ultralytics (YOLOv8), mediapipe, opencv-python, yt-dlp, FFmpeg, httpx |
+| Backend | Go control plane, Python JSON-lines ML/media worker, google-genai, faster-whisper, ultralytics (YOLOv8), mediapipe, opencv-python, yt-dlp, FFmpeg, httpx |
 | Frontend | React 18, Vite 4, Tailwind CSS 3.4 |
 | AI APIs | Google Gemini, fal.ai (Flux, Hailuo, VEED, Kling), ElevenLabs |
 | Infrastructure | Docker + Docker Compose, AWS S3 |
