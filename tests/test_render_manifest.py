@@ -10,6 +10,7 @@ from render_manifest import (
     load_manifest,
     master_is_current,
     register_asset,
+    register_remote_asset,
     save_manifest_atomic,
     verify_manifest_assets,
 )
@@ -46,6 +47,25 @@ class ManifestTests(unittest.TestCase):
             asset = register_asset(source, project, fixture_probe())
             self.assertEqual(asset["sha256"], hashlib.sha256(b"source-bytes").hexdigest())
             self.assertEqual(asset["relative_path"], "source.mp4")
+
+    def test_remote_asset_keeps_minio_reference_without_local_project_copy(self):
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root) / "source.bin"
+            source.write_bytes(b"remote-source")
+            asset = register_remote_asset(
+                source,
+                fixture_probe(),
+                {"bucket": "youtube-downloads", "key": "videos/source.bin"},
+            )
+            manifest = fixture_manifest()
+            manifest["assets"] = {asset["asset_id"]: asset}
+            manifest["source_object"] = asset["source_object"]
+            source.unlink()
+
+            verify_manifest_assets(manifest, Path(root) / "project")
+
+            self.assertEqual(asset["relative_path"], "")
+            self.assertEqual(asset["source_object"]["key"], "videos/source.bin")
 
     def test_revision_ignores_export_result(self):
         manifest = fixture_manifest()

@@ -52,7 +52,8 @@ warnings.filterwarnings("ignore", category=UserWarning, module='google.protobuf'
 from ai_client import load_ai_config, chat_json
 from master_policy import master_video_encode_args, choose_master_spec, master_video_filter
 from media_probe import probe_media
-from render_manifest import register_asset, save_manifest_atomic
+from render_manifest import register_asset, register_remote_asset, save_manifest_atomic
+from minio_sources import validate_source_object
 from crop_track import CropKeyframe, CropRect, CropScene, CropTrack
 from clip_timeline import resolve_clip_frame_range
 from video_decode import build_decode_compatibility_command, requires_decode_compatibility
@@ -602,6 +603,18 @@ def sanitize_filename(filename):
     filename = re.sub(r'[<>:"/\\|?*#]', '', filename)
     filename = filename.replace(' ', '_')
     return filename[:100]
+
+
+def parse_source_object_argument(value: str | None) -> dict | None:
+    """Parse and validate the optional MinIO source reference passed to the CLI."""
+    if not value:
+        return None
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("source object must be valid JSON") from exc
+    bucket, key = validate_source_object(parsed)
+    return {"bucket": bucket, "key": key}
 
 
 SOURCE_CONTEXT_KEYS = (
@@ -1234,10 +1247,19 @@ def process_video_to_vertical(
     return True
 
 
-def _prepare_manifest_source(input_video: str, output_dir: str) -> tuple[str, dict, object]:
-    """Keep a source inside the job directory so future masters can rerender it."""
+def _prepare_manifest_source(
+    input_video: str,
+    output_dir: str,
+    source_object: dict | None = None,
+) -> tuple[str, dict, object]:
+    """Prepare local or temporary remote source metadata without duplicating remote files."""
     os.makedirs(output_dir, exist_ok=True)
     source_path = os.path.abspath(input_video)
+    if source_object:
+        media = probe_media(source_path)
+        asset = register_remote_asset(Path(source_path), media, source_object)
+        return source_path, asset, media
+
     job_root = os.path.abspath(output_dir)
     try:
         inside_job = os.path.commonpath([source_path, job_root]) == job_root
@@ -1262,6 +1284,7 @@ def _write_clip_manifest(
     source_asset: dict,
     source_media,
     transcript: dict,
+    source_object: dict | None = None,
 ) -> str:
     width = source_media.display_width
     height = source_media.display_height
@@ -1276,6 +1299,7 @@ def _write_clip_manifest(
         "project_id": os.path.basename(output_dir),
         "workflow": "long_video",
         "assets": {source_asset["asset_id"]: source_asset},
+        "source_object": source_object,
         "timeline": {
             "source_asset_id": source_asset["asset_id"],
             "trim": {"start_sec": float(clip["start"]), "end_sec": float(clip["end"])},
@@ -1301,12 +1325,17 @@ def render_clip_plan(
     transcript: dict,
     source_asset: dict,
     source_media,
+    source_object: dict | None = None,
     metrics: JobVideoMetrics | None = None,
 ) -> list[dict]:
     """Render a clip plan using one immutable source analysis object."""
     rendered_clips = []
     source_video_filename = source_asset.get("relative_path", "")
-    source_video_url = f"/videos/{os.path.basename(output_dir)}/{source_video_filename}"
+    source_video_url = (
+        f"/videos/{os.path.basename(output_dir)}/{source_video_filename}"
+        if source_video_filename
+        else ""
+    )
     master_spec = choose_master_spec(source_media, strategy="crop")
 
     for index, clip in enumerate(clips, start=1):
@@ -1316,11 +1345,20 @@ def render_clip_plan(
         clip_final_path = os.path.join(output_dir, clip_filename)
 
         manifest_path = _write_clip_manifest(
-            output_dir, video_title, index, clip, source_asset, source_media, transcript
+            output_dir,
+            video_title,
+            index,
+            clip,
+            source_asset,
+            source_media,
+            transcript,
+            source_object,
         )
         clip["manifest_path"] = manifest_path
         clip["source_video_filename"] = source_video_filename
         clip["source_video_url"] = source_video_url
+        if source_object:
+            clip["source_object"] = dict(source_object)
         clip["video_filename"] = clip_filename
         clip["output_width"] = master_spec.width
         clip["output_height"] = master_spec.height
@@ -1672,6 +1710,7 @@ if __name__ == '__main__':
     input_group.add_argument('-u', '--url', type=str, help="YouTube URL to download and process.")
     input_group.add_argument('--direct-url', type=str, help="Direct HTTP(S) video URL to download and process.")
     parser.add_argument('--source-url', type=str, help="Original HTTPS YouTube or Twitch page used for metadata context only.")
+    parser.add_argument('--source-object', type=str, help="JSON MinIO source object reference for provenance.")
     
     parser.add_argument('-o', '--output', type=str, help="Output directory or file (if processing whole video).")
     parser.add_argument('--keep-original', action='store_true', help="Keep the downloaded YouTube video.")
@@ -1680,6 +1719,10 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     target_clips = min(max(3, args.target_clips), 15)
+    try:
+        source_object = parse_source_object_argument(args.source_object)
+    except ValueError as exc:
+        parser.error(f"invalid --source-object: {exc}")
 
     script_start_time = time.time()
     job_metrics = JobVideoMetrics()
@@ -1731,7 +1774,11 @@ if __name__ == '__main__':
 
     with job_metrics.timed("source_preparation"):
         processing_video = prepare_opencv_video(input_video)
-        manifest_source_path, source_asset, source_media = _prepare_manifest_source(input_video, output_dir)
+        manifest_source_path, source_asset, source_media = _prepare_manifest_source(
+            input_video,
+            output_dir,
+            source_object,
+        )
     source_analysis = build_source_analysis_for_job(
         processing_video, output_dir, metrics=job_metrics
     )
@@ -1782,6 +1829,8 @@ if __name__ == '__main__':
             # Save metadata
             clips_data['transcript'] = transcript # Save full transcript for subtitles
             attach_source_context_to_clip_plan(clips_data, source_context_record)
+            if source_object:
+                clips_data["source_object"] = dict(source_object)
             metadata_file = os.path.join(output_dir, f"{video_title}_metadata.json")
             with open(metadata_file, 'w') as f:
                 json.dump(clips_data, f, indent=2)
@@ -1797,6 +1846,7 @@ if __name__ == '__main__':
                 transcript=transcript,
                 source_asset=source_asset,
                 source_media=source_media,
+                source_object=source_object,
                 metrics=job_metrics,
             )
                 
