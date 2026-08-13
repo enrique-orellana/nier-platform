@@ -555,7 +555,7 @@ function App() {
         jobId,
         status,
         results,
-        processingMedia: processingMedia?.type === 'url' ? processingMedia : null,
+        processingMedia: ['url', 'minio-object'].includes(processingMedia?.type) ? processingMedia : null,
         activeTab,
         timestamp: Date.now()
       };
@@ -829,13 +829,19 @@ function App() {
       const selectedClipCount = data.clipCount || clipCount;
       const processUrl = getApiUrl(`/api/process?clip_count=${encodeURIComponent(selectedClipCount)}`);
 
-      if (data.type === 'url') {
+      if (data.type === 'minio-object' || data.type === 'url') {
         headers['Content-Type'] = 'application/json';
-        body = JSON.stringify({
-          url: data.payload,
-          source_url: data.sourceUrl?.trim() || undefined,
-          acknowledged: !!data.acknowledged,
-        });
+        body = JSON.stringify(data.type === 'minio-object'
+          ? {
+              source_object: data.payload,
+              source_url: data.sourceUrl?.trim() || undefined,
+              acknowledged: !!data.acknowledged,
+            }
+          : {
+              url: data.payload,
+              source_url: data.sourceUrl?.trim() || undefined,
+              acknowledged: !!data.acknowledged,
+            });
       } else {
         const formData = new FormData();
         formData.append('file', data.payload);
@@ -846,7 +852,7 @@ function App() {
 
       const res = await fetch(processUrl, {
         method: 'POST',
-        headers: data.type === 'url' ? headers : getAiHeaders(),
+        headers: data.type === 'minio-object' || data.type === 'url' ? headers : getAiHeaders(),
         body
       });
 

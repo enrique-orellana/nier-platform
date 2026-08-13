@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Link, Upload, FileVideo, X } from 'lucide-react';
+import { Database, Upload, FileVideo, X } from 'lucide-react';
+import MinioObjectPicker from './MinioObjectPicker';
 
 export default function MediaInput({
     onProcess,
@@ -7,8 +8,8 @@ export default function MediaInput({
     targetClipCount,
     onTargetClipCountChange,
 }) {
-    const [mode, setMode] = useState('url'); // 'url' | 'file'
-    const [url, setUrl] = useState('');
+    const [mode, setMode] = useState('minio'); // 'minio' | 'file'
+    const [selectedObject, setSelectedObject] = useState(null);
     const [sourceUrl, setSourceUrl] = useState('');
     const [file, setFile] = useState(null);
     const [acknowledged, setAcknowledged] = useState(false);
@@ -16,8 +17,13 @@ export default function MediaInput({
     const handleSubmit = (e) => {
         e.preventDefault();
         if (!acknowledged) return;
-        if (mode === 'url' && url) {
-            onProcess({ type: 'url', payload: url, sourceUrl: sourceUrl.trim(), acknowledged: true });
+        if (mode === 'minio' && selectedObject) {
+            onProcess({
+                type: 'minio-object',
+                payload: { bucket: selectedObject.bucket, key: selectedObject.key },
+                sourceUrl: sourceUrl.trim(),
+                acknowledged: true,
+            });
         } else if (mode === 'file' && file) {
             onProcess({ type: 'file', payload: file, sourceUrl: sourceUrl.trim(), acknowledged: true });
         }
@@ -35,16 +41,18 @@ export default function MediaInput({
         <div className="bg-surface border border-white/5 rounded-2xl p-6 animate-[fadeIn_0.6s_ease-out]">
             <div className="flex gap-4 mb-6 border-b border-white/5 pb-4">
                 <button
-                    onClick={() => setMode('url')}
-                    className={`flex items-center gap-2 pb-2 px-2 transition-all ${mode === 'url'
+                    type="button"
+                    onClick={() => setMode('minio')}
+                    className={`flex items-center gap-2 pb-2 px-2 transition-all ${mode === 'minio'
                         ? 'text-primary border-b-2 border-primary -mb-[17px]'
                         : 'text-zinc-400 hover:text-white'
                         }`}
                 >
-                    <Link size={18} />
-                    Local MinIO URL
+                    <Database size={18} />
+                    Select from MinIO
                 </button>
                 <button
+                    type="button"
                     onClick={() => setMode('file')}
                     className={`flex items-center gap-2 pb-2 px-2 transition-all ${mode === 'file'
                         ? 'text-primary border-b-2 border-primary -mb-[17px]'
@@ -57,20 +65,8 @@ export default function MediaInput({
             </div>
 
             <form onSubmit={handleSubmit}>
-                {mode === 'url' ? (
-                    <div className="space-y-4">
-                        <input
-                            type="url"
-                            value={url}
-                            onChange={(e) => setUrl(e.target.value)}
-                            placeholder="http://localhost:9000/bucket/video.mp4"
-                            className="input-field"
-                            required
-                        />
-                        <p className="text-xs text-zinc-500">
-                            Use a direct MinIO object URL reachable by the OpenShorts backend.
-                        </p>
-                    </div>
+                {mode === 'minio' ? (
+                    <MinioObjectPicker selected={selectedObject} onSelect={setSelectedObject} />
                 ) : (
                     <div
                         className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${file ? 'border-primary/50 bg-primary/5' : 'border-zinc-700 hover:border-zinc-500 bg-white/5'
@@ -158,7 +154,7 @@ export default function MediaInput({
 
                 <button
                     type="submit"
-                    disabled={isProcessing || !acknowledged || (mode === 'url' && !url) || (mode === 'file' && !file)}
+                    disabled={isProcessing || !acknowledged || (mode === 'minio' && !selectedObject) || (mode === 'file' && !file)}
                     className="w-full btn-primary mt-4 flex items-center justify-center gap-2"
                 >
                     {isProcessing ? (

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Scan, Scissors, Activity, Radio, CheckCircle, Play } from 'lucide-react';
+import { Scan, Scissors, Activity, Radio, CheckCircle, Database } from 'lucide-react';
 
 const ProcessingAnimation = ({ media, isComplete, syncedTime, isSyncedPlaying, syncTrigger, aiProvider = 'gemini', aiTextModel = '' }) => {
   const [videoSrc, setVideoSrc] = useState(null);
@@ -23,12 +23,16 @@ const ProcessingAnimation = ({ media, isComplete, syncedTime, isSyncedPlaying, s
 
     if (media.type === 'file') {
       const url = URL.createObjectURL(media.payload);
+      setIsYouTube(false);
       setVideoSrc(url);
       return () => URL.revokeObjectURL(url);
     } else if (media.type === 'url') {
       setIsYouTube(true);
       const videoId = getYouTubeId(media.payload);
       setVideoSrc(videoId);
+    } else if (media.type === 'minio-object') {
+      setIsYouTube(false);
+      setVideoSrc(null);
     }
   }, [media]);
 
@@ -174,6 +178,16 @@ const ProcessingAnimation = ({ media, isComplete, syncedTime, isSyncedPlaying, s
             loop
             playsInline
           />
+        ) : media?.type === 'minio-object' ? (
+          <div className="w-full h-full flex items-center justify-center bg-zinc-900 px-8 text-center">
+            <div>
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary">
+                <Database size={28} />
+              </div>
+              <p className="mt-3 text-sm font-medium text-zinc-300">{media.payload?.key}</p>
+              <p className="mt-1 text-xs text-zinc-500">Selected MinIO source</p>
+            </div>
+          </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-zinc-900">
              <div className="w-16 h-16 border-4 border-zinc-700 border-t-zinc-500 rounded-full animate-spin"></div>
