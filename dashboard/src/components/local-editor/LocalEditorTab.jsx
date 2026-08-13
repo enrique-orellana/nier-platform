@@ -5,7 +5,7 @@ import ClipMetadataPanel from './ClipMetadataPanel';
 import SubtitleCueTable from './SubtitleCueTable';
 import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock } from './localEditorExport';
-import { burnLocalEditorSubtitles, cueCaptionsForRender, renderLocalVideoOnBackend, renderLocalVideoOnBrowser, syncSubtitleCue } from './localEditorRender';
+import { burnLocalEditorSubtitles, cueCaptionsForRender, renderLocalVideoOnBackend, syncSubtitleCue } from './localEditorRender';
 import { detectEmbeddedSideBars, getFilledFrameDimensions } from './localEditorVideo';
 import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
@@ -849,9 +849,7 @@ export default function LocalEditorTab({
             const video = videoRef.current;
             if (!video?.videoWidth || !video?.videoHeight) throw new Error('Video metadata is not ready for export.');
             const cropForExport = videoViewMode === 'fill' || (videoViewMode === 'auto' && autoCrop);
-            const outputDimensions = cropForExport
-                ? getFilledFrameDimensions(video.videoWidth, video.videoHeight)
-                : { width: video.videoWidth, height: video.videoHeight };
+            const outputDimensions = getFilledFrameDimensions(video.videoWidth, video.videoHeight);
             const renderParams = {
                 durationSeconds: Number(video.duration) > 0 ? video.duration : durationMs / 1000,
                 fps: 30,
@@ -866,13 +864,7 @@ export default function LocalEditorTab({
             if (subtitleCues.length) {
                 outputUrl = await burnLocalEditorSubtitles({ file: videoFile, ...renderParams });
             } else {
-                try {
-                    outputUrl = await renderLocalVideoOnBrowser({ videoUrl: video.currentSrc || video.src, ...renderParams });
-                } catch (browserRenderError) {
-                    setProgress(0);
-                    outputUrl = await renderLocalVideoOnBackend({ file: videoFile, ...renderParams });
-                    if (!outputUrl) throw browserRenderError;
-                }
+                outputUrl = await renderLocalVideoOnBackend({ file: videoFile, ...renderParams });
             }
             downloadUrl(outputUrl, 'openshorts-local-editor.mp4');
         } catch (exportError) {

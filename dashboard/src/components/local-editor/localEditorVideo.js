@@ -2,12 +2,15 @@ const DARK_PIXEL_THRESHOLD = 24;
 const DARK_COLUMN_RATIO = 0.96;
 const MIN_SIDE_BAR_RATIO = 0.12;
 
+export const SOCIAL_OUTPUT_DIMENSIONS = Object.freeze({ width: 1080, height: 1920 });
+
 const evenDimension = (value) => {
     const rounded = Math.max(2, Math.round(Number(value) || 0));
     return rounded % 2 === 0 ? rounded : rounded - 1;
 };
 
 export const getFilledFrameDimensions = (width, height, targetAspect = 9 / 16) => {
+    if (targetAspect === 9 / 16) return { ...SOCIAL_OUTPUT_DIMENSIONS };
     const sourceWidth = Math.max(2, Number(width) || 2);
     const sourceHeight = Math.max(2, Number(height) || 2);
     const sourceAspect = sourceWidth / sourceHeight;

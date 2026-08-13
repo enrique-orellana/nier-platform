@@ -53,8 +53,12 @@ export async function renderInBrowser({
         },
         container: 'mp4',
         videoCodec: 'h264',
-        videoBitrate: 'very-high',
+        videoBitrate: 12000000,
         audioCodec: 'aac',
+        audioBitrate: 192000,
+        sampleRate: 48000,
+        keyframeIntervalInSeconds: 2,
+        muted: false,
         onProgress: onProgress
             ? ({ progress }) => onProgress(progress)
             : undefined,

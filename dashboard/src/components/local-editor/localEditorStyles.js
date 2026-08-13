@@ -51,7 +51,7 @@ export const DEFAULT_SUBTITLE_STYLE = {
 
 export const normalizeSubtitleStyle = (style = {}) => ({ ...DEFAULT_SUBTITLE_STYLE, ...style });
 
-// SubtitleModal uses compact controls and scales them for the 608x1080
+// SubtitleModal uses compact controls and scales them for the 1080x1920
 // Remotion composition. Keep the local editor on that same render contract.
 export const toClipGeneratorSubtitleStyle = (style = {}) => {
     const normalized = normalizeSubtitleStyle(style);

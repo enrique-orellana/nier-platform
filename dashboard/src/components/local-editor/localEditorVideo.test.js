@@ -25,7 +25,7 @@ describe('localEditorVideo', () => {
         expect(hasEmbeddedSideBars(makeImageData(10, 6, 0, 9))).toBe(false);
     });
 
-    it('uses the centered 9:16 frame dimensions when exporting a wide source with portrait content', () => {
-        expect(getFilledFrameDimensions(1920, 1080)).toEqual({ width: 608, height: 1080 });
+    it('uses the canonical social canvas when exporting a wide source with portrait content', () => {
+        expect(getFilledFrameDimensions(1920, 1080)).toEqual({ width: 1080, height: 1920 });
     });
 });
