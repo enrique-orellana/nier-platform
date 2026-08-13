@@ -7,6 +7,7 @@ import json
 import re
 import shutil
 import glob
+import tempfile
 from pathlib import Path
 import time
 import asyncio
@@ -39,7 +40,7 @@ from local_editor_subtitles import (
 )
 from media_probe import probe_media
 from video_output_validation import validate_clip_output
-from minio_sources import list_source_objects
+from minio_sources import download_source_object, list_source_objects, validate_source_object
 
 load_dotenv()
 
@@ -614,18 +615,43 @@ def _clip_artifact_is_valid(path: str, clip: dict) -> bool:
     )
 
 
+def _prepare_minio_job_command(job_id: str, job_data: dict) -> tuple[list[str], str | None]:
+    """Materialize a selected MinIO object outside the publishable job directory."""
+    source_object = job_data.get("source_object")
+    command = list(job_data["cmd"])
+    if not source_object:
+        return command, None
+
+    temporary_root = tempfile.mkdtemp(prefix=f"openshorts-source-{job_id}-")
+    source_path = os.path.join(temporary_root, "source.bin")
+    try:
+        download_source_object(
+            source_object["bucket"],
+            source_object["key"],
+            source_path,
+            max_bytes=MAX_FILE_SIZE_MB * 1024 * 1024,
+        )
+        command.extend(["--input", source_path])
+        return command, temporary_root
+    except Exception:
+        shutil.rmtree(temporary_root, ignore_errors=True)
+        raise
+
+
 async def run_job(job_id, job_data):
     """Executes the subprocess for a specific job."""
     
-    cmd = job_data['cmd']
     env = job_data['env']
     output_dir = job_data['output_dir']
+    temporary_root = None
     
     jobs[job_id]['status'] = 'processing'
     jobs[job_id]['logs'].append("Job started by worker.")
     print(f"🎬 [run_job] Executing command for {job_id}: {' '.join(cmd)}")
     
     try:
+        cmd, temporary_root = _prepare_minio_job_command(job_id, job_data)
+        print(f"[run_job] Executing command for {job_id}: {' '.join(cmd)}")
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -731,6 +757,9 @@ async def run_job(job_id, job_data):
     except Exception as e:
         jobs[job_id]['status'] = 'failed'
         jobs[job_id]['logs'].append(f"Execution error: {str(e)}")
+    finally:
+        if temporary_root:
+            shutil.rmtree(temporary_root, ignore_errors=True)
 
 class LmStudioDiscoveryRequest(BaseModel):
     baseUrl: str
@@ -910,16 +939,19 @@ async def process_endpoint(
         raise HTTPException(status_code=400, detail="Missing Gemini API key")
 
     ack_flag = str(acknowledged).lower() in ("1", "true", "yes")
-    # Handle JSON body manually for URL payload
+    source_object = None
+    # Handle JSON body manually for URL or MinIO object payloads.
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
         body = await request.json()
         url = body.get("url")
         source_url = body.get("source_url")
+        source_object = body.get("source_object")
         ack_flag = bool(body.get("acknowledged"))
 
-    if not url and not file:
-        raise HTTPException(status_code=400, detail="Must provide URL or File")
+    provided_sources = sum(bool(value) for value in (url, file, source_object))
+    if provided_sources != 1:
+        raise HTTPException(status_code=400, detail="Must provide exactly one URL, MinIO object, or File")
 
     if not ack_flag:
         raise HTTPException(status_code=400, detail="You must confirm you own the content or have rights to process it.")
@@ -929,6 +961,14 @@ async def process_endpoint(
         parsed_url = urlsplit(url)
         if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
             raise HTTPException(status_code=400, detail="Video URL must use http:// or https://")
+
+    normalized_source_object = None
+    if source_object is not None:
+        try:
+            bucket, key = validate_source_object(source_object)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        normalized_source_object = {"bucket": bucket, "key": key}
 
     source_url = validate_original_source_url(source_url)
 
@@ -943,8 +983,9 @@ async def process_endpoint(
         "ip": client_ip,
         "user_agent": user_agent,
         "timestamp": time.time(),
-        "source": "url" if url else "file",
+        "source": "minio" if normalized_source_object else ("url" if url else "file"),
         "source_url": source_url,
+        "source_object": normalized_source_object,
     }
 
     job_id = str(uuid.uuid4())
@@ -955,7 +996,10 @@ async def process_endpoint(
     cmd = ["python", "-u", "main.py"] # -u for unbuffered
     env = os.environ.copy()
     env.update(ai_config_to_env(ai_config))
-    if url:
+    if normalized_source_object:
+        # The selected object is downloaded by run_job into a disposable temp directory.
+        pass
+    elif url:
         cmd.extend(["--direct-url", url])
     else:
         # Save uploaded file with size limit check
@@ -979,8 +1023,10 @@ async def process_endpoint(
     if source_url:
         cmd.extend(["--source-url", source_url])
 
-    # Keep source media available for manifest-driven rerenders and master exports.
-    cmd.extend(["--target-clips", str(clip_count), "--keep-original"])
+    cmd.extend(["--target-clips", str(clip_count)])
+    if not normalized_source_object:
+        # Preserve the existing URL/file behavior until those workflows are migrated.
+        cmd.append("--keep-original")
     cmd.extend(["-o", job_output_dir])
 
     print(f"[attestation] job={job_id} ip={attestation['ip']} source={attestation['source']} ack=true")
@@ -992,7 +1038,8 @@ async def process_endpoint(
         'cmd': cmd,
         'env': env,
         'output_dir': job_output_dir,
-        'attestation': attestation
+        'attestation': attestation,
+        'source_object': normalized_source_object,
     }
 
     await job_queue.put(job_id)

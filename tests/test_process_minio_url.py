@@ -40,6 +40,45 @@ def test_process_queues_direct_url_without_ytdlp_flag(monkeypatch):
     assert queue.values == [response.json()["job_id"]]
 
 
+def test_process_queues_selected_minio_object(monkeypatch):
+    app_module.jobs.clear()
+    configured_ai(monkeypatch)
+    queue = AsyncQueue()
+    monkeypatch.setattr(app_module, "job_queue", queue)
+
+    response = TestClient(app_module.app).post(
+        "/api/process?clip_count=3",
+        json={
+            "source_object": {"bucket": "youtube-downloads", "key": "videos/source.bin"},
+            "acknowledged": True,
+        },
+    )
+
+    assert response.status_code == 200
+    job = app_module.jobs[response.json()["job_id"]]
+    assert job["source_object"] == {
+        "bucket": "youtube-downloads",
+        "key": "videos/source.bin",
+    }
+    assert "--direct-url" not in job["cmd"]
+    assert "--keep-original" not in job["cmd"]
+    assert queue.values == [response.json()["job_id"]]
+
+
+def test_process_rejects_non_allowlisted_source_bucket(monkeypatch):
+    configured_ai(monkeypatch)
+
+    response = TestClient(app_module.app).post(
+        "/api/process",
+        json={
+            "source_object": {"bucket": "other", "key": "source.mp4"},
+            "acknowledged": True,
+        },
+    )
+
+    assert response.status_code == 400
+
+
 def test_process_passes_original_source_url_separately_for_json_url(monkeypatch):
     app_module.jobs.clear()
     configured_ai(monkeypatch)
