@@ -6,15 +6,24 @@ export interface MasterPolicy {
   container: "mp4";
   codec: "h264";
   profile: "high";
+  h264_level: "4.2";
   crf: number;
   preset: "veryslow";
   pixel_format: "yuv420p";
+  output_width: number;
+  output_height: number;
   max_width: number;
   max_height: number;
   max_fps: number;
+  gop_seconds: number;
   audio_codec: "aac";
   audio_sample_rate: number;
+  audio_channels: number;
   audio_bitrate: string;
+  color_range: "tv";
+  color_space: "bt709";
+  color_transfer: "bt709";
+  color_primaries: "bt709";
   faststart: boolean;
 }
 
@@ -36,7 +45,8 @@ export function loadMasterPolicy(): MasterPolicy {
   return Object.freeze(value);
 }
 
-export function buildRenderOptions(policy = loadMasterPolicy()) {
+export function buildRenderOptions(policy = loadMasterPolicy(), fps = 30) {
+  const gopSize = Math.max(1, Math.round(fps * policy.gop_seconds));
   return {
     codec: policy.codec,
     crf: policy.crf,
@@ -45,5 +55,9 @@ export function buildRenderOptions(policy = loadMasterPolicy()) {
     colorSpace: "bt709" as const,
     audioCodec: policy.audio_codec,
     audioBitrate: policy.audio_bitrate as `${number}k`,
+    sampleRate: policy.audio_sample_rate,
+    gopSize,
+    everyNthFrame: 1,
+    concurrency: null,
   } as const;
 }

@@ -10,7 +10,11 @@ describe("master policy", () => {
       pixelFormat: "yuv420p",
       colorSpace: "bt709",
       audioCodec: "aac",
-      audioBitrate: "320k",
+      audioBitrate: "192k",
+      gopSize: 60,
+      everyNthFrame: 1,
+      concurrency: null,
+      sampleRate: 48000,
     });
   });
 });

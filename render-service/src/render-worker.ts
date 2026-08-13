@@ -8,6 +8,7 @@ import { loadMasterPolicy } from "./master-policy.js";
 import { validateOutputFile } from "./output-validation.js";
 import { applyRequestedCompositionMetadata } from "./composition.js";
 import { outputFileNameForVersion } from "./version-render.js";
+import { normalizeOutputFile } from "./output-normalization.js";
 
 export interface RenderParams {
   renderId: string;
@@ -51,14 +52,20 @@ export async function executeRender(params: RenderParams): Promise<void> {
     );
 
     const bundleLocation = getBundleLocation();
+    const policy = loadMasterPolicy();
+    const renderProps = {
+      ...props,
+      width: policy.output_width,
+      height: policy.output_height,
+    };
 
     // Select the composition with the provided input props
     const selectedComposition = await selectComposition({
       serveUrl: bundleLocation,
       id: "ShortVideo",
-      inputProps: props,
+      inputProps: renderProps,
     });
-    const composition = applyRequestedCompositionMetadata(selectedComposition, props);
+    const composition = applyRequestedCompositionMetadata(selectedComposition, renderProps);
 
     // Determine output directory and file path
     const outputDir = process.env.OUTPUT_DIR
@@ -78,7 +85,8 @@ export async function executeRender(params: RenderParams): Promise<void> {
     await renderMedia({
       composition,
       serveUrl: bundleLocation,
-      ...buildRenderOptions(),
+      ...buildRenderOptions(policy, renderProps.fps),
+      enforceAudioTrack: true,
       outputLocation,
       onProgress: ({ progress }) => {
         const percent = Math.round(progress * 100);
@@ -90,17 +98,19 @@ export async function executeRender(params: RenderParams): Promise<void> {
       },
     });
 
+    await normalizeOutputFile(outputLocation, { fps: renderProps.fps, hasAudio: true });
+
     await validateOutputFile(
       outputLocation,
       {
-        width: props.width,
-        height: props.height,
-        fps: props.fps,
-        durationSeconds: props.durationInFrames / props.fps,
-        requireAudio: false,
-        toneMappedToSdr: false,
+        width: renderProps.width,
+        height: renderProps.height,
+        fps: renderProps.fps,
+        durationSeconds: renderProps.durationInFrames / renderProps.fps,
+        requireAudio: true,
+        toneMappedToSdr: true,
       },
-      loadMasterPolicy(),
+      policy,
     );
 
     // Success
