@@ -65,6 +65,7 @@ func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs
 	mux.HandleFunc("/api/ai/openai-codex/status", server.codexRoute)
 	mux.HandleFunc("/api/ai/openai-codex/disconnect", server.codexRoute)
 	mux.HandleFunc("/api/ai/openai-codex/models", server.codexRoute)
+	mux.HandleFunc("/api/social/user", server.socialUser)
 	mux.HandleFunc("/api/local-editor/translate", server.createTranslation)
 	mux.HandleFunc("/api/local-editor/transcribe", server.transcribeLocalEditor)
 	mux.HandleFunc("/api/local-editor/hashtags", server.generateHashtags)
@@ -334,6 +335,66 @@ func (s *Server) codexRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
+}
+
+func (s *Server) socialUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	apiKey := strings.TrimSpace(r.Header.Get("X-Upload-Post-Key"))
+	if apiKey == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Missing X-Upload-Post-Key header"})
+		return
+	}
+	endpoint := s.config.UploadPostUserURL
+	if endpoint == "" {
+		endpoint = "https://api.upload-post.com/api/uploadposts/users"
+	}
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
+		return
+	}
+	request.Header.Set("Authorization", "Apikey "+apiKey)
+	response, err := (&http.Client{Timeout: 30 * time.Second}).Do(request)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Failed to fetch user: %s", err)})
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		writeJSON(w, response.StatusCode, map[string]string{"detail": "Failed to fetch user"})
+		return
+	}
+	var data struct {
+		Profiles []struct {
+			Username       string         `json:"username"`
+			SocialAccounts map[string]any `json:"social_accounts"`
+		} `json:"profiles"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&data); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Invalid user response"})
+		return
+	}
+	profiles := make([]map[string]any, 0, len(data.Profiles))
+	for _, profile := range data.Profiles {
+		if profile.Username == "" {
+			continue
+		}
+		connected := make([]string, 0)
+		for _, platform := range []string{"tiktok", "instagram", "youtube"} {
+			if _, ok := profile.SocialAccounts[platform]; ok {
+				connected = append(connected, platform)
+			}
+		}
+		profiles = append(profiles, map[string]any{"username": profile.Username, "connected": connected})
+	}
+	if len(profiles) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"profiles": []any{}, "error": "No profiles found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"profiles": profiles})
 }
 
 func serviceOrigin(value string) (string, error) {

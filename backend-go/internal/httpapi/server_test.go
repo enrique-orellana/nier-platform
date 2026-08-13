@@ -675,6 +675,25 @@ func TestLocalEditorBurnSubtitlesUsesPythonWorker(t *testing.T) {
 	}
 }
 
+func TestSocialUserRouteProxiesProfilesToUploadPost(t *testing.T) {
+	vendor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Apikey secret" {
+			t.Fatalf("unexpected authorization header: %q", r.Header.Get("Authorization"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"profiles":[{"username":"creator","social_accounts":{"youtube":{},"tiktok":{}}}]}`))
+	}))
+	defer vendor.Close()
+	server := NewServer(config.Config{UploadPostUserURL: vendor.URL})
+	req := httptest.NewRequest(http.MethodGet, "/api/social/user", nil)
+	req.Header.Set("X-Upload-Post-Key", "secret")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"username":"creator"`) || !strings.Contains(res.Body.String(), `"youtube"`) {
+		t.Fatalf("unexpected social user response: %d %s", res.Code, res.Body.String())
+	}
+}
+
 func TestStatusReturnsNotFoundForUnknownJob(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/status/missing-job", nil)

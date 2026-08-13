@@ -12,6 +12,7 @@ const (
 	defaultMaxConcurrentJobs = 5
 	defaultRenderServiceURL  = "http://localhost:3100"
 	defaultOutputDir         = "output"
+	defaultUploadPostUserURL = "https://api.upload-post.com/api/uploadposts/users"
 )
 
 type Config struct {
@@ -20,6 +21,7 @@ type Config struct {
 	RenderServiceURL  string
 	OutputDir         string
 	DisableYouTubeURL bool
+	UploadPostUserURL string
 }
 
 func Load() (Config, error) {
@@ -28,6 +30,7 @@ func Load() (Config, error) {
 		MaxConcurrentJobs: defaultMaxConcurrentJobs,
 		RenderServiceURL:  defaultRenderServiceURL,
 		OutputDir:         defaultOutputDir,
+		UploadPostUserURL: defaultUploadPostUserURL,
 	}
 
 	if value := os.Getenv("PORT"); value != "" {
@@ -52,6 +55,9 @@ func Load() (Config, error) {
 	}
 	if value := os.Getenv("DISABLE_YOUTUBE_URL"); value != "" {
 		cfg.DisableYouTubeURL = strings.EqualFold(value, "1") || strings.EqualFold(value, "true") || strings.EqualFold(value, "yes")
+	}
+	if value := os.Getenv("UPLOAD_POST_USER_URL"); value != "" {
+		cfg.UploadPostUserURL = value
 	}
 
 	return cfg, nil
