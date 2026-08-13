@@ -31,31 +31,31 @@
 - Create: `backend-go/internal/httpapi/server_test.go`
 - Create: `backend-go/cmd/api/main.go`
 
-- [ ] **Step 1: Write failing health and config tests**
+- [x] **Step 1: Write failing health and config tests**
 
 Add tests that construct the server without external services, request `/health`, and verify `{"status":"ok"}`. Add a second test setting `PORT=8123`, `MAX_CONCURRENT_JOBS=7`, and `RENDER_SERVICE_URL=http://renderer:3100`, then assert `/api/config` returns those values.
 
-- [ ] **Step 2: Run the focused Go tests and verify the expected missing-package failure**
+- [x] **Step 2: Run the focused Go tests and verify the expected missing-package failure**
 
 Run: `cd backend-go; go test ./internal/httpapi`
 
 Expected: FAIL because the module and server package do not yet exist.
 
-- [ ] **Step 3: Implement the minimum typed configuration and HTTP server**
+- [x] **Step 3: Implement the minimum typed configuration and HTTP server**
 
 `config.Load` reads `PORT`, `MAX_CONCURRENT_JOBS`, and `RENDER_SERVICE_URL`, applying `8000`, `5`, and `http://localhost:3100` when unset. The server exposes `/health` and `/api/config`, sets JSON content types, and returns `404` JSON for unknown routes.
 
-- [ ] **Step 4: Add the API entry point**
+- [x] **Step 4: Add the API entry point**
 
 `cmd/api/main.go` loads configuration, constructs the HTTP server, starts `http.Server`, and shuts down on `SIGINT` or `SIGTERM` with a five-second timeout.
 
-- [ ] **Step 5: Run the focused tests and build**
+- [x] **Step 5: Run the focused tests and build**
 
 Run: `cd backend-go; go test ./...; go build ./cmd/api`
 
 Expected: all tests pass and the API binary builds without CGO or external services.
 
-- [ ] **Step 6: Commit the vertical slice**
+- [x] **Step 6: Commit the vertical slice**
 
 ```powershell
 git add backend-go
@@ -244,4 +244,3 @@ Run: `cd backend-go; go test ./...; go build ./cmd/api`; then run `python -m pyt
 git add backend-go Dockerfile docker-compose.yml k8s/openshorts.yaml
 git commit -m "chore: add Go control plane deployment canary"
 ```
-
