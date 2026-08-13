@@ -143,31 +143,31 @@ git commit -m "feat: add process and status API contracts"
 - Create: `backend-go/internal/jobs/runner_test.go`
 - Modify: `backend-go/internal/domain/job.go`
 
-- [ ] **Step 1: Write failing worker adapter tests**
+- [x] **Step 1: Write failing worker adapter tests**
 
 Use an injected command runner to assert that a URL job invokes `python -u main.py --direct-url <url> --target-clips <count> -o <job-output-dir>`, captures output lines, marks success only after a zero exit code, and marks non-zero exits as failed.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 Run: `cd backend-go; go test ./internal/workers ./internal/jobs -v`
 
 Expected: FAIL because the worker adapter and runner do not exist.
 
-- [ ] **Step 3: Implement injected Python command execution**
+- [x] **Step 3: Implement injected Python command execution**
 
 Keep process execution behind an interface so tests do not spawn Python. The production runner uses `os/exec`, sets `PYTHONUNBUFFERED=1`, streams combined stdout/stderr to the job log sink, and propagates context cancellation.
 
-- [ ] **Step 4: Implement queued-job dispatch**
+- [x] **Step 4: Implement queued-job dispatch**
 
 Add a bounded worker runner that claims queued jobs, transitions them to processing, invokes the Python adapter, and transitions to completed or failed. Do not mark a job completed from exit code alone once artifact validation is added in the next slice.
 
-- [ ] **Step 5: Run race tests and the existing Python suite**
+- [x] **Step 5: Run race tests and the existing Python suite**
 
 Run: `cd backend-go; go test -race ./...`; then from the repository root run `python -m pytest -q`.
 
 Expected: Go tests pass and the pre-existing Python tests remain green.
 
-- [ ] **Step 6: Commit the worker boundary**
+- [x] **Step 6: Commit the worker boundary**
 
 ```powershell
 git add backend-go/internal/jobs backend-go/internal/workers
