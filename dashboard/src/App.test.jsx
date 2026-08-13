@@ -36,6 +36,13 @@ describe('App settings layout', () => {
         expect(container.querySelectorAll('p > div')).toHaveLength(0);
     });
 
+    it('makes the idle clip generator content vertically scrollable', () => {
+        window.history.pushState({}, '', '/');
+        const { container } = render(<App />);
+
+        expect(container.querySelector('[data-testid="dashboard-scroll-container"]')).toBeInTheDocument();
+    });
+
     it('loads the account-available Codex models after the connection is ready', async () => {
         render(<App />);
 
