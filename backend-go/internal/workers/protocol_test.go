@@ -37,6 +37,35 @@ func TestPythonWorkerAdapterReturnsProtocolError(t *testing.T) {
 	}
 }
 
+func TestPythonWorkerAdapterSendsNonURLSourcesAndContext(t *testing.T) {
+	runner := &recordingProtocolRunner{}
+	adapter := PythonWorkerAdapter{Runner: runner}
+	job := domain.Job{
+		ID:        "job-2",
+		ClipCount: 5,
+		Metadata: map[string]any{
+			"source_url": "https://youtube.com/watch?v=2",
+			"source_object": map[string]any{
+				"bucket": "videos",
+				"key":    "source.mp4",
+			},
+		},
+	}
+	if err := adapter.Run(context.Background(), job, "output/job-2", nil); err != nil {
+		t.Fatalf("run worker: %v", err)
+	}
+	if runner.request["source_object"] == nil || runner.request["source_context_url"] != "https://youtube.com/watch?v=2" {
+		t.Fatalf("missing object/context fields: %#v", runner.request)
+	}
+	job.Metadata = map[string]any{"source_path": "/tmp/source.mp4", "source_url": "https://youtube.com/watch?v=2"}
+	if err := adapter.Run(context.Background(), job, "output/job-2", nil); err != nil {
+		t.Fatalf("run file worker: %v", err)
+	}
+	if runner.request["source_path"] != "/tmp/source.mp4" || runner.request["source_context_url"] != "https://youtube.com/watch?v=2" {
+		t.Fatalf("missing file/context fields: %#v", runner.request)
+	}
+}
+
 func TestPythonWorkerAdapterSendsJSONLJobRequest(t *testing.T) {
 	runner := &recordingProtocolRunner{}
 	adapter := PythonWorkerAdapter{

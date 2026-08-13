@@ -103,9 +103,17 @@ func (a PythonWorkerAdapter) Run(ctx context.Context, job domain.Job, outputDir 
 	request := map[string]any{
 		"id":         job.ID,
 		"operation":  "clip_generation",
-		"source_url": job.SourceURL,
 		"output_dir": outputDir,
 		"clip_count": job.ClipCount,
+	}
+	if job.SourceURL != "" {
+		request["source_url"] = job.SourceURL
+	}
+	if sourceObject, ok := job.Metadata["source_object"]; ok {
+		request["source_object"] = sourceObject
+	}
+	if sourcePath, ok := job.Metadata["source_path"].(string); ok && sourcePath != "" {
+		request["source_path"] = sourcePath
 	}
 	if sourceContext, ok := job.Metadata["source_url"].(string); ok {
 		request["source_context_url"] = sourceContext

@@ -1,13 +1,16 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -406,6 +409,58 @@ func TestProcessRequiresRightsAcknowledgement(t *testing.T) {
 	}
 	if payload["detail"] != "You must confirm you own the content or have rights to process it." {
 		t.Fatalf("unexpected validation detail: %#v", payload)
+	}
+}
+
+func TestProcessAcceptsMinioObjectSource(t *testing.T) {
+	server := NewServer(config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/process?clip_count=5", strings.NewReader(`{"source_object":{"bucket":"videos","key":"source.mp4"},"source_url":"https://youtube.com/watch?v=1","acknowledged":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestProcessAcceptsMultipartVideoAndStoresWorkerSourcePath(t *testing.T) {
+	outputDir := t.TempDir()
+	store := jobs.NewMemoryStore()
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	file, err := writer.CreateFormFile("file", "source.mp4")
+	if err != nil {
+		t.Fatalf("create file part: %v", err)
+	}
+	_, _ = file.Write([]byte("fake-video"))
+	_ = writer.WriteField("acknowledged", "true")
+	_ = writer.WriteField("source_url", "https://youtube.com/watch?v=1")
+	_ = writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/process?clip_count=4", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", res.Code, res.Body.String())
+	}
+	var created struct {
+		JobID string `json:"job_id"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	job, ok := store.Get(context.Background(), created.JobID)
+	if !ok {
+		t.Fatal("job was not stored")
+	}
+	path, ok := job.Metadata["source_path"].(string)
+	if !ok || path == "" {
+		t.Fatalf("missing source path metadata: %#v", job.Metadata)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("uploaded source was not saved: %v", err)
 	}
 }
 

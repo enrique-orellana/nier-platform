@@ -339,9 +339,12 @@ func (s *Server) runtimeConfig(w http.ResponseWriter, _ *http.Request) {
 }
 
 type processRequest struct {
-	URL          string `json:"url"`
-	Acknowledged bool   `json:"acknowledged"`
-	ClipCount    int    `json:"clip_count"`
+	URL          string         `json:"url"`
+	SourceURL    string         `json:"source_url"`
+	SourceObject map[string]any `json:"source_object"`
+	SourcePath   string         `json:"-"`
+	Acknowledged bool           `json:"acknowledged"`
+	ClipCount    int            `json:"clip_count"`
 }
 
 func (s *Server) process(w http.ResponseWriter, r *http.Request) {
@@ -350,7 +353,7 @@ func (s *Server) process(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload, err := decodeProcessRequest(r)
+	payload, err := s.decodeProcessRequest(r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
 		return
@@ -361,22 +364,63 @@ func (s *Server) process(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if err := validateVideoURL(payload.URL); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+	providedSources := 0
+	if payload.URL != "" {
+		providedSources++
+	}
+	if payload.SourceObject != nil {
+		providedSources++
+	}
+	if payload.SourcePath != "" {
+		providedSources++
+	}
+	if providedSources != 1 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Must provide exactly one URL, MinIO object, or File"})
 		return
 	}
+	if payload.URL != "" {
+		if err := validateVideoURL(payload.URL); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+			return
+		}
+	}
+	if payload.SourceObject != nil {
+		if strings.TrimSpace(fmt.Sprint(payload.SourceObject["bucket"])) == "" || strings.TrimSpace(fmt.Sprint(payload.SourceObject["key"])) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "MinIO source object requires bucket and key"})
+			return
+		}
+	}
 	if payload.ClipCount == 0 {
-		payload.ClipCount = 6
+		if queryCount := r.URL.Query().Get("clip_count"); queryCount != "" {
+			payload.ClipCount, err = strconv.Atoi(queryCount)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "clip_count must be an integer"})
+				return
+			}
+		} else {
+			payload.ClipCount = 6
+		}
 	}
 	if payload.ClipCount < 3 || payload.ClipCount > 15 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "clip_count must be between 3 and 15"})
 		return
 	}
 
+	metadata := map[string]any{}
+	if payload.SourceURL != "" {
+		metadata["source_url"] = payload.SourceURL
+	}
+	if payload.SourceObject != nil {
+		metadata["source_object"] = payload.SourceObject
+	}
+	if payload.SourcePath != "" {
+		metadata["source_path"] = payload.SourcePath
+	}
 	job, err := s.store.Create(r.Context(), domain.CreateJobInput{
 		Kind:      "clip-generation",
 		SourceURL: payload.URL,
 		ClipCount: payload.ClipCount,
+		Metadata:  metadata,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Failed to create job"})
@@ -915,7 +959,7 @@ func (s *Server) patchManifest(w http.ResponseWriter, r *http.Request, jobID str
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "manifest": manifest, "revision": revision, "master_current": false})
 }
 
-func decodeProcessRequest(r *http.Request) (processRequest, error) {
+func (s *Server) decodeProcessRequest(r *http.Request) (processRequest, error) {
 	contentType := strings.ToLower(r.Header.Get("Content-Type"))
 	if strings.Contains(contentType, "application/json") {
 		var payload processRequest
@@ -926,6 +970,37 @@ func decodeProcessRequest(r *http.Request) (processRequest, error) {
 	}
 	if err := r.ParseForm(); err != nil {
 		return processRequest{}, errors.New("Invalid form request body")
+	}
+	var sourcePath string
+	if strings.Contains(contentType, "multipart/form-data") {
+		file, header, err := r.FormFile("file")
+		if err == nil {
+			defer file.Close()
+			root := s.config.OutputDir
+			if root == "" {
+				root = "output"
+			}
+			uploadDir := filepath.Join(root, ".uploads")
+			if err := os.MkdirAll(uploadDir, 0o755); err != nil {
+				return processRequest{}, errors.New("could not create upload directory")
+			}
+			temporary, err := os.CreateTemp(uploadDir, "source-*"+filepath.Ext(filepath.Base(header.Filename)))
+			if err != nil {
+				return processRequest{}, errors.New("could not create upload file")
+			}
+			sourcePath = temporary.Name()
+			if _, err := io.Copy(temporary, file); err != nil {
+				_ = temporary.Close()
+				_ = os.Remove(sourcePath)
+				return processRequest{}, errors.New("could not save uploaded file")
+			}
+			if err := temporary.Close(); err != nil {
+				_ = os.Remove(sourcePath)
+				return processRequest{}, errors.New("could not close uploaded file")
+			}
+		} else if !errors.Is(err, http.ErrMissingFile) {
+			return processRequest{}, errors.New("invalid uploaded file")
+		}
 	}
 	acknowledged, err := parseBool(r.FormValue("acknowledged"))
 	if err != nil {
@@ -938,7 +1013,7 @@ func decodeProcessRequest(r *http.Request) (processRequest, error) {
 			return processRequest{}, errors.New("clip_count must be an integer")
 		}
 	}
-	return processRequest{URL: r.FormValue("url"), Acknowledged: acknowledged, ClipCount: clipCount}, nil
+	return processRequest{URL: r.FormValue("url"), SourceURL: r.FormValue("source_url"), SourcePath: sourcePath, Acknowledged: acknowledged, ClipCount: clipCount}, nil
 }
 
 func parseBool(value string) (bool, error) {
