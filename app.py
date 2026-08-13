@@ -490,6 +490,9 @@ async def run_job_wrapper(job_id):
             await run_job(job_id, job)
     except Exception as e:
          print(f"❌ Job wrapper error {job_id}: {e}")
+         if job:
+             job['status'] = 'failed'
+             job['logs'].append(f"Execution error: {str(e)}")
     finally:
         # Always release semaphore and mark queue task done
         concurrency_semaphore.release()
@@ -647,8 +650,6 @@ async def run_job(job_id, job_data):
     
     jobs[job_id]['status'] = 'processing'
     jobs[job_id]['logs'].append("Job started by worker.")
-    print(f"🎬 [run_job] Executing command for {job_id}: {' '.join(cmd)}")
-    
     try:
         cmd, temporary_root = _prepare_minio_job_command(job_id, job_data)
         print(f"[run_job] Executing command for {job_id}: {' '.join(cmd)}")
