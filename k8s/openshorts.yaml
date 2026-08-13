@@ -21,7 +21,8 @@ metadata:
   name: openshorts-config
   namespace: openshorts
 data:
-  MAX_CONCURRENT_JOBS: "5"
+    MAX_CONCURRENT_JOBS: "5"
+    MAX_MINIO_SOURCE_SIZE_MB: "16384"
   AI_PROVIDER: lmstudio
   AI_BASE_URL: http://host.docker.internal:1234
   AI_QUALITY_PRESET: balanced

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -107,6 +108,7 @@ def download_source_object(
     key: str,
     destination: str,
     max_bytes: int,
+    progress_callback: Callable[[int, int | None], None] | None = None,
 ) -> None:
     """Stream one MinIO object into a local file with an atomic final rename."""
     validated_bucket, validated_key = validate_source_object({"bucket": bucket, "key": key})
@@ -135,6 +137,8 @@ def download_source_object(
                     if written > max_bytes:
                         raise ValueError("Source object exceeds the configured file size limit")
                     handle.write(chunk)
+                    if progress_callback:
+                        progress_callback(written, int(content_length) if content_length is not None else None)
         finally:
             close = getattr(body, "close", None)
             if close:

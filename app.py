@@ -54,6 +54,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # Default to 1 if not set, but user can set higher for powerful servers
 MAX_CONCURRENT_JOBS = int(os.environ.get("MAX_CONCURRENT_JOBS", "5"))
 MAX_FILE_SIZE_MB = 2048  # 2GB limit
+MAX_MINIO_SOURCE_SIZE_MB = int(os.environ.get("MAX_MINIO_SOURCE_SIZE_MB", "16384"))
 JOB_RETENTION_SECONDS = 3600  # 1 hour retention
 PERSISTENT_OUTPUT_DIRECTORY_NAMES = {".openshorts"}
 DISABLE_YOUTUBE_URL = os.environ.get("DISABLE_YOUTUBE_URL", "false").lower() in ("1", "true", "yes")
@@ -627,13 +628,36 @@ def _prepare_minio_job_command(job_id: str, job_data: dict) -> tuple[list[str], 
 
     temporary_root = tempfile.mkdtemp(prefix=f"openshorts-source-{job_id}-")
     source_path = os.path.join(temporary_root, "source.bin")
+    last_logged_mb = 0
+    job_logs = jobs.get(job_id, {}).get("logs")
+
+    def log_download_progress(written: int, total: int | None) -> None:
+        nonlocal last_logged_mb
+        if job_logs is None:
+            return
+        written_mb = written // (1024 * 1024)
+        if written_mb - last_logged_mb < 256 and total is not None and written < total:
+            return
+        last_logged_mb = written_mb
+        if total:
+            percent = min(100, written * 100 // total)
+            message = f"Downloading MinIO source: {written_mb}MB/{total // (1024 * 1024)}MB ({percent}%)."
+        else:
+            message = f"Downloading MinIO source: {written_mb}MB."
+        jobs[job_id]["logs"].append(message)
+
     try:
+        if job_logs is not None:
+            job_logs.append("Downloading selected MinIO source to temporary storage.")
         download_source_object(
             source_object["bucket"],
             source_object["key"],
             source_path,
-            max_bytes=MAX_FILE_SIZE_MB * 1024 * 1024,
+            max_bytes=MAX_MINIO_SOURCE_SIZE_MB * 1024 * 1024,
+            progress_callback=log_download_progress,
         )
+        if job_logs is not None:
+            job_logs.append("MinIO source download complete; starting video analysis.")
         command.extend(["--input", source_path])
         return command, temporary_root
     except Exception:

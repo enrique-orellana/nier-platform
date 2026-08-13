@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import app as app_module
 
@@ -22,7 +22,8 @@ def test_prepare_minio_job_command_uses_temporary_input_path(tmp_path):
         "youtube-downloads",
         "videos/source.bin",
         source_path,
-        max_bytes=app_module.MAX_FILE_SIZE_MB * 1024 * 1024,
+        max_bytes=app_module.MAX_MINIO_SOURCE_SIZE_MB * 1024 * 1024,
+        progress_callback=ANY,
     )
     assert command[:5] == ["python", "-u", "main.py", "--target-clips", "3"]
     assert command[-2:] == ["--input", source_path]
