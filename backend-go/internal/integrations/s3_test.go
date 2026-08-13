@@ -33,6 +33,9 @@ func (f *fakeS3) DeleteObjects(_ context.Context, input *s3.DeleteObjectsInput, 
 	for _, item := range input.Delete.Objects {
 		f.deleted = append(f.deleted, aws.ToString(item.Key))
 	}
+	if aws.ToBool(input.Delete.Quiet) {
+		return &s3.DeleteObjectsOutput{}, nil
+	}
 	return &s3.DeleteObjectsOutput{Deleted: make([]types.DeletedObject, len(input.Delete.Objects))}, nil
 }
 
@@ -49,13 +52,13 @@ func TestListSourceObjectsFiltersAndNormalizesMetadata(t *testing.T) {
 }
 
 func TestDeletePrefixDeletesAllMatchingKeys(t *testing.T) {
-	client := &fakeS3{}
+	client := &fakeS3{objects: []types.Object{{Key: aws.String("jobs/job-1/one.mp4")}, {Key: aws.String("jobs/job-1/two.mp4")}}}
 	store := &S3Store{Client: client, Bucket: "openshorts-media"}
 	count, err := store.DeletePrefix(context.Background(), "jobs/job-1/")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count != 0 || len(client.deleted) != 0 {
+	if count != 2 || len(client.deleted) != 2 {
 		t.Fatalf("unexpected delete result: %d %#v", count, client.deleted)
 	}
 }

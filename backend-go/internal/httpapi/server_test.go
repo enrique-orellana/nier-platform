@@ -35,6 +35,29 @@ func (completingTranslation) Run(_ context.Context, _ string, _ string, _ map[st
 	return json.RawMessage(`{"track":{"id":"es","label":"ES"}}`), nil
 }
 
+type galleryOperation struct{}
+
+func (galleryOperation) Run(_ context.Context, _ string, operation string, payload map[string]any, _ map[string]string) (json.RawMessage, error) {
+	if operation != "legacy_api" || payload["action"] != "saas_gallery" {
+		return nil, fmt.Errorf("unexpected gallery request: %s %#v", operation, payload)
+	}
+	return json.RawMessage(`{"videos":[{"video_id":"v1","title":"Demo","video_url":"/videos/v1.mp4","actor_url":"/videos/v1.png","caption":"A demo","full_narration":"Full narration","product_name":"Product","product_url":"https://example.com/product","video_mode":"lowcost","duration":12.5,"language":"en","hashtags":["#demo"],"cost_estimate":{"total":1.25},"created_at":"2026-08-13T12:00:00Z","actor_description":"Friendly actor"}],"total":1}`), nil
+}
+
+type blockingThumbnailOperation struct {
+	started chan map[string]any
+	release chan struct{}
+}
+
+func (o blockingThumbnailOperation) Run(_ context.Context, _ string, operation string, payload map[string]any, _ map[string]string) (json.RawMessage, error) {
+	if operation != "legacy_api" || payload["action"] != "thumbnail_publish" {
+		return nil, fmt.Errorf("unexpected thumbnail publish request: %s %#v", operation, payload)
+	}
+	o.started <- payload
+	<-o.release
+	return json.RawMessage(`{"publish_id":"worker-result","status":"done","result":{"upload_id":"upload-1"},"error":null}`), nil
+}
+
 type transcribingOperation struct{}
 
 func (transcribingOperation) Run(_ context.Context, _ string, operation string, payload map[string]any, _ map[string]string) (json.RawMessage, error) {
@@ -154,6 +177,75 @@ func TestUnknownRouteReturnsJSONNotFound(t *testing.T) {
 	if payload["detail"] != "Not found" {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
+}
+
+func TestGalleryPageRendersWorkerVideos(t *testing.T) {
+	server := NewServerWithDependencies(config.Config{}, jobs.NewMemoryStore(), nil, galleryOperation{})
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/gallery", nil))
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), "/video/v1") || !strings.Contains(res.Body.String(), "Demo") || !strings.Contains(res.Body.String(), "robots") || !strings.Contains(res.Body.String(), "CollectionPage") || !strings.Contains(res.Body.String(), "Product") {
+		t.Fatalf("unexpected gallery response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestVideoPageRendersSelectedVideoAndNotFound(t *testing.T) {
+	server := NewServerWithDependencies(config.Config{}, jobs.NewMemoryStore(), nil, galleryOperation{})
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/video/v1", nil))
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), "Demo") || !strings.Contains(res.Body.String(), "/videos/v1.mp4") || !strings.Contains(res.Body.String(), "VideoObject") || !strings.Contains(res.Body.String(), "Full narration") || !strings.Contains(res.Body.String(), "Friendly actor") || !strings.Contains(res.Body.String(), "#demo") || !strings.Contains(res.Body.String(), "Product") {
+		t.Fatalf("unexpected video response: %d %s", res.Code, res.Body.String())
+	}
+	missing := httptest.NewRecorder()
+	server.Handler().ServeHTTP(missing, httptest.NewRequest(http.MethodGet, "/video/missing", nil))
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("expected missing video 404, got %d", missing.Code)
+	}
+}
+
+func TestThumbnailPublishReturnsBeforeWorkerCompletes(t *testing.T) {
+	started := make(chan map[string]any, 1)
+	release := make(chan struct{})
+	server := NewServerWithDependencies(config.Config{OutputDir: t.TempDir()}, jobs.NewMemoryStore(), nil, blockingThumbnailOperation{started: started, release: release})
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("session_id", "session-1")
+	_ = writer.WriteField("title", "Demo")
+	_ = writer.WriteField("description", "Description")
+	_ = writer.WriteField("thumbnail_url", "/thumbnails/session-1/thumb.jpg")
+	_ = writer.WriteField("api_key", "key")
+	_ = writer.WriteField("user_id", "user")
+	_ = writer.Close()
+	request := httptest.NewRequest(http.MethodPost, "/api/thumbnail/publish", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		recorder := httptest.NewRecorder()
+		server.Handler().ServeHTTP(recorder, request)
+		response <- recorder
+	}()
+	var payload map[string]any
+	select {
+	case recorder := <-response:
+		if recorder.Code != http.StatusAccepted {
+			t.Fatalf("expected 202, got %d: %s", recorder.Code, recorder.Body.String())
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		close(release)
+		t.Fatal("publish request waited for worker completion")
+	}
+	select {
+	case workerPayload := <-started:
+		if payload["publish_id"] != workerPayload["publish_id"] || payload["status"] != "uploading" {
+			t.Fatalf("publish ID/status not propagated: response=%#v worker=%#v", payload, workerPayload)
+		}
+	case <-time.After(time.Second):
+		close(release)
+		t.Fatal("worker was not started")
+	}
+	close(release)
 }
 
 func TestProcessCreatesQueuedJob(t *testing.T) {

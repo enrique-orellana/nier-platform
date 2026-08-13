@@ -132,8 +132,13 @@ func BuildUploadPostRequestWithContext(ctx context.Context, endpoint, apiKey, fi
 			}
 		}
 	}
-	if err := multipartWriter.WriteField("media_type", "REELS"); err != nil {
-		return nil, err
+	for _, platform := range input.Platforms {
+		if platform == "instagram" {
+			if err := multipartWriter.WriteField("media_type", "REELS"); err != nil {
+				return nil, err
+			}
+			break
+		}
 	}
 	part, err := multipartWriter.CreateFormFile("video", filename)
 	if err != nil {

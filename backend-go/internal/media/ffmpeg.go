@@ -21,13 +21,106 @@ func (ExecCommandRunner) Run(ctx context.Context, name string, args ...string) e
 }
 
 type SubtitleStyle struct {
-	Alignment string
-	FontSize  int
+	Alignment       string
+	FontSize        int
+	FontName        string
+	FontColor       string
+	BorderColor     string
+	BorderWidth     int
+	BackgroundColor string
+	BackgroundAlpha float64
 }
 
 func SubtitleBurnArgs(inputPath, subtitlePath, outputPath string, style SubtitleStyle) []string {
-	_ = style
-	return []string{"-y", "-i", inputPath, "-vf", "subtitles=" + subtitlePath, "-c:a", "copy", outputPath}
+	return []string{
+		"-y", "-i", inputPath, "-vf", subtitleFilter(subtitlePath, style),
+		"-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2", "-preset", "veryslow", "-crf", "14",
+		"-pix_fmt", "yuv420p", "-color_range", "tv", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709",
+		"-video_track_timescale", "90000", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "192k", "-movflags", "+faststart", outputPath,
+	}
+}
+
+func subtitleFilter(subtitlePath string, style SubtitleStyle) string {
+	pathValue := strings.ReplaceAll(subtitlePath, `\`, "/")
+	pathValue = strings.ReplaceAll(pathValue, ":", `\:`)
+	pathValue = strings.ReplaceAll(pathValue, "'", `\'`)
+	return "subtitles='" + pathValue + "':force_style='" + subtitleASSStyle(style) + "',setsar=1,colorspace=all=bt709:iall=bt709:range=tv:irange=tv"
+}
+
+func subtitleASSStyle(style SubtitleStyle) string {
+	alignment := 2
+	switch strings.ToLower(strings.TrimSpace(style.Alignment)) {
+	case "top":
+		alignment = 6
+	case "middle", "center", "centre":
+		alignment = 10
+	}
+	fontName := strings.NewReplacer("'", "", ",", " ").Replace(strings.TrimSpace(style.FontName))
+	if fontName == "" {
+		fontName = "Verdana"
+	}
+	fontSize := style.FontSize
+	if fontSize <= 0 {
+		fontSize = 16
+	}
+	fontSize = int(float64(fontSize) * 0.85)
+	if fontSize < 10 {
+		fontSize = 10
+	}
+	borderWidth := style.BorderWidth
+	if borderWidth <= 0 {
+		borderWidth = 2
+	}
+	fontColor := style.FontColor
+	if fontColor == "" {
+		fontColor = "#FFFFFF"
+	}
+	borderColor := style.BorderColor
+	if borderColor == "" {
+		borderColor = "#000000"
+	}
+	backgroundColor := style.BackgroundColor
+	if backgroundColor == "" {
+		backgroundColor = "#000000"
+	}
+	backgroundAlpha := style.BackgroundAlpha
+	if backgroundAlpha < 0 {
+		backgroundAlpha = 0
+	}
+	if backgroundAlpha > 1 {
+		backgroundAlpha = 1
+	}
+	borderStyle := 1
+	outline := borderWidth
+	outlineColor := assColor(borderColor, 1)
+	if backgroundAlpha > 0 {
+		borderStyle = 3
+		outline = 1
+		outlineColor = assColor(backgroundColor, backgroundAlpha)
+	}
+	return fmt.Sprintf("Alignment=%d,Fontname=%s,Fontsize=%d,PrimaryColour=%s,OutlineColour=%s,BackColour=%s,BorderStyle=%d,Outline=%d,Shadow=0,MarginV=25,Bold=1", alignment, fontName, fontSize, assColor(fontColor, 1), outlineColor, assColor("#000000", 0), borderStyle, outline)
+}
+
+func assColor(value string, opacity float64) string {
+	value = strings.TrimPrefix(strings.TrimSpace(value), "#")
+	if len(value) != 6 {
+		value = "FFFFFF"
+	}
+	parsed, err := strconv.ParseUint(value, 16, 32)
+	if err != nil {
+		parsed = 0xFFFFFF
+	}
+	if opacity < 0 {
+		opacity = 0
+	}
+	if opacity > 1 {
+		opacity = 1
+	}
+	alpha := int((1-opacity)*255 + 0.5)
+	r := (parsed >> 16) & 0xFF
+	g := (parsed >> 8) & 0xFF
+	b := parsed & 0xFF
+	return fmt.Sprintf("&H%02X%02X%02X%02X", alpha, b, g, r)
 }
 
 func SafeMediaPath(root, candidate string) bool {
@@ -49,12 +142,15 @@ func BurnSubtitles(ctx context.Context, runner CommandRunner, inputPath, subtitl
 
 func BuildWordSRT(transcript map[string]any, start, end float64) (string, error) {
 	segments, _ := transcript["segments"].([]any)
-	var output strings.Builder
-	sequence := 1
+	type cueWord struct {
+		text       string
+		start, end float64
+	}
+	words := make([]cueWord, 0)
 	for _, rawSegment := range segments {
 		segment, _ := rawSegment.(map[string]any)
-		words, _ := segment["words"].([]any)
-		for _, rawWord := range words {
+		segmentWords, _ := segment["words"].([]any)
+		for _, rawWord := range segmentWords {
 			word, _ := rawWord.(map[string]any)
 			wordStart, okStart := numberValue(word["start"])
 			wordEnd, okEnd := numberValue(word["end"])
@@ -62,20 +158,67 @@ func BuildWordSRT(transcript map[string]any, start, end float64) (string, error)
 			if !okStart || !okEnd || strings.TrimSpace(text) == "" || wordEnd <= start || wordStart >= end {
 				continue
 			}
-			if wordStart < start {
-				wordStart = start
-			}
-			if wordEnd > end {
-				wordEnd = end
-			}
-			fmt.Fprintf(&output, "%d\n%s --> %s\n%s\n\n", sequence, formatSRTTime(wordStart-start), formatSRTTime(wordEnd-start), strings.TrimSpace(text))
-			sequence++
+			words = append(words, cueWord{text: strings.TrimSpace(text), start: maxFloat64(wordStart-start, 0), end: minFloat(wordEnd-start, end-start)})
 		}
 	}
+	var output strings.Builder
+	sequence := 1
+	current := make([]cueWord, 0)
+	writeCue := func() {
+		if len(current) == 0 {
+			return
+		}
+		text := make([]string, 0, len(current))
+		for _, word := range current {
+			text = append(text, word.text)
+		}
+		fmt.Fprintf(&output, "%d\n%s --> %s\n%s\n\n", sequence, formatSRTTime(current[0].start), formatSRTTime(current[len(current)-1].end), strings.Join(text, " "))
+		sequence++
+		current = current[:0]
+	}
+	for _, word := range words {
+		if len(current) == 0 {
+			current = append(current, word)
+			continue
+		}
+		last := current[len(current)-1]
+		currentLength := 0
+		for _, item := range current {
+			currentLength += len(item.text) + 1
+		}
+		if sentenceEnd(last.text) || currentLength+len(word.text) > 20 || word.end-current[0].start > 2 {
+			writeCue()
+		}
+		current = append(current, word)
+	}
+	writeCue()
 	if sequence == 1 {
 		return "", fmt.Errorf("no words found for this clip range")
 	}
 	return output.String(), nil
+}
+
+func sentenceEnd(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	last := value[len(value)-1]
+	return last == '.' || last == '!' || last == '?' || last == '\xE2'
+}
+
+func minFloat(left, right float64) float64 {
+	if left < right {
+		return left
+	}
+	return right
+}
+
+func maxFloat64(left, right float64) float64 {
+	if left > right {
+		return left
+	}
+	return right
 }
 
 func numberValue(value any) (float64, bool) {

@@ -143,7 +143,7 @@ func (s *S3Store) DeletePrefix(ctx context.Context, prefix string) (int, error) 
 			for _, object := range output.Contents {
 				identifiers = append(identifiers, types.ObjectIdentifier{Key: object.Key})
 			}
-			response, err := s.Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{Bucket: aws.String(s.Bucket), Delete: &types.Delete{Objects: identifiers, Quiet: aws.Bool(true)}})
+			response, err := s.Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{Bucket: aws.String(s.Bucket), Delete: &types.Delete{Objects: identifiers, Quiet: aws.Bool(false)}})
 			if err != nil {
 				return deleted, err
 			}

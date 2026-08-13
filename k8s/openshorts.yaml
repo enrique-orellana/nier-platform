@@ -48,8 +48,6 @@ data:
   AWS_S3_FORCE_PATH_STYLE: "true"
   RENDER_SERVICE_URL: http://openshorts-renderer.openshorts.svc.cluster.local:3100
   OPENSHORTS_CODEX_AUTH_FILE: /app/output/.openshorts/codex-auth.json
-  PORT: "3100"
-  OUTPUT_DIR: /output
   REMOTION_BUNDLE_PATH: /app/remotion
 ---
 apiVersion: apps/v1
@@ -77,6 +75,10 @@ spec:
             - configMapRef:
                 name: openshorts-config
           env:
+            - name: PORT
+              value: "8000"
+            - name: OUTPUT_DIR
+              value: /app/output
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
@@ -159,6 +161,11 @@ spec:
           envFrom:
             - configMapRef:
                 name: openshorts-config
+          env:
+            - name: PORT
+              value: "3100"
+            - name: OUTPUT_DIR
+              value: /output
           volumeMounts:
             - name: workdir
               mountPath: /output

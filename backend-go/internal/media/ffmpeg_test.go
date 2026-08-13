@@ -2,7 +2,7 @@ package media
 
 import (
 	"context"
-	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -17,10 +17,53 @@ func (r *recordingRunner) Run(_ context.Context, name string, args ...string) er
 }
 
 func TestSubtitleBurnArgsDoNotUseShellInterpolation(t *testing.T) {
-	args := SubtitleBurnArgs("input.mp4", "captions.srt", "output.mp4", SubtitleStyle{Alignment: "bottom", FontSize: 16})
-	want := []string{"-y", "-i", "input.mp4", "-vf", "subtitles=captions.srt", "-c:a", "copy", "output.mp4"}
-	if !reflect.DeepEqual(args, want) {
-		t.Fatalf("args = %#v, want %#v", args, want)
+	args := SubtitleBurnArgs(`input.mp4`, `C:\tmp\captions.srt`, `output.mp4`, SubtitleStyle{
+		Alignment: "top", FontSize: 20, FontName: "Arial", FontColor: "#FF0000", BorderColor: "#000000", BorderWidth: 3,
+	})
+	filter := args[4]
+	for _, expected := range []string{
+		`subtitles='C\:/tmp/captions.srt'`,
+		`force_style='`,
+		`Alignment=6`,
+		`Fontname=Arial`,
+		`Fontsize=17`,
+		`PrimaryColour=&H000000FF`,
+		`Outline=3`,
+		`setsar=1`,
+		`colorspace=all=bt709:iall=bt709:range=tv:irange=tv`,
+	} {
+		if !strings.Contains(filter, expected) {
+			t.Fatalf("filter %q does not contain %q", filter, expected)
+		}
+	}
+	for _, pair := range [][]string{{"-c:v", "libx264"}, {"-profile:v", "high"}, {"-level:v", "4.2"}, {"-preset", "veryslow"}, {"-crf", "14"}, {"-pix_fmt", "yuv420p"}, {"-c:a", "aac"}, {"-ar", "48000"}, {"-ac", "2"}, {"-b:a", "192k"}, {"-movflags", "+faststart"}} {
+		if !containsArgPair(args, pair[0], pair[1]) {
+			t.Fatalf("args %#v does not contain %s %s", args, pair[0], pair[1])
+		}
+	}
+}
+
+func containsArgPair(args []string, key, value string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == key && args[index+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
+func TestBuildWordSRTGroupsWordsIntoReadableCues(t *testing.T) {
+	transcript := map[string]any{"segments": []any{map[string]any{"words": []any{
+		map[string]any{"word": "one", "start": 0.0, "end": 0.3},
+		map[string]any{"word": "two", "start": 0.4, "end": 0.7},
+		map[string]any{"word": "three", "start": 0.8, "end": 1.1},
+	}}}}
+	srt, err := BuildWordSRT(transcript, 0, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(srt, " --> ") != 1 || !strings.Contains(srt, "one two three") {
+		t.Fatalf("expected one grouped cue, got %q", srt)
 	}
 }
 

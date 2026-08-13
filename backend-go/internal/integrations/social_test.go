@@ -42,4 +42,7 @@ func TestBuildUploadPostRequestIncludesPlatformAndScheduleFields(t *testing.T) {
 	if request.FormValue("scheduled_date") == "" || request.FormValue("timezone") != "UTC" {
 		t.Fatalf("schedule fields missing: %#v", request.Form)
 	}
+	if request.FormValue("media_type") != "" {
+		t.Fatalf("media_type should only be sent for Instagram: %#v", request.Form)
+	}
 }

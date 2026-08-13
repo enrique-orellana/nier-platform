@@ -136,6 +136,17 @@ def _job_paths(payload: Mapping[str, Any], root: Path) -> tuple[Path, dict[str, 
     return input_path, metadata, clip_index
 
 
+def _thumbnail_publish_state_path(root: Path, publish_id: str) -> Path:
+    publish_id = str(publish_id or "").strip()
+    if not publish_id or Path(publish_id).name != publish_id:
+        raise ValueError("publish_id is required")
+    return root / f".thumbnail_publish_{publish_id}.json"
+
+
+def _write_thumbnail_publish_state(root: Path, publish_id: str, state: dict[str, Any]) -> None:
+    _thumbnail_publish_state_path(root, publish_id).write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+
+
 def _persist_clip_url(job_root: Path, metadata: dict[str, Any], clip_index: int, url: str) -> None:
     metadata.setdefault("shorts", [])[clip_index]["video_url"] = url
     metadata_files = sorted(job_root.glob("*_metadata.json"))
@@ -337,9 +348,52 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
             session_path.write_text(json.dumps(state), encoding="utf-8")
             return result
         if action == "thumbnail_publish":
-            return {"publish_id": str(uuid.uuid4()), "status": "queued"}
+            session_id = str(payload.get("session_id") or "")
+            session = state.get(session_id)
+            video_path = Path(str((session or {}).get("video_path") or ""))
+            if not session or not video_path.is_file():
+                raise FileNotFoundError("Original video file not found")
+            thumbnail_url = str(payload.get("thumbnail_url") or "").strip()
+            relative_thumbnail = thumbnail_url.lstrip("/")
+            thumbnail_path = root / relative_thumbnail if relative_thumbnail.startswith("thumbnails/") else root / "thumbnails" / relative_thumbnail
+            try:
+                thumbnail_path = thumbnail_path.resolve()
+                if root.resolve() not in thumbnail_path.parents:
+                    raise ValueError("Invalid thumbnail path")
+            except OSError as exc:
+                raise ValueError("Invalid thumbnail path") from exc
+            if not thumbnail_path.is_file():
+                raise FileNotFoundError("Thumbnail file not found")
+            publish_id = str(payload.get("publish_id") or uuid.uuid4())
+            uploading = {"publish_id": publish_id, "status": "uploading", "result": None, "error": None}
+            _write_thumbnail_publish_state(root, publish_id, uploading)
+            try:
+                import httpx
+                title = str(payload.get("title") or "Untitled")
+                description = str(payload.get("description") or "")
+                api_key = str(payload.get("api_key") or "")
+                user_id = str(payload.get("user_id") or "")
+                if not api_key or not user_id:
+                    raise ValueError("api_key and user_id are required")
+                data = {"user": user_id, "platform[]": "youtube", "title": title, "async_upload": "true", "youtube_title": title, "youtube_description": description, "privacyStatus": "public"}
+                with video_path.open("rb") as video, thumbnail_path.open("rb") as thumbnail:
+                    files = {"video": (video_path.name, video.read(), "video/mp4"), "thumbnail": (thumbnail_path.name, thumbnail.read(), "image/jpeg")}
+                with httpx.Client(timeout=600.0) as client:
+                    response = client.post("https://api.upload-post.com/api/upload", headers={"Authorization": f"Apikey {api_key}"}, data=data, files=files)
+                if response.status_code not in {200, 201, 202}:
+                    raise RuntimeError(f"Upload-Post API Error ({response.status_code}): {response.text}")
+                completed = {"publish_id": publish_id, "status": "done", "result": response.json(), "error": None}
+                _write_thumbnail_publish_state(root, publish_id, completed)
+                return completed
+            except Exception as exc:
+                failed = {"publish_id": publish_id, "status": "failed", "result": None, "error": str(exc)}
+                _write_thumbnail_publish_state(root, publish_id, failed)
+                return failed
         if action == "thumbnail_publish_status":
-            return {"status": "unknown"}
+            state_path = _thumbnail_publish_state_path(root, str(payload.get("publish_id") or ""))
+            if not state_path.is_file():
+                raise FileNotFoundError("Publish job not found")
+            return json.loads(state_path.read_text(encoding="utf-8"))
 
     if action.startswith("saas_"):
         headers = request.get("headers") or {}
