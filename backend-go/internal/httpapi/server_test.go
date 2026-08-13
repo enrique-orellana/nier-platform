@@ -254,6 +254,54 @@ func TestRenderRoutesProxyToRendererService(t *testing.T) {
 	}
 }
 
+func TestClipVersionRoutesPersistAndBranchManifests(t *testing.T) {
+	outputDir := t.TempDir()
+	server := NewServer(config.Config{OutputDir: outputDir})
+	manifest := `{"schema_version":1,"timeline":{"source_video_url":"/videos/job-1/source.mp4"},"layers":{}}`
+	createReq := httptest.NewRequest(http.MethodPost, "/api/clip/job-1/0/versions", strings.NewReader(`{"manifest":`+manifest+`}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(createRes, createReq)
+	if createRes.Code != http.StatusOK {
+		t.Fatalf("expected create status 200, got %d: %s", createRes.Code, createRes.Body.String())
+	}
+	var created struct {
+		Version struct {
+			VersionID string `json:"version_id"`
+		} `json:"version"`
+		Manifest map[string]any `json:"manifest"`
+	}
+	if err := json.Unmarshal(createRes.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.Version.VersionID == "" || created.Manifest["manifest_revision"] == nil {
+		t.Fatalf("unexpected created version: %#v", created)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/clip/job-1/0/versions", nil)
+	listRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(listRes, listReq)
+	if listRes.Code != http.StatusOK || !strings.Contains(listRes.Body.String(), created.Version.VersionID) {
+		t.Fatalf("unexpected list response: %d %s", listRes.Code, listRes.Body.String())
+	}
+
+	branchReq := httptest.NewRequest(http.MethodPost, "/api/clip/job-1/0/versions/branch", strings.NewReader(`{"version_id":"`+created.Version.VersionID+`"}`))
+	branchReq.Header.Set("Content-Type", "application/json")
+	branchRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(branchRes, branchReq)
+	if branchRes.Code != http.StatusOK || !strings.Contains(branchRes.Body.String(), `"parent_version_id":"`+created.Version.VersionID+`"`) {
+		t.Fatalf("unexpected branch response: %d %s", branchRes.Code, branchRes.Body.String())
+	}
+
+	completeReq := httptest.NewRequest(http.MethodPost, "/api/clip/job-1/0/versions/"+created.Version.VersionID+"/complete", strings.NewReader(`{"output_url":"/videos/job-1/rendered.mp4"}`))
+	completeReq.Header.Set("Content-Type", "application/json")
+	completeRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(completeRes, completeReq)
+	if completeRes.Code != http.StatusOK || !strings.Contains(completeRes.Body.String(), `"current_version_id":"`+created.Version.VersionID+`"`) {
+		t.Fatalf("unexpected complete response: %d %s", completeRes.Code, completeRes.Body.String())
+	}
+}
+
 func TestProcessRequiresRightsAcknowledgement(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodPost, "/api/process", strings.NewReader(`{"url":"https://example.com/video.mp4"}`))

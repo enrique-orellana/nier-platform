@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -60,6 +61,20 @@ func (s *Store) CurrentVersionID() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.readIndex().CurrentVersionID
+}
+
+func (s *Store) ListVersions() []VersionRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	index := s.readIndex()
+	versions := make([]VersionRecord, 0, len(index.Versions))
+	for _, version := range index.Versions {
+		versions = append(versions, version)
+	}
+	sort.SliceStable(versions, func(i, j int) bool {
+		return versions[i].CreatedAt < versions[j].CreatedAt
+	})
+	return versions
 }
 
 func (s *Store) CreateVersion(manifest map[string]any, parentVersionID *string) (VersionRecord, error) {

@@ -10,12 +10,14 @@ const (
 	defaultPort              = 8000
 	defaultMaxConcurrentJobs = 5
 	defaultRenderServiceURL  = "http://localhost:3100"
+	defaultOutputDir         = "output"
 )
 
 type Config struct {
 	Port              int
 	MaxConcurrentJobs int
 	RenderServiceURL  string
+	OutputDir         string
 }
 
 func Load() (Config, error) {
@@ -23,6 +25,7 @@ func Load() (Config, error) {
 		Port:              defaultPort,
 		MaxConcurrentJobs: defaultMaxConcurrentJobs,
 		RenderServiceURL:  defaultRenderServiceURL,
+		OutputDir:         defaultOutputDir,
 	}
 
 	if value := os.Getenv("PORT"); value != "" {
@@ -41,6 +44,9 @@ func Load() (Config, error) {
 	}
 	if value := os.Getenv("RENDER_SERVICE_URL"); value != "" {
 		cfg.RenderServiceURL = value
+	}
+	if value := os.Getenv("OUTPUT_DIR"); value != "" {
+		cfg.OutputDir = value
 	}
 
 	return cfg, nil
