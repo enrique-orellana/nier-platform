@@ -1,0 +1,10 @@
+FROM golang:1.26-alpine AS builder
+
+WORKDIR /go-src
+COPY go.mod go.sum ./
+COPY cmd ./cmd
+COPY internal ./internal
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/openshorts-api ./cmd/api
+
+FROM openshorts-backend:go-local
+COPY --from=builder /out/openshorts-api /usr/local/bin/openshorts-api
