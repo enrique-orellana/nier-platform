@@ -41,6 +41,16 @@ videos/
 output/
 uploads/
 .remotion/
+.tmp-deploy/
+.agents/
+.benchmarks/
+.superpowers/
+screenshots/
+tests/
+
+# Large local media and development dependencies
+*.gif
+**/node_modules/
 
 # Docker
 Dockerfile
