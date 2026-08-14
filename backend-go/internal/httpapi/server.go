@@ -43,6 +43,8 @@ type Server struct {
 	s3Store           *integrations.S3Store
 	versionMu         sync.Mutex
 	versionStores     map[string]*versions.Store
+	highlightMu       sync.Mutex
+	highlightRuntime  map[string]map[string]any
 }
 
 func NewServer(cfg config.Config) *Server {
@@ -63,7 +65,11 @@ func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs
 
 func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, runner *jobs.Runner, translationRunner OperationClient, scheduler *jobs.Scheduler) *Server {
 	mux := http.NewServeMux()
-	server := &Server{config: cfg, mux: mux, store: store, runner: runner, scheduler: scheduler, translationRunner: translationRunner, versionStores: make(map[string]*versions.Store)}
+	server := &Server{config: cfg, mux: mux, store: store, runner: runner, scheduler: scheduler, translationRunner: translationRunner, versionStores: make(map[string]*versions.Store), highlightRuntime: make(map[string]map[string]any)}
+	if runner != nil {
+		runner.RuntimeMetadata = server.highlightRuntimeMetadata
+		runner.ReleaseRuntimeMetadata = server.releaseHighlightRuntimeMetadata
+	}
 	server.mediaRunner = media.ExecCommandRunner{}
 	if cfg.S3Bucket != "" || cfg.S3Endpoint != "" {
 		server.s3Store, _ = integrations.NewS3Store(context.Background(), integrations.S3Config{Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, ForcePathStyle: cfg.S3ForcePathStyle, Bucket: cfg.S3Bucket, SourceBucket: cfg.S3SourceBucket})
@@ -80,6 +86,8 @@ func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, 
 	mux.HandleFunc("/api/config", server.runtimeConfig)
 	mux.HandleFunc("/api/process", server.process)
 	mux.HandleFunc("/api/status/", server.status)
+	mux.HandleFunc("/api/highlights", server.highlights)
+	mux.HandleFunc("/api/highlights/", server.highlightRoute)
 	mux.HandleFunc("/api/render", server.renderProxy)
 	mux.HandleFunc("/api/render/", server.renderProxy)
 	mux.HandleFunc("/api/video-proxy", server.videoProxy)
@@ -1106,10 +1114,12 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		Status string          `json:"status"`
 		Logs   []string        `json:"logs"`
 		Result json.RawMessage `json:"result"`
+		Error  string          `json:"error"`
 	}{
 		Status: string(job.Status),
 		Logs:   logs,
 		Result: result,
+		Error:  job.Error,
 	})
 }
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from python_worker import _legacy_api, build_clip_generation_command, load_generation_result, parse_request
+from python_worker import _legacy_api, build_clip_generation_command, handle_request, load_generation_result, parse_request
 
 
 def test_parse_request_requires_id_and_operation():
@@ -55,6 +55,24 @@ def test_build_clip_generation_command_rejects_missing_source():
 
     with pytest.raises(ValueError, match="exactly one source"):
         build_clip_generation_command(request)
+
+
+def test_handle_request_dispatches_highlight_generation(monkeypatch, capsys, tmp_path):
+    calls = []
+
+    def fake_run(request, emit_log):
+        calls.append((request, emit_log))
+        emit_log("selected highlight")
+        return {"video_url": "/videos/job-1/highlights.mp4"}
+
+    monkeypatch.setattr("highlight_generation.run_highlight_generation", fake_run)
+    handle_request({"id": "job-1", "operation": "highlight_generation", "output_dir": str(tmp_path)})
+
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert events[0]["type"] == "started"
+    assert events[1]["type"] == "log"
+    assert events[-1]["type"] == "result"
+    assert calls[0][0]["id"] == "job-1"
 
 
 def test_load_generation_result_reads_metadata_for_go_status_api():

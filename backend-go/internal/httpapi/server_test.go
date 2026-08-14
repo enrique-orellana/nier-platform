@@ -29,6 +29,62 @@ func (completingWorker) Run(_ context.Context, _ domain.Job, _ string, onLog fun
 	return nil
 }
 
+func TestHighlightsCreateRequiresAcknowledgementAndQueuesMinioJob(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	runner := &jobs.Runner{Store: store, Worker: completingWorker{}}
+	scheduler := jobs.NewScheduler(store, runner, 1)
+	server := NewServerWithDependenciesAndScheduler(config.Config{OutputDir: t.TempDir()}, store, runner, nil, scheduler)
+	if err := scheduler.Start(context.Background()); err != nil {
+		t.Fatalf("start scheduler: %v", err)
+	}
+	defer scheduler.Stop(context.Background())
+
+	missingAck := httptest.NewRecorder()
+	server.Handler().ServeHTTP(missingAck, httptest.NewRequest(http.MethodPost, "/api/highlights", strings.NewReader(`{"source_object":{"bucket":"youtube-downloads","key":"source.mp4"}}`)))
+	if missingAck.Code != http.StatusBadRequest {
+		t.Fatalf("expected acknowledgement validation, got %d", missingAck.Code)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/highlights", strings.NewReader(`{"source_object":{"bucket":"youtube-downloads","key":"source.mp4"},"acknowledged":true,"min_minutes":12,"ideal_minutes":20}`))
+	request.Header.Set("X-AI-Provider", "ollama")
+	queued := httptest.NewRecorder()
+	server.Handler().ServeHTTP(queued, request)
+	if queued.Code != http.StatusAccepted {
+		t.Fatalf("expected highlight job to be accepted, got %d: %s", queued.Code, queued.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(queued.Body.Bytes(), &payload); err != nil || payload["id"] == "" {
+		t.Fatalf("unexpected highlight response: %s", queued.Body.String())
+	}
+}
+
+func TestHighlightsNeverReturnsOrPersistsAIHeaders(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	runner := &jobs.Runner{Store: store, Worker: completingWorker{}}
+	scheduler := jobs.NewScheduler(store, runner, 1)
+	server := NewServerWithDependenciesAndScheduler(config.Config{OutputDir: t.TempDir()}, store, runner, nil, scheduler)
+	if err := scheduler.Start(context.Background()); err != nil {
+		t.Fatalf("start scheduler: %v", err)
+	}
+	defer scheduler.Stop(context.Background())
+
+	request := httptest.NewRequest(http.MethodPost, "/api/highlights", strings.NewReader(`{"source_object":{"bucket":"youtube-downloads","key":"source.mp4"},"acknowledged":true}`))
+	request.Header.Set("X-AI-Provider", "gemini")
+	request.Header.Set("X-Gemini-Key", "super-secret")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if strings.Contains(response.Body.String(), "super-secret") {
+		t.Fatalf("response leaked AI credentials: %s", response.Body.String())
+	}
+	jobsByKind, err := store.ListByKind(context.Background(), "highlight-generation")
+	if err != nil || len(jobsByKind) != 1 {
+		t.Fatalf("expected one stored job: %v %#v", err, jobsByKind)
+	}
+	if _, ok := jobsByKind[0].Metadata["headers"]; ok {
+		t.Fatalf("stored job contains raw headers: %#v", jobsByKind[0].Metadata)
+	}
+}
+
 type completingTranslation struct{}
 
 func (completingTranslation) Run(_ context.Context, _ string, _ string, _ map[string]any, _ map[string]string) (json.RawMessage, error) {

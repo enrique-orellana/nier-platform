@@ -628,6 +628,13 @@ def handle_request(request: Mapping[str, Any]) -> None:
         if operation == "legacy_api":
             _emit({"id": request_id, "type": "result", "result": _legacy_api(request)})
             return
+        if operation == "highlight_generation":
+            from highlight_generation import run_highlight_generation
+
+            _emit({"id": request_id, "type": "started", "operation": operation})
+            result = run_highlight_generation(request, lambda message: _emit({"id": request_id, "type": "log", "message": message}))
+            _emit({"id": request_id, "type": "result", "result": result})
+            return
         if operation != "clip_generation":
             raise ValueError(f"unsupported operation: {operation}")
         _emit({"id": request_id, "type": "started", "operation": operation})
