@@ -1,3 +1,4 @@
+# LEGACY WORKER: Invoked by the Go control plane for media/AI generation.
 import time
 import atexit
 import cv2

@@ -3,6 +3,10 @@
 This service is the production HTTP control plane for OpenShorts. Python remains
 an internal worker for media and AI workloads; it is not an HTTP server.
 
+The retained Python entrypoints are transitional legacy code documented in
+the repository-level [`LEGACY.md`](../LEGACY.md). They can be removed after
+the worker capabilities and model/media dependencies are migrated to Go.
+
 ## Local run
 
 ```powershell

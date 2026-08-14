@@ -1,4 +1,4 @@
-"""Framework-free subtitle translation operation used by the Go control plane."""
+"""LEGACY subtitle translation worker retained for compatibility."""
 
 from __future__ import annotations
 

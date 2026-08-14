@@ -1,4 +1,4 @@
-"""JSON-lines worker bridge for media and AI workloads.
+"""LEGACY JSON-lines worker bridge for media and AI workloads.
 
 The Go control plane owns HTTP. This process accepts one or more newline-delimited
 job requests on stdin and emits newline-delimited lifecycle events on stdout.

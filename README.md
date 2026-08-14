@@ -99,6 +99,10 @@ All generated videos and avatars are saved to a public gallery with SEO pages fo
 - Shared avatar gallery across all users
 - Async job queue with configurable concurrency
 
+The remaining Python entrypoints and their supporting modules are tracked as
+transitional legacy code in [`LEGACY.md`](LEGACY.md). They remain in the image
+only because the Go control plane still launches the media/AI worker.
+
 ---
 
 ## Who Is This For?

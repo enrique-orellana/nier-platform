@@ -1,3 +1,5 @@
+# LEGACY: Former FastAPI HTTP entrypoint. Production HTTP is owned by Go;
+# retain this module only for compatibility while the Python worker surface is migrated.
 import os
 from dataclasses import asdict
 import uuid
