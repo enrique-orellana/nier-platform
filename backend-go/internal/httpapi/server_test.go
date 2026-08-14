@@ -475,6 +475,26 @@ func TestClipVersionRoutesPersistAndBranchManifests(t *testing.T) {
 	}
 }
 
+func TestManifestRouteFindsOneBasedManifestLayout(t *testing.T) {
+	outputDir := t.TempDir()
+	manifestDir := filepath.Join(outputDir, "job-1", "manifests")
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+		t.Fatalf("create manifest directory: %v", err)
+	}
+	manifest := `{"schema_version":1,"timeline":{"source_video_url":"/videos/job-1/source.mp4"},"layers":{}}`
+	if err := os.WriteFile(filepath.Join(manifestDir, "clip_1.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	server := NewServer(config.Config{OutputDir: outputDir})
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/clip/job-1/0/manifest", nil))
+
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"source_video_url":"/videos/job-1/source.mp4"`) {
+		t.Fatalf("expected one-based manifest to load, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
 func TestVideoProxyForwardsRangeAndContentHeaders(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Range") != "bytes=10-19" {

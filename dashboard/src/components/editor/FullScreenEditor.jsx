@@ -208,16 +208,25 @@ export default function FullScreenEditor({
       const history = await historyResponse.json();
       const currentId =
         initialVersionId || history.current_version_id || history.versions?.at(-1)?.version_id;
-      if (!currentId) return;
-      const versionResponse = await fetch(
-        getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions/${currentId}`),
-      );
-      const payload = await versionResponse.json();
+      let payload;
+      if (currentId) {
+        const versionResponse = await fetch(
+          getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions/${currentId}`),
+        );
+        payload = await versionResponse.json();
+        if (!versionResponse.ok) throw new Error(payload.detail || "Unable to load version");
+      } else {
+        const manifestResponse = await fetch(
+          getApiUrl(`/api/clip/${jobId}/${clipIndex}/manifest`),
+        );
+        if (!manifestResponse.ok) return;
+        payload = await manifestResponse.json();
+      }
       if (cancelled) return;
       const hydratedManifest = await hydrateManifest(payload.manifest);
       if (cancelled) return;
       setVersions(history.versions || []);
-      setVersion(payload.version);
+      setVersion(payload.version || null);
       setManifest(hydratedManifest);
       setPublishingMetadata(publishingMetadataFrom(hydratedManifest, clip));
       setEditorState(
@@ -446,7 +455,7 @@ export default function FullScreenEditor({
     }
   };
   const saveVersion = useCallback(async () => {
-    if (!version?.version_id || busy) return;
+    if (busy) return;
     setBusy(true);
     setError(null);
     const props = {
@@ -460,7 +469,7 @@ export default function FullScreenEditor({
       jobId,
       clipIndex,
       manifest: { ...projectManifest, active_subtitle_track_id: activeTrackId },
-      parentVersionId: version.version_id,
+      parentVersionId: version?.version_id,
       props,
     });
     if (result.status === "done") {
@@ -539,7 +548,7 @@ export default function FullScreenEditor({
               <span className="mr-auto text-xs text-red-300" role="alert">{error}</span>
               <button type="button" onClick={downloadVersion} disabled={!version?.output_url || version.status !== "done" || busy} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40">Download version</button>
               <button type="button" onClick={onClose} className="rounded-lg px-3 py-2 text-xs font-semibold text-zinc-400 hover:bg-white/10 hover:text-white">Cancel</button>
-              <button type="button" onClick={saveVersion} disabled={busy || !version?.version_id} className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy ? "Rendering…" : "Save as new version"}</button>
+              <button type="button" onClick={saveVersion} disabled={busy} className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy ? "Rendering…" : "Save as new version"}</button>
             </div>
           )}
         />
@@ -702,7 +711,7 @@ export default function FullScreenEditor({
         <button
           type="button"
           onClick={saveVersion}
-          disabled={busy || !version?.version_id}
+          disabled={busy}
           className="btn-primary flex items-center gap-2 drop-shadow-md"
         >
           <Save size={16} /> {busy ? "Rendering…" : "Save as new version"}

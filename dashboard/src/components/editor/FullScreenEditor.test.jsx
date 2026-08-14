@@ -242,4 +242,32 @@ describe('FullScreenEditor', () => {
         await waitFor(() => expect(screen.getByRole('button', { name: 'Ciao clip' })).toBeInTheDocument());
         expect(screen.getByRole('button', { name: 'Original it' })).toBeInTheDocument();
     });
+
+    it('bootstraps the editor from a persisted manifest when no saved version exists', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (url) => {
+            if (String(url).endsWith('/versions')) {
+                return { ok: true, json: async () => ({ current_version_id: '', versions: [] }) };
+            }
+            if (String(url).endsWith('/manifest')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        manifest: {
+                            timeline: { source_video_url: '/videos/clip.mp4', trim: { start_sec: 0, end_sec: 4 } },
+                            subtitle_tracks: [],
+                            layers: {},
+                        },
+                    }),
+                };
+            }
+            if (String(url).endsWith('/transcript')) {
+                return { ok: true, json: async () => ({ language: 'it', captions: [{ text: 'Ciao', startMs: 500, endMs: 1500 }] }) };
+            }
+            throw new Error(`Unexpected request: ${url}`);
+        }));
+        render(<FullScreenEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, video_url: '/videos/clip.mp4' }} onClose={vi.fn()} />);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Ciao clip' })).toBeInTheDocument());
+        expect(screen.getByRole('button', { name: 'Original it' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Save as new version' })).toBeEnabled();
+    });
 });

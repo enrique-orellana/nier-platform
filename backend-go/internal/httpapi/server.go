@@ -1750,6 +1750,8 @@ func (s *Server) manifestPath(jobID string, clipIndex int) (string, error) {
 	for _, candidate := range []string{
 		filepath.Join(root, fmt.Sprintf("clip_%d", clipIndex), "manifest.json"),
 		filepath.Join(root, fmt.Sprintf("manifest_%d.json", clipIndex)),
+		filepath.Join(root, "manifests", fmt.Sprintf("clip_%d.json", clipIndex)),
+		filepath.Join(root, "manifests", fmt.Sprintf("clip_%d.json", clipIndex+1)),
 	} {
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate, nil
