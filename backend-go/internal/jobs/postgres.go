@@ -93,6 +93,55 @@ func (s *PostgresStore) Create(ctx context.Context, input domain.CreateJobInput)
 	return job, nil
 }
 
+func (s *PostgresStore) CreateIfNoActive(ctx context.Context, kind string, input domain.CreateJobInput) (domain.Job, error) {
+	if kind == "" || input.Kind == "" {
+		return domain.Job{}, errors.New("job kind is required")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Job{}, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, kind); err != nil {
+		return domain.Job{}, err
+	}
+	var active bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM jobs WHERE kind = $1 AND status IN ('queued', 'processing'))`, kind).Scan(&active); err != nil {
+		return domain.Job{}, err
+	}
+	if active {
+		return domain.Job{}, ErrActiveJob
+	}
+	id, err := newID()
+	if err != nil {
+		return domain.Job{}, fmt.Errorf("generate job id: %w", err)
+	}
+	metadata, err := json.Marshal(input.Metadata)
+	if err != nil {
+		return domain.Job{}, fmt.Errorf("encode job metadata: %w", err)
+	}
+	if input.Metadata == nil {
+		metadata = []byte(`{}`)
+	}
+	var job domain.Job
+	err = tx.QueryRowContext(ctx, `
+		INSERT INTO jobs (id, kind, status, source_url, clip_count, output_dir, metadata)
+		VALUES ($1, $2, 'queued', NULLIF($3, ''), COALESCE(NULLIF($4, 0), 6), $5, $6::jsonb)
+		RETURNING id, kind, status, COALESCE(source_url, ''), clip_count, output_dir, metadata, result, COALESCE(error, ''), created_at, updated_at
+	`, id, input.Kind, input.SourceURL, input.ClipCount, input.OutputDir, metadata).Scan(
+		&job.ID, &job.Kind, &job.Status, &job.SourceURL, &job.ClipCount, &job.OutputDir,
+		&metadata, &job.Result, &job.Error, &job.CreatedAt, &job.UpdatedAt,
+	)
+	if err != nil {
+		return domain.Job{}, fmt.Errorf("create job: %w", err)
+	}
+	job.Metadata = decodeMetadata(metadata)
+	if err := tx.Commit(); err != nil {
+		return domain.Job{}, err
+	}
+	return job, nil
+}
+
 func (s *PostgresStore) Get(ctx context.Context, id string) (domain.Job, bool) {
 	job, err := s.get(ctx, s.db, id)
 	if err != nil {
@@ -144,7 +193,7 @@ func (s *PostgresStore) Transition(ctx context.Context, id string, next domain.J
 	}
 	job.Status = next
 	job.Error = ""
-	if next == domain.JobStatusFailed {
+	if next == domain.JobStatusFailed || next == domain.JobStatusCancelled {
 		job.Error = message
 	}
 	job.UpdatedAt = time.Now().UTC()
@@ -203,6 +252,34 @@ func (s *PostgresStore) ListByStatus(ctx context.Context, status domain.JobStatu
 		return nil, err
 	}
 	return jobs, nil
+}
+
+func (s *PostgresStore) SetOutputDir(ctx context.Context, id, outputDir string) error {
+	result, err := s.db.ExecContext(ctx, `UPDATE jobs SET output_dir = $2, updated_at = now() WHERE id = $1`, id, outputDir)
+	if err != nil {
+		return err
+	}
+	if count, _ := result.RowsAffected(); count == 0 {
+		return ErrJobNotFound
+	}
+	return nil
+}
+
+func (s *PostgresStore) ListByKind(ctx context.Context, kind string) ([]domain.Job, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, status, COALESCE(source_url, ''), clip_count, output_dir, metadata, result, COALESCE(error, ''), created_at, updated_at FROM jobs WHERE kind = $1 ORDER BY created_at, id`, kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]domain.Job, 0)
+	for rows.Next() {
+		job, err := scanJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, job)
+	}
+	return result, rows.Err()
 }
 
 func (s *PostgresStore) RequeueProcessing(ctx context.Context) error {

@@ -17,16 +17,20 @@ var (
 	ErrJobNotFound       = errors.New("job not found")
 	ErrInvalidTransition = errors.New("invalid job status transition")
 	ErrJobNotClaimable   = errors.New("job is not queued")
+	ErrActiveJob         = errors.New("an active job of this kind already exists")
 )
 
 type Store interface {
 	Create(context.Context, domain.CreateJobInput) (domain.Job, error)
+	CreateIfNoActive(context.Context, string, domain.CreateJobInput) (domain.Job, error)
 	Get(context.Context, string) (domain.Job, bool)
 	Transition(context.Context, string, domain.JobStatus, string) (domain.Job, error)
 	AppendLog(context.Context, string, string) error
 	SetResult(context.Context, string, []byte) error
+	SetOutputDir(context.Context, string, string) error
 	Claim(context.Context, string) (domain.Job, error)
 	ListByStatus(context.Context, domain.JobStatus) ([]domain.Job, error)
+	ListByKind(context.Context, string) ([]domain.Job, error)
 	RequeueProcessing(context.Context) error
 }
 
@@ -40,6 +44,23 @@ func NewMemoryStore() *MemoryStore {
 }
 
 func (s *MemoryStore) Create(_ context.Context, input domain.CreateJobInput) (domain.Job, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.createLocked(input)
+}
+
+func (s *MemoryStore) CreateIfNoActive(_ context.Context, kind string, input domain.CreateJobInput) (domain.Job, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, job := range s.jobs {
+		if job.Kind == kind && (job.Status == domain.JobStatusQueued || job.Status == domain.JobStatusProcessing) {
+			return domain.Job{}, ErrActiveJob
+		}
+	}
+	return s.createLocked(input)
+}
+
+func (s *MemoryStore) createLocked(input domain.CreateJobInput) (domain.Job, error) {
 	if input.Kind == "" {
 		return domain.Job{}, fmt.Errorf("job kind is required")
 	}
@@ -60,9 +81,7 @@ func (s *MemoryStore) Create(_ context.Context, input domain.CreateJobInput) (do
 		UpdatedAt: now,
 	}
 
-	s.mu.Lock()
 	s.jobs[id] = job
-	s.mu.Unlock()
 	return cloneJob(job), nil
 }
 
@@ -89,12 +108,30 @@ func (s *MemoryStore) Transition(_ context.Context, id string, next domain.JobSt
 	}
 	job.Status = next
 	job.Error = ""
-	if next == domain.JobStatusFailed {
+	if next == domain.JobStatusFailed || next == domain.JobStatusCancelled {
 		job.Error = message
 	}
 	job.UpdatedAt = time.Now().UTC()
 	s.jobs[id] = job
 	return cloneJob(job), nil
+}
+
+func (s *MemoryStore) ListByKind(_ context.Context, kind string) ([]domain.Job, error) {
+	s.mu.RLock()
+	jobs := make([]domain.Job, 0)
+	for _, job := range s.jobs {
+		if job.Kind == kind {
+			jobs = append(jobs, cloneJob(job))
+		}
+	}
+	s.mu.RUnlock()
+	sort.Slice(jobs, func(i, j int) bool {
+		if jobs[i].CreatedAt.Equal(jobs[j].CreatedAt) {
+			return jobs[i].ID < jobs[j].ID
+		}
+		return jobs[i].CreatedAt.Before(jobs[j].CreatedAt)
+	})
+	return jobs, nil
 }
 
 func (s *MemoryStore) Claim(_ context.Context, id string) (domain.Job, error) {
@@ -180,12 +217,25 @@ func (s *MemoryStore) SetResult(_ context.Context, id string, result []byte) err
 	return nil
 }
 
+func (s *MemoryStore) SetOutputDir(_ context.Context, id, outputDir string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job, ok := s.jobs[id]
+	if !ok {
+		return ErrJobNotFound
+	}
+	job.OutputDir = outputDir
+	job.UpdatedAt = time.Now().UTC()
+	s.jobs[id] = job
+	return nil
+}
+
 func allowedTransition(current, next domain.JobStatus) bool {
 	switch current {
 	case domain.JobStatusQueued:
-		return next == domain.JobStatusProcessing || next == domain.JobStatusFailed
+		return next == domain.JobStatusProcessing || next == domain.JobStatusFailed || next == domain.JobStatusCancelled
 	case domain.JobStatusProcessing:
-		return next == domain.JobStatusCompleted || next == domain.JobStatusFailed
+		return next == domain.JobStatusCompleted || next == domain.JobStatusFailed || next == domain.JobStatusCancelled
 	default:
 		return false
 	}

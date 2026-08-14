@@ -3,6 +3,8 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"sync"
 	"testing"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
@@ -149,5 +151,56 @@ func TestRecoverProcessingJobsAndListQueuedJobs(t *testing.T) {
 	}
 	if len(queuedJobs) != 2 || !seen[queued.ID] || !seen[processing.ID] {
 		t.Fatalf("unexpected queued jobs: %#v", queuedJobs)
+	}
+}
+
+func TestStoreListsJobsByKindAndSupportsCancellation(t *testing.T) {
+	store := NewMemoryStore()
+	highlight, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "highlight-generation"})
+	if err != nil {
+		t.Fatalf("create highlight job: %v", err)
+	}
+	_, err = store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatalf("create clip job: %v", err)
+	}
+	jobs, err := store.ListByKind(context.Background(), "highlight-generation")
+	if err != nil || len(jobs) != 1 || jobs[0].ID != highlight.ID {
+		t.Fatalf("unexpected jobs by kind: %#v, %v", jobs, err)
+	}
+	cancelled, err := store.Transition(context.Background(), highlight.ID, domain.JobStatusCancelled, "cancelled by user")
+	if err != nil {
+		t.Fatalf("cancel job: %v", err)
+	}
+	if cancelled.Status != domain.JobStatusCancelled || cancelled.Error != "cancelled by user" {
+		t.Fatalf("unexpected cancelled job: %#v", cancelled)
+	}
+}
+
+func TestCreateIfNoActiveHighlightIsAtomic(t *testing.T) {
+	store := NewMemoryStore()
+	var wg sync.WaitGroup
+	results := make(chan error, 2)
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := store.CreateIfNoActive(context.Background(), "highlight-generation", domain.CreateJobInput{Kind: "highlight-generation"})
+			results <- err
+		}()
+	}
+	wg.Wait()
+	close(results)
+	created := 0
+	activeErrors := 0
+	for err := range results {
+		if err == nil {
+			created++
+		} else if errors.Is(err, ErrActiveJob) {
+			activeErrors++
+		}
+	}
+	if created != 1 || activeErrors != 1 {
+		t.Fatalf("expected one creation and one active-job rejection, created=%d activeErrors=%d", created, activeErrors)
 	}
 }

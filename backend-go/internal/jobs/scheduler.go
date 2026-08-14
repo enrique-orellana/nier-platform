@@ -21,13 +21,14 @@ type Scheduler struct {
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
 	started bool
+	running map[string]context.CancelFunc
 }
 
 func NewScheduler(store Store, runner *Runner, maxConcurrent int) *Scheduler {
 	if maxConcurrent < 1 {
 		maxConcurrent = 1
 	}
-	return &Scheduler{store: store, runner: runner, limit: maxConcurrent}
+	return &Scheduler{store: store, runner: runner, limit: maxConcurrent, running: make(map[string]context.CancelFunc)}
 }
 
 func (s *Scheduler) Start(parent context.Context) error {
@@ -57,6 +58,7 @@ func (s *Scheduler) Start(parent context.Context) error {
 	s.mu.Lock()
 	s.queue = make(chan string, s.limit*2)
 	s.cancel = cancel
+	s.running = make(map[string]context.CancelFunc)
 	s.started = true
 	s.mu.Unlock()
 
@@ -98,6 +100,30 @@ func (s *Scheduler) Started() bool {
 	return s.started
 }
 
+func (s *Scheduler) Cancel(ctx context.Context, jobID string) (domain.Job, error) {
+	if jobID == "" {
+		return domain.Job{}, errors.New("job ID is required")
+	}
+	job, ok := s.store.Get(ctx, jobID)
+	if !ok {
+		return domain.Job{}, ErrJobNotFound
+	}
+	if job.Status == domain.JobStatusQueued {
+		return s.store.Transition(ctx, jobID, domain.JobStatusCancelled, "Cancelled by user.")
+	}
+	if job.Status != domain.JobStatusProcessing {
+		return job, nil
+	}
+	s.mu.Lock()
+	cancel := s.running[jobID]
+	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+		_ = s.store.AppendLog(context.Background(), jobID, "Cancellation requested by user.")
+	}
+	return job, nil
+}
+
 func (s *Scheduler) worker(ctx context.Context) {
 	defer s.wg.Done()
 	for {
@@ -105,7 +131,15 @@ func (s *Scheduler) worker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case jobID := <-s.queue:
-			_ = s.runner.RunOnce(ctx, jobID)
+			jobCtx, cancel := context.WithCancel(ctx)
+			s.mu.Lock()
+			s.running[jobID] = cancel
+			s.mu.Unlock()
+			_ = s.runner.RunOnce(jobCtx, jobID)
+			s.mu.Lock()
+			delete(s.running, jobID)
+			s.mu.Unlock()
+			cancel()
 		}
 	}
 }

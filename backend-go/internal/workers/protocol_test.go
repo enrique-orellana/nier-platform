@@ -3,11 +3,35 @@ package workers
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
 )
+
+func TestWorkerGrandchild(t *testing.T) {
+	if os.Getenv("OPENSHORTS_GRANDCHILD") != "1" {
+		return
+	}
+	time.Sleep(500 * time.Millisecond)
+	_ = os.WriteFile(os.Getenv("OPENSHORTS_GRANDCHILD_MARKER"), []byte("survived"), 0o600)
+}
+
+func TestWorkerProcessHelper(t *testing.T) {
+	if os.Getenv("OPENSHORTS_WORKER_HELPER") != "1" {
+		return
+	}
+	child := exec.Command(os.Args[0], "-test.run=TestWorkerGrandchild", "-test.v=false")
+	child.Env = append(os.Environ(), "OPENSHORTS_GRANDCHILD=1")
+	if err := child.Start(); err != nil {
+		return
+	}
+	_ = child.Process.Release()
+	time.Sleep(10 * time.Second)
+}
 
 type recordingProtocolRunner struct {
 	spec    CommandSpec
@@ -42,6 +66,31 @@ func TestPythonWorkerAdapterReturnsProtocolError(t *testing.T) {
 	err := adapter.Run(context.Background(), domain.Job{ID: "job-1", SourceURL: "https://example.com/video"}, "output/job-1", nil)
 	if err == nil || err.Error() != "worker rejected request" {
 		t.Fatalf("expected protocol failure, got %v", err)
+	}
+}
+
+func TestExecProtocolRunnerCancelsWorkerProcessTree(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "grandchild-survived")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runner := ExecProtocolRunner{}
+	done := make(chan error, 1)
+	go func() {
+		done <- runner.RunProtocol(ctx, CommandSpec{Name: os.Args[0], Args: []string{"-test.run=TestWorkerProcessHelper", "-test.v=false"}, Env: []string{"OPENSHORTS_WORKER_HELPER=1", "OPENSHORTS_GRANDCHILD_MARKER=" + marker}}, map[string]any{"id": "job-1"}, nil)
+	}()
+	time.Sleep(150 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected worker cancellation to return an error")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker did not stop after cancellation")
+	}
+	time.Sleep(800 * time.Millisecond)
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("worker grandchild survived cancellation")
 	}
 }
 
@@ -123,5 +172,27 @@ func TestPythonWorkerAdapterSendsJSONLJobRequest(t *testing.T) {
 	}
 	if len(logs) != 1 || logs[0] != "worker started" {
 		t.Fatalf("unexpected logs: %#v", logs)
+	}
+}
+
+func TestPythonWorkerAdapterSendsHighlightOperationAndAIHeaders(t *testing.T) {
+	runner := &recordingProtocolRunner{}
+	adapter := PythonWorkerAdapter{Runner: runner}
+	job := domain.Job{
+		ID:   "highlight-1",
+		Kind: "highlight-generation",
+		Metadata: map[string]any{
+			"min_minutes":   12.0,
+			"ideal_minutes": 20.0,
+			"headers": map[string]any{
+				"X-AI-Provider": "ollama",
+			},
+		},
+	}
+	if err := adapter.Run(context.Background(), job, "output/highlight-1", nil); err != nil {
+		t.Fatalf("run highlight worker: %v", err)
+	}
+	if runner.request["operation"] != "highlight_generation" || runner.request["min_minutes"] != 12.0 || runner.request["headers"].(map[string]string)["X-AI-Provider"] != "ollama" {
+		t.Fatalf("unexpected highlight worker request: %#v", runner.request)
 	}
 }

@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS jobs (
     id UUID PRIMARY KEY,
     kind TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'completed', 'failed')),
+    status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'completed', 'failed', 'cancelled')),
     source_url TEXT,
     clip_count INTEGER NOT NULL DEFAULT 6 CHECK (clip_count BETWEEN 3 AND 15),
     output_dir TEXT NOT NULL,
@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS jobs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_status_check;
+ALTER TABLE jobs ADD CONSTRAINT jobs_status_check CHECK (status IN ('queued', 'processing', 'completed', 'failed', 'cancelled'));
 
 CREATE INDEX IF NOT EXISTS jobs_status_updated_at_idx ON jobs (status, updated_at);
 

@@ -33,7 +33,11 @@ type SourceDownloader interface {
 type ExecProtocolRunner struct{}
 
 func (ExecProtocolRunner) RunProtocol(ctx context.Context, spec CommandSpec, request map[string]any, onEvent func(ProtocolEvent)) error {
-	command := exec.CommandContext(ctx, spec.Name, spec.Args...)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	command := exec.Command(spec.Name, spec.Args...)
+	configureWorkerProcess(command)
 	command.Dir = spec.Dir
 	command.Env = append(os.Environ(), spec.Env...)
 	stdin, err := command.StdinPipe()
@@ -48,15 +52,35 @@ func (ExecProtocolRunner) RunProtocol(ctx context.Context, spec CommandSpec, req
 	if err := command.Start(); err != nil {
 		return err
 	}
+	stopWatcher := make(chan struct{})
+	waited := false
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = killWorkerProcess(command)
+		case <-stopWatcher:
+		}
+	}()
+	defer func() {
+		close(stopWatcher)
+		if !waited {
+			_ = killWorkerProcess(command)
+			_ = command.Wait()
+		}
+	}()
 
 	encodeErr := json.NewEncoder(stdin).Encode(request)
 	closeErr := stdin.Close()
 	if encodeErr != nil {
-		_ = command.Process.Kill()
+		_ = killWorkerProcess(command)
+		_ = command.Wait()
+		waited = true
 		return encodeErr
 	}
 	if closeErr != nil {
-		_ = command.Process.Kill()
+		_ = killWorkerProcess(command)
+		_ = command.Wait()
+		waited = true
 		return closeErr
 	}
 
@@ -72,10 +96,18 @@ func (ExecProtocolRunner) RunProtocol(ctx context.Context, spec CommandSpec, req
 		}
 	}
 	if err := scanner.Err(); err != nil {
+		_ = killWorkerProcess(command)
+		_ = command.Wait()
+		waited = true
 		return err
 	}
-	if err := command.Wait(); err != nil {
+	waitErr := command.Wait()
+	waited = true
+	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if waitErr != nil {
+		return waitErr
 	}
 	return nil
 }
@@ -117,6 +149,29 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 		"operation":  "clip_generation",
 		"output_dir": outputDir,
 		"clip_count": job.ClipCount,
+	}
+	if job.Kind == "highlight-generation" {
+		request["operation"] = "highlight_generation"
+		if headers, ok := job.Metadata["headers"].(map[string]string); ok {
+			request["headers"] = headers
+		} else if headers, ok := job.Metadata["headers"].(map[string]any); ok {
+			values := make(map[string]string, len(headers))
+			for key, value := range headers {
+				if text, ok := value.(string); ok {
+					values[key] = text
+				}
+			}
+			request["headers"] = values
+		}
+		if value, ok := job.Metadata["min_minutes"]; ok {
+			request["min_minutes"] = value
+		}
+		if value, ok := job.Metadata["ideal_minutes"]; ok {
+			request["ideal_minutes"] = value
+		}
+		if value, ok := job.Metadata["source_context"]; ok {
+			request["source_context"] = value
+		}
 	}
 	if job.SourceURL != "" {
 		request["source_url"] = job.SourceURL

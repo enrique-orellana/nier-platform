@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
@@ -16,8 +17,10 @@ type ResultWorker interface {
 }
 
 type Runner struct {
-	Store  Store
-	Worker JobWorker
+	Store                  Store
+	Worker                 JobWorker
+	RuntimeMetadata        func(string) map[string]any
+	ReleaseRuntimeMetadata func(string)
 }
 
 func (r Runner) RunOnce(ctx context.Context, jobID string) error {
@@ -33,6 +36,17 @@ func (r Runner) RunOnce(ctx context.Context, jobID string) error {
 	}
 	if err := r.Store.AppendLog(ctx, jobID, "Job started by worker."); err != nil {
 		return err
+	}
+	if r.RuntimeMetadata != nil {
+		if job.Metadata == nil {
+			job.Metadata = make(map[string]any)
+		}
+		for key, value := range r.RuntimeMetadata(jobID) {
+			job.Metadata[key] = value
+		}
+		if r.ReleaseRuntimeMetadata != nil {
+			defer r.ReleaseRuntimeMetadata(jobID)
+		}
 	}
 
 	var logErr error
@@ -59,10 +73,19 @@ func (r Runner) RunOnce(ctx context.Context, jobID string) error {
 		workerErr = logErr
 	}
 	if workerErr != nil {
-		_ = r.Store.AppendLog(ctx, jobID, fmt.Sprintf("Execution error: %s", workerErr))
-		_, transitionErr := r.Store.Transition(ctx, jobID, domain.JobStatusFailed, workerErr.Error())
+		status := domain.JobStatusFailed
+		if errors.Is(workerErr, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			status = domain.JobStatusCancelled
+		}
+		persistCtx := context.Background()
+		message := workerErr.Error()
+		if status == domain.JobStatusCancelled {
+			message = "Job cancelled."
+		}
+		_ = r.Store.AppendLog(persistCtx, jobID, fmt.Sprintf("Execution stopped: %s", message))
+		_, transitionErr := r.Store.Transition(persistCtx, jobID, status, message)
 		if transitionErr != nil {
-			return fmt.Errorf("mark job failed: %w", transitionErr)
+			return fmt.Errorf("mark job %s: %w", status, transitionErr)
 		}
 		return workerErr
 	}

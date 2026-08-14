@@ -99,3 +99,65 @@ func TestRunnerPersistsResultFromResultWorker(t *testing.T) {
 		t.Fatalf("unexpected job result: %s", completed.Result)
 	}
 }
+
+type contextAwareWorker struct{}
+
+func (contextAwareWorker) Run(ctx context.Context, _ domain.Job, _ string, _ func(string)) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestRunnerMarksContextCancellationAsCancelled(t *testing.T) {
+	store := NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "highlight-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	runner := Runner{Store: store, Worker: contextAwareWorker{}}
+	if err := runner.RunOnce(ctx, job.ID); err == nil {
+		t.Fatal("expected cancellation error")
+	}
+	cancelled, _ := store.Get(context.Background(), job.ID)
+	if cancelled.Status != domain.JobStatusCancelled {
+		t.Fatalf("expected cancelled status, got %#v", cancelled)
+	}
+}
+
+type metadataWorker struct {
+	job      domain.Job
+	released bool
+}
+
+func (w *metadataWorker) Run(_ context.Context, job domain.Job, _ string, _ func(string)) error {
+	w.job = job
+	return nil
+}
+
+func TestRunnerPassesRuntimeMetadataWithoutPersistingIt(t *testing.T) {
+	store := NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "highlight-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	worker := &metadataWorker{}
+	runner := Runner{
+		Store:  store,
+		Worker: worker,
+		RuntimeMetadata: func(string) map[string]any {
+			return map[string]any{"headers": map[string]string{"X-AI-Api-Key": "secret"}}
+		},
+		ReleaseRuntimeMetadata: func(string) { worker.released = true },
+	}
+	if err := runner.RunOnce(context.Background(), job.ID); err != nil {
+		t.Fatalf("run job: %v", err)
+	}
+	if worker.job.Metadata["headers"].(map[string]string)["X-AI-Api-Key"] != "secret" || !worker.released {
+		t.Fatalf("runtime metadata was not passed/released: %#v released=%v", worker.job.Metadata, worker.released)
+	}
+	persisted, _ := store.Get(context.Background(), job.ID)
+	if _, ok := persisted.Metadata["headers"]; ok {
+		t.Fatalf("runtime metadata was persisted: %#v", persisted.Metadata)
+	}
+}
