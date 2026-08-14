@@ -1,7 +1,7 @@
 # Kubernetes Notes
 
 This folder contains the manifests and helper notes for running OpenShorts
-against the recovered MinIO deployment.
+against the single-replica MinIO deployment.
 
 ## Ingress controller
 
@@ -18,16 +18,11 @@ The ingress controller is exposed as a `LoadBalancer`, so the `nip.io`
 hostnames should be reachable directly once the controller gets its external
 address from the cluster.
 
-## MinIO ingress
+## MinIO
 
-Upgrade the existing MinIO release with:
-
-```bash
-helm repo add minio https://charts.min.io
-helm upgrade minio minio/minio \
-  -n minio-system \
-  -f k8s/minio-ingress-values.yaml
-```
+The MinIO chart is maintained in
+`D:\workspace\kube-monorepo\minio\standalone`. Deploy it before applying the
+OpenShorts bundle.
 
 ## OpenShorts app bundle
 
@@ -80,8 +75,8 @@ OpenShorts is exposed on one host and uses path routing:
 
 - UI: `http://openshorts.127.0.0.1.nip.io`
 - API: `http://openshorts.127.0.0.1.nip.io/api`
-- MinIO: `http://minio.openshorts.127.0.0.1.nip.io`
-- MinIO console: `http://console.minio.openshorts.127.0.0.1.nip.io`
+- MinIO: `http://minio-standalone.openshorts.127.0.0.1.nip.io`
+- MinIO console: `http://console.minio-standalone.127.0.0.1.nip.io`
 
 The backend talks to MinIO inside the cluster, and gallery/video URLs are
 served back through the MinIO ingress host above. The recovered buckets remain:
