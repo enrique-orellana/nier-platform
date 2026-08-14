@@ -12,6 +12,7 @@ import UGCGallery from './components/UGCGallery';
 import ScheduleWeekModal from './components/ScheduleWeekModal';
 import AISettingsPanel from './components/AISettingsPanel';
 import LocalEditorTab from './components/local-editor/LocalEditorTab';
+import HighlightsTab from './components/HighlightsTab';
 
 import { pickLmStudioModel, pickProviderAfterDiscoveryFailure } from './lib/lmStudio';
 import {
@@ -904,6 +905,14 @@ function App() {
         </button>
 
         <button
+          onClick={() => navigateToTab('highlights')}
+          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'highlights' ? 'bg-primary/10 text-primary' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
+        >
+          <Sparkles size={20} />
+          <span className="font-medium hidden lg:block">Highlights</span>
+        </button>
+
+        <button
           onClick={() => navigateToTab('saasshorts')}
           className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === 'saasshorts' ? 'bg-violet-500/10 text-violet-400' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
         >
@@ -1273,6 +1282,10 @@ function App() {
 
           {activeTab === 'editor' && (
             <LocalEditorTab />
+          )}
+
+          {activeTab === 'highlights' && (
+            <HighlightsTab getAiHeaders={getAiHeaders} aiProvider={aiProvider} />
           )}
 
           {/* View: SaaS Shorts */}
