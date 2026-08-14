@@ -4,6 +4,22 @@ metadata:
   name: openshorts
 ---
 apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: microk8s-openshorts-workdir
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: microk8s-migration
+  volumeMode: Filesystem
+  hostPath:
+    path: /home/ubuntu/kubefiles/openshorts-workdir
+    type: Directory
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: openshorts-workdir
@@ -14,6 +30,9 @@ spec:
   resources:
     requests:
       storage: 50Gi
+  storageClassName: microk8s-migration
+  volumeMode: Filesystem
+  volumeName: microk8s-openshorts-workdir
 ---
 apiVersion: v1
 kind: ConfigMap

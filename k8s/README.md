@@ -72,6 +72,10 @@ Apply the OpenShorts bundle:
 kubectl apply -f k8s/openshorts.yaml
 ```
 
+The bundle declares the OpenShorts workdir PV explicitly. On this WSL
+MicroK8s setup it uses the Linux-native path
+`/home/ubuntu/kubefiles/openshorts-workdir`, not a `/mnt/d` Windows mount.
+
 OpenShorts is exposed on one host and uses path routing:
 
 - UI: `http://openshorts.127.0.0.1.nip.io`
