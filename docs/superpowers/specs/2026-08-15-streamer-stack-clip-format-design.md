@@ -49,7 +49,7 @@ The settings travel through the existing generation path:
 
 1. `MediaInput` collects the format and facecam size.
 2. `App` includes those values in the existing `/api/process` request for both file and MinIO/URL inputs.
-3. `app.py` validates the values, records them with the job, and forwards them to the Python worker command.
+3. The Go control plane stores and forwards the values as job metadata through `backend-go/internal/httpapi/server.go`, `backend-go/internal/workers/protocol.go`, and `python_worker.py`. The legacy `app.py` path validates and forwards the same values for compatibility.
 4. `main.py` accepts the layout settings, keeps the existing Standard path unchanged, and passes the settings through `render_clip_plan` into the per-clip renderer.
 5. The clip manifest records the selected layout settings in its export policy and layer metadata.
 6. The existing post-generation Hook action reads the clip layout metadata and selects the streamer hook style only for `streamer_stack`; Standard clips keep the current hook style.
@@ -75,7 +75,7 @@ The implementation will add focused coverage for:
 
 - Format and facecam-size defaults in the Clip Generator input.
 - Request payload propagation for file and remote-source processing.
-- Backend validation and worker command propagation.
+- Go and legacy backend validation and worker command propagation.
 - Streamer Stack panel geometry for Small, Medium, and Large settings.
 - Center-crop fallback when tracking has no face target.
 - Optional post-generation hook behavior for Streamer Stack and Standard clips.
