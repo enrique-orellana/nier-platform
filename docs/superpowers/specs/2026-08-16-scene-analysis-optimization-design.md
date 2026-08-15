@@ -1,7 +1,7 @@
 # Scene Analysis Optimization Design
 
-**Date:** 2026-08-16  
-**Status:** Approved for planning  
+**Date:** 2026-08-16
+**Status:** Approved for planning
 **Scope:** PySceneDetect and scene strategy analysis in `main.py`
 
 ## Goal
@@ -67,4 +67,3 @@ Benchmark acceptance for a representative source:
 - Scene count and strategy output remain within the expected tolerance for the selected skip value.
 - Existing focused tests pass.
 - Final render behavior and output validation are unchanged because the renderer is outside this scope.
-

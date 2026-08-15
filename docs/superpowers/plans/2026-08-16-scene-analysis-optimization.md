@@ -163,4 +163,3 @@ Expected: exit code `0`.
 - [ ] Run GitNexus `detect_changes()` and confirm only planned scene-analysis, cache, metrics, and test symbols are affected.
 
 - [ ] Run `git diff --check` and `git status --short`; inspect the final diff before reporting results.
-

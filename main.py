@@ -392,6 +392,7 @@ def resize_scene_strategy_frame(frame, max_dimension=SCENE_STRATEGY_MAX_DIMENSIO
         interpolation=cv2.INTER_AREA,
     )
 
+
 def detect_person_yolo(frame):
     """
     Fallback: Detect largest person using YOLO when face detection fails.
