@@ -3,10 +3,55 @@ package jobs
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
 )
+
+func TestPostgresHighlightProjectSurvivesReopen(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not configured")
+	}
+	ctx := context.Background()
+	first, err := OpenPostgresStore(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, job, err := first.CreateHighlightProject(ctx, domain.CreateHighlightProjectInput{
+		Name:                 fmt.Sprintf("durability-%d", time.Now().UnixNano()),
+		SourceBucket:         "youtube-downloads",
+		SourceKey:            "durability.mp4",
+		MinDurationSeconds:   720,
+		IdealDurationSeconds: 1200,
+	})
+	if err != nil {
+		_ = first.Close()
+		t.Fatal(err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := OpenPostgresStore(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	gotProject, gotJob, err := second.GetHighlightProject(ctx, project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotProject.LatestJobID != job.ID || gotJob.ProjectID != project.ID {
+		t.Fatalf("association not durable: project=%#v job=%#v", gotProject, gotJob)
+	}
+	if err := second.DeleteHighlightProject(ctx, project.ID); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestMemoryStoreCreatesAndListsHighlightProject(t *testing.T) {
 	store := NewMemoryStore()
