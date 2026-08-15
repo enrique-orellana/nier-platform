@@ -47,6 +47,13 @@ class FakeCodexStreamResponse:
         return iter(self.lines)
 
 
+class BrokenCodexStreamResponse(FakeCodexStreamResponse):
+    def iter_lines(self):
+        raise ai_client.httpx.RemoteProtocolError(
+            "peer closed connection without sending complete message body"
+        )
+
+
 class FakeCodexStreamClient:
     responses = []
     last_url = None
@@ -221,3 +228,23 @@ def test_codex_transport_refreshes_once_after_auth_rejection(monkeypatch):
 
     assert result == "ok"
     assert FakeCodexStreamClient.last_headers["Authorization"] == "Bearer new-access"
+
+
+def test_codex_transport_retries_an_interrupted_stream(monkeypatch):
+    config = ai_client.AIConfig(provider="openai-codex", text_model="auto")
+    FakeCodexStreamClient.responses = [
+        BrokenCodexStreamResponse([]),
+        FakeCodexStreamResponse([
+            'data: {"type":"response.output_text.delta","delta":"ok"}',
+            "data: [DONE]",
+        ]),
+    ]
+    monkeypatch.setattr(ai_client, "get_access_token", lambda: "access")
+    monkeypatch.setattr(ai_client, "get_codex_account_id", lambda: "account")
+    monkeypatch.setattr(ai_client.time, "sleep", lambda _: None)
+    monkeypatch.setattr(ai_client.httpx, "Client", FakeCodexStreamClient)
+
+    result = ai_client.chat_completion(config, "Say ok")
+
+    assert result == "ok"
+    assert not FakeCodexStreamClient.responses

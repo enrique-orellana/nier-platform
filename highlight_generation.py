@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -292,6 +293,7 @@ def rank_highlights(
     min_seconds: float | None = None,
     ideal_seconds: float | None = None,
     source_context: Mapping[str, Any] | None = None,
+    emit_log: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     target = normalize_target(
         video_duration,
@@ -307,7 +309,13 @@ def rank_highlights(
     model = config.analyze_model or config.text_model or ("gemini-2.5-flash" if config.is_gemini() else "")
     candidates = []
     chunks = _analysis_chunks(transcript)
-    for chunk in chunks:
+    provider = config.normalized_provider()
+    if emit_log:
+        emit_log(
+            f"AI analysis provider={provider} model={model or 'auto'}; "
+            f"transcript_chunks={len(chunks)}"
+        )
+    for index, chunk in enumerate(chunks, start=1):
         prompt = HIGHLIGHT_PROMPT.format(
             video_duration=round(float(video_duration), 3),
             min_seconds=target["min_seconds"],
@@ -317,10 +325,29 @@ def rank_highlights(
         )
         if len(prompt) > MAX_PROMPT_CHARS:
             raise ValueError("Transcript chunk exceeds the configured AI prompt limit")
-        response = chat_json(config, prompt, model=model, reasoning_effort=config.analyze_reasoning_effort)
+        if emit_log:
+            emit_log(
+                f"AI analysis chunk {index}/{len(chunks)} started; "
+                f"prompt_chars={len(prompt)}"
+            )
+        started_at = time.monotonic()
+        try:
+            response = chat_json(config, prompt, model=model, reasoning_effort=config.analyze_reasoning_effort)
+        except Exception as exc:
+            if emit_log:
+                emit_log(
+                    f"AI analysis chunk {index}/{len(chunks)} failed after "
+                    f"{time.monotonic() - started_at:.1f}s: {type(exc).__name__}: {exc}"
+                )
+            raise
         raw_candidates = response.get("highlights") if isinstance(response, dict) else None
         if not isinstance(raw_candidates, list):
             raise ValueError("AI returned no highlight candidates")
+        if emit_log:
+            emit_log(
+                f"AI analysis chunk {index}/{len(chunks)} completed in "
+                f"{time.monotonic() - started_at:.1f}s; candidates={len(raw_candidates)}"
+            )
         for raw in raw_candidates:
             if not isinstance(raw, Mapping):
                 continue
@@ -409,6 +436,7 @@ def run_highlight_generation(request: Mapping[str, Any], emit_log: Callable[[str
         min_seconds=target["min_seconds"],
         ideal_seconds=target["ideal_seconds"],
         source_context={**(request.get("source_context") or {}), "headers": request.get("headers") or {}},
+        emit_log=emit_log,
     )
     selected = select_segments(
         ranked.get("candidates", []),

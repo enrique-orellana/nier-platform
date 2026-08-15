@@ -193,14 +193,19 @@ def test_rank_highlights_uses_existing_ai_configuration(monkeypatch):
     monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
     chat = Mock(return_value={"highlights": [{"start": 10, "end": 18, "score": 0.91, "reason": "clear payoff"}]})
     monkeypatch.setattr(highlight_generation, "chat_json", chat)
+    logs = []
 
-    result = highlight_generation.rank_highlights(transcript, 60.0)
+    result = highlight_generation.rank_highlights(transcript, 60.0, emit_log=logs.append)
 
     assert result["method"] == "ai"
     assert result["provider"] == "ollama"
     assert result["model"] == "qwen"
     assert result["candidates"][0]["score"] == 0.91
     assert "TRANSCRIPT" in chat.call_args.args[1]
+    assert logs[0] == "AI analysis provider=ollama model=qwen; transcript_chunks=1"
+    assert logs[1].startswith("AI analysis chunk 1/1 started; prompt_chars=")
+    assert logs[2].startswith("AI analysis chunk 1/1 completed in ")
+    assert logs[2].endswith("; candidates=1")
 
 
 def test_run_highlight_generation_writes_manifest_and_video(monkeypatch, tmp_path):

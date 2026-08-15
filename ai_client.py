@@ -25,6 +25,8 @@ OPENROUTER_DEFAULT_MODEL = "openai/gpt-4o-mini"
 OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL = "openai/whisper-large-v3"
 OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS = 3
 OPENROUTER_TRANSCRIPTION_RETRY_BACKOFF_SECONDS = 1.0
+CODEX_STREAM_MAX_ATTEMPTS = 3
+CODEX_STREAM_RETRY_BACKOFF_SECONDS = 0.5
 CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.4")
 CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
 AUTO_MODEL_VALUES = {"", "auto", "default"}
@@ -727,7 +729,8 @@ def _codex_chat(
         payload["reasoning"] = {"effort": selected_effort}
 
     text = ""
-    for attempt in range(2):
+    auth_refreshed = False
+    for attempt in range(CODEX_STREAM_MAX_ATTEMPTS):
         access_token = get_access_token()
         account_id = get_codex_account_id()
         request_id = str(uuid.uuid4())
@@ -742,21 +745,29 @@ def _codex_chat(
             "Accept": "text/event-stream",
         }
 
-        with httpx.Client(timeout=timeout) as client:
-            with client.stream(
-                "POST",
-                "https://chatgpt.com/backend-api/codex/responses",
-                headers=headers,
-                json=payload,
-            ) as response:
-                if response.status_code in {401, 403}:
-                    if attempt:
-                        raise CodexReauthRequired("ChatGPT authorization was rejected. Reconnect ChatGPT.")
-                    refresh_credentials(default_codex_store())
-                    continue
-                response.raise_for_status()
-                text = _extract_codex_sse_text(response.iter_lines())
-        break
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                with client.stream(
+                    "POST",
+                    "https://chatgpt.com/backend-api/codex/responses",
+                    headers=headers,
+                    json=payload,
+                ) as response:
+                    if response.status_code in {401, 403}:
+                        if auth_refreshed:
+                            raise CodexReauthRequired("ChatGPT authorization was rejected. Reconnect ChatGPT.")
+                        refresh_credentials(default_codex_store())
+                        auth_refreshed = True
+                        continue
+                    response.raise_for_status()
+                    text = _extract_codex_sse_text(response.iter_lines())
+            break
+        except httpx.TransportError as exc:
+            if attempt == CODEX_STREAM_MAX_ATTEMPTS - 1:
+                raise RuntimeError(
+                    f"Codex streaming request failed after {CODEX_STREAM_MAX_ATTEMPTS} attempts: {exc}"
+                ) from exc
+            time.sleep(CODEX_STREAM_RETRY_BACKOFF_SECONDS * (2 ** attempt))
 
     if not text:
         raise RuntimeError("Codex returned no text output.")
