@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import io
-import os
 import subprocess
-from contextlib import redirect_stdout
+import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -41,16 +39,8 @@ TRANSCRIPT:
 
 MAX_PROMPT_CHARS = 48000
 MAX_TRANSCRIPT_CHARS_PER_CHUNK = 36000
-
-
-def _transcribe_video(video_path: str) -> dict[str, Any]:
-    # Keep Faster-Whisper in the existing OpenShorts transcription implementation.
-    from main import transcribe_video
-
-    return transcribe_video(video_path)
-
-
-transcribe_video = _transcribe_video
+TRANSCRIPTION_CHUNK_SECONDS = 600.0
+TRANSCRIPTION_OVERLAP_SECONDS = 10.0
 
 
 def _transcript_text(transcript: Mapping[str, Any]) -> str:
@@ -58,6 +48,103 @@ def _transcript_text(transcript: Mapping[str, Any]) -> str:
     if text:
         return text
     return " ".join(str(segment.get("text") or "").strip() for segment in transcript.get("segments", []) if segment.get("text")).strip()
+
+
+def plan_transcription_chunks(
+    duration_seconds: float,
+    *,
+    chunk_seconds: float = TRANSCRIPTION_CHUNK_SECONDS,
+    overlap_seconds: float = TRANSCRIPTION_OVERLAP_SECONDS,
+) -> list[tuple[float, float]]:
+    duration = float(duration_seconds)
+    chunk = float(chunk_seconds)
+    overlap = float(overlap_seconds)
+    if duration <= 0:
+        return []
+    if chunk <= 0 or overlap < 0 or overlap >= chunk:
+        raise ValueError("transcription chunk size must be positive and larger than its overlap")
+
+    chunks: list[tuple[float, float]] = []
+    start = 0.0
+    while start < duration:
+        end = min(duration, start + chunk)
+        chunks.append((round(start, 3), round(end, 3)))
+        if end >= duration:
+            break
+        start = end - overlap
+    return chunks
+
+
+def _load_whisper_model():
+    from faster_whisper import WhisperModel
+
+    return WhisperModel("large-v3", device="cpu", compute_type="int8")
+
+
+def _extract_audio_chunk(source_path: Path, start: float, end: float, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    _run_ffmpeg([
+        "ffmpeg", "-y", "-ss", f"{start:.3f}", "-i", str(source_path),
+        "-t", f"{end - start:.3f}", "-vn", "-ac", "1", "-ar", "16000",
+        "-c:a", "pcm_s16le", str(destination),
+    ])
+
+
+def transcribe_video_in_chunks(
+    video_path: str | Path,
+    duration_seconds: float,
+    emit_log: Callable[[str], None] | None = None,
+    *,
+    model_factory: Callable[[], Any] = _load_whisper_model,
+    extract_chunk: Callable[[Path, float, float, Path], None] = _extract_audio_chunk,
+    chunk_seconds: float = TRANSCRIPTION_CHUNK_SECONDS,
+    overlap_seconds: float = TRANSCRIPTION_OVERLAP_SECONDS,
+    temp_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    chunks = plan_transcription_chunks(duration_seconds, chunk_seconds=chunk_seconds, overlap_seconds=overlap_seconds)
+    if not chunks:
+        raise ValueError("source video has no duration")
+
+    model = model_factory()
+    segments: list[dict[str, Any]] = []
+    language = "und"
+
+    def transcribe_from_directory(directory: Path) -> None:
+        nonlocal language
+        for index, (start, end) in enumerate(chunks, start=1):
+            if emit_log:
+                emit_log(f"Transcribing chunk {index}/{len(chunks)}")
+            chunk_path = directory / f"chunk-{index:04d}.wav"
+            try:
+                extract_chunk(Path(video_path), start, end, chunk_path)
+                chunk_segments, info = model.transcribe(str(chunk_path), word_timestamps=False)
+                language = str(getattr(info, "language", language) or language)
+                for segment in chunk_segments:
+                    text = str(getattr(segment, "text", "") or "").strip()
+                    if not text:
+                        continue
+                    segments.append({
+                        "text": text,
+                        "start": round(start + float(segment.start), 3),
+                        "end": round(start + float(segment.end), 3),
+                        "words": [],
+                    })
+            finally:
+                chunk_path.unlink(missing_ok=True)
+
+    if temp_dir is None:
+        with tempfile.TemporaryDirectory(prefix="openshorts-highlight-") as directory:
+            transcribe_from_directory(Path(directory))
+    else:
+        directory = Path(temp_dir)
+        directory.mkdir(parents=True, exist_ok=True)
+        transcribe_from_directory(directory)
+
+    return {
+        "text": " ".join(segment["text"] for segment in segments).strip(),
+        "segments": segments,
+        "language": language,
+    }
 
 
 def _analysis_chunks(transcript: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -209,12 +296,7 @@ def run_highlight_generation(request: Mapping[str, Any], emit_log: Callable[[str
     target = normalize_target(source_duration, min_minutes=min_minutes, ideal_minutes=ideal_minutes)
 
     emit_log("Transcribing source with Faster-Whisper")
-    transcription_output = io.StringIO()
-    with redirect_stdout(transcription_output):
-        transcript = transcribe_video(str(source_path))
-    for line in transcription_output.getvalue().splitlines():
-        if line.strip():
-            emit_log(line.strip())
+    transcript = transcribe_video_in_chunks(source_path, source_duration, emit_log)
     emit_log("Analyzing transcript with the configured AI provider")
     ranked = rank_highlights(
         transcript,
