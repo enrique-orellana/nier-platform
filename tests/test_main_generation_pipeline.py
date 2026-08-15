@@ -13,6 +13,7 @@ import numpy as np
 from media_probe import AudioProbe, MediaProbe
 from streamer_layout import streamer_panel_heights
 from video_analysis import SourceAnalysis
+from video_metrics import JobVideoMetrics
 
 
 def source_media():
@@ -156,6 +157,37 @@ class MainGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(result, ["GENERAL"])
         analyzed_frame = detect_faces.call_args.args[0]
         self.assertEqual(max(analyzed_frame.shape[:2]), 640)
+
+    def test_scene_strategy_metrics_count_decoded_samples(self):
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        capture = FakeStrategyCapture(frame)
+        metrics = JobVideoMetrics()
+        with patch.object(main.cv2, "VideoCapture", return_value=capture), patch.object(
+            main, "detect_face_candidates", return_value=[]
+        ):
+            main.analyze_scenes_strategy("source.mp4", [(0, 90)], metrics=metrics)
+        self.assertEqual(metrics.to_dict()["counters"]["scene_strategy_samples"], 3)
+
+    def test_source_analysis_metrics_record_scene_stages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source_path = Path(directory) / "source.mp4"
+            output_dir = Path(directory) / "output"
+            source_path.write_bytes(b"source")
+            output_dir.mkdir()
+            metrics = JobVideoMetrics()
+            with patch.object(main, "probe_media", return_value=source_media()), patch.object(
+                main.cv2, "VideoCapture", return_value=FakeCapture()
+            ), patch.object(main, "detect_scenes", return_value=([(0, 100)], 30.0)), patch.object(
+                main, "analyze_scenes_strategy", return_value=["TRACK"]
+            ):
+                main.build_source_analysis_for_job(
+                    str(source_path), str(output_dir), metrics=metrics
+                )
+
+        payload = metrics.to_dict()
+        self.assertIn("scene_detection", payload["durations"])
+        self.assertIn("scene_strategy", payload["durations"])
+        self.assertEqual(payload["counters"]["scene_frame_skip"], 2)
 
     def test_source_analysis_builders_run_once_and_cache_reuses_result(self):
         with tempfile.TemporaryDirectory() as directory:

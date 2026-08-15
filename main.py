@@ -471,6 +471,7 @@ def analyze_scenes_strategy(
     scenes,
     *,
     max_dimension=SCENE_STRATEGY_MAX_DIMENSION,
+    metrics=None,
 ):
     """
     Analyzes each scene to determine if it should be TRACK (Single person) or GENERAL (Group/Wide).
@@ -497,6 +498,8 @@ def analyze_scenes_strategy(
             cap.set(cv2.CAP_PROP_POS_FRAMES, f_idx)
             ret, frame = cap.read()
             if not ret: continue
+            if metrics is not None:
+                metrics.increment("scene_strategy_samples")
             
             # Detect faces on a bounded analysis frame; render frames remain full resolution.
             analysis_frame = resize_scene_strategy_frame(frame, max_dimension)
@@ -619,19 +622,29 @@ def build_source_analysis_for_job(
     }
 
     def scene_builder():
-        scenes, _detected_fps = detect_scenes(
-            str(source_path), frame_skip=scene_frame_skip
-        )
-        if scenes:
-            return scenes
-        return [(0, total_frames)]
+        started = time.monotonic()
+        try:
+            scenes, _detected_fps = detect_scenes(
+                str(source_path), frame_skip=scene_frame_skip
+            )
+            if scenes:
+                return scenes
+            return [(0, total_frames)]
+        finally:
+            if metrics is not None:
+                metrics.add_duration("scene_detection", time.monotonic() - started)
+                metrics.increment("scene_frame_skip", scene_frame_skip)
 
     def strategy_builder(scenes):
-        return analyze_scenes_strategy(
-            str(source_path),
-            scenes,
-            max_dimension=scene_strategy_max_dimension,
-        )
+        started = time.monotonic()
+        try:
+            kwargs = {"max_dimension": scene_strategy_max_dimension}
+            if metrics is not None:
+                kwargs["metrics"] = metrics
+            return analyze_scenes_strategy(str(source_path), scenes, **kwargs)
+        finally:
+            if metrics is not None:
+                metrics.add_duration("scene_strategy", time.monotonic() - started)
 
     load_kwargs = {
         "cache_path": Path(output_dir) / "_source_analysis.json",
