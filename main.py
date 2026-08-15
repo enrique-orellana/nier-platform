@@ -58,6 +58,11 @@ from render_manifest import register_asset, register_remote_asset, save_manifest
 from minio_sources import validate_source_object
 from crop_track import CropKeyframe, CropRect, CropScene, CropTrack
 from clip_timeline import resolve_clip_frame_range
+from streamer_layout import (
+    STREAMER_STACK_LAYOUT,
+    compose_streamer_stack_frame,
+    normalize_clip_layout,
+)
 from video_decode import build_decode_compatibility_command, requires_decode_compatibility
 from video_analysis import SourceAnalysis, load_or_build_source_analysis
 from video_output_validation import validate_clip_output
@@ -1011,11 +1016,14 @@ def process_video_to_vertical(
     source_analysis: SourceAnalysis,
     source_media=None,
     metrics: JobVideoMetrics | None = None,
+    layout_format: str = "standard",
+    facecam_size: str = "medium",
 ):
     """
     Core logic to convert horizontal video to vertical using scene detection and Active Speaker Tracking (MediaPipe).
     """
     script_start_time = time.time()
+    layout_options = normalize_clip_layout(layout_format, facecam_size)
     
     # Define temporary file paths based on the output name
     base_name = os.path.splitext(final_output_video)[0]
@@ -1057,13 +1065,23 @@ def process_video_to_vertical(
     original_width = int(source_analysis.width)
     original_height = int(source_analysis.height)
     
-    OUTPUT_HEIGHT = original_height
-    OUTPUT_WIDTH = int(OUTPUT_HEIGHT * ASPECT_RATIO)
-    if OUTPUT_WIDTH % 2 != 0:
-        OUTPUT_WIDTH += 1
+    if layout_options.layout_format == STREAMER_STACK_LAYOUT:
+        master_spec = choose_master_spec(source_media, strategy="crop")
+        OUTPUT_WIDTH = master_spec.width
+        OUTPUT_HEIGHT = master_spec.height
+    else:
+        OUTPUT_HEIGHT = original_height
+        OUTPUT_WIDTH = int(OUTPUT_HEIGHT * ASPECT_RATIO)
+        if OUTPUT_WIDTH % 2 != 0:
+            OUTPUT_WIDTH += 1
 
     # Initialize Cameraman
-    cameraman = SmoothedCameraman(OUTPUT_WIDTH, OUTPUT_HEIGHT, original_width, original_height)
+    cameraman = (
+        SmoothedCameraman(OUTPUT_WIDTH, OUTPUT_HEIGHT, original_width, original_height)
+        if layout_options.layout_format != STREAMER_STACK_LAYOUT
+        else None
+    )
+    streamer_face_focus = None
     
     print("\n   ✂️ Step 2: Processing video frames...")
     
@@ -1121,7 +1139,26 @@ def process_video_to_vertical(
             current_strategy = scene_strategies[current_scene_index] if current_scene_index < len(scene_strategies) else 'TRACK'
             
             # Apply Strategy
-            if current_strategy == 'GENERAL':
+            if layout_options.layout_format == STREAMER_STACK_LAYOUT:
+                if frame_number % 2 == 0:
+                    candidates = detect_face_candidates(frame)
+                    target_box = speaker_tracker.get_target(candidates, frame_number, original_width)
+                    if target_box is None:
+                        target_box = detect_person_yolo(frame)
+                    if target_box:
+                        x, y, width, height = target_box
+                        streamer_face_focus = (
+                            (x + width / 2) / max(original_width, 1),
+                            (y + height / 2) / max(original_height, 1),
+                        )
+                output_frame = compose_streamer_stack_frame(
+                    frame,
+                    OUTPUT_WIDTH,
+                    OUTPUT_HEIGHT,
+                    facecam_size=layout_options.facecam_size,
+                    face_focus=streamer_face_focus,
+                )
+            elif current_strategy == 'GENERAL':
                 # "Plano General" -> Blur Background + Fit Width
                 output_frame = create_general_frame(frame, OUTPUT_WIDTH, OUTPUT_HEIGHT)
                 
@@ -1287,6 +1324,8 @@ def _write_clip_manifest(
     source_media,
     transcript: dict,
     source_object: dict | None = None,
+    layout_format: str = "standard",
+    facecam_size: str = "medium",
 ) -> str:
     width = source_media.display_width
     height = source_media.display_height
@@ -1296,6 +1335,7 @@ def _write_clip_manifest(
         float(clip["start"]), float(clip["end"]), "TRACK",
         (CropKeyframe(float(clip["start"]), crop), CropKeyframe(float(clip["end"]), crop)),
     ),))
+    layout_options = normalize_clip_layout(layout_format, facecam_size)
     manifest = {
         "schema_version": 1,
         "project_id": os.path.basename(output_dir),
@@ -1308,8 +1348,22 @@ def _write_clip_manifest(
             "crop_track": track.to_dict(),
             "transcript": transcript,
         },
-        "layers": {"subtitles": None, "hook": None, "effects": None, "audio": None},
-        "export_policy": {"aspect_ratio": "9:16", "max_fps": 60},
+        "layers": {
+            "subtitles": None,
+            "hook": None,
+            "effects": None,
+            "audio": None,
+            "layout": {
+                "format": layout_options.layout_format,
+                "facecam_size": layout_options.facecam_size,
+            },
+        },
+        "export_policy": {
+            "aspect_ratio": "9:16",
+            "max_fps": 60,
+            "layout_format": layout_options.layout_format,
+            "facecam_size": layout_options.facecam_size,
+        },
         "master": None,
     }
     manifest_path = os.path.join(output_dir, "manifests", f"clip_{clip_index}.json")
@@ -1329,8 +1383,11 @@ def render_clip_plan(
     source_media,
     source_object: dict | None = None,
     metrics: JobVideoMetrics | None = None,
+    layout_format: str = "standard",
+    facecam_size: str = "medium",
 ) -> list[dict]:
     """Render a clip plan using one immutable source analysis object."""
+    layout_options = normalize_clip_layout(layout_format, facecam_size)
     rendered_clips = []
     source_video_filename = source_asset.get("relative_path", "")
     source_video_url = (
@@ -1355,6 +1412,8 @@ def render_clip_plan(
             source_media,
             transcript,
             source_object,
+            layout_options.layout_format,
+            layout_options.facecam_size,
         )
         clip["manifest_path"] = manifest_path
         clip["source_video_filename"] = source_video_filename
@@ -1366,6 +1425,8 @@ def render_clip_plan(
         clip["output_height"] = master_spec.height
         clip["output_fps"] = master_spec.fps
         clip["source_has_audio"] = source_media.audio is not None
+        clip["layout_format"] = layout_options.layout_format
+        clip["facecam_size"] = layout_options.facecam_size
 
         print(f"\nProcessing Clip {index}: {start}s - {end}s")
         print(f"   Title: {clip.get('video_title_for_youtube_short', 'No Title')}")
@@ -1377,6 +1438,8 @@ def render_clip_plan(
             source_analysis=source_analysis,
             source_media=source_media,
             metrics=metrics,
+            layout_format=layout_options.layout_format,
+            facecam_size=layout_options.facecam_size,
         )
         if success:
             rendered_clips.append(clip)
@@ -1729,6 +1792,18 @@ if __name__ == '__main__':
     parser.add_argument('--keep-original', action='store_true', help="Keep the downloaded YouTube video.")
     parser.add_argument('--skip-analysis', action='store_true', help="Skip AI analysis and convert the whole video.")
     parser.add_argument('--target-clips', type=int, default=6, help="Preferred number of viral clips to generate (3-15).")
+    parser.add_argument(
+        '--layout-format',
+        choices=('standard', 'streamer_stack'),
+        default='standard',
+        help="Vertical clip layout format.",
+    )
+    parser.add_argument(
+        '--facecam-size',
+        choices=('small', 'medium', 'large'),
+        default='medium',
+        help="Streamer Stack facecam panel size.",
+    )
     
     args = parser.parse_args()
     target_clips = min(max(3, args.target_clips), 15)
@@ -1806,6 +1881,8 @@ if __name__ == '__main__':
             source_analysis=source_analysis,
             source_media=source_media,
             metrics=job_metrics,
+            layout_format=args.layout_format,
+            facecam_size=args.facecam_size,
         )
     else:
         # 3. Transcribe
@@ -1833,6 +1910,8 @@ if __name__ == '__main__':
                 source_analysis=source_analysis,
                 source_media=source_media,
                 metrics=job_metrics,
+                layout_format=args.layout_format,
+                facecam_size=args.facecam_size,
             )
         else:
             print(f"🔥 Found {len(clips_data['shorts'])} viral clips!")
@@ -1859,6 +1938,8 @@ if __name__ == '__main__':
                 source_media=source_media,
                 source_object=source_object,
                 metrics=job_metrics,
+                layout_format=args.layout_format,
+                facecam_size=args.facecam_size,
             )
                 
             with open(metadata_file, 'w', encoding='utf-8') as f:

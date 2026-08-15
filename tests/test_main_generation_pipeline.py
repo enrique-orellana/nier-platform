@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -132,6 +133,63 @@ class MainGenerationPipelineTests(unittest.TestCase):
         self.assertTrue(all("_temp" not in clip["video_filename"] for clip in result))
         detect_scenes.assert_not_called()
         analyze_strategy.assert_not_called()
+
+    def test_render_clip_plan_propagates_streamer_layout_options(self):
+        analysis = SourceAnalysis(
+            source_fingerprint={"size": 1},
+            source_fps=30.0,
+            total_frames=300,
+            width=1920,
+            height=1080,
+            scene_boundaries=[(0, 300)],
+            scene_strategies=["TRACK"],
+        )
+        clips = [{"start": 0.0, "end": 2.0}]
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(main, "process_video_to_vertical", return_value=True) as render:
+                with patch.object(main, "_write_clip_manifest", return_value="manifests/clip.json"):
+                    result = main.render_clip_plan(
+                        input_video="source.mp4",
+                        output_dir=directory,
+                        video_title="source",
+                        clips=clips,
+                        source_analysis=analysis,
+                        transcript={},
+                        source_asset={"asset_id": "source"},
+                        source_media=source_media(),
+                        layout_format="streamer_stack",
+                        facecam_size="large",
+                    )
+
+        self.assertEqual(render.call_count, 1)
+        self.assertEqual(render.call_args.kwargs["layout_format"], "streamer_stack")
+        self.assertEqual(render.call_args.kwargs["facecam_size"], "large")
+        self.assertEqual(result[0]["layout_format"], "streamer_stack")
+        self.assertEqual(result[0]["facecam_size"], "large")
+
+    def test_clip_manifest_records_streamer_layout_metadata(self):
+        clip = {"start": 1.0, "end": 4.0}
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest_path = main._write_clip_manifest(
+                directory,
+                "source",
+                1,
+                clip,
+                {"asset_id": "source"},
+                source_media(),
+                {},
+                layout_format="streamer_stack",
+                facecam_size="large",
+            )
+            manifest = json.loads(
+                (Path(directory) / manifest_path).read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(manifest["layers"]["layout"], {"format": "streamer_stack", "facecam_size": "large"})
+        self.assertEqual(manifest["export_policy"]["layout_format"], "streamer_stack")
+        self.assertEqual(manifest["export_policy"]["facecam_size"], "large")
 
 
 if __name__ == "__main__":
