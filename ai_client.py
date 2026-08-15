@@ -674,9 +674,11 @@ def _build_codex_input(prompt: str, images: Optional[Sequence[Any]] = None) -> l
     return [{"role": "user", "content": content}]
 
 
-def _extract_codex_sse_text(lines: Sequence[Any]) -> str:
+def _extract_codex_sse_text(lines: Sequence[Any], *, deadline: float | None = None) -> str:
     chunks: list[str] = []
     for raw_line in lines:
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("Codex response exceeded the configured timeout")
         line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else str(raw_line)
         if not line.startswith("data:"):
             continue
@@ -729,8 +731,12 @@ def _codex_chat(
         payload["reasoning"] = {"effort": selected_effort}
 
     text = ""
+    deadline = time.monotonic() + timeout if timeout > 0 else time.monotonic()
     auth_refreshed = False
     for attempt in range(CODEX_STREAM_MAX_ATTEMPTS):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError(f"Codex streaming request timed out after {timeout:.0f}s")
         access_token = get_access_token()
         account_id = get_codex_account_id()
         request_id = str(uuid.uuid4())
@@ -746,7 +752,7 @@ def _codex_chat(
         }
 
         try:
-            with httpx.Client(timeout=timeout) as client:
+            with httpx.Client(timeout=remaining) as client:
                 with client.stream(
                     "POST",
                     "https://chatgpt.com/backend-api/codex/responses",
@@ -760,14 +766,18 @@ def _codex_chat(
                         auth_refreshed = True
                         continue
                     response.raise_for_status()
-                    text = _extract_codex_sse_text(response.iter_lines())
+                    text = _extract_codex_sse_text(response.iter_lines(), deadline=deadline)
             break
+        except TimeoutError as exc:
+            raise RuntimeError(f"Codex streaming request timed out after {timeout:.0f}s") from exc
+        except httpx.TimeoutException as exc:
+            raise RuntimeError(f"Codex streaming request timed out after {timeout:.0f}s") from exc
         except httpx.TransportError as exc:
             if attempt == CODEX_STREAM_MAX_ATTEMPTS - 1:
                 raise RuntimeError(
                     f"Codex streaming request failed after {CODEX_STREAM_MAX_ATTEMPTS} attempts: {exc}"
                 ) from exc
-            time.sleep(CODEX_STREAM_RETRY_BACKOFF_SECONDS * (2 ** attempt))
+            time.sleep(min(CODEX_STREAM_RETRY_BACKOFF_SECONDS * (2 ** attempt), max(0.0, deadline - time.monotonic())))
 
     if not text:
         raise RuntimeError("Codex returned no text output.")

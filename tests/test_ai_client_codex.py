@@ -248,3 +248,13 @@ def test_codex_transport_retries_an_interrupted_stream(monkeypatch):
 
     assert result == "ok"
     assert not FakeCodexStreamClient.responses
+
+
+def test_codex_sse_parser_enforces_absolute_deadline(monkeypatch):
+    monkeypatch.setattr(ai_client.time, "monotonic", lambda: 10.0)
+
+    with pytest.raises(TimeoutError, match="configured timeout"):
+        ai_client._extract_codex_sse_text(
+            ['data: {"type":"response.output_text.delta","delta":"ok"}'],
+            deadline=9.0,
+        )

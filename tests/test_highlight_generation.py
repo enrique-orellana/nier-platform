@@ -202,6 +202,7 @@ def test_rank_highlights_uses_existing_ai_configuration(monkeypatch):
     assert result["model"] == "qwen"
     assert result["candidates"][0]["score"] == 0.91
     assert "TRANSCRIPT" in chat.call_args.args[1]
+    assert chat.call_args.kwargs["timeout"] == highlight_generation.HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS
     assert logs[0] == "AI analysis provider=ollama model=qwen; transcript_chunks=1"
     assert logs[1].startswith("AI analysis chunk 1/1 started; prompt_chars=")
     assert logs[2].startswith("AI analysis chunk 1/1 completed in ")

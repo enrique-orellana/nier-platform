@@ -40,6 +40,7 @@ TRANSCRIPT:
 
 MAX_PROMPT_CHARS = 48000
 MAX_TRANSCRIPT_CHARS_PER_CHUNK = 36000
+HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS = 120.0
 TRANSCRIPTION_CHUNK_SECONDS = 600.0
 OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS = 300.0
 OPENROUTER_TRANSCRIPTION_OVERLAP_SECONDS = 5.0
@@ -332,7 +333,13 @@ def rank_highlights(
             )
         started_at = time.monotonic()
         try:
-            response = chat_json(config, prompt, model=model, reasoning_effort=config.analyze_reasoning_effort)
+            response = chat_json(
+                config,
+                prompt,
+                model=model,
+                reasoning_effort=config.analyze_reasoning_effort,
+                timeout=HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS,
+            )
         except Exception as exc:
             if emit_log:
                 emit_log(
