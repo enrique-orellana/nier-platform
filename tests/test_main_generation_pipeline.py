@@ -1,12 +1,15 @@
 import json
+import subprocess
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import main
 import numpy as np
 from media_probe import AudioProbe, MediaProbe
+from streamer_layout import streamer_panel_heights
 from video_analysis import SourceAnalysis
 
 
@@ -277,6 +280,79 @@ class MainGenerationPipelineTests(unittest.TestCase):
             expected_fps=30.0,
             source_has_audio=True,
         )
+
+    def test_streamer_render_composes_real_facecam_and_gameplay_panels(self):
+        analysis = SourceAnalysis(
+            source_fingerprint={"size": 1},
+            source_fps=30.0,
+            total_frames=60,
+            width=1920,
+            height=1080,
+            scene_boundaries=[(0, 60)],
+            scene_strategies=["TRACK"],
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            source_path = Path(directory) / "source.mp4"
+            output_path = Path(directory) / "streamer.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-f", "lavfi", "-i", "color=c=black:s=1920x540:r=30:d=2",
+                    "-f", "lavfi", "-i", "color=c=white:s=1920x540:r=30:d=2",
+                    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=2",
+                    "-filter_complex", "[0:v][1:v]vstack=inputs=2[v]",
+                    "-map", "[v]", "-map", "2:a:0",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-shortest", str(source_path),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            media = replace(
+                source_media(),
+                path=str(source_path),
+                duration_seconds=2.0,
+                frame_count=60,
+                audio=AudioProbe("aac", 48000, 2, "stereo", 2.0),
+            )
+
+            with patch.object(
+                main,
+                "detect_face_candidates",
+                return_value=[{"box": [900, 100, 200, 300], "score": 60000}],
+            ), patch.object(main, "detect_person_yolo", return_value=None):
+                result = main.process_video_to_vertical(
+                    str(source_path),
+                    str(output_path),
+                    source_analysis=analysis,
+                    source_media=media,
+                    layout_format="streamer_stack",
+                    facecam_size="medium",
+                )
+
+            self.assertTrue(result)
+            capture = main.cv2.VideoCapture(str(output_path))
+            try:
+                self.assertEqual(int(capture.get(main.cv2.CAP_PROP_FRAME_WIDTH)), 1080)
+                self.assertEqual(int(capture.get(main.cv2.CAP_PROP_FRAME_HEIGHT)), 1920)
+                self.assertAlmostEqual(capture.get(main.cv2.CAP_PROP_FPS), 30.0, places=1)
+                ret, frame = capture.read()
+            finally:
+                capture.release()
+
+            self.assertTrue(ret)
+            facecam_height, _ = streamer_panel_heights(1080, 1920, "medium")
+            facecam = frame[:facecam_height]
+            gameplay = frame[facecam_height:]
+            facecam_luma = float(facecam.mean())
+            gameplay_luma = float(gameplay.mean())
+            self.assertLess(facecam_luma, 100)
+            self.assertGreater(gameplay_luma, facecam_luma + 30)
+
+            probe = main.probe_media(str(output_path))
+            self.assertIsNotNone(probe.audio)
 
 
 if __name__ == "__main__":

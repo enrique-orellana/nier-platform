@@ -801,15 +801,17 @@ describe('LocalEditorTab', () => {
         await waitFor(() => expect(screen.getByRole('dialog', { name: /saved projects/i })).toBeInTheDocument());
         fireEvent.click(screen.getByRole('button', { name: 'Open Other project' }));
         await waitFor(() => expect(screen.getByText(/other\.mp4/)).toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: /saved projects/i })).not.toBeInTheDocument());
 
         fireEvent.click(screen.getByRole('button', { name: /^Projects$/i }));
-        await waitFor(() => expect(screen.getByRole('dialog', { name: /saved projects/i })).toBeInTheDocument());
+        const projectsDialog = await screen.findByRole('dialog', { name: /saved projects/i });
+        const deleteOtherProject = await within(projectsDialog).findByRole('button', { name: 'Delete Other project' });
         vi.spyOn(window, 'confirm').mockReturnValue(false);
-        fireEvent.click(screen.getByRole('button', { name: 'Delete Other project' }));
-        expect(screen.getByRole('button', { name: 'Open Other project' })).toBeInTheDocument();
+        fireEvent.click(deleteOtherProject);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Open Other project' })).toBeInTheDocument());
 
         window.confirm.mockReturnValue(true);
-        fireEvent.click(screen.getByRole('button', { name: 'Delete Other project' }));
+        fireEvent.click(await within(screen.getByRole('dialog', { name: /saved projects/i })).findByRole('button', { name: 'Delete Other project' }));
         await waitFor(() => expect(screen.queryByRole('button', { name: 'Open Other project' })).not.toBeInTheDocument());
         expect((await listStoredProjects()).find((project) => project.id === other.id)).toBeUndefined();
     });
