@@ -24,6 +24,7 @@ describe('AISettingsPanel', () => {
 
     expect(screen.getAllByRole('option', { name: /OpenRouter/i })).toHaveLength(2);
     expect(screen.getByPlaceholderText('sk-or-v1-...')).toBeInTheDocument();
+    expect(screen.getByLabelText('OpenRouter API key')).toBeInTheDocument();
     expect(screen.getByText(/only the API key is required/i)).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /OpenShorts local/i })).toBeInTheDocument();
   });

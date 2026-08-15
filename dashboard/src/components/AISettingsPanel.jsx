@@ -154,7 +154,7 @@ export default function AISettingsPanel({
                     : 'Connect ChatGPT'}
             </button>
           </div>
-        ) : (
+        ) : !isOpenRouter && (
           <label className="block">
             <span className="block text-sm text-zinc-400 mb-2">API / Access Key</span>
             <input
@@ -347,6 +347,21 @@ export default function AISettingsPanel({
             <option value="local">OpenShorts local (Faster-Whisper)</option>
             <option value="openrouter">OpenRouter audio transcription</option>
           </select>
+          {(isOpenRouter || transcriptionProvider === 'openrouter') && (
+            <label className="block">
+              <span className="block text-sm text-zinc-300 mb-2">OpenRouter API key</span>
+              <input
+                aria-label="OpenRouter API key"
+                type="password"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                className="input-field"
+                placeholder="sk-or-v1-..."
+                autoComplete="off"
+              />
+              <p className="mt-2 text-xs text-zinc-500">Shared by OpenRouter AI and transcription. Paste your key here.</p>
+            </label>
+          )}
           <input aria-label="Transcription model" value={transcriptionModel} onChange={(event) => setTranscriptionModel(event.target.value)} readOnly={transcriptionProvider !== 'openrouter'} className="input-field" placeholder="openai/whisper-large-v3" />
           <p className="text-xs text-zinc-500">{transcriptionProvider === 'local' ? 'Uses the existing OpenShorts local transcription service.' : 'Uses OpenRouter with the configured API key. The default model is openai/whisper-large-v3.'}</p>
         </div>
