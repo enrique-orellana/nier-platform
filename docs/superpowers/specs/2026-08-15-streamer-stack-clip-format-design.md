@@ -17,7 +17,7 @@ When `Streamer Stack` is selected:
 - Medium is the default.
 - The AI-generated `viral_hook_text` is enabled by default.
 - The hook can be disabled before generation.
-- When enabled, the hook uses bold yellow text with a black outline and is placed across the facecam/gameplay boundary, matching the reference style.
+- When enabled, the hook is added in a separate post-generation pass. It uses bold yellow text with a black outline and is placed across the facecam/gameplay boundary, matching the reference style.
 - Subtitles remain independent and optional through the existing subtitle workflow.
 
 The selector is part of the existing Clip Generator input flow, before the user starts processing a video. The selected settings apply to every clip in that generation job.
@@ -38,7 +38,9 @@ The remaining height is the gameplay panel. Each panel is rendered independently
 
 1. The facecam panel uses the existing face/person tracking signals with adaptive zoom and a bounded crop. This keeps the streamer visible even when the source is horizontal or the facecam is a small region of the recording.
 2. The gameplay panel uses a stable center/lower-biased crop of the same source frame. It must not inherit the facecam tracker’s horizontal movement.
-3. The two panels are stacked into the output canvas with no unintended gap. The hook is composited after the panels so it can cross the boundary cleanly.
+3. The two panels are stacked into the output canvas with no unintended gap. The layout pass produces a clean split video without a hook overlay.
+
+4. If hook rendering is enabled and hook text is available, a separate post-generation overlay pass adds the hook to the completed split video. This keeps panel composition and hook composition independently testable and preserves the existing post-generation editing model.
 
 If no face is detected for a frame or scene, the facecam crop falls back to a centered crop. A missing hook string does not fail the render; it simply produces the layout without the hook.
 
@@ -56,7 +58,7 @@ The persisted format identifier is `streamer_stack`; requests that omit the new 
 
 ## Hook and subtitle behavior
 
-The Streamer Stack generation path uses the existing clip-level `viral_hook_text` value. Hook rendering is enabled by default for this format and uses a dedicated streamer visual treatment. The existing hook action and its current styling remain unchanged for Standard clips and for later manual hook edits.
+The Streamer Stack generation path uses the existing clip-level `viral_hook_text` value. Hook rendering is enabled by default for this format, but it runs only after the split video has been generated. The post-generation pass uses a dedicated streamer visual treatment. The existing hook action and its current styling remain unchanged for Standard clips and for later manual hook edits.
 
 Subtitles are not automatically burned by the new format. Existing subtitle generation, translation, and editor controls remain available after the clip is generated. Applying subtitles to a Streamer Stack clip should operate on the already-composed 9:16 output.
 
