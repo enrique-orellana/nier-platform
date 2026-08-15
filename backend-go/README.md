@@ -26,12 +26,12 @@ Invoke-WebRequest http://localhost:8000/health
 - `PORT`: HTTP port, default `8000`.
 - `MAX_CONCURRENT_JOBS`: maximum concurrent Python jobs, default `5`.
 - `RENDER_SERVICE_URL`: renderer address, default `http://localhost:3100`.
-- `DATABASE_URL`: PostgreSQL connection URL. Required for durable production job state.
+- `DATABASE_URL`: PostgreSQL connection URL. Required for durable production job state and Highlights project persistence.
 - `PYTHON_BINARY`: Python executable for the internal worker, default `python`.
 - `PYTHON_WORKER_SCRIPT`: worker entrypoint, default `python_worker.py`.
 
 Without `DATABASE_URL`, local development falls back to in-memory job storage;
-all jobs are lost when the process exits. Production deployments must provide
+all jobs and Highlights projects are lost when the process exits. Production deployments must provide
 the URL (the Kubernetes manifest expects the `openshorts-postgres` secret with
 key `DATABASE_URL`) and use the `/ready` endpoint for readiness checks. OpenAPI endpoints
 from the former FastAPI service are not served by the Go control plane yet.

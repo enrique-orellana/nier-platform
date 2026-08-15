@@ -26,6 +26,13 @@ OpenShorts bundle.
 
 ## OpenShorts app bundle
 
+The local bundle includes a PostgreSQL Deployment and a 10Gi persistent volume
+claim for durable Highlights projects. The deployment helpers create the
+`openshorts-postgres` Secret from `OPENSHORTS_POSTGRES_DB`,
+`OPENSHORTS_POSTGRES_USER`, and `OPENSHORTS_POSTGRES_PASSWORD`; credentials are
+not committed in this repository. The backend receives `DATABASE_URL` from the
+same Secret and runs its migrations on startup.
+
 Build the local images from the repo root:
 
 ```bash
@@ -70,6 +77,17 @@ kubectl apply -f k8s/openshorts.yaml
 The bundle declares the OpenShorts workdir PV explicitly. On this WSL
 MicroK8s setup it uses the Linux-native path
 `/home/ubuntu/kubefiles/openshorts-workdir`, not a `/mnt/d` Windows mount.
+
+Verify PostgreSQL and backend persistence with:
+
+```powershell
+kubectl -n openshorts get pod,svc,pvc openshorts-postgres
+kubectl -n openshorts logs deployment/openshorts-backend --tail=100
+kubectl -n openshorts get secret openshorts-postgres
+```
+
+Deleting a Highlights project removes only its generated output and database
+records. The original source object in MinIO is preserved.
 
 OpenShorts is exposed on one host and uses path routing:
 

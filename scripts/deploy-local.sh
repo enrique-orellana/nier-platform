@@ -96,6 +96,10 @@ AI_BASE_URL="${AI_BASE_URL:-${OPENSHORTS_AI_BASE_URL:-}}"
 VITE_AI_BASE_URL="${VITE_AI_BASE_URL:-${OPENSHORTS_VITE_AI_BASE_URL:-}}"
 S3_PUBLIC_URL_BASE="${AWS_S3_PUBLIC_URL_BASE:-${OPENSHORTS_S3_PUBLIC_URL_BASE:-}}"
 S3_PUBLIC_ENDPOINT_URL="${AWS_S3_PUBLIC_ENDPOINT_URL:-${OPENSHORTS_S3_PUBLIC_ENDPOINT_URL:-}}"
+POSTGRES_DB="${OPENSHORTS_POSTGRES_DB:-openshorts}"
+POSTGRES_USER="${OPENSHORTS_POSTGRES_USER:-openshorts}"
+POSTGRES_PASSWORD="${OPENSHORTS_POSTGRES_PASSWORD:-openshorts-local}"
+DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@openshorts-postgres:5432/${POSTGRES_DB}"
 
 log_step() {
   printf '\n==> %s\n' "$1"
@@ -142,6 +146,25 @@ if [[ ! -f "k8s/openshorts.yaml" ]]; then
   echo "Missing k8s/openshorts.yaml" >&2
   exit 1
 fi
+
+if [[ ! -f "k8s/openshorts-postgres.yaml" ]]; then
+  echo "Missing k8s/openshorts-postgres.yaml" >&2
+  exit 1
+fi
+
+log_step "Preparing PostgreSQL Secret"
+apply_kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | apply_kubectl apply -f -
+apply_kubectl create secret generic openshorts-postgres \
+  -n "$NAMESPACE" \
+  --from-literal="POSTGRES_DB=$POSTGRES_DB" \
+  --from-literal="POSTGRES_USER=$POSTGRES_USER" \
+  --from-literal="POSTGRES_PASSWORD=$POSTGRES_PASSWORD" \
+  --from-literal="DATABASE_URL=$DATABASE_URL" \
+  --dry-run=client -o yaml | apply_kubectl apply -f -
+
+log_step "Applying PostgreSQL"
+apply_kubectl apply -f k8s/openshorts-postgres.yaml
+apply_kubectl rollout status deployment/openshorts-postgres -n "$NAMESPACE" --timeout=180s
 
 log_step "Applying bundle"
 apply_kubectl apply -f k8s/openshorts.yaml

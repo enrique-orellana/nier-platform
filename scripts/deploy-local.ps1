@@ -156,10 +156,44 @@ $frontendImage = "openshorts-frontend:local"
 $rendererImage = "openshorts-renderer:local"
 $translationImage = $backendImage
 
+$postgresDb = Get-EnvValue "OPENSHORTS_POSTGRES_DB"
+if (-not $postgresDb) { $postgresDb = "openshorts" }
+$postgresUser = Get-EnvValue "OPENSHORTS_POSTGRES_USER"
+if (-not $postgresUser) { $postgresUser = "openshorts" }
+$postgresPassword = Get-EnvValue "OPENSHORTS_POSTGRES_PASSWORD"
+if (-not $postgresPassword) { $postgresPassword = "openshorts-local" }
+$postgresPasswordURL = [System.Uri]::EscapeDataString($postgresPassword)
+$databaseUrl = "postgres://$postgresUser`:$postgresPasswordURL@openshorts-postgres:5432/$postgresDb"
+
 Write-Step "Building local images"
 Invoke-CheckedCommand "docker" @("build", "-t", $backendImage, ".")
 Invoke-CheckedCommand "docker" @("build", "-t", $frontendImage, "-f", "dashboard/Dockerfile", "dashboard")
 Invoke-CheckedCommand "docker" @("build", "-t", $rendererImage, "-f", "render-service/Dockerfile", ".")
+
+Write-Step "Preparing PostgreSQL Secret"
+if ($KubeContext) {
+    kubectl --context $KubeContext create namespace $Namespace --dry-run=client -o yaml | kubectl --context $KubeContext apply -f -
+    $secretYaml = kubectl --context $KubeContext create secret generic openshorts-postgres -n $Namespace `
+        --from-literal=POSTGRES_DB=$postgresDb `
+        --from-literal=POSTGRES_USER=$postgresUser `
+        --from-literal=POSTGRES_PASSWORD=$postgresPassword `
+        --from-literal=DATABASE_URL=$databaseUrl `
+        --dry-run=client -o yaml
+    $secretYaml | kubectl --context $KubeContext apply -f -
+} else {
+    kubectl create namespace $Namespace --dry-run=client -o yaml | kubectl apply -f -
+    $secretYaml = kubectl create secret generic openshorts-postgres -n $Namespace `
+        --from-literal=POSTGRES_DB=$postgresDb `
+        --from-literal=POSTGRES_USER=$postgresUser `
+        --from-literal=POSTGRES_PASSWORD=$postgresPassword `
+        --from-literal=DATABASE_URL=$databaseUrl `
+        --dry-run=client -o yaml
+    $secretYaml | kubectl apply -f -
+}
+
+Write-Step "Applying PostgreSQL"
+Invoke-Kubectl @("apply", "-f", "k8s/openshorts-postgres.yaml")
+Invoke-Kubectl @("rollout", "status", "deployment/openshorts-postgres", "-n", $Namespace, "--timeout=180s")
 
 Write-Step "Applying bundle"
 if ($KubeContext) {
