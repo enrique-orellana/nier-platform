@@ -128,7 +128,7 @@ That single command:
 - builds the backend, frontend, and renderer images with local tags
 - applies `k8s/openshorts.yaml`
 - refreshes the `openshorts-config` ConfigMap from `k8s/openshorts.env.example`
-- restarts the three deployments
+- restarts the backend, frontend, and renderer deployments
 - waits for all rollouts to finish
 
 If you want to change the local host URLs or model defaults, edit `.env` once

@@ -15,9 +15,6 @@ def _deployment_block(manifest: str, name: str) -> str:
 def test_kubernetes_codex_auth_is_configured_for_shared_persistent_storage():
     manifest = MANIFEST.read_text(encoding="utf-8")
     backend = _deployment_block(manifest, "openshorts-backend")
-    translation = _deployment_block(manifest, "openshorts-translation")
 
     assert f"  OPENSHORTS_CODEX_AUTH_FILE: {CODEX_AUTH_FILE}" in manifest
     assert f"mountPath: {CODEX_AUTH_FILE.rsplit('/', 2)[0]}" in backend
-    assert f"mountPath: {CODEX_AUTH_FILE.rsplit('/', 2)[0]}" in translation
-
