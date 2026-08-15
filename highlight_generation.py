@@ -40,7 +40,7 @@ TRANSCRIPT:
 MAX_PROMPT_CHARS = 48000
 MAX_TRANSCRIPT_CHARS_PER_CHUNK = 36000
 TRANSCRIPTION_CHUNK_SECONDS = 600.0
-OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS = 30.0
+OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS = 300.0
 OPENROUTER_TRANSCRIPTION_OVERLAP_SECONDS = 5.0
 TRANSCRIPTION_OVERLAP_SECONDS = 10.0
 
@@ -50,6 +50,43 @@ def _transcript_text(transcript: Mapping[str, Any]) -> str:
     if text:
         return text
     return " ".join(str(segment.get("text") or "").strip() for segment in transcript.get("segments", []) if segment.get("text")).strip()
+
+
+def _normalized_segment_text(text: Any) -> str:
+    return " ".join(str(text or "").casefold().split())
+
+
+def merge_transcript_segments(segments: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Keep global ordering while removing duplicate text at chunk boundaries."""
+    ordered = sorted(
+        (segment for segment in segments if str(segment.get("text") or "").strip()),
+        key=lambda segment: (float(segment.get("start", 0.0)), float(segment.get("end", 0.0))),
+    )
+    merged: list[dict[str, Any]] = []
+    for raw_segment in ordered:
+        text = str(raw_segment.get("text") or "").strip()
+        start = float(raw_segment.get("start", 0.0))
+        end = float(raw_segment.get("end", start))
+        normalized = _normalized_segment_text(text)
+        duplicate = False
+        for previous in reversed(merged):
+            previous_start = float(previous.get("start", 0.0))
+            previous_end = float(previous.get("end", previous_start))
+            if start > previous_end + 0.001:
+                break
+            if normalized == _normalized_segment_text(previous.get("text")):
+                duplicate = True
+                break
+        if duplicate:
+            continue
+        merged.append({
+            **dict(raw_segment),
+            "text": text,
+            "start": round(start, 3),
+            "end": round(max(end, start), 3),
+            "words": list(raw_segment.get("words") or []),
+        })
+    return merged
 
 
 def plan_transcription_chunks(
@@ -89,6 +126,15 @@ def _extract_audio_chunk(source_path: Path, start: float, end: float, destinatio
         "ffmpeg", "-y", "-ss", f"{start:.3f}", "-i", str(source_path),
         "-t", f"{end - start:.3f}", "-vn", "-ac", "1", "-ar", "16000",
         "-c:a", "pcm_s16le", str(destination),
+    ])
+
+
+def _extract_openrouter_audio_chunk(source_path: Path, start: float, end: float, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    _run_ffmpeg([
+        "ffmpeg", "-y", "-ss", f"{start:.3f}", "-i", str(source_path),
+        "-t", f"{end - start:.3f}", "-vn", "-ac", "1", "-ar", "16000",
+        "-c:a", "libmp3lame", "-b:a", "32k", str(destination),
     ])
 
 
@@ -175,8 +221,8 @@ def transcribe_video_with_config(
         for index, (start, end) in enumerate(chunks, start=1):
             if emit_log:
                 emit_log(f"Transcribing chunk {index}/{len(chunks)} with OpenRouter")
-            chunk_path = directory_path / f"chunk-{index:04d}.wav"
-            _extract_audio_chunk(Path(video_path), start, end, chunk_path)
+            chunk_path = directory_path / f"chunk-{index:04d}.mp3"
+            _extract_openrouter_audio_chunk(Path(video_path), start, end, chunk_path)
             transcript = transcribe_audio_openrouter(str(chunk_path), config)
             language = str(transcript.get("language") or language)
             for segment in transcript.get("segments", []):
@@ -191,6 +237,7 @@ def transcribe_video_with_config(
                     "words": [],
                 })
             chunk_path.unlink(missing_ok=True)
+    segments = merge_transcript_segments(segments)
     return {"text": " ".join(segment["text"] for segment in segments).strip(), "segments": segments, "language": language}
 
 

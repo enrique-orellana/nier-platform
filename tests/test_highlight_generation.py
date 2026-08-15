@@ -60,22 +60,18 @@ def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch
     source.write_bytes(b"source")
     config = Mock(transcription_provider="openrouter")
     monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
-    monkeypatch.setattr(highlight_generation, "_extract_audio_chunk", lambda _source, _start, _end, destination: destination.write_bytes(b"audio"))
+    monkeypatch.setattr(highlight_generation, "_extract_openrouter_audio_chunk", lambda _source, _start, _end, destination: destination.write_bytes(b"audio"))
     transcribe = Mock(return_value={"text": "Cloud text", "language": "en", "segments": [{"start": 1, "end": 4, "text": "Cloud text"}]})
     monkeypatch.setattr(highlight_generation, "transcribe_audio_openrouter", transcribe)
 
     result = highlight_generation.transcribe_video_with_config(source, 60.0, headers={"X-AI-Provider": "openrouter"})
 
-    assert result["text"] == "Cloud text Cloud text Cloud text"
-    assert result["segments"] == [
-        {"text": "Cloud text", "start": 1.0, "end": 4.0, "words": []},
-        {"text": "Cloud text", "start": 26.0, "end": 29.0, "words": []},
-        {"text": "Cloud text", "start": 51.0, "end": 54.0, "words": []},
-    ]
-    assert transcribe.call_count == 3
+    assert result["text"] == "Cloud text"
+    assert result["segments"] == [{"text": "Cloud text", "start": 1.0, "end": 4.0, "words": []}]
+    transcribe.assert_called_once()
 
 
-def test_openrouter_transcription_uses_payload_safe_chunks(monkeypatch, tmp_path):
+def test_openrouter_transcription_uses_single_chunk_for_short_source(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
     config = Mock(transcription_provider="openrouter")
@@ -86,7 +82,7 @@ def test_openrouter_transcription_uses_payload_safe_chunks(monkeypatch, tmp_path
         extracted.append((start, end))
         destination.write_bytes(b"audio")
 
-    monkeypatch.setattr(highlight_generation, "_extract_audio_chunk", extract_chunk)
+    monkeypatch.setattr(highlight_generation, "_extract_openrouter_audio_chunk", extract_chunk)
     monkeypatch.setattr(
         highlight_generation,
         "transcribe_audio_openrouter",
@@ -99,19 +95,70 @@ def test_openrouter_transcription_uses_payload_safe_chunks(monkeypatch, tmp_path
 
     result = highlight_generation.transcribe_video_with_config(source, 240.0, headers={"X-AI-Provider": "openrouter"})
 
-    assert result["text"] == " ".join(["Cloud text"] * 10)
+    assert result["text"] == "Cloud text"
+    assert extracted == [(0.0, 240.0)]
+
+
+def test_openrouter_transcription_uses_five_minute_overlapping_chunks(monkeypatch, tmp_path):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    config = Mock(transcription_provider="openrouter")
+    monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
+    extracted = []
+
+    def extract_chunk(_source, start, end, destination):
+        extracted.append((start, end, destination.suffix))
+        destination.write_bytes(b"audio")
+
+    monkeypatch.setattr(highlight_generation, "_extract_openrouter_audio_chunk", extract_chunk)
+    monkeypatch.setattr(
+        highlight_generation,
+        "transcribe_audio_openrouter",
+        lambda *_args: {
+            "text": "Cloud text",
+            "language": "en",
+            "segments": [{"start": 0, "end": 1, "text": "Cloud text"}],
+        },
+    )
+
+    result = highlight_generation.transcribe_video_with_config(
+        source,
+        1200.0,
+        headers={"X-AI-Provider": "openrouter"},
+    )
+
+    assert result["text"] == " ".join(["Cloud text"] * 5)
     assert extracted == [
-        (0.0, 30.0),
-        (25.0, 55.0),
-        (50.0, 80.0),
-        (75.0, 105.0),
-        (100.0, 130.0),
-        (125.0, 155.0),
-        (150.0, 180.0),
-        (175.0, 205.0),
-        (200.0, 230.0),
-        (225.0, 240.0),
+        (0.0, 300.0, ".mp3"),
+        (295.0, 595.0, ".mp3"),
+        (590.0, 890.0, ".mp3"),
+        (885.0, 1185.0, ".mp3"),
+        (1180.0, 1200.0, ".mp3"),
     ]
+
+
+def test_extract_openrouter_audio_chunk_uses_compressed_mono_speech_audio(monkeypatch, tmp_path):
+    commands = []
+    monkeypatch.setattr(highlight_generation, "_run_ffmpeg", lambda command: commands.append(command))
+
+    destination = tmp_path / "chunk.mp3"
+    highlight_generation._extract_openrouter_audio_chunk(tmp_path / "source.mp4", 5.0, 65.0, destination)
+
+    assert commands == [[
+        "ffmpeg", "-y", "-ss", "5.000", "-i", str(tmp_path / "source.mp4"),
+        "-t", "60.000", "-vn", "-ac", "1", "-ar", "16000",
+        "-c:a", "libmp3lame", "-b:a", "32k", str(destination),
+    ]]
+
+
+def test_merge_transcript_segments_removes_duplicate_overlap_segments():
+    segments = highlight_generation.merge_transcript_segments([
+        {"text": "The important point.", "start": 290.0, "end": 299.0, "words": []},
+        {"text": "The important point.", "start": 295.0, "end": 299.0, "words": []},
+        {"text": "The next point.", "start": 299.0, "end": 304.0, "words": []},
+    ])
+
+    assert [segment["text"] for segment in segments] == ["The important point.", "The next point."]
 
 
 def test_rank_highlights_uses_existing_ai_configuration(monkeypatch):
