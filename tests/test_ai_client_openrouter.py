@@ -51,6 +51,44 @@ class InvalidTranscriptionClient(RecordingClient):
         return InvalidTranscriptionResponse()
 
 
+class SuccessfulTranscriptionResponse:
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {
+            "text": "Transcript",
+            "segments": [{"start": 0, "end": 1, "text": "Transcript"}],
+        }
+
+
+class RecordingTranscriptionClient(RecordingClient):
+    def post(self, url, headers=None, json=None):
+        type(self).last_url = url
+        return SuccessfulTranscriptionResponse()
+
+
+class RetryableTranscriptionClient(RecordingClient):
+    attempts = 0
+
+    def post(self, url, headers=None, json=None):
+        type(self).attempts += 1
+        if type(self).attempts < 3:
+            raise ai_client.httpx.ConnectError("connection refused")
+        return type("SuccessfulResponse", (), {
+            "raise_for_status": lambda self: None,
+            "json": lambda self: {
+                "text": "Recovered transcript",
+                "segments": [{"start": 0, "end": 1, "text": "Recovered transcript"}],
+            },
+        })()
+
+
+class AlwaysUnavailableTranscriptionClient(RecordingClient):
+    def post(self, url, headers=None, json=None):
+        raise ai_client.httpx.ConnectError("connection refused")
+
+
 class OpenRouterTests(unittest.TestCase):
     def test_load_ai_config_applies_openrouter_defaults(self):
         config = ai_client.load_ai_config({
@@ -73,6 +111,40 @@ class OpenRouterTests(unittest.TestCase):
         )
 
         self.assertEqual(config.resolved_base_url(), "https://openrouter.ai/api/v1")
+
+    @patch("ai_client.httpx.Client", RecordingTranscriptionClient)
+    def test_transcription_uses_openrouter_endpoint_when_main_provider_is_lmstudio(self):
+        config = ai_client.AIConfig(
+            provider="lmstudio",
+            api_key="secret",
+            base_url="http://host.docker.internal:1234",
+            transcription_provider="openrouter",
+            transcription_model="openai/whisper-large-v3",
+        )
+        with TemporaryDirectory() as directory:
+            audio_path = Path(directory) / "audio.wav"
+            audio_path.write_bytes(b"audio")
+
+            result = ai_client.transcribe_audio_openrouter(str(audio_path), config)
+
+        self.assertEqual(result["text"], "Transcript")
+        self.assertEqual(
+            RecordingTranscriptionClient.last_url,
+            "https://openrouter.ai/api/v1/audio/transcriptions",
+        )
+
+    def test_transcription_requires_an_openrouter_api_key(self):
+        config = ai_client.AIConfig(
+            provider="lmstudio",
+            base_url="http://host.docker.internal:1234",
+            transcription_provider="openrouter",
+        )
+        with TemporaryDirectory() as directory:
+            audio_path = Path(directory) / "audio.wav"
+            audio_path.write_bytes(b"audio")
+
+            with self.assertRaisesRegex(RuntimeError, "requires an API key"):
+                ai_client.transcribe_audio_openrouter(str(audio_path), config)
 
     @patch("ai_client.httpx.Client", RecordingClient)
     def test_chat_completion_uses_openrouter_compatible_endpoint(self):
@@ -101,4 +173,30 @@ class OpenRouterTests(unittest.TestCase):
             audio_path = Path(directory) / "audio.wav"
             audio_path.write_bytes(b"audio")
             with self.assertRaisesRegex(RuntimeError, "invalid transcription response.*HTTP 200.*empty body"):
+                ai_client.transcribe_audio_openrouter(str(audio_path), config)
+
+    @patch("time.sleep")
+    @patch("ai_client.httpx.Client", RetryableTranscriptionClient)
+    def test_transcription_retries_connection_refused(self, _sleep):
+        RetryableTranscriptionClient.attempts = 0
+        config = ai_client.AIConfig(provider="openrouter", api_key="secret")
+        with TemporaryDirectory() as directory:
+            audio_path = Path(directory) / "audio.wav"
+            audio_path.write_bytes(b"audio")
+
+            result = ai_client.transcribe_audio_openrouter(str(audio_path), config)
+
+        self.assertEqual(result["text"], "Recovered transcript")
+        self.assertEqual(RetryableTranscriptionClient.attempts, 3)
+        self.assertEqual(_sleep.call_count, 2)
+
+    @patch("time.sleep")
+    @patch("ai_client.httpx.Client", AlwaysUnavailableTranscriptionClient)
+    def test_transcription_reports_connection_failure_after_retries(self, _sleep):
+        config = ai_client.AIConfig(provider="openrouter", api_key="secret")
+        with TemporaryDirectory() as directory:
+            audio_path = Path(directory) / "audio.wav"
+            audio_path.write_bytes(b"audio")
+
+            with self.assertRaisesRegex(RuntimeError, "could not connect to OpenRouter"):
                 ai_client.transcribe_audio_openrouter(str(audio_path), config)

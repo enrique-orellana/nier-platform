@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import re
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,8 @@ GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_DEFAULT_MODEL = "openai/gpt-4o-mini"
 OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL = "openai/whisper-large-v3"
+OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS = 3
+OPENROUTER_TRANSCRIPTION_RETRY_BACKOFF_SECONDS = 1.0
 CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.4")
 CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
 AUTO_MODEL_VALUES = {"", "auto", "default"}
@@ -84,6 +87,11 @@ class AIConfig:
         # paste a nested path into the field, which would otherwise duplicate
         # segments when the app appends endpoint paths.
         return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+
+    def resolved_transcription_base_url(self) -> str:
+        if (self.transcription_provider or "local").strip().lower() == "openrouter":
+            return OPENROUTER_BASE_URL
+        return self.resolved_base_url()
 
 
 def _is_placeholder_model(model: str, provider: str) -> bool:
@@ -297,6 +305,10 @@ def _build_bearer_headers(api_key: str) -> dict[str, str]:
 
 def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: float = 300.0) -> dict[str, Any]:
     """Transcribe an extracted audio chunk through OpenRouter's audio endpoint."""
+    if not config.api_key:
+        raise RuntimeError(
+            "OpenRouter transcription requires an API key. Set the OpenRouter API key in Settings and retry."
+        )
     with open(audio_path, "rb") as handle:
         encoded_audio = base64.b64encode(handle.read()).decode("ascii")
     suffix = os.path.splitext(audio_path)[1].lower().lstrip(".") or "wav"
@@ -305,12 +317,24 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
         "input_audio": {"data": encoded_audio, "format": suffix},
         "response_format": "verbose_json",
     }
-    with httpx.Client(timeout=timeout) as client:
-        response = client.post(
-            f"{config.resolved_base_url()}/audio/transcriptions",
-            headers={**_build_bearer_headers(config.api_key), "Content-Type": "application/json"},
-            json=payload,
-        )
+    transcription_base_url = config.resolved_transcription_base_url()
+    endpoint = f"{transcription_base_url}/audio/transcriptions"
+    for attempt in range(OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS):
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                response = client.post(
+                    endpoint,
+                    headers={**_build_bearer_headers(config.api_key), "Content-Type": "application/json"},
+                    json=payload,
+                )
+            break
+        except httpx.RequestError as exc:
+            if attempt == OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS - 1:
+                raise RuntimeError(
+                    f"could not connect to OpenRouter transcription endpoint at {transcription_base_url} "
+                    f"after {OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS} attempts: {exc}"
+                ) from exc
+            time.sleep(OPENROUTER_TRANSCRIPTION_RETRY_BACKOFF_SECONDS * (2**attempt))
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:

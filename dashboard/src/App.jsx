@@ -23,6 +23,7 @@ import {
   pickCodexModel,
 } from './lib/openaiCodex';
 import { getApiUrl } from './config';
+import { OPENROUTER_BASE_URL, requiresAiApiKey, resolveAiBaseUrl, shouldForwardApiKey } from './lib/aiProvider';
 import {
   buildEditorPath,
   buildProjectPath,
@@ -146,7 +147,6 @@ const SESSION_KEY = 'openshorts_session';
 const SESSION_MAX_AGE = 3600000; // 1 hour (matches server job retention)
 const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
 const GEMINI_VISION_MODEL = 'gemini-3.1-flash-image-preview';
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const OPENROUTER_DEFAULT_MODEL = 'openai/gpt-4o-mini';
 const OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL = 'openai/whisper-large-v3';
 const normalizeQualityPreset = (value) => {
@@ -478,7 +478,8 @@ function App() {
     }
   }, [aiProvider, aiBaseUrl, detectLmStudio]);
 
-  const needsAiConnection = ((aiProvider === 'gemini' || aiProvider === 'openrouter') && !apiKey)
+  const needsOpenRouterKey = (aiProvider === 'openrouter' || transcriptionProvider === 'openrouter') && !apiKey;
+  const needsAiConnection = (requiresAiApiKey(aiProvider, transcriptionProvider) && !apiKey)
     || (aiProvider === 'openai-codex' && !codexStatus.connected);
   const lastProviderRef = useRef(aiProvider);
 
@@ -749,12 +750,12 @@ function App() {
     };
 
     if (shouldSendAiBaseUrl()) {
-      headers['X-AI-Base-Url'] = aiProvider === 'openrouter' ? (aiBaseUrl || OPENROUTER_BASE_URL) : aiBaseUrl;
+      headers['X-AI-Base-Url'] = resolveAiBaseUrl(aiProvider, aiBaseUrl);
     }
 
     if (aiProvider === 'gemini' && apiKey) {
       headers['X-Gemini-Key'] = apiKey;
-    } else if (apiKey && aiProvider !== 'openai-codex') {
+    } else if (apiKey && shouldForwardApiKey(aiProvider, transcriptionProvider)) {
       headers['X-AI-Api-Key'] = apiKey;
     }
 
@@ -829,7 +830,7 @@ function App() {
 
 
   const handleProcess = async (data) => {
-    if ((aiProvider === 'gemini' || aiProvider === 'openrouter') && !apiKey) {
+    if (requiresAiApiKey(aiProvider, transcriptionProvider) && !apiKey) {
       setShowKeyModal(true);
       return;
     }
@@ -1068,7 +1069,7 @@ function App() {
                   title="Click to configure your API keys"
                 >
                   <AlertTriangle size={12} />
-                  {aiProvider === 'openai-codex' ? 'Connect ChatGPT' : `${aiProvider === 'openrouter' ? 'OpenRouter' : 'Gemini'} API Key Missing`}
+                  {aiProvider === 'openai-codex' && !needsOpenRouterKey ? 'Connect ChatGPT' : `${needsOpenRouterKey ? 'OpenRouter' : 'Gemini'} API Key Missing`}
                 </button>
               )}
             </div>
@@ -1081,11 +1082,11 @@ function App() {
             <div className="flex items-center gap-3 text-sm text-amber-200">
               <KeyRound size={16} className="shrink-0 text-amber-400" />
               <div>
-                <span className="font-semibold">{aiProvider === 'openai-codex' ? 'ChatGPT connection required.' : `${aiProvider === 'openrouter' ? 'OpenRouter' : 'Gemini'} API key missing.`}</span>{' '}
+                <span className="font-semibold">{aiProvider === 'openai-codex' && !needsOpenRouterKey ? 'ChatGPT connection required.' : `${needsOpenRouterKey ? 'OpenRouter' : 'Gemini'} API key missing.`}</span>{' '}
                 <span className="text-amber-200/80">
-                  {aiProvider === 'openai-codex'
+                  {aiProvider === 'openai-codex' && !needsOpenRouterKey
                     ? 'Connect your ChatGPT account in Settings to use OpenAI Codex. Upload-Post is optional and only needed for social publishing.'
-                    : `Set your ${aiProvider === 'openrouter' ? 'OpenRouter' : 'Gemini'} API key to use OpenShorts. Upload-Post is optional and only needed if you want social publishing.`}
+                    : `Set your ${needsOpenRouterKey ? 'OpenRouter' : 'Gemini'} API key to use OpenShorts. Upload-Post is optional and only needed if you want social publishing.`}
                 </span>
               </div>
             </div>

@@ -699,6 +699,21 @@ func TestProcessRequiresRightsAcknowledgement(t *testing.T) {
 	}
 }
 
+func TestProcessRejectsOpenRouterTranscriptionWithoutAPIKey(t *testing.T) {
+	server := NewServer(config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/process", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-AI-Provider", "lmstudio")
+	req.Header.Set("X-AI-Transcription-Provider", "openrouter")
+	res := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest || !strings.Contains(res.Body.String(), "OpenRouter API key is required") {
+		t.Fatalf("expected missing OpenRouter key rejection, got %d %s", res.Code, res.Body.String())
+	}
+}
+
 func TestProcessAcceptsMinioObjectSource(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodPost, "/api/process?clip_count=5", strings.NewReader(`{"source_object":{"bucket":"videos","key":"source.mp4"},"source_url":"https://youtube.com/watch?v=1","acknowledged":true}`))

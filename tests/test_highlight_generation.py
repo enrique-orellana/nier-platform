@@ -99,6 +99,26 @@ def test_openrouter_transcription_uses_single_chunk_for_short_source(monkeypatch
     assert extracted == [(0.0, 240.0)]
 
 
+def test_openrouter_transcription_reports_failed_chunk(monkeypatch, tmp_path):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    config = Mock(transcription_provider="openrouter")
+    monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
+    monkeypatch.setattr(
+        highlight_generation,
+        "_extract_openrouter_audio_chunk",
+        lambda _source, _start, _end, destination: destination.write_bytes(b"audio"),
+    )
+    monkeypatch.setattr(
+        highlight_generation,
+        "transcribe_audio_openrouter",
+        Mock(side_effect=RuntimeError("could not connect to OpenRouter")),
+    )
+
+    with pytest.raises(RuntimeError, match=r"OpenRouter transcription failed for chunk 1/1.*could not connect"):
+        highlight_generation.transcribe_video_with_config(source, 60.0, headers={"X-AI-Provider": "openrouter"})
+
+
 def test_openrouter_transcription_uses_five_minute_overlapping_chunks(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")

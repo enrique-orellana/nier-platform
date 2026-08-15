@@ -1,3 +1,5 @@
+import { resolveAiBaseUrl } from '../../lib/aiProvider';
+
 export const getLocalAiHeaders = () => {
     const provider = localStorage.getItem('ai_provider_v1') || 'gemini';
     const apiKey = localStorage.getItem('ai_api_key_v1') || localStorage.getItem('gemini_key') || '';
@@ -13,7 +15,7 @@ export const getLocalAiHeaders = () => {
         'X-AI-Transcription-Provider': localStorage.getItem('ai_transcription_provider_v1') || 'local',
         'X-AI-Transcription-Model': localStorage.getItem('ai_transcription_model_v1') || 'openai/whisper-large-v3',
     };
-    const baseUrl = localStorage.getItem('ai_base_url_v1') || (provider === 'openrouter' ? 'https://openrouter.ai/api/v1' : '');
+    const baseUrl = resolveAiBaseUrl(provider, localStorage.getItem('ai_base_url_v1') || '');
     if (baseUrl) headers['X-AI-Base-Url'] = baseUrl;
     if (apiKey) headers[provider === 'gemini' ? 'X-Gemini-Key' : 'X-AI-Api-Key'] = apiKey;
     return headers;

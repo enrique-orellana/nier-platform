@@ -1007,6 +1007,13 @@ func (s *Server) process(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("X-AI-Transcription-Provider")), "openrouter") &&
+		strings.TrimSpace(r.Header.Get("X-AI-Api-Key")) == "" && strings.TrimSpace(r.Header.Get("X-Gemini-Key")) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"detail": "OpenRouter API key is required when OpenRouter transcription is selected.",
+		})
+		return
+	}
 	providedSources := 0
 	if payload.URL != "" {
 		providedSources++

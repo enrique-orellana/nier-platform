@@ -223,7 +223,13 @@ def transcribe_video_with_config(
                 emit_log(f"Transcribing chunk {index}/{len(chunks)} with OpenRouter")
             chunk_path = directory_path / f"chunk-{index:04d}.mp3"
             _extract_openrouter_audio_chunk(Path(video_path), start, end, chunk_path)
-            transcript = transcribe_audio_openrouter(str(chunk_path), config)
+            try:
+                transcript = transcribe_audio_openrouter(str(chunk_path), config)
+            except RuntimeError as exc:
+                raise RuntimeError(
+                    f"OpenRouter transcription failed for chunk {index}/{len(chunks)} "
+                    f"({start:.3f}-{end:.3f}s): {exc}"
+                ) from exc
             language = str(transcript.get("language") or language)
             for segment in transcript.get("segments", []):
                 segment_start = float(segment.get("start", 0.0))

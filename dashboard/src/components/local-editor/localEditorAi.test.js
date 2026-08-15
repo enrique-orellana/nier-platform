@@ -17,4 +17,14 @@ describe('local editor AI helpers', () => {
             'X-AI-Base-Url': 'http://localhost:1234',
         });
     });
+
+    it('does not forward a saved local endpoint for OpenRouter', () => {
+        localStorage.setItem('ai_provider_v1', 'openrouter');
+        localStorage.setItem('ai_base_url_v1', 'http://host.docker.internal:1234');
+
+        expect(getLocalAiHeaders()).toMatchObject({
+            'X-AI-Provider': 'openrouter',
+            'X-AI-Base-Url': 'https://openrouter.ai/api/v1',
+        });
+    });
 });
