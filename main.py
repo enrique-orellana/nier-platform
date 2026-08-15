@@ -75,6 +75,17 @@ load_dotenv()
 # --- Constants ---
 ASPECT_RATIO = 9 / 16
 DIRECT_VIDEO_MAX_BYTES = int(os.environ.get("MAX_FILE_SIZE_MB", "2048")) * 1024 * 1024
+DEFAULT_SCENE_FRAME_SKIP = 2
+SCENE_STRATEGY_MAX_DIMENSION = 640
+
+
+def scene_detection_frame_skip() -> int:
+    raw_value = os.environ.get("SCENE_DETECTION_FRAME_SKIP", str(DEFAULT_SCENE_FRAME_SKIP))
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return DEFAULT_SCENE_FRAME_SKIP
+    return value if value >= 0 else DEFAULT_SCENE_FRAME_SKIP
 
 GEMINI_PROMPT_TEMPLATE = """
 You are a senior short-form video editor. Read the ENTIRE transcript and word-level timestamps to choose the 3–15 MOST VIRAL moments for TikTok/IG Reels/YouTube Shorts. Each clip must be between 15 and 60 seconds long.
@@ -364,6 +375,23 @@ def detect_face_candidates(frame):
             
     return candidates
 
+
+def resize_scene_strategy_frame(frame, max_dimension=SCENE_STRATEGY_MAX_DIMENSION):
+    """Bound face-analysis resolution without changing final render inputs."""
+    height, width = frame.shape[:2]
+    longest_side = max(height, width)
+    if longest_side <= max_dimension:
+        return frame
+
+    scale = float(max_dimension) / float(longest_side)
+    resized_width = max(1, round(width * scale))
+    resized_height = max(1, round(height * scale))
+    return cv2.resize(
+        frame,
+        (resized_width, resized_height),
+        interpolation=cv2.INTER_AREA,
+    )
+
 def detect_person_yolo(frame):
     """
     Fallback: Detect largest person using YOLO when face detection fails.
@@ -438,7 +466,12 @@ def create_general_frame(frame, output_width, output_height):
     
     return final_frame
 
-def analyze_scenes_strategy(video_path, scenes):
+def analyze_scenes_strategy(
+    video_path,
+    scenes,
+    *,
+    max_dimension=SCENE_STRATEGY_MAX_DIMENSION,
+):
     """
     Analyzes each scene to determine if it should be TRACK (Single person) or GENERAL (Group/Wide).
     Returns list of strategies corresponding to scenes.
@@ -465,8 +498,9 @@ def analyze_scenes_strategy(video_path, scenes):
             ret, frame = cap.read()
             if not ret: continue
             
-            # Detect faces
-            candidates = detect_face_candidates(frame)
+            # Detect faces on a bounded analysis frame; render frames remain full resolution.
+            analysis_frame = resize_scene_strategy_frame(frame, max_dimension)
+            candidates = detect_face_candidates(analysis_frame)
             face_counts.append(len(candidates))
             
         # Decision Logic
@@ -488,17 +522,20 @@ def analyze_scenes_strategy(video_path, scenes):
     cap.release()
     return strategies
 
-def detect_scenes(video_path):
+def detect_scenes(video_path, *, frame_skip=None):
     try:
         from scenedetect import open_video, SceneManager
         from scenedetect.detectors import ContentDetector
     except ImportError as error:
         raise RuntimeError("PySceneDetect is required for scene analysis") from error
 
+    if frame_skip is None:
+        frame_skip = scene_detection_frame_skip()
+
     video = open_video(video_path)
     scene_manager = SceneManager()
     scene_manager.add_detector(ContentDetector())
-    scene_manager.detect_scenes(video=video)
+    scene_manager.detect_scenes(video=video, frame_skip=frame_skip)
     scene_list = scene_manager.get_scene_list()
     fps = video.frame_rate
     return scene_list, fps
