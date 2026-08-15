@@ -706,7 +706,6 @@ def _codex_chat(
     reasoning_effort: Optional[str] = None,
     images: Optional[Sequence[Any]] = None,
     timeout: float = 300.0,
-    max_output_tokens: Optional[int] = None,
 ) -> str:
     del json_mode
     resolved_model = _normalize_model_for_provider(model or config.text_model, "openai-codex", "text")
@@ -730,9 +729,6 @@ def _codex_chat(
         payload["instructions"] = system_prompt
     if selected_effort:
         payload["reasoning"] = {"effort": selected_effort}
-    if max_output_tokens is not None:
-        payload["max_output_tokens"] = int(max_output_tokens)
-
     text = ""
     deadline = time.monotonic() + timeout if timeout > 0 else time.monotonic()
     auth_refreshed = False
@@ -877,7 +873,6 @@ def chat_completion(
     reasoning_effort: Optional[str] = None,
     images: Optional[Sequence[Any]] = None,
     timeout: float = 300.0,
-    max_output_tokens: Optional[int] = None,
 ) -> str:
     provider = config.normalized_provider()
     if provider == "gemini":
@@ -928,7 +923,6 @@ def chat_completion(
             reasoning_effort=selected_effort,
             images=images,
             timeout=timeout,
-            max_output_tokens=max_output_tokens,
         )
 
     raise ValueError(f"Unsupported AI provider: {config.provider}")
@@ -943,7 +937,6 @@ def chat_json(
     reasoning_effort: Optional[str] = None,
     images: Optional[Sequence[Any]] = None,
     timeout: float = 300.0,
-    max_output_tokens: Optional[int] = None,
 ) -> dict[str, Any]:
     raw = chat_completion(
         config,
@@ -954,7 +947,6 @@ def chat_json(
         reasoning_effort=reasoning_effort,
         images=images,
         timeout=timeout,
-        max_output_tokens=max_output_tokens,
     )
     text = extract_json_text(raw)
     return json.loads(text)

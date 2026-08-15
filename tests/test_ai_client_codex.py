@@ -206,11 +206,10 @@ def test_codex_transport_sends_selected_reasoning_effort(monkeypatch):
     monkeypatch.setattr(ai_client, "get_codex_account_id", lambda: "account")
     monkeypatch.setattr(ai_client.httpx, "Client", FakeCodexStreamClient)
 
-    ai_client.chat_completion(config, "Return JSON", json_mode=True, max_output_tokens=4096)
+    ai_client.chat_completion(config, "Return JSON", json_mode=True)
 
     assert FakeCodexStreamClient.last_payload["model"] == "gpt-5.6-luna"
     assert FakeCodexStreamClient.last_payload["reasoning"] == {"effort": "high"}
-    assert FakeCodexStreamClient.last_payload["max_output_tokens"] == 4096
 
 
 def test_codex_transport_refreshes_once_after_auth_rejection(monkeypatch):

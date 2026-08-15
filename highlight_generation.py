@@ -44,7 +44,6 @@ TRANSCRIPT:
 MAX_PROMPT_CHARS = 48000
 MAX_TRANSCRIPT_CHARS_PER_CHUNK = 36000
 HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS = 120.0
-HIGHLIGHT_MAX_OUTPUT_TOKENS = 4096
 TRANSCRIPTION_CHUNK_SECONDS = 600.0
 OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS = 300.0
 OPENROUTER_TRANSCRIPTION_OVERLAP_SECONDS = 5.0
@@ -343,7 +342,6 @@ def rank_highlights(
                 model=model,
                 reasoning_effort=config.analyze_reasoning_effort,
                 timeout=HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS,
-                max_output_tokens=HIGHLIGHT_MAX_OUTPUT_TOKENS,
             )
         except Exception as exc:
             if emit_log:
