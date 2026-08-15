@@ -35,6 +35,10 @@ func (s *Server) highlights(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) highlightRoute(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/highlights/")
+	if id == "projects" || strings.HasPrefix(id, "projects/") {
+		s.highlightProjects(w, r)
+		return
+	}
 	if id == "" || strings.Contains(id, "/") {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Highlight job not found"})
 		return
