@@ -6,18 +6,26 @@ metadata:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: microk8s-openshorts-workdir
+  name: docker-openshorts-workdir
 spec:
   capacity:
     storage: 50Gi
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: microk8s-migration
+  storageClassName: docker-migration
   volumeMode: Filesystem
   hostPath:
-    path: /home/ubuntu/kubefiles/openshorts-workdir
+    path: /run/desktop/mnt/host/d/openshorts-docker-data/workdir
     type: Directory
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - docker-desktop
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -30,9 +38,9 @@ spec:
   resources:
     requests:
       storage: 50Gi
-  storageClassName: microk8s-migration
+  storageClassName: docker-migration
   volumeMode: Filesystem
-  volumeName: microk8s-openshorts-workdir
+  volumeName: docker-openshorts-workdir
 ---
 apiVersion: v1
 kind: ConfigMap

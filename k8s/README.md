@@ -21,8 +21,16 @@ address from the cluster.
 ## MinIO
 
 The MinIO chart is maintained in
-`D:\workspace\kube-monorepo\minio\standalone`. Deploy it before applying the
-OpenShorts bundle.
+`D:\workspace\kube-monorepo\minio\standalone`. For the migrated Docker Desktop
+cluster, apply `docker-desktop-pv.yaml` and deploy the chart with
+`values-docker-desktop.yaml` before applying the OpenShorts bundle:
+
+```powershell
+kubectl apply -f D:\workspace\kube-monorepo\minio\standalone\docker-desktop-pv.yaml
+helm upgrade --install minio-standalone D:\workspace\kube-monorepo\minio\standalone `
+  -n minio-system --create-namespace `
+  -f D:\workspace\kube-monorepo\minio\standalone\values-docker-desktop.yaml
+```
 
 ## OpenShorts app bundle
 
@@ -74,9 +82,12 @@ Apply the OpenShorts bundle:
 kubectl apply -f k8s/openshorts.yaml
 ```
 
-The bundle declares the OpenShorts workdir PV explicitly. On this WSL
-MicroK8s setup it uses the Linux-native path
-`/home/ubuntu/kubefiles/openshorts-workdir`, not a `/mnt/d` Windows mount.
+The bundle declares the OpenShorts workdir and PostgreSQL PVs explicitly for
+Docker Desktop Kubernetes. They use retained host paths under
+`D:\openshorts-docker-data` (mounted in Kubernetes as
+`/run/desktop/mnt/host/d/openshorts-docker-data`). Keep that directory in place
+when recreating the local cluster; it contains the migrated workdir and
+database-backed project data.
 
 Verify PostgreSQL and backend persistence with:
 
