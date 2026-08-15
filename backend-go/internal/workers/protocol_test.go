@@ -146,7 +146,17 @@ func TestPythonWorkerAdapterSendsJSONLJobRequest(t *testing.T) {
 		WorkerScript: "python_worker.py",
 		Runner:       runner,
 	}
-	job := domain.Job{ID: "job-1", SourceURL: "https://example.com/video.mp4", ClipCount: 4}
+	job := domain.Job{
+		ID:        "job-1",
+		SourceURL: "https://example.com/video.mp4",
+		ClipCount: 4,
+		Metadata: map[string]any{
+			"headers": map[string]string{
+				"X-AI-Provider": "openrouter",
+				"X-AI-Api-Key":  "secret",
+			},
+		},
+	}
 	var logs []string
 
 	if err := adapter.Run(context.Background(), job, "output/job-1", func(message string) { logs = append(logs, message) }); err != nil {
@@ -169,6 +179,10 @@ func TestPythonWorkerAdapterSendsJSONLJobRequest(t *testing.T) {
 	}
 	if runner.request["source_url"] != job.SourceURL || runner.request["output_dir"] != "output/job-1" {
 		t.Fatalf("unexpected job inputs: %#v", runner.request)
+	}
+	headers, ok := runner.request["headers"].(map[string]string)
+	if !ok || headers["X-AI-Provider"] != "openrouter" || headers["X-AI-Api-Key"] != "secret" {
+		t.Fatalf("clip-generation AI headers were not forwarded: %#v", runner.request)
 	}
 	if len(logs) != 1 || logs[0] != "worker started" {
 		t.Fatalf("unexpected logs: %#v", logs)

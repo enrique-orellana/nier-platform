@@ -51,6 +51,7 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='google.protobuf')
 from ai_client import load_ai_config, chat_json
+from highlight_generation import transcribe_video_with_config
 from master_policy import master_video_encode_args, choose_master_spec, master_video_filter
 from media_probe import probe_media
 from render_manifest import register_asset, register_remote_asset, save_manifest_atomic
@@ -1383,7 +1384,18 @@ def render_clip_plan(
     return rendered_clips
 
 
-def transcribe_video(video_path):
+def transcribe_video(video_path, *, duration_seconds=None, emit_log=None, headers=None):
+    ai_config = load_ai_config(headers)
+    if ai_config.transcription_provider == "openrouter":
+        if duration_seconds is None:
+            duration_seconds = probe_media(video_path).duration_seconds
+        return transcribe_video_with_config(
+            video_path,
+            duration_seconds,
+            emit_log,
+            headers=headers,
+        )
+
     print("🎙️  Transcribing video with Faster-Whisper (CPU Optimized)...")
     from faster_whisper import WhisperModel
     
@@ -1797,14 +1809,12 @@ if __name__ == '__main__':
         )
     else:
         # 3. Transcribe
+        duration = source_analysis.total_frames / source_analysis.source_fps
         with job_metrics.timed("transcription"):
-            transcript = transcribe_video(processing_video)
+            transcript = transcribe_video(processing_video, duration_seconds=duration)
 
         source_context_record = prepare_source_context(args.source_url, transcript)
         
-        # Get duration
-        duration = source_analysis.total_frames / source_analysis.source_fps
-
         # 4. Gemini Analysis
         with job_metrics.timed("ai_planning"):
             clips_data = get_viral_clips(

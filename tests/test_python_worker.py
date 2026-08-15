@@ -5,7 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from python_worker import _legacy_api, build_clip_generation_command, handle_request, load_generation_result, parse_request
+from python_worker import (
+    _legacy_api,
+    build_clip_generation_command,
+    build_clip_generation_environment,
+    handle_request,
+    load_generation_result,
+    parse_request,
+)
 
 
 def test_parse_request_requires_id_and_operation():
@@ -55,6 +62,26 @@ def test_build_clip_generation_command_rejects_missing_source():
 
     with pytest.raises(ValueError, match="exactly one source"):
         build_clip_generation_command(request)
+
+
+def test_clip_generation_environment_uses_request_ai_headers(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "lmstudio")
+
+    environment = build_clip_generation_environment(
+        {
+            "headers": {
+                "X-AI-Provider": "openrouter",
+                "X-AI-Api-Key": "secret",
+                "X-AI-Base-Url": "https://openrouter.ai/api/v1",
+                "X-AI-Analyze-Model": "openai/gpt-4o-mini",
+            }
+        }
+    )
+
+    assert environment["AI_PROVIDER"] == "openrouter"
+    assert environment["AI_API_KEY"] == "secret"
+    assert environment["AI_BASE_URL"] == "https://openrouter.ai/api/v1"
+    assert environment["AI_ANALYZE_MODEL"] == "openai/gpt-4o-mini"
 
 
 def test_handle_request_dispatches_highlight_generation(monkeypatch, capsys, tmp_path):

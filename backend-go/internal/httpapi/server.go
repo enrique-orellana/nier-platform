@@ -1071,8 +1071,10 @@ func (s *Server) process(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Failed to initialize job"})
 		return
 	}
+	s.setHighlightRuntimeMetadata(job.ID, map[string]any{"headers": translationHeaders(r)})
 	if s.scheduler != nil {
 		if err := s.scheduler.Submit(r.Context(), job.ID); err != nil {
+			s.releaseHighlightRuntimeMetadata(job.ID)
 			_, _ = s.store.Transition(r.Context(), job.ID, domain.JobStatusFailed, err.Error())
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"detail": "Job scheduler unavailable"})
 			return

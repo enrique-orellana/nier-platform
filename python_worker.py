@@ -74,6 +74,20 @@ def load_generation_result(output_dir: str) -> dict[str, Any]:
     }
 
 
+def build_clip_generation_environment(request: Mapping[str, Any]) -> dict[str, str]:
+    """Translate per-job AI headers into the environment consumed by main.py."""
+    from ai_client import ai_config_to_env, load_ai_config
+
+    environment = os.environ.copy()
+    headers = request.get("headers") or {}
+    if headers:
+        environment.update(ai_config_to_env(load_ai_config(headers)))
+    for key, value in (request.get("environment") or {}).items():
+        if value is not None:
+            environment[str(key)] = str(value)
+    return environment
+
+
 def _emit(event: Mapping[str, Any]) -> None:
     sys.stdout.write(json.dumps(dict(event), ensure_ascii=False) + "\n")
     sys.stdout.flush()
@@ -81,10 +95,7 @@ def _emit(event: Mapping[str, Any]) -> None:
 
 def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any] | None]:
     command = build_clip_generation_command(request)
-    environment = os.environ.copy()
-    for key, value in (request.get("environment") or {}).items():
-        if value is not None:
-            environment[str(key)] = str(value)
+    environment = build_clip_generation_environment(request)
 
     process = subprocess.Popen(
         [sys.executable, *command],

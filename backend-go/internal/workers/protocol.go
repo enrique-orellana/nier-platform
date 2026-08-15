@@ -150,19 +150,19 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 		"output_dir": outputDir,
 		"clip_count": job.ClipCount,
 	}
+	if headers, ok := job.Metadata["headers"].(map[string]string); ok {
+		request["headers"] = cloneHeaders(headers)
+	} else if headers, ok := job.Metadata["headers"].(map[string]any); ok {
+		values := make(map[string]string, len(headers))
+		for key, value := range headers {
+			if text, ok := value.(string); ok {
+				values[key] = text
+			}
+		}
+		request["headers"] = values
+	}
 	if job.Kind == "highlight-generation" {
 		request["operation"] = "highlight_generation"
-		if headers, ok := job.Metadata["headers"].(map[string]string); ok {
-			request["headers"] = headers
-		} else if headers, ok := job.Metadata["headers"].(map[string]any); ok {
-			values := make(map[string]string, len(headers))
-			for key, value := range headers {
-				if text, ok := value.(string); ok {
-					values[key] = text
-				}
-			}
-			request["headers"] = values
-		}
 		if value, ok := job.Metadata["min_minutes"]; ok {
 			request["min_minutes"] = value
 		}
@@ -223,6 +223,14 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 		return nil, protocolErr
 	}
 	return result, nil
+}
+
+func cloneHeaders(headers map[string]string) map[string]string {
+	clone := make(map[string]string, len(headers))
+	for key, value := range headers {
+		clone[key] = value
+	}
+	return clone
 }
 
 var _ io.Writer = (*lineSink)(nil)
