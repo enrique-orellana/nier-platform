@@ -15,8 +15,7 @@ When `Streamer Stack` is selected:
 
 - Facecam size is selectable as Small, Medium, or Large.
 - Medium is the default.
-- The AI-generated `viral_hook_text` is enabled by default.
-- The hook can be disabled before generation.
+- The AI-generated `viral_hook_text` remains optional, matching the existing hook workflow.
 - When enabled, the hook is added in a separate post-generation pass. It uses bold yellow text with a black outline and is placed across the facecam/gameplay boundary, matching the reference style.
 - Subtitles remain independent and optional through the existing subtitle workflow.
 
@@ -58,7 +57,7 @@ The persisted format identifier is `streamer_stack`; requests that omit the new 
 
 ## Hook and subtitle behavior
 
-The Streamer Stack generation path uses the existing clip-level `viral_hook_text` value. Hook rendering is enabled by default for this format, but it runs only after the split video has been generated. The post-generation pass uses a dedicated streamer visual treatment. The existing hook action and its current styling remain unchanged for Standard clips and for later manual hook edits.
+The Streamer Stack generation path uses the existing clip-level `viral_hook_text` value only when the user enables the optional hook. The post-generation pass runs after the split video has been generated and uses a dedicated streamer visual treatment. The existing hook action and its current styling remain unchanged for Standard clips and for later manual hook edits.
 
 Subtitles are not automatically burned by the new format. Existing subtitle generation, translation, and editor controls remain available after the clip is generated. Applying subtitles to a Streamer Stack clip should operate on the already-composed 9:16 output.
 
