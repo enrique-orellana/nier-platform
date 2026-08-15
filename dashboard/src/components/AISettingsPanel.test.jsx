@@ -4,6 +4,30 @@ import { describe, expect, it, vi } from 'vitest';
 import AISettingsPanel from './AISettingsPanel';
 
 describe('AISettingsPanel', () => {
+  it('shows OpenRouter as a cloud provider with a key-only setup', () => {
+    render(
+      <AISettingsPanel
+        aiProvider="openrouter"
+        aiBaseUrl=""
+        apiKey=""
+        aiQualityPreset="balanced"
+        aiTextModel="openai/gpt-4o-mini"
+        aiAnalyzeModel="openai/gpt-4o-mini"
+        aiVisionModel="openai/gpt-4o-mini"
+        aiImageModel=""
+        transcriptionProvider="local"
+        transcriptionModel="openai/whisper-large-v3"
+        lmStudioAvailable={false}
+        lmStudioModels={{ textModels: [], visionModels: [] }}
+      />,
+    );
+
+    expect(screen.getAllByRole('option', { name: /OpenRouter/i })).toHaveLength(2);
+    expect(screen.getByPlaceholderText('sk-or-v1-...')).toBeInTheDocument();
+    expect(screen.getByText(/only the API key is required/i)).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /OpenShorts local/i })).toBeInTheDocument();
+  });
+
   it('shows lmstudio as an available local provider before discovery', () => {
     render(
       <AISettingsPanel

@@ -55,6 +55,22 @@ def test_transcribe_video_in_chunks_reuses_model_offsets_timestamps_and_cleans_c
     assert all(not destination.exists() for _start, _end, destination in extracted)
 
 
+def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch, tmp_path):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    config = Mock(transcription_provider="openrouter")
+    monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
+    monkeypatch.setattr(highlight_generation, "_extract_audio_chunk", lambda _source, _start, _end, destination: destination.write_bytes(b"audio"))
+    transcribe = Mock(return_value={"text": "Cloud text", "language": "en", "segments": [{"start": 1, "end": 4, "text": "Cloud text"}]})
+    monkeypatch.setattr(highlight_generation, "transcribe_audio_openrouter", transcribe)
+
+    result = highlight_generation.transcribe_video_with_config(source, 60.0, headers={"X-AI-Provider": "openrouter"})
+
+    assert result["text"] == "Cloud text"
+    assert result["segments"] == [{"text": "Cloud text", "start": 1.0, "end": 4.0, "words": []}]
+    transcribe.assert_called_once()
+
+
 def test_rank_highlights_uses_existing_ai_configuration(monkeypatch):
     transcript = {
         "text": "A useful explanation.",

@@ -9,7 +9,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from ai_client import chat_json, load_ai_config
+from ai_client import chat_json, load_ai_config, transcribe_audio_openrouter
 from highlight_selection import normalize_target, select_segments
 from media_probe import probe_media
 
@@ -145,6 +145,47 @@ def transcribe_video_in_chunks(
         "segments": segments,
         "language": language,
     }
+
+
+def transcribe_video_with_config(
+    video_path: str | Path,
+    duration_seconds: float,
+    emit_log: Callable[[str], None] | None = None,
+    *,
+    headers: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Use the configured transcription provider while reusing local OpenShorts transcription by default."""
+    config = load_ai_config(headers)
+    if config.transcription_provider != "openrouter":
+        return transcribe_video_in_chunks(video_path, duration_seconds, emit_log)
+
+    chunks = plan_transcription_chunks(duration_seconds)
+    if not chunks:
+        raise ValueError("source video has no duration")
+    segments: list[dict[str, Any]] = []
+    language = "und"
+    with tempfile.TemporaryDirectory(prefix="openshorts-openrouter-transcription-") as directory:
+        directory_path = Path(directory)
+        for index, (start, end) in enumerate(chunks, start=1):
+            if emit_log:
+                emit_log(f"Transcribing chunk {index}/{len(chunks)} with OpenRouter")
+            chunk_path = directory_path / f"chunk-{index:04d}.wav"
+            _extract_audio_chunk(Path(video_path), start, end, chunk_path)
+            transcript = transcribe_audio_openrouter(str(chunk_path), config)
+            language = str(transcript.get("language") or language)
+            for segment in transcript.get("segments", []):
+                segment_start = float(segment.get("start", 0.0))
+                segment_end = float(segment.get("end", 0.0))
+                if segment_end <= segment_start:
+                    segment_end = min(end - start, max(segment_start + 0.1, end - start))
+                segments.append({
+                    "text": str(segment.get("text") or "").strip(),
+                    "start": round(start + segment_start, 3),
+                    "end": round(min(duration_seconds, start + segment_end), 3),
+                    "words": [],
+                })
+            chunk_path.unlink(missing_ok=True)
+    return {"text": " ".join(segment["text"] for segment in segments).strip(), "segments": segments, "language": language}
 
 
 def _analysis_chunks(transcript: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -295,8 +336,13 @@ def run_highlight_generation(request: Mapping[str, Any], emit_log: Callable[[str
     ideal_minutes = request.get("ideal_minutes")
     target = normalize_target(source_duration, min_minutes=min_minutes, ideal_minutes=ideal_minutes)
 
-    emit_log("Transcribing source with Faster-Whisper")
-    transcript = transcribe_video_in_chunks(source_path, source_duration, emit_log)
+    emit_log("Transcribing source with the configured provider")
+    transcript = transcribe_video_with_config(
+        source_path,
+        source_duration,
+        emit_log,
+        headers=request.get("headers") if isinstance(request.get("headers"), Mapping) else None,
+    )
     emit_log("Analyzing transcript with the configured AI provider")
     ranked = rank_highlights(
         transcript,

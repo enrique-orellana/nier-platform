@@ -146,6 +146,9 @@ const SESSION_KEY = 'openshorts_session';
 const SESSION_MAX_AGE = 3600000; // 1 hour (matches server job retention)
 const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
 const GEMINI_VISION_MODEL = 'gemini-3.1-flash-image-preview';
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+const OPENROUTER_DEFAULT_MODEL = 'openai/gpt-4o-mini';
+const OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL = 'openai/whisper-large-v3';
 const normalizeQualityPreset = (value) => {
   const preset = (value || '').trim().toLowerCase();
   if (preset === 'fast') return 'lite';
@@ -185,7 +188,7 @@ const pollJob = async (jobId) => {
 };
 
 function App() {
-  const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_key') || '');
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('ai_api_key_v1') || localStorage.getItem('gemini_key') || '');
   const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('ai_provider_v1') || import.meta.env.VITE_AI_PROVIDER || 'gemini');
   const [aiBaseUrl, setAiBaseUrl] = useState(() => localStorage.getItem('ai_base_url_v1') || CONFIGURED_LMSTUDIO_BASE_URL || '');
   const [aiQualityPreset, setAiQualityPreset] = useState(() => normalizeQualityPreset(localStorage.getItem('ai_quality_preset_v1') || CONFIGURED_AI_QUALITY_PRESET || 'balanced'));
@@ -196,6 +199,8 @@ function App() {
   const [aiTextEffort, setAiTextEffort] = useState(() => localStorage.getItem('ai_text_effort_v1') || 'auto');
   const [aiAnalyzeEffort, setAiAnalyzeEffort] = useState(() => localStorage.getItem('ai_analyze_effort_v1') || 'auto');
   const [aiVisionEffort, setAiVisionEffort] = useState(() => localStorage.getItem('ai_vision_effort_v1') || 'auto');
+  const [transcriptionProvider, setTranscriptionProvider] = useState(() => localStorage.getItem('ai_transcription_provider_v1') || 'local');
+  const [transcriptionModel, setTranscriptionModel] = useState(() => localStorage.getItem('ai_transcription_model_v1') || OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL);
   // Social API State - Load encrypted or plain
   const [uploadPostKey, setUploadPostKey] = useState(() => {
     const stored = localStorage.getItem('uploadPostKey_v3');
@@ -473,7 +478,7 @@ function App() {
     }
   }, [aiProvider, aiBaseUrl, detectLmStudio]);
 
-  const needsAiConnection = (aiProvider === 'gemini' && !apiKey)
+  const needsAiConnection = ((aiProvider === 'gemini' || aiProvider === 'openrouter') && !apiKey)
     || (aiProvider === 'openai-codex' && !codexStatus.connected);
   const lastProviderRef = useRef(aiProvider);
 
@@ -517,6 +522,7 @@ function App() {
   };
 
   const shouldSendAiBaseUrl = useCallback(() => {
+    if (aiProvider === 'openrouter') return true;
     if (aiProvider !== 'lmstudio') return false;
     return !!aiBaseUrl && !!aiBaseUrl.trim();
   }, [aiProvider, aiBaseUrl]);
@@ -569,7 +575,10 @@ function App() {
   useEffect(() => {
     // Encrypt Gemini Key too for consistency if desired, but user asked specifically about Social integration not saving well.
     // For now keeping gemini plain for compatibility unless requested.
-    if (apiKey) localStorage.setItem('gemini_key', apiKey);
+    if (apiKey) {
+      localStorage.setItem('gemini_key', apiKey);
+      localStorage.setItem('ai_api_key_v1', apiKey);
+    }
   }, [apiKey]);
 
   useEffect(() => {
@@ -613,6 +622,14 @@ function App() {
   }, [aiVisionEffort]);
 
   useEffect(() => {
+    localStorage.setItem('ai_transcription_provider_v1', transcriptionProvider);
+  }, [transcriptionProvider]);
+
+  useEffect(() => {
+    localStorage.setItem('ai_transcription_model_v1', transcriptionModel);
+  }, [transcriptionModel]);
+
+  useEffect(() => {
     const previousProvider = lastProviderRef.current;
     lastProviderRef.current = aiProvider;
 
@@ -634,6 +651,15 @@ function App() {
       setAiAnalyzeModel((current) => (!current || current === '') ? GEMINI_TEXT_MODEL : current);
       setAiVisionModel((current) => (!current || current === '') ? GEMINI_VISION_MODEL : current);
       setAiImageModel((current) => (!current || current === '') ? GEMINI_VISION_MODEL : current);
+      return;
+    }
+
+    if (aiProvider === 'openrouter') {
+      setAiBaseUrl(OPENROUTER_BASE_URL);
+      setAiTextModel((current) => current || OPENROUTER_DEFAULT_MODEL);
+      setAiAnalyzeModel((current) => current || OPENROUTER_DEFAULT_MODEL);
+      setAiVisionModel((current) => current || OPENROUTER_DEFAULT_MODEL);
+      setAiImageModel('');
       return;
     }
 
@@ -718,10 +744,12 @@ function App() {
       'X-AI-Reasoning-Effort': aiTextEffort,
       'X-AI-Analyze-Reasoning-Effort': aiAnalyzeEffort,
       'X-AI-Vision-Reasoning-Effort': aiVisionEffort,
+      'X-AI-Transcription-Provider': transcriptionProvider,
+      'X-AI-Transcription-Model': transcriptionModel,
     };
 
     if (shouldSendAiBaseUrl()) {
-      headers['X-AI-Base-Url'] = aiBaseUrl;
+      headers['X-AI-Base-Url'] = aiProvider === 'openrouter' ? (aiBaseUrl || OPENROUTER_BASE_URL) : aiBaseUrl;
     }
 
     if (aiProvider === 'gemini' && apiKey) {
@@ -801,7 +829,7 @@ function App() {
 
 
   const handleProcess = async (data) => {
-    if (aiProvider === 'gemini' && !apiKey) {
+    if ((aiProvider === 'gemini' || aiProvider === 'openrouter') && !apiKey) {
       setShowKeyModal(true);
       return;
     }
@@ -1034,7 +1062,7 @@ function App() {
                   title="Click to configure your API keys"
                 >
                   <AlertTriangle size={12} />
-                  {aiProvider === 'openai-codex' ? 'Connect ChatGPT' : 'Gemini API Key Missing'}
+                  {aiProvider === 'openai-codex' ? 'Connect ChatGPT' : `${aiProvider === 'openrouter' ? 'OpenRouter' : 'Gemini'} API Key Missing`}
                 </button>
               )}
             </div>
@@ -1047,11 +1075,11 @@ function App() {
             <div className="flex items-center gap-3 text-sm text-amber-200">
               <KeyRound size={16} className="shrink-0 text-amber-400" />
               <div>
-                <span className="font-semibold">{aiProvider === 'openai-codex' ? 'ChatGPT connection required.' : 'Gemini API key missing.'}</span>{' '}
+                <span className="font-semibold">{aiProvider === 'openai-codex' ? 'ChatGPT connection required.' : `${aiProvider === 'openrouter' ? 'OpenRouter' : 'Gemini'} API key missing.`}</span>{' '}
                 <span className="text-amber-200/80">
                   {aiProvider === 'openai-codex'
                     ? 'Connect your ChatGPT account in Settings to use OpenAI Codex. Upload-Post is optional and only needed for social publishing.'
-                    : 'Set your Gemini API key to use OpenShorts. Upload-Post is optional and only needed if you want social publishing.'}
+                    : `Set your ${aiProvider === 'openrouter' ? 'OpenRouter' : 'Gemini'} API key to use OpenShorts. Upload-Post is optional and only needed if you want social publishing.`}
                 </span>
               </div>
             </div>
@@ -1113,6 +1141,10 @@ function App() {
                 setAiAnalyzeEffort={setAiAnalyzeEffort}
                 aiVisionEffort={aiVisionEffort}
                 setAiVisionEffort={setAiVisionEffort}
+                transcriptionProvider={transcriptionProvider}
+                setTranscriptionProvider={setTranscriptionProvider}
+                transcriptionModel={transcriptionModel}
+                setTranscriptionModel={setTranscriptionModel}
                 lmStudioAvailable={lmStudioAvailable}
                 lmStudioModels={lmStudioModels}
                 codexStatus={codexStatus}

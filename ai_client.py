@@ -19,6 +19,9 @@ from codex_auth import (
 
 GEMINI_TEXT_MODEL = "gemini-2.5-flash"
 GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_DEFAULT_MODEL = "openai/gpt-4o-mini"
+OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL = "openai/whisper-large-v3"
 CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.4")
 CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
 AUTO_MODEL_VALUES = {"", "auto", "default"}
@@ -43,6 +46,8 @@ class AIConfig:
     reasoning_effort: str = ""
     analyze_reasoning_effort: str = ""
     vision_reasoning_effort: str = ""
+    transcription_provider: str = "local"
+    transcription_model: str = OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL
 
     def normalized_provider(self) -> str:
         provider = (self.provider or "gemini").strip().lower()
@@ -59,11 +64,16 @@ class AIConfig:
     def is_openai_codex(self) -> bool:
         return self.normalized_provider() == "openai-codex"
 
+    def is_openrouter(self) -> bool:
+        return self.normalized_provider() == "openrouter"
+
     def resolved_base_url(self) -> str:
         if not self.base_url:
-            return ""
+            return OPENROUTER_BASE_URL if self.is_openrouter() else ""
 
         cleaned = self.base_url.strip().rstrip("/")
+        if self.is_openrouter():
+            return cleaned
         parsed = urlsplit(cleaned)
         if not parsed.scheme or not parsed.netloc:
             return cleaned
@@ -92,6 +102,8 @@ def _normalize_model_for_provider(model: str, provider: str, kind: str) -> str:
             return GEMINI_VISION_MODEL
     if provider == "lmstudio" and _is_placeholder_model(cleaned, provider):
         return ""
+    if provider == "openrouter" and _is_placeholder_model(cleaned, provider):
+        return OPENROUTER_DEFAULT_MODEL
     return cleaned
 
 
@@ -131,33 +143,33 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
     base_url = _pick(
         source,
         "X-AI-Base-Url",
-        "AI_BASE_URL",
-        default="",
+        "OPENROUTER_BASE_URL" if provider_normalized == "openrouter" else "AI_BASE_URL",
+        default=OPENROUTER_BASE_URL if provider_normalized == "openrouter" else "",
     )
 
     text_model = _pick(
         source,
         "X-AI-Model",
-        "AI_MODEL",
-        default=GEMINI_TEXT_MODEL if provider_normalized == "gemini" else "",
+        "OPENROUTER_MODEL" if provider_normalized == "openrouter" else "AI_MODEL",
+        default=GEMINI_TEXT_MODEL if provider_normalized == "gemini" else OPENROUTER_DEFAULT_MODEL if provider_normalized == "openrouter" else "",
     )
     analyze_model = _pick(
         source,
         "X-AI-Analyze-Model",
-        "AI_ANALYZE_MODEL",
-        default=GEMINI_TEXT_MODEL if provider_normalized == "gemini" else "",
+        "OPENROUTER_ANALYZE_MODEL" if provider_normalized == "openrouter" else "AI_ANALYZE_MODEL",
+        default=GEMINI_TEXT_MODEL if provider_normalized == "gemini" else OPENROUTER_DEFAULT_MODEL if provider_normalized == "openrouter" else "",
     )
     vision_model = _pick(
         source,
         "X-AI-Vision-Model",
-        "AI_VISION_MODEL",
-        default=GEMINI_VISION_MODEL if provider_normalized == "gemini" else "",
+        "OPENROUTER_VISION_MODEL" if provider_normalized == "openrouter" else "AI_VISION_MODEL",
+        default=GEMINI_VISION_MODEL if provider_normalized == "gemini" else OPENROUTER_DEFAULT_MODEL if provider_normalized == "openrouter" else "",
     )
     image_model = _pick(
         source,
         "X-AI-Image-Model",
-        "AI_IMAGE_MODEL",
-        default=GEMINI_VISION_MODEL if provider_normalized == "gemini" else "",
+        "OPENROUTER_IMAGE_MODEL" if provider_normalized == "openrouter" else "AI_IMAGE_MODEL",
+        default=GEMINI_VISION_MODEL if provider_normalized == "gemini" else OPENROUTER_DEFAULT_MODEL if provider_normalized == "openrouter" else "",
     )
     reasoning_effort = _normalize_reasoning_effort(
         _pick(source, "X-AI-Reasoning-Effort", "AI_REASONING_EFFORT", default="")
@@ -179,6 +191,21 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         )
     )
 
+    transcription_provider = _pick(
+        source,
+        "X-AI-Transcription-Provider",
+        "AI_TRANSCRIPTION_PROVIDER",
+        default="local",
+    ).strip().lower()
+    if transcription_provider in {"openshorts-local", "local-editor", "faster-whisper"}:
+        transcription_provider = "local"
+    transcription_model = _pick(
+        source,
+        "X-AI-Transcription-Model",
+        "AI_TRANSCRIPTION_MODEL",
+        default=OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL,
+    )
+
     text_model = _normalize_model_for_provider(text_model, provider_normalized, "text")
     analyze_model = _normalize_model_for_provider(analyze_model, provider_normalized, "analysis")
     vision_model = _normalize_model_for_provider(vision_model, provider_normalized, "vision")
@@ -195,6 +222,8 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         reasoning_effort=reasoning_effort,
         analyze_reasoning_effort=analyze_reasoning_effort,
         vision_reasoning_effort=vision_reasoning_effort,
+        transcription_provider=transcription_provider,
+        transcription_model=transcription_model,
     )
 
 
@@ -209,6 +238,8 @@ def ai_config_to_env(config: AIConfig) -> dict[str, str]:
         "AI_REASONING_EFFORT": config.reasoning_effort,
         "AI_ANALYZE_REASONING_EFFORT": config.analyze_reasoning_effort,
         "AI_VISION_REASONING_EFFORT": config.vision_reasoning_effort,
+        "AI_TRANSCRIPTION_PROVIDER": config.transcription_provider,
+        "AI_TRANSCRIPTION_MODEL": config.transcription_model,
     }
     if config.api_key:
         env["AI_API_KEY"] = config.api_key
@@ -260,6 +291,46 @@ def _build_bearer_headers(api_key: str) -> dict[str, str]:
     if not api_key:
         return {}
     return {"Authorization": f"Bearer {api_key}"}
+
+
+def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: float = 300.0) -> dict[str, Any]:
+    """Transcribe an extracted audio chunk through OpenRouter's audio endpoint."""
+    with open(audio_path, "rb") as handle:
+        encoded_audio = base64.b64encode(handle.read()).decode("ascii")
+    suffix = os.path.splitext(audio_path)[1].lower().lstrip(".") or "wav"
+    payload = {
+        "model": config.transcription_model or OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL,
+        "input_audio": {"data": encoded_audio, "format": suffix},
+        "response_format": "verbose_json",
+    }
+    with httpx.Client(timeout=timeout) as client:
+        response = client.post(
+            f"{config.resolved_base_url()}/audio/transcriptions",
+            headers={**_build_bearer_headers(config.api_key), "Content-Type": "application/json"},
+            json=payload,
+        )
+    response.raise_for_status()
+    result = response.json()
+    if not isinstance(result, Mapping):
+        raise RuntimeError("OpenRouter returned an invalid transcription response")
+    text = str(result.get("text") or "").strip()
+    if not text:
+        raise RuntimeError("OpenRouter returned an empty transcription")
+    segments = []
+    for raw_segment in result.get("segments", []) or []:
+        if not isinstance(raw_segment, Mapping):
+            continue
+        try:
+            start = float(raw_segment.get("start"))
+            end = float(raw_segment.get("end"))
+        except (TypeError, ValueError):
+            continue
+        segment_text = str(raw_segment.get("text") or "").strip()
+        if segment_text and end > start:
+            segments.append({"start": start, "end": end, "text": segment_text, "words": []})
+    if not segments:
+        segments = [{"start": 0.0, "end": 0.0, "text": text, "words": []}]
+    return {"text": text, "segments": segments, "language": str(result.get("language") or "und")}
 
 
 def _normalize_lmstudio_model(model: Mapping[str, Any]) -> Optional[dict[str, Any]]:
@@ -688,6 +759,46 @@ def _lmstudio_chat(
     return ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
 
 
+def _openrouter_chat(
+    config: AIConfig,
+    prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    json_mode: bool = False,
+    model: Optional[str] = None,
+    images: Optional[Sequence[Any]] = None,
+    timeout: float = 300.0,
+) -> str:
+    url = f"{config.resolved_base_url()}/chat/completions"
+    resolved_model = _normalize_model_for_provider(
+        model or config.text_model,
+        "openrouter",
+        "vision" if images else "text",
+    )
+    messages: list[dict[str, Any]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append(_build_openai_message(prompt, images))
+
+    payload: dict[str, Any] = {
+        "model": resolved_model,
+        "messages": messages,
+        "temperature": 0.2,
+    }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+
+    with httpx.Client(timeout=timeout) as client:
+        response = client.post(
+            url,
+            headers=_build_bearer_headers(config.api_key),
+            json=payload,
+        )
+    response.raise_for_status()
+    data = response.json()
+    return ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+
+
 def chat_completion(
     config: AIConfig,
     prompt: str,
@@ -712,6 +823,17 @@ def chat_completion(
 
     if provider == "lmstudio":
         return _lmstudio_chat(
+            config,
+            prompt,
+            system_prompt=system_prompt,
+            json_mode=json_mode,
+            model=model or config.text_model,
+            images=images,
+            timeout=timeout,
+        )
+
+    if provider == "openrouter":
+        return _openrouter_chat(
             config,
             prompt,
             system_prompt=system_prompt,

@@ -8,8 +8,8 @@ import {
 
 describe('lmStudio helpers', () => {
   it('shows lmstudio only when discovery is available', () => {
-    expect(buildVisibleProviders({ lmStudioAvailable: false })).toEqual(['gemini', 'lmstudio', 'openai-codex']);
-    expect(buildVisibleProviders({ lmStudioAvailable: true })).toEqual(['gemini', 'lmstudio', 'openai-codex']);
+    expect(buildVisibleProviders({ lmStudioAvailable: false })).toEqual(['gemini', 'openrouter', 'lmstudio', 'openai-codex']);
+    expect(buildVisibleProviders({ lmStudioAvailable: true })).toEqual(['gemini', 'openrouter', 'lmstudio', 'openai-codex']);
   });
 
   it('keeps the current provider when lmstudio disappears', () => {

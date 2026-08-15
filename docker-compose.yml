@@ -26,10 +26,12 @@ services:
       - ./output:/app/output
     environment:
       - DATABASE_URL=postgres://openshorts:openshorts-local@db:5432/openshorts
-      - AI_PROVIDER=ollama
-      - AI_BASE_URL=http://host.docker.internal:11434
-      - AI_MODEL=qwen3:latest
-      - AI_VISION_MODEL=qwen2.5vl:latest
+      - AI_PROVIDER=openrouter
+      - AI_BASE_URL=https://openrouter.ai/api/v1
+      - AI_MODEL=openai/gpt-4o-mini
+      - AI_ANALYZE_MODEL=openai/gpt-4o-mini
+      - AI_TRANSCRIPTION_PROVIDER=local
+      - AI_TRANSCRIPTION_MODEL=openai/whisper-large-v3
     restart: unless-stopped
     depends_on:
       db:
@@ -44,10 +46,12 @@ services:
       - ./dashboard:/app
       - /app/node_modules
     environment:
-      - VITE_AI_PROVIDER=ollama
-      - VITE_AI_BASE_URL=http://localhost:11434
-      - VITE_AI_MODEL=qwen3:latest
-      - VITE_AI_VISION_MODEL=qwen2.5vl:latest
+      - VITE_AI_PROVIDER=openrouter
+      - VITE_AI_BASE_URL=https://openrouter.ai/api/v1
+      - VITE_AI_MODEL=openai/gpt-4o-mini
+      - VITE_AI_ANALYZE_MODEL=openai/gpt-4o-mini
+      - VITE_AI_TRANSCRIPTION_PROVIDER=local
+      - VITE_AI_TRANSCRIPTION_MODEL=openai/whisper-large-v3
       - VITE_BACKEND_PROXY_TARGET=http://backend:8000
       - VITE_RENDERER_PROXY_TARGET=http://renderer:3100
     restart: unless-stopped

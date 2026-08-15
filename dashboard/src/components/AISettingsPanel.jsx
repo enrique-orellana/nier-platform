@@ -20,6 +20,10 @@ export default function AISettingsPanel({
   setAiVisionModel,
   aiImageModel,
   setAiImageModel,
+  transcriptionProvider = 'local',
+  setTranscriptionProvider = () => {},
+  transcriptionModel = 'openai/whisper-large-v3',
+  setTranscriptionModel = () => {},
   aiTextEffort = 'auto',
   setAiTextEffort = () => {},
   aiAnalyzeEffort = 'auto',
@@ -40,6 +44,7 @@ export default function AISettingsPanel({
 }) {
   const providerOptions = buildVisibleProviders({ lmStudioAvailable });
   const isCodex = aiProvider === 'openai-codex';
+  const isOpenRouter = aiProvider === 'openrouter';
   const textOptions = aiProvider === 'lmstudio' ? lmStudioModels.textModels : null;
   const visionOptions = aiProvider === 'lmstudio' ? lmStudioModels.visionModels : null;
   const codexTextOptions = codexModels.models || [];
@@ -108,6 +113,7 @@ export default function AISettingsPanel({
           <span className="block text-sm text-zinc-400 mb-2">Provider</span>
           <select value={aiProvider} onChange={(e) => setAiProvider(e.target.value)} className="input-field">
             {providerOptions.includes('gemini') && <option value="gemini">Gemini (Cloud)</option>}
+            {providerOptions.includes('openrouter') && <option value="openrouter">OpenRouter</option>}
             {providerOptions.includes('lmstudio') && <option value="lmstudio">LM Studio (Local)</option>}
             {providerOptions.includes('openai-codex') && <option value="openai-codex">OpenAI Codex (ChatGPT)</option>}
           </select>
@@ -156,7 +162,7 @@ export default function AISettingsPanel({
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               className="input-field"
-              placeholder={aiProvider === 'gemini' ? 'AIza...' : 'Optional'}
+              placeholder={aiProvider === 'gemini' ? 'AIza...' : isOpenRouter ? 'sk-or-v1-...' : 'Optional'}
             />
           </label>
         )}
@@ -165,13 +171,14 @@ export default function AISettingsPanel({
             <span className="block text-sm text-zinc-400 mb-2">Base URL</span>
             <input
               type="text"
-              value={aiBaseUrl}
+              value={isOpenRouter ? (aiBaseUrl || 'https://openrouter.ai/api/v1') : aiBaseUrl}
               onChange={(e) => setAiBaseUrl(e.target.value)}
               className="input-field"
-              placeholder="http://localhost:11434"
+              readOnly={isOpenRouter}
+              placeholder={isOpenRouter ? 'https://openrouter.ai/api/v1' : 'http://localhost:11434'}
             />
             <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
-              Enter the reachable endpoint for your cluster or host.
+              {isOpenRouter ? 'Configured automatically. Only the API key is required.' : 'Enter the reachable endpoint for your cluster or host.'}
             </p>
             {aiProvider === 'lmstudio' && !aiBaseUrl.trim() && (
               <p className="mt-2 text-xs text-amber-400">
@@ -223,6 +230,15 @@ export default function AISettingsPanel({
             {renderCodexEffortSelect('Clip Analysis Effort', aiAnalyzeModel, aiAnalyzeEffort, setAiAnalyzeEffort)}
             {renderCodexModelSelect('Vision Model', aiVisionModel, setAiVisionModel, codexVisionOptions)}
             {renderCodexEffortSelect('Vision Effort', aiVisionModel, aiVisionEffort, setAiVisionEffort)}
+          </>
+        ) : isOpenRouter ? (
+          <>
+            {[['Text Model', aiTextModel], ['Clip Analysis Model', aiAnalyzeModel], ['Vision Model', aiVisionModel]].map(([label, value]) => (
+              <label className="block" key={label}>
+                <span className="block text-sm text-zinc-400 mb-2">{label}</span>
+                <input aria-label={label} value={value || 'openai/gpt-4o-mini'} readOnly className="input-field" />
+              </label>
+            ))}
           </>
         ) : !textOptions ? (
           <>
@@ -322,6 +338,18 @@ export default function AISettingsPanel({
             </label>
           </>
         )}
+        <div className="md:col-span-2 rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+          <div>
+            <span className="block text-sm text-zinc-300">Global transcription provider</span>
+            <p className="mt-1 text-xs text-zinc-500">Highlights and other timed-text features use this setting.</p>
+          </div>
+          <select aria-label="Transcription provider" value={transcriptionProvider} onChange={(event) => setTranscriptionProvider(event.target.value)} className="input-field">
+            <option value="local">OpenShorts local (Faster-Whisper)</option>
+            <option value="openrouter">OpenRouter audio transcription</option>
+          </select>
+          <input aria-label="Transcription model" value={transcriptionModel} onChange={(event) => setTranscriptionModel(event.target.value)} readOnly={transcriptionProvider !== 'openrouter'} className="input-field" placeholder="openai/whisper-large-v3" />
+          <p className="text-xs text-zinc-500">{transcriptionProvider === 'local' ? 'Uses the existing OpenShorts local transcription service.' : 'Uses OpenRouter with the configured API key. The default model is openai/whisper-large-v3.'}</p>
+        </div>
       </div>
     </div>
   );

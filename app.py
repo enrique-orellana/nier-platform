@@ -112,6 +112,8 @@ def build_ai_config(
     reasoning_effort: Optional[str] = None,
     analyze_reasoning_effort: Optional[str] = None,
     vision_reasoning_effort: Optional[str] = None,
+    transcription_provider: Optional[str] = None,
+    transcription_model: Optional[str] = None,
     extra: Optional[Dict[str, str]] = None,
 ) -> AIConfig:
     source = dict(extra or {})
@@ -135,9 +137,15 @@ def build_ai_config(
         source["X-AI-Analyze-Reasoning-Effort"] = analyze_reasoning_effort
     if vision_reasoning_effort:
         source["X-AI-Vision-Reasoning-Effort"] = vision_reasoning_effort
+    if transcription_provider:
+        source["X-AI-Transcription-Provider"] = transcription_provider
+    if transcription_model:
+        source["X-AI-Transcription-Model"] = transcription_model
     ai_config = load_ai_config(source)
     if ai_config.is_lmstudio() and not ai_config.base_url:
         raise HTTPException(status_code=400, detail="Missing LM Studio base URL. Set it in Settings.")
+    if ai_config.is_openrouter() and not ai_config.api_key:
+        raise HTTPException(status_code=400, detail="Missing OpenRouter API key. Set it in Settings.")
     return ai_config
 
 def _relocate_root_job_artifacts(job_id: str, job_output_dir: str) -> bool:

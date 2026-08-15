@@ -42,20 +42,24 @@ metadata:
 data:
   MAX_CONCURRENT_JOBS: "5"
   MAX_MINIO_SOURCE_SIZE_MB: "16384"
-  AI_PROVIDER: lmstudio
-  AI_BASE_URL: http://host.docker.internal:1234
+  AI_PROVIDER: openrouter
+  AI_BASE_URL: https://openrouter.ai/api/v1
   AI_QUALITY_PRESET: balanced
-  AI_MODEL: auto
-  AI_ANALYZE_MODEL: auto
-  AI_VISION_MODEL: auto
-  AI_IMAGE_MODEL: auto
-  VITE_AI_PROVIDER: lmstudio
-  VITE_AI_BASE_URL: http://host.docker.internal:1234
+  AI_MODEL: openai/gpt-4o-mini
+  AI_ANALYZE_MODEL: openai/gpt-4o-mini
+  AI_VISION_MODEL: openai/gpt-4o-mini
+  AI_IMAGE_MODEL: ""
+  AI_TRANSCRIPTION_PROVIDER: local
+  AI_TRANSCRIPTION_MODEL: openai/whisper-large-v3
+  VITE_AI_PROVIDER: openrouter
+  VITE_AI_BASE_URL: https://openrouter.ai/api/v1
   VITE_AI_QUALITY_PRESET: balanced
-  VITE_AI_MODEL: auto
-  VITE_AI_ANALYZE_MODEL: auto
-  VITE_AI_VISION_MODEL: auto
-  VITE_AI_IMAGE_MODEL: auto
+  VITE_AI_MODEL: openai/gpt-4o-mini
+  VITE_AI_ANALYZE_MODEL: openai/gpt-4o-mini
+  VITE_AI_VISION_MODEL: openai/gpt-4o-mini
+  VITE_AI_IMAGE_MODEL: ""
+  VITE_AI_TRANSCRIPTION_PROVIDER: local
+  VITE_AI_TRANSCRIPTION_MODEL: openai/whisper-large-v3
   VITE_BACKEND_PROXY_TARGET: http://openshorts-backend:8000
   VITE_RENDERER_PROXY_TARGET: http://openshorts-renderer:3100
   AWS_REGION: eu-west-3

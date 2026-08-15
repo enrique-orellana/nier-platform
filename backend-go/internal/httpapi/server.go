@@ -1464,6 +1464,7 @@ func translationHeaders(r *http.Request) map[string]string {
 		"X-AI-Provider", "X-AI-Api-Key", "X-Gemini-Key", "X-AI-Base-Url",
 		"X-AI-Model", "X-AI-Analyze-Model", "X-AI-Vision-Model", "X-AI-Image-Model",
 		"X-AI-Reasoning-Effort", "X-AI-Analyze-Reasoning-Effort", "X-AI-Vision-Reasoning-Effort",
+		"X-AI-Transcription-Provider", "X-AI-Transcription-Model",
 	}
 	result := make(map[string]string)
 	for _, key := range allowed {

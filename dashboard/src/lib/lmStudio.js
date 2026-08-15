@@ -1,5 +1,5 @@
 export const buildVisibleProviders = () => (
-  ['gemini', 'lmstudio', 'openai-codex']
+  ['gemini', 'openrouter', 'lmstudio', 'openai-codex']
 );
 
 export const pickProviderAfterDiscoveryFailure = ({ currentProvider }) => {
