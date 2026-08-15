@@ -1095,7 +1095,7 @@ async def get_status(job_id: str):
 
 from editor import VideoEditor
 from subtitles import build_subtitle_segments, generate_srt, burn_subtitles, generate_srt_from_video, transcribe_audio
-from hooks import add_hook_to_video
+from hooks import add_hook_to_video, hook_style_for_layout
 from translate import translate_video, get_supported_languages
 from thumbnail import analyze_video_for_titles, refine_titles, generate_thumbnail, generate_youtube_description
 
@@ -2334,11 +2334,19 @@ async def add_hook(req: HookRequest):
     # Map Size to Scale
     size_map = {"S": 0.8, "M": 1.0, "L": 1.3}
     font_scale = size_map.get(req.size, 1.0)
+    hook_style = hook_style_for_layout(clip_data.get("layout_format"))
     
     try:
         # Run in thread pool
         def run_hook():
-             add_hook_to_video(input_path, req.text, output_path, position=req.position, font_scale=font_scale)
+             add_hook_to_video(
+                 input_path,
+                 req.text,
+                 output_path,
+                 position=req.position,
+                 font_scale=font_scale,
+                 style=hook_style,
+             )
         
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, run_hook)

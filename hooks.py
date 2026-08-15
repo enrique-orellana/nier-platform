@@ -13,6 +13,11 @@ FONT_URL = "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSe
 FONT_DIR = "fonts"
 FONT_PATH = os.path.join(FONT_DIR, "NotoSerif-Bold.ttf")
 
+
+def hook_style_for_layout(layout_format):
+    """Return the post-generation hook treatment for a clip layout."""
+    return "streamer" if str(layout_format or "").strip().lower() == "streamer_stack" else "legacy"
+
 def download_font_if_needed():
     """Downloads a serif font for the hook text if not present."""
     if not os.path.exists(FONT_DIR):
@@ -31,7 +36,13 @@ def download_font_if_needed():
         except Exception as e:
             print(f"❌ Failed to download font: {e}")
 
-def create_hook_image(text, target_width, output_image_path="hook_overlay.png", font_scale=1.0):
+def create_hook_image(
+    text,
+    target_width,
+    output_image_path="hook_overlay.png",
+    font_scale=1.0,
+    style="legacy",
+):
     """
     Generates a white box with black serif text using pixel-based wrapping.
     target_width: The max width the box should occupy (e.g. 85% of video)
@@ -141,17 +152,19 @@ def create_hook_image(text, target_width, output_image_path="hook_overlay.png", 
     img = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # 2. Draw Shadow
+    is_streamer = str(style or "legacy").strip().lower() == "streamer"
+
+    # 2. Draw Shadow for the legacy boxed treatment only.
     shadow_box = [
         (20 + shadow_offset[0], 20 + shadow_offset[1]),
         (20 + box_width + shadow_offset[0], 20 + box_height + shadow_offset[1])
     ]
-    draw.rounded_rectangle(shadow_box, radius=cornerradius, fill=(0, 0, 0, 100))
+    if not is_streamer:
+        draw.rounded_rectangle(shadow_box, radius=cornerradius, fill=(0, 0, 0, 100))
+        img = img.filter(ImageFilter.GaussianBlur(5))
     
-    # 3. Blur Shadow
-    img = img.filter(ImageFilter.GaussianBlur(5))
-    
-    # 4. Draw White Box (sharper, on top of blurred shadow)
+    # 4. Draw the hook background. Streamer hooks intentionally remain transparent
+    # so the text can sit across the facecam/gameplay boundary.
     draw_final = ImageDraw.Draw(img)
     if Pilmoji:
         pilmoji_final = Pilmoji(img)
@@ -162,8 +175,9 @@ def create_hook_image(text, target_width, output_image_path="hook_overlay.png", 
         (20, 20),
         (20 + box_width, 20 + box_height)
     ]
-    # Semi-transparent white (240/255 alpha ~ 94% opacity)
-    draw_final.rounded_rectangle(main_box, radius=cornerradius, fill=(255, 255, 255, 240))
+    if not is_streamer:
+        # Semi-transparent white (240/255 alpha ~ 94% opacity)
+        draw_final.rounded_rectangle(main_box, radius=cornerradius, fill=(255, 255, 255, 240))
     
     # 5. Draw Text
     current_y = 20 + padding_y - 2 # Minor visual adjustment
@@ -184,8 +198,19 @@ def create_hook_image(text, target_width, output_image_path="hook_overlay.png", 
         # Center X
         x = 20 + (box_width - line_w) // 2
         
-        # Draw Black Text
-        if pilmoji_final:
+        # Streamer hooks use yellow text with a black outline; legacy hooks keep
+        # the existing black text on a white rounded box.
+        if is_streamer:
+            stroke_width = max(2, int(font_size * 0.06))
+            draw_final.text(
+                (x, current_y),
+                line,
+                font=font,
+                fill=(255, 232, 64, 255),
+                stroke_width=stroke_width,
+                stroke_fill=(0, 0, 0, 255),
+            )
+        elif pilmoji_final:
             pilmoji_final.text((x, current_y), line, font=font, fill="black")
         else:
             draw_final.text((x, current_y), line, font=font, fill="black")
@@ -195,7 +220,14 @@ def create_hook_image(text, target_width, output_image_path="hook_overlay.png", 
     img.save(output_image_path)
     return output_image_path, canvas_w, canvas_h
 
-def add_hook_to_video(video_path, text, output_path, position="top", font_scale=1.0):
+def add_hook_to_video(
+    video_path,
+    text,
+    output_path,
+    position="top",
+    font_scale=1.0,
+    style="legacy",
+):
     """
     Overlays text hook onto video.
     position: 'top', 'center', 'bottom'
@@ -225,7 +257,13 @@ def add_hook_to_video(video_path, text, output_path, position="top", font_scale=
     # Ensure unique or temp location if needed, but relative is fine for this app structure
     
     try:
-        img_path, box_w, box_h = create_hook_image(text, target_box_width, hook_filename, font_scale=font_scale)
+        img_path, box_w, box_h = create_hook_image(
+            text,
+            target_box_width,
+            hook_filename,
+            font_scale=font_scale,
+            style=style,
+        )
         
         # 3. Calculate Overlay Position
         overlay_x = (video_width - box_w) // 2
@@ -235,6 +273,10 @@ def add_hook_to_video(video_path, text, output_path, position="top", font_scale=
         elif position == "bottom":
              # Bottom 20% mark (approx)
              overlay_y = int(video_height * 0.70)
+        elif str(style or "legacy").strip().lower() == "streamer":
+             # The default streamer hook is centered on the medium facecam
+             # boundary; explicit center/bottom positions remain available.
+             overlay_y = int(video_height * 0.34)
         else:
              # Top 20% mark
              overlay_y = int(video_height * 0.20)
