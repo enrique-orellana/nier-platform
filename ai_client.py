@@ -309,8 +309,26 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
             headers={**_build_bearer_headers(config.api_key), "Content-Type": "application/json"},
             json=payload,
         )
-    response.raise_for_status()
-    result = response.json()
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = str(getattr(response, "text", "") or "").strip().replace("\n", " ")
+        if len(detail) > 500:
+            detail = detail[:500] + "…"
+        suffix = f": {detail}" if detail else ""
+        raise RuntimeError(
+            f"OpenRouter transcription request failed with HTTP {response.status_code}{suffix}"
+        ) from exc
+    try:
+        result = response.json()
+    except ValueError as exc:
+        detail = str(getattr(response, "text", "") or "").strip().replace("\n", " ")
+        if len(detail) > 500:
+            detail = detail[:500] + "…"
+        suffix = f": {detail}" if detail else ""
+        raise RuntimeError(
+            f"OpenRouter returned an invalid transcription response (HTTP {response.status_code}){suffix}"
+        ) from exc
     if not isinstance(result, Mapping):
         raise RuntimeError("OpenRouter returned an invalid transcription response")
     text = str(result.get("text") or "").strip()

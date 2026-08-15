@@ -66,9 +66,13 @@ def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch
 
     result = highlight_generation.transcribe_video_with_config(source, 60.0, headers={"X-AI-Provider": "openrouter"})
 
-    assert result["text"] == "Cloud text"
-    assert result["segments"] == [{"text": "Cloud text", "start": 1.0, "end": 4.0, "words": []}]
-    transcribe.assert_called_once()
+    assert result["text"] == "Cloud text Cloud text Cloud text"
+    assert result["segments"] == [
+        {"text": "Cloud text", "start": 1.0, "end": 4.0, "words": []},
+        {"text": "Cloud text", "start": 26.0, "end": 29.0, "words": []},
+        {"text": "Cloud text", "start": 51.0, "end": 54.0, "words": []},
+    ]
+    assert transcribe.call_count == 3
 
 
 def test_openrouter_transcription_uses_payload_safe_chunks(monkeypatch, tmp_path):
@@ -95,8 +99,19 @@ def test_openrouter_transcription_uses_payload_safe_chunks(monkeypatch, tmp_path
 
     result = highlight_generation.transcribe_video_with_config(source, 240.0, headers={"X-AI-Provider": "openrouter"})
 
-    assert result["text"] == "Cloud text Cloud text Cloud text"
-    assert extracted == [(0.0, 120.0), (110.0, 230.0), (220.0, 240.0)]
+    assert result["text"] == " ".join(["Cloud text"] * 10)
+    assert extracted == [
+        (0.0, 30.0),
+        (25.0, 55.0),
+        (50.0, 80.0),
+        (75.0, 105.0),
+        (100.0, 130.0),
+        (125.0, 155.0),
+        (150.0, 180.0),
+        (175.0, 205.0),
+        (200.0, 230.0),
+        (225.0, 240.0),
+    ]
 
 
 def test_rank_highlights_uses_existing_ai_configuration(monkeypatch):
