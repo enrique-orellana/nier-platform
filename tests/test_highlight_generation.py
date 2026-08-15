@@ -71,6 +71,34 @@ def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch
     transcribe.assert_called_once()
 
 
+def test_openrouter_transcription_uses_payload_safe_chunks(monkeypatch, tmp_path):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    config = Mock(transcription_provider="openrouter")
+    monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
+    extracted = []
+
+    def extract_chunk(_source, start, end, destination):
+        extracted.append((start, end))
+        destination.write_bytes(b"audio")
+
+    monkeypatch.setattr(highlight_generation, "_extract_audio_chunk", extract_chunk)
+    monkeypatch.setattr(
+        highlight_generation,
+        "transcribe_audio_openrouter",
+        lambda *_args: {
+            "text": "Cloud text",
+            "language": "en",
+            "segments": [{"start": 0, "end": 1, "text": "Cloud text"}],
+        },
+    )
+
+    result = highlight_generation.transcribe_video_with_config(source, 240.0, headers={"X-AI-Provider": "openrouter"})
+
+    assert result["text"] == "Cloud text Cloud text Cloud text"
+    assert extracted == [(0.0, 120.0), (110.0, 230.0), (220.0, 240.0)]
+
+
 def test_rank_highlights_uses_existing_ai_configuration(monkeypatch):
     transcript = {
         "text": "A useful explanation.",

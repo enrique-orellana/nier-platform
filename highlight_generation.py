@@ -40,6 +40,7 @@ TRANSCRIPT:
 MAX_PROMPT_CHARS = 48000
 MAX_TRANSCRIPT_CHARS_PER_CHUNK = 36000
 TRANSCRIPTION_CHUNK_SECONDS = 600.0
+OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS = 120.0
 TRANSCRIPTION_OVERLAP_SECONDS = 10.0
 
 
@@ -159,7 +160,10 @@ def transcribe_video_with_config(
     if config.transcription_provider != "openrouter":
         return transcribe_video_in_chunks(video_path, duration_seconds, emit_log)
 
-    chunks = plan_transcription_chunks(duration_seconds)
+    chunks = plan_transcription_chunks(
+        duration_seconds,
+        chunk_seconds=OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS,
+    )
     if not chunks:
         raise ValueError("source video has no duration")
     segments: list[dict[str, Any]] = []
