@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getApiUrl } from '../config';
+import { resolveClipVideoUrl } from '../lib/videoUrls';
 import HookModal from './HookModal';
 import SubtitleModal from './SubtitleModal';
 import TranslateModal from './TranslateModal';
@@ -42,6 +43,8 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     const [showModal, setShowModal] = useState(false);
     const [showSubtitleModal, setShowSubtitleModal] = useState(false);
     const videoRef = React.useRef(null);
+    const resolvedClipVideoUrl = resolveClipVideoUrl(clip, jobId);
+    clip = resolvedClipVideoUrl ? { ...clip, video_url: resolvedClipVideoUrl } : clip;
     const trueOriginalUrl = toProxiedVideoUrl(getApiUrl(clip.original_video_url || clip.video_url)); // The absolute, unedited original
     const originalVideoUrl = toProxiedVideoUrl(getApiUrl(clip.video_url)); // Never changes — used for Remotion previews
     const [currentVideoUrl, setCurrentVideoUrl] = useState(originalVideoUrl);
