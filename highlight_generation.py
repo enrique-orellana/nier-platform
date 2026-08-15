@@ -28,7 +28,10 @@ Return JSON only in this shape:
 Use absolute seconds. Every section must be between 15 and 300 seconds, must be
 inside the source duration, and must start/end near natural word boundaries. Rank
 the sections by score from 0 to 1. Return enough candidates to reach the target
-duration when strong material exists, but do not invent or pad weak sections.
+duration when strong material exists, but do not invent or pad weak sections. If
+the source is shorter than the requested target, analyze only the available source.
+Return at most 8 candidates. Keep each reason under 160 characters and each text
+under 300 characters.
 
 SOURCE_DURATION_SECONDS: {video_duration}
 MINIMUM_REEL_SECONDS: {min_seconds}
@@ -41,6 +44,7 @@ TRANSCRIPT:
 MAX_PROMPT_CHARS = 48000
 MAX_TRANSCRIPT_CHARS_PER_CHUNK = 36000
 HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS = 120.0
+HIGHLIGHT_MAX_OUTPUT_TOKENS = 4096
 TRANSCRIPTION_CHUNK_SECONDS = 600.0
 OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS = 300.0
 OPENROUTER_TRANSCRIPTION_OVERLAP_SECONDS = 5.0
@@ -339,6 +343,7 @@ def rank_highlights(
                 model=model,
                 reasoning_effort=config.analyze_reasoning_effort,
                 timeout=HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS,
+                max_output_tokens=HIGHLIGHT_MAX_OUTPUT_TOKENS,
             )
         except Exception as exc:
             if emit_log:
