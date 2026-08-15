@@ -15,8 +15,8 @@ When `Streamer Stack` is selected:
 
 - Facecam size is selectable as Small, Medium, or Large.
 - Medium is the default.
-- The AI-generated `viral_hook_text` remains optional, matching the existing hook workflow.
-- When enabled, the hook is added in a separate post-generation pass. It uses bold yellow text with a black outline and is placed across the facecam/gameplay boundary, matching the reference style.
+- Generation produces the clean split layout without a hook.
+- After generation, the existing optional Hook action can add the AI-generated `viral_hook_text`. For Streamer Stack clips, that post-generation hook uses bold yellow text with a black outline and is placed across the facecam/gameplay boundary, matching the reference style.
 - Subtitles remain independent and optional through the existing subtitle workflow.
 
 The selector is part of the existing Clip Generator input flow, before the user starts processing a video. The selected settings apply to every clip in that generation job.
@@ -39,25 +39,26 @@ The remaining height is the gameplay panel. Each panel is rendered independently
 2. The gameplay panel uses a stable center/lower-biased crop of the same source frame. It must not inherit the facecam tracker’s horizontal movement.
 3. The two panels are stacked into the output canvas with no unintended gap. The layout pass produces a clean split video without a hook overlay.
 
-4. If hook rendering is enabled and hook text is available, a separate post-generation overlay pass adds the hook to the completed split video. This keeps panel composition and hook composition independently testable and preserves the existing post-generation editing model.
+4. Hook rendering is not part of the generation pass. The existing optional Hook action adds it later to the completed split video. This keeps panel composition and hook composition independently testable and preserves the existing post-generation editing model.
 
-If no face is detected for a frame or scene, the facecam crop falls back to a centered crop. A missing hook string does not fail the render; it simply produces the layout without the hook.
+If no face is detected for a frame or scene, the facecam crop falls back to a centered crop. A missing hook string does not fail the post-generation Hook action; it follows the existing no-text behavior.
 
 ## Data flow
 
 The settings travel through the existing generation path:
 
-1. `MediaInput` collects the format, facecam size, and hook-enabled state.
+1. `MediaInput` collects the format and facecam size.
 2. `App` includes those values in the existing `/api/process` request for both file and MinIO/URL inputs.
 3. `app.py` validates the values, records them with the job, and forwards them to the Python worker command.
 4. `main.py` accepts the layout settings, keeps the existing Standard path unchanged, and passes the settings through `render_clip_plan` into the per-clip renderer.
 5. The clip manifest records the selected layout settings in its export policy and layer metadata.
+6. The existing post-generation Hook action reads the clip layout metadata and selects the streamer hook style only for `streamer_stack`; Standard clips keep the current hook style.
 
 The persisted format identifier is `streamer_stack`; requests that omit the new fields resolve to `standard` for backward compatibility. Invalid user input is rejected before the job is queued.
 
 ## Hook and subtitle behavior
 
-The Streamer Stack generation path uses the existing clip-level `viral_hook_text` value only when the user enables the optional hook. The post-generation pass runs after the split video has been generated and uses a dedicated streamer visual treatment. The existing hook action and its current styling remain unchanged for Standard clips and for later manual hook edits.
+The Streamer Stack generation path does not burn hook text. After the clip exists, the existing optional Hook action can use the clip-level `viral_hook_text` value. That action uses a dedicated streamer visual treatment for Streamer Stack clips and keeps the current styling for Standard clips.
 
 Subtitles are not automatically burned by the new format. Existing subtitle generation, translation, and editor controls remain available after the clip is generated. Applying subtitles to a Streamer Stack clip should operate on the already-composed 9:16 output.
 
@@ -77,7 +78,7 @@ The implementation will add focused coverage for:
 - Backend validation and worker command propagation.
 - Streamer Stack panel geometry for Small, Medium, and Large settings.
 - Center-crop fallback when tracking has no face target.
-- Hook enabled, disabled, and missing-text behavior.
+- Optional post-generation hook behavior for Streamer Stack and Standard clips.
 - Preservation of Standard output behavior.
 - Manifest metadata for the selected layout.
 - Final output dimensions, FPS, and audio readiness.
