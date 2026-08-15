@@ -587,6 +587,8 @@ def build_source_analysis_for_job(
     """Build or load the expensive source analysis shared by all clip renders."""
     source_path = Path(input_video).resolve()
     source_media = probe_media(source_path)
+    scene_frame_skip = scene_detection_frame_skip()
+    scene_strategy_max_dimension = SCENE_STRATEGY_MAX_DIMENSION
     capture = cv2.VideoCapture(str(source_path))
     try:
         is_opened = getattr(capture, "isOpened", lambda: True)
@@ -612,16 +614,24 @@ def build_source_analysis_for_job(
         "frame_count": total_frames,
         "width": width,
         "height": height,
+        "scene_frame_skip": scene_frame_skip,
+        "scene_strategy_max_dimension": scene_strategy_max_dimension,
     }
 
     def scene_builder():
-        scenes, _detected_fps = detect_scenes(str(source_path))
+        scenes, _detected_fps = detect_scenes(
+            str(source_path), frame_skip=scene_frame_skip
+        )
         if scenes:
             return scenes
         return [(0, total_frames)]
 
     def strategy_builder(scenes):
-        return analyze_scenes_strategy(str(source_path), scenes)
+        return analyze_scenes_strategy(
+            str(source_path),
+            scenes,
+            max_dimension=scene_strategy_max_dimension,
+        )
 
     load_kwargs = {
         "cache_path": Path(output_dir) / "_source_analysis.json",

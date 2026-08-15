@@ -11,7 +11,7 @@ import tempfile
 from typing import Any
 
 
-ANALYSIS_VERSION = 1
+ANALYSIS_VERSION = 2
 
 
 def _json_safe(value: Any) -> Any:
