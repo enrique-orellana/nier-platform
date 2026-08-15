@@ -1,5 +1,6 @@
 # Git
 .git
+.gitnexus/
 .gitignore
 
 # Python
@@ -38,6 +39,7 @@ videos/
 # Cache and Data
 *.pt
 .cache/
+**/.cache/
 output/
 uploads/
 .remotion/
