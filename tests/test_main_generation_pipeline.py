@@ -1,6 +1,8 @@
 import json
 import subprocess
+import sys
 import tempfile
+import types
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -54,6 +56,28 @@ class FakeCapture:
         self.released = True
 
 
+class FakeStrategyCapture:
+    def __init__(self, frame):
+        self.frame = frame
+        self.read_count = 0
+        self.released = False
+
+    def isOpened(self):
+        return self.read_count < 3
+
+    def set(self, _property_id, _value):
+        return True
+
+    def read(self):
+        if self.read_count >= 3:
+            return False, None
+        self.read_count += 1
+        return True, self.frame.copy()
+
+    def release(self):
+        self.released = True
+
+
 class FakeStreamerCapture:
     def __init__(self):
         self.frames = [np.zeros((1080, 1920, 3), dtype=np.uint8) for _ in range(2)]
@@ -96,6 +120,43 @@ class FakeProcess:
 
 
 class MainGenerationPipelineTests(unittest.TestCase):
+    def test_scene_frame_skip_configuration_accepts_zero_and_rejects_invalid_values(self):
+        with patch.dict(main.os.environ, {"SCENE_DETECTION_FRAME_SKIP": "0"}, clear=False):
+            self.assertEqual(main.scene_detection_frame_skip(), 0)
+        with patch.dict(main.os.environ, {"SCENE_DETECTION_FRAME_SKIP": "bad"}, clear=False):
+            self.assertEqual(main.scene_detection_frame_skip(), 2)
+        with patch.dict(main.os.environ, {"SCENE_DETECTION_FRAME_SKIP": "-1"}, clear=False):
+            self.assertEqual(main.scene_detection_frame_skip(), 2)
+
+    def test_detect_scenes_passes_frame_skip_to_scene_manager(self):
+        scene_manager = Mock()
+        scene_manager.get_scene_list.return_value = []
+        video = Mock(frame_rate=30.0)
+        fake_scenedetect = types.ModuleType("scenedetect")
+        fake_detectors = types.ModuleType("scenedetect.detectors")
+        fake_scenedetect.open_video = Mock(return_value=video)
+        fake_scenedetect.SceneManager = Mock(return_value=scene_manager)
+        fake_detectors.ContentDetector = Mock()
+        with patch.dict(
+            sys.modules,
+            {"scenedetect": fake_scenedetect, "scenedetect.detectors": fake_detectors},
+        ):
+            scenes, fps = main.detect_scenes("source.mp4", frame_skip=2)
+        self.assertEqual(scenes, [])
+        self.assertEqual(fps, 30.0)
+        scene_manager.detect_scenes.assert_called_once_with(video=video, frame_skip=2)
+
+    def test_scene_strategy_downscales_face_samples(self):
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        capture = FakeStrategyCapture(frame)
+        with patch.object(main.cv2, "VideoCapture", return_value=capture), patch.object(
+            main, "detect_face_candidates", return_value=[]
+        ) as detect_faces:
+            result = main.analyze_scenes_strategy("source.mp4", [(0, 90)])
+        self.assertEqual(result, ["GENERAL"])
+        analyzed_frame = detect_faces.call_args.args[0]
+        self.assertEqual(max(analyzed_frame.shape[:2]), 640)
+
     def test_source_analysis_builders_run_once_and_cache_reuses_result(self):
         with tempfile.TemporaryDirectory() as directory:
             source_path = Path(directory) / "source.mp4"
@@ -114,8 +175,29 @@ class MainGenerationPipelineTests(unittest.TestCase):
                 second = main.build_source_analysis_for_job(str(source_path), str(output_dir))
 
         self.assertEqual(first, second)
-        scene_calls.assert_called_once_with(str(source_path))
+        scene_calls.assert_called_once_with(str(source_path), frame_skip=2)
         strategy_calls.assert_called_once()
+
+    def test_source_analysis_cache_rebuilds_when_scene_frame_skip_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source_path = Path(directory) / "source.mp4"
+            output_dir = Path(directory) / "output"
+            source_path.write_bytes(b"source")
+            output_dir.mkdir()
+            scene_calls = Mock(return_value=([(0, 100), (100, 300)], 30.0))
+            strategy_calls = Mock(return_value=["TRACK", "GENERAL"])
+
+            with patch.object(main, "probe_media", return_value=source_media()), patch.object(
+                main.cv2, "VideoCapture", return_value=FakeCapture()
+            ), patch.object(main, "detect_scenes", scene_calls), patch.object(
+                main, "analyze_scenes_strategy", strategy_calls
+            ), patch.dict(main.os.environ, {"SCENE_DETECTION_FRAME_SKIP": "2"}, clear=False):
+                main.build_source_analysis_for_job(str(source_path), str(output_dir))
+                with patch.dict(main.os.environ, {"SCENE_DETECTION_FRAME_SKIP": "0"}, clear=False):
+                    main.build_source_analysis_for_job(str(source_path), str(output_dir))
+
+        self.assertEqual(scene_calls.call_count, 2)
+        self.assertEqual(strategy_calls.call_count, 2)
 
     def test_empty_scene_detection_uses_one_full_source_scene(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -133,7 +215,7 @@ class MainGenerationPipelineTests(unittest.TestCase):
 
         self.assertEqual(analysis.scene_boundaries, [(0, 300)])
         self.assertEqual(analysis.scene_strategies, ["GENERAL"])
-        strategy.assert_called_once_with(str(source_path), [(0, 300)])
+        strategy.assert_called_once_with(str(source_path), [(0, 300)], max_dimension=640)
 
     def test_render_clip_plan_passes_one_analysis_to_every_clip(self):
         analysis = SourceAnalysis(
