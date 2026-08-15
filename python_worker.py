@@ -218,11 +218,20 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
             burn_subtitles(str(input_path), str(srt_path), str(output_path), alignment=payload.get("position", "bottom"), fontsize=int(payload.get("font_size") or 16), font_name=str(payload.get("font_name") or "Verdana"), font_color=str(payload.get("font_color") or "#FFFFFF"), border_color=str(payload.get("border_color") or "#000000"), border_width=int(payload.get("border_width") or 2), bg_color=str(payload.get("bg_color") or "#000000"), bg_opacity=float(payload.get("bg_opacity") or 0))
             srt_path.unlink(missing_ok=True)
         elif action == "hook":
-            from hooks import add_hook_to_video
+            from hooks import add_hook_to_video, hook_style_for_layout
             output_name = f"hook_{input_path.name}"
             output_path = job_root / output_name
             scale = {"S": 0.8, "M": 1.0, "L": 1.3}.get(str(payload.get("size") or "M"), 1.0)
-            add_hook_to_video(str(input_path), str(payload.get("text") or ""), str(output_path), position=str(payload.get("position") or "top"), font_scale=scale)
+            clip = metadata["shorts"][clip_index]
+            add_hook_to_video(
+                str(input_path),
+                str(payload.get("text") or ""),
+                str(output_path),
+                position=str(payload.get("position") or "top"),
+                font_scale=scale,
+                style=hook_style_for_layout(clip.get("layout_format")),
+                facecam_size=clip.get("facecam_size", "medium"),
+            )
         else:
             from translate import translate_video
             target = str(payload.get("target_language") or "").strip()

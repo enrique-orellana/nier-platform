@@ -64,6 +64,8 @@ export interface HookConfig {
   fontFamily?: string;
   startMs?: number;
   endMs?: number;
+  layoutFormat?: "standard" | "streamer_stack";
+  facecamSize?: "small" | "medium" | "large";
 }
 
 // --- Effects config ---
@@ -140,6 +142,8 @@ export const hookConfigSchema = z.object({
   displayDurationSec: z.number().positive(),
   startMs: z.number().min(0).optional(),
   endMs: z.number().positive().optional(),
+  layoutFormat: z.enum(["standard", "streamer_stack"]).optional(),
+  facecamSize: z.enum(["small", "medium", "large"]).optional(),
 });
 
 export const effectSegmentSchema = z.object({

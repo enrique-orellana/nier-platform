@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import main
+import numpy as np
 from media_probe import AudioProbe, MediaProbe
 from video_analysis import SourceAnalysis
 
@@ -48,6 +49,47 @@ class FakeCapture:
 
     def release(self):
         self.released = True
+
+
+class FakeStreamerCapture:
+    def __init__(self):
+        self.frames = [np.zeros((1080, 1920, 3), dtype=np.uint8) for _ in range(2)]
+        self.index = 0
+        self.released = False
+
+    def isOpened(self):
+        return self.index < len(self.frames)
+
+    def read(self):
+        if self.index >= len(self.frames):
+            return False, None
+        frame = self.frames[self.index]
+        self.index += 1
+        return True, frame
+
+    def release(self):
+        self.released = True
+
+
+class FakePipe:
+    def write(self, value):
+        return len(value)
+
+    def close(self):
+        return None
+
+    def read(self):
+        return b""
+
+
+class FakeProcess:
+    def __init__(self):
+        self.stdin = FakePipe()
+        self.stderr = FakePipe()
+        self.returncode = 0
+
+    def wait(self):
+        return self.returncode
 
 
 class MainGenerationPipelineTests(unittest.TestCase):
@@ -190,6 +232,51 @@ class MainGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(manifest["layers"]["layout"], {"format": "streamer_stack", "facecam_size": "large"})
         self.assertEqual(manifest["export_policy"]["layout_format"], "streamer_stack")
         self.assertEqual(manifest["export_policy"]["facecam_size"], "large")
+
+    def test_streamer_render_validates_master_dimensions_fps_and_audio(self):
+        analysis = SourceAnalysis(
+            source_fingerprint={"size": 1},
+            source_fps=30.0,
+            total_frames=2,
+            width=1920,
+            height=1080,
+            scene_boundaries=[(0, 2)],
+            scene_strategies=["TRACK"],
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "streamer.mp4"
+
+            def fake_run(command, **_kwargs):
+                Path(command[-1]).touch()
+
+            with patch.object(main.cv2, "VideoCapture", return_value=FakeStreamerCapture()), patch.object(
+                main, "seek_capture_to_frame", return_value=(0, 0)
+            ), patch.object(main, "detect_face_candidates", return_value=[]), patch.object(
+                main, "detect_person_yolo", return_value=None
+            ), patch.object(main, "compose_streamer_stack_frame", return_value=np.zeros((1920, 1080, 3), dtype=np.uint8)) as compose, patch.object(
+                main.subprocess, "Popen", return_value=FakeProcess()
+            ), patch.object(main.subprocess, "run", side_effect=fake_run), patch.object(
+                main, "validate_clip_output"
+            ) as validate:
+                result = main.process_video_to_vertical(
+                    "source.mp4",
+                    str(output_path),
+                    source_analysis=analysis,
+                    source_media=source_media(),
+                    layout_format="streamer_stack",
+                    facecam_size="large",
+                )
+
+        self.assertTrue(result)
+        self.assertEqual(compose.call_count, 2)
+        validate.assert_called_once_with(
+            str(output_path),
+            expected_width=1080,
+            expected_height=1920,
+            expected_fps=30.0,
+            source_has_audio=True,
+        )
 
 
 if __name__ == "__main__":

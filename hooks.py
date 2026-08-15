@@ -4,6 +4,7 @@ import subprocess
 import urllib.request
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from master_policy import master_video_encode_args, master_video_filter
+from streamer_layout import FACECAM_HEIGHT_RATIOS
 try:
     from pilmoji import Pilmoji
 except ImportError:
@@ -17,6 +18,11 @@ FONT_PATH = os.path.join(FONT_DIR, "NotoSerif-Bold.ttf")
 def hook_style_for_layout(layout_format):
     """Return the post-generation hook treatment for a clip layout."""
     return "streamer" if str(layout_format or "").strip().lower() == "streamer_stack" else "legacy"
+
+
+def streamer_facecam_boundary_ratio(facecam_size="medium"):
+    normalized_size = str(facecam_size or "medium").strip().lower()
+    return FACECAM_HEIGHT_RATIOS.get(normalized_size, FACECAM_HEIGHT_RATIOS["medium"])
 
 def download_font_if_needed():
     """Downloads a serif font for the hook text if not present."""
@@ -227,6 +233,7 @@ def add_hook_to_video(
     position="top",
     font_scale=1.0,
     style="legacy",
+    facecam_size="medium",
 ):
     """
     Overlays text hook onto video.
@@ -274,9 +281,10 @@ def add_hook_to_video(
              # Bottom 20% mark (approx)
              overlay_y = int(video_height * 0.70)
         elif str(style or "legacy").strip().lower() == "streamer":
-             # The default streamer hook is centered on the medium facecam
+             # Center the streamer hook on the selected facecam/gameplay
              # boundary; explicit center/bottom positions remain available.
-             overlay_y = int(video_height * 0.34)
+             boundary_y = int(video_height * streamer_facecam_boundary_ratio(facecam_size))
+             overlay_y = max(0, min(video_height - box_h, boundary_y - box_h // 2))
         else:
              # Top 20% mark
              overlay_y = int(video_height * 0.20)

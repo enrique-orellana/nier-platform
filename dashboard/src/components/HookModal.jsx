@@ -31,7 +31,7 @@ const ENTRANCE_OPTIONS = [
     { value: 'none', label: 'None' },
 ];
 
-export default function HookModal({ isOpen, onClose, onGenerate, isProcessing, videoUrl, initialText, durationInSeconds, existingSubtitles }) {
+export default function HookModal({ isOpen, onClose, onGenerate, isProcessing, videoUrl, initialText, durationInSeconds, existingSubtitles, layoutFormat = 'standard', facecamSize = 'medium' }) {
     const [text, setText] = useState(initialText || 'POV: You are using the viral hook feature');
     const [position, setPosition] = useState('top');
     const [size, setSize] = useState('M');
@@ -47,6 +47,8 @@ export default function HookModal({ isOpen, onClose, onGenerate, isProcessing, v
         size,
         entranceAnimation,
         displayDurationSec: displayDuration,
+        layoutFormat,
+        facecamSize,
     };
 
     const useRemotionPreview = !!videoUrl;

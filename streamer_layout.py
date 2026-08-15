@@ -109,7 +109,9 @@ def compose_streamer_stack_frame(
         output_width,
         gameplay_height,
         focus=(0.5, 0.58),
-        zoom=1.0,
+        # A bounded zoom gives the lower-biased focus room to move on
+        # landscape sources, where an unzoomed portrait crop uses full height.
+        zoom=1.12,
     )
     facecam = cv2.resize(facecam, (output_width, facecam_height), interpolation=cv2.INTER_AREA)
     gameplay = cv2.resize(

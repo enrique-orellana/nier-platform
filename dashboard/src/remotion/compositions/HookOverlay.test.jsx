@@ -41,4 +41,27 @@ describe('HookOverlay visual contract', () => {
             fontSize: '18.46153846153846px',
         });
     });
+
+    it('renders Streamer Stack hooks across the selected facecam boundary', () => {
+        render(<HookOverlay config={{
+            text: 'Watch this',
+            position: 'top',
+            size: 'M',
+            entranceAnimation: 'none',
+            displayDurationSec: 2,
+            layoutFormat: 'streamer_stack',
+            facecamSize: 'large',
+        }} />);
+
+        const text = screen.getByText('Watch this');
+        const box = text.parentElement;
+        const container = box.parentElement;
+        expect(box.style.color).toBe('rgb(255, 232, 64)');
+        expect(box.style.backgroundColor).toBe('transparent');
+        expect(box.style.getPropertyValue('-webkit-text-stroke')).toBe('2px #000000');
+        expect(container).toHaveStyle({
+            top: '46%',
+            transform: 'translate(-50%, -50%)',
+        });
+    });
 });

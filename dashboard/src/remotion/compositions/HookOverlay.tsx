@@ -43,7 +43,7 @@ const HookBox: React.FC<HookBoxProps> = ({ config, displayFrames, width }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const elapsedMs = (frame / fps) * 1000;
-  const positionStyle = getHookPositionStyle(config.position);
+  const positionStyle = getHookPositionStyle(config.position, config.layoutFormat, config.facecamSize);
   const boxStyle = getHookBoxStyle({
     ...config,
     color: config.color || "#000000",

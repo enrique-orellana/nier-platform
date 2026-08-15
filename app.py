@@ -2360,6 +2360,7 @@ async def add_hook(req: HookRequest):
                  position=req.position,
                  font_scale=font_scale,
                  style=hook_style,
+                 facecam_size=clip_data.get("facecam_size", "medium"),
              )
         
         loop = asyncio.get_event_loop()

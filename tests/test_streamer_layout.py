@@ -55,3 +55,20 @@ def test_streamer_stack_uses_centered_facecam_fallback():
     )
 
     assert result.shape == (1920, 1080, 3)
+
+
+def test_streamer_stack_gameplay_crop_is_lower_biased_for_landscape_source():
+    gradient = np.linspace(0, 255, 1080, dtype=np.uint8)[:, None, None]
+    source = np.repeat(np.repeat(gradient, 1920, axis=1), 3, axis=2)
+
+    result = compose_streamer_stack_frame(
+        source,
+        output_width=1080,
+        output_height=1920,
+        facecam_size="medium",
+    )
+    facecam_height, gameplay_height = streamer_panel_heights(1080, 1920, "medium")
+    gameplay = result[facecam_height:facecam_height + gameplay_height]
+
+    assert int(gameplay[0].mean()) > 15
+    assert int(gameplay[-1].mean()) > int(gameplay[0].mean())
