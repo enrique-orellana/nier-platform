@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,15 +15,24 @@ import (
 )
 
 var (
-	ErrJobNotFound       = errors.New("job not found")
-	ErrInvalidTransition = errors.New("invalid job status transition")
-	ErrJobNotClaimable   = errors.New("job is not queued")
-	ErrActiveJob         = errors.New("an active job of this kind already exists")
+	ErrJobNotFound        = errors.New("job not found")
+	ErrInvalidTransition  = errors.New("invalid job status transition")
+	ErrJobNotClaimable    = errors.New("job is not queued")
+	ErrActiveJob          = errors.New("an active job of this kind already exists")
+	ErrProjectNotFound    = errors.New("highlight project not found")
+	ErrProjectActive      = errors.New("highlight project has an active job")
+	ErrProjectNotEditable = errors.New("highlight project is not editable")
 )
 
 type Store interface {
 	Create(context.Context, domain.CreateJobInput) (domain.Job, error)
 	CreateIfNoActive(context.Context, string, domain.CreateJobInput) (domain.Job, error)
+	CreateHighlightProject(context.Context, domain.CreateHighlightProjectInput) (domain.HighlightProject, domain.Job, error)
+	ListHighlightProjects(context.Context) ([]domain.HighlightProject, error)
+	GetHighlightProject(context.Context, string) (domain.HighlightProject, domain.Job, error)
+	UpdateHighlightProject(context.Context, string, domain.UpdateHighlightProjectInput) (domain.HighlightProject, error)
+	RetryHighlightProject(context.Context, string) (domain.Job, error)
+	DeleteHighlightProject(context.Context, string) error
 	Get(context.Context, string) (domain.Job, bool)
 	Transition(context.Context, string, domain.JobStatus, string) (domain.Job, error)
 	AppendLog(context.Context, string, string) error
@@ -35,12 +45,13 @@ type Store interface {
 }
 
 type MemoryStore struct {
-	mu   sync.RWMutex
-	jobs map[string]domain.Job
+	mu       sync.RWMutex
+	jobs     map[string]domain.Job
+	projects map[string]domain.HighlightProject
 }
 
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{jobs: make(map[string]domain.Job)}
+	return &MemoryStore{jobs: make(map[string]domain.Job), projects: make(map[string]domain.HighlightProject)}
 }
 
 func (s *MemoryStore) Create(_ context.Context, input domain.CreateJobInput) (domain.Job, error) {
@@ -60,6 +71,159 @@ func (s *MemoryStore) CreateIfNoActive(_ context.Context, kind string, input dom
 	return s.createLocked(input)
 }
 
+func (s *MemoryStore) CreateHighlightProject(_ context.Context, input domain.CreateHighlightProjectInput) (domain.HighlightProject, domain.Job, error) {
+	if err := validateHighlightProjectInput(input.Name, input.SourceBucket, input.SourceKey, input.MinDurationSeconds, input.IdealDurationSeconds); err != nil {
+		return domain.HighlightProject{}, domain.Job{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, job := range s.jobs {
+		if job.Kind == "highlight-generation" && isActive(job.Status) {
+			return domain.HighlightProject{}, domain.Job{}, ErrActiveJob
+		}
+	}
+	projectID, err := newID()
+	if err != nil {
+		return domain.HighlightProject{}, domain.Job{}, fmt.Errorf("generate project id: %w", err)
+	}
+	now := time.Now().UTC()
+	project := domain.HighlightProject{
+		ID:                   projectID,
+		Name:                 input.Name,
+		SourceBucket:         input.SourceBucket,
+		SourceKey:            input.SourceKey,
+		MinDurationSeconds:   input.MinDurationSeconds,
+		IdealDurationSeconds: input.IdealDurationSeconds,
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
+	job, err := s.createLocked(domain.CreateJobInput{
+		Kind:      "highlight-generation",
+		ProjectID: project.ID,
+		Metadata: map[string]any{
+			"source_object": map[string]any{"bucket": project.SourceBucket, "key": project.SourceKey},
+			"min_minutes":   float64(project.MinDurationSeconds) / 60,
+			"ideal_minutes": float64(project.IdealDurationSeconds) / 60,
+		},
+	})
+	if err != nil {
+		return domain.HighlightProject{}, domain.Job{}, err
+	}
+	project.LatestJobID = job.ID
+	s.projects[project.ID] = project
+	return cloneProject(project), cloneJob(job), nil
+}
+
+func (s *MemoryStore) ListHighlightProjects(_ context.Context) ([]domain.HighlightProject, error) {
+	s.mu.RLock()
+	projects := make([]domain.HighlightProject, 0, len(s.projects))
+	for _, project := range s.projects {
+		projects = append(projects, cloneProject(project))
+	}
+	s.mu.RUnlock()
+	sort.Slice(projects, func(i, j int) bool {
+		if projects[i].UpdatedAt.Equal(projects[j].UpdatedAt) {
+			return projects[i].ID < projects[j].ID
+		}
+		return projects[i].UpdatedAt.After(projects[j].UpdatedAt)
+	})
+	return projects, nil
+}
+
+func (s *MemoryStore) GetHighlightProject(_ context.Context, id string) (domain.HighlightProject, domain.Job, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	project, ok := s.projects[id]
+	if !ok {
+		return domain.HighlightProject{}, domain.Job{}, ErrProjectNotFound
+	}
+	job, ok := s.jobs[project.LatestJobID]
+	if !ok {
+		return domain.HighlightProject{}, domain.Job{}, ErrProjectNotFound
+	}
+	return cloneProject(project), cloneJob(job), nil
+}
+
+func (s *MemoryStore) UpdateHighlightProject(_ context.Context, id string, input domain.UpdateHighlightProjectInput) (domain.HighlightProject, error) {
+	if err := validateHighlightProjectDurations(input.MinDurationSeconds, input.IdealDurationSeconds); err != nil {
+		return domain.HighlightProject{}, err
+	}
+	if strings.TrimSpace(input.Name) == "" {
+		return domain.HighlightProject{}, errors.New("project name is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	project, ok := s.projects[id]
+	if !ok {
+		return domain.HighlightProject{}, ErrProjectNotFound
+	}
+	job, ok := s.jobs[project.LatestJobID]
+	if !ok {
+		return domain.HighlightProject{}, ErrProjectNotFound
+	}
+	if isActive(job.Status) {
+		return domain.HighlightProject{}, ErrProjectActive
+	}
+	project.Name = strings.TrimSpace(input.Name)
+	project.MinDurationSeconds = input.MinDurationSeconds
+	project.IdealDurationSeconds = input.IdealDurationSeconds
+	project.UpdatedAt = time.Now().UTC()
+	s.projects[id] = project
+	return cloneProject(project), nil
+}
+
+func (s *MemoryStore) RetryHighlightProject(_ context.Context, id string) (domain.Job, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	project, ok := s.projects[id]
+	if !ok {
+		return domain.Job{}, ErrProjectNotFound
+	}
+	latest, ok := s.jobs[project.LatestJobID]
+	if !ok {
+		return domain.Job{}, ErrProjectNotFound
+	}
+	if isActive(latest.Status) {
+		return domain.Job{}, ErrProjectActive
+	}
+	for _, job := range s.jobs {
+		if job.Kind == "highlight-generation" && isActive(job.Status) {
+			return domain.Job{}, ErrActiveJob
+		}
+	}
+	job, err := s.createLocked(domain.CreateJobInput{
+		Kind:      "highlight-generation",
+		ProjectID: project.ID,
+		Metadata: map[string]any{
+			"source_object": map[string]any{"bucket": project.SourceBucket, "key": project.SourceKey},
+			"min_minutes":   float64(project.MinDurationSeconds) / 60,
+			"ideal_minutes": float64(project.IdealDurationSeconds) / 60,
+		},
+	})
+	if err != nil {
+		return domain.Job{}, err
+	}
+	project.LatestJobID = job.ID
+	project.UpdatedAt = time.Now().UTC()
+	s.projects[id] = project
+	return cloneJob(job), nil
+}
+
+func (s *MemoryStore) DeleteHighlightProject(_ context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.projects[id]; !ok {
+		return ErrProjectNotFound
+	}
+	for jobID, job := range s.jobs {
+		if job.ProjectID == id {
+			delete(s.jobs, jobID)
+		}
+	}
+	delete(s.projects, id)
+	return nil
+}
+
 func (s *MemoryStore) createLocked(input domain.CreateJobInput) (domain.Job, error) {
 	if input.Kind == "" {
 		return domain.Job{}, fmt.Errorf("job kind is required")
@@ -72,6 +236,7 @@ func (s *MemoryStore) createLocked(input domain.CreateJobInput) (domain.Job, err
 	job := domain.Job{
 		ID:        id,
 		Kind:      input.Kind,
+		ProjectID: input.ProjectID,
 		Status:    domain.JobStatusQueued,
 		SourceURL: input.SourceURL,
 		ClipCount: input.ClipCount,
@@ -255,6 +420,31 @@ func cloneJob(job domain.Job) domain.Job {
 	job.Logs = append([]domain.JobLog(nil), job.Logs...)
 	job.Metadata = cloneMetadata(job.Metadata)
 	return job
+}
+
+func cloneProject(project domain.HighlightProject) domain.HighlightProject {
+	return project
+}
+
+func isActive(status domain.JobStatus) bool {
+	return status == domain.JobStatusQueued || status == domain.JobStatusProcessing
+}
+
+func validateHighlightProjectInput(name, bucket, key string, minSeconds, idealSeconds int) error {
+	if strings.TrimSpace(name) == "" {
+		return errors.New("project name is required")
+	}
+	if strings.TrimSpace(bucket) == "" || strings.TrimSpace(key) == "" {
+		return errors.New("MinIO source object requires bucket and key")
+	}
+	return validateHighlightProjectDurations(minSeconds, idealSeconds)
+}
+
+func validateHighlightProjectDurations(minSeconds, idealSeconds int) error {
+	if minSeconds <= 0 || minSeconds > 180*60 || idealSeconds < minSeconds || idealSeconds > 180*60 {
+		return errors.New("durations must be positive, ideal must be at least minimum, and both must be at most 180 minutes")
+	}
+	return nil
 }
 
 func cloneMetadata(metadata map[string]any) map[string]any {
