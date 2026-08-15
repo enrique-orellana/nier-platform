@@ -150,6 +150,12 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 		"output_dir": outputDir,
 		"clip_count": job.ClipCount,
 	}
+	if layoutFormat, ok := job.Metadata["layout_format"].(string); ok && layoutFormat != "" {
+		request["layout_format"] = layoutFormat
+	}
+	if facecamSize, ok := job.Metadata["facecam_size"].(string); ok && facecamSize != "" {
+		request["facecam_size"] = facecamSize
+	}
 	if headers, ok := job.Metadata["headers"].(map[string]string); ok {
 		request["headers"] = cloneHeaders(headers)
 	} else if headers, ok := job.Metadata["headers"].(map[string]any); ok {

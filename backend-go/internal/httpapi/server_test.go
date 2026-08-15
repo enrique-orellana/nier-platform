@@ -368,6 +368,53 @@ func TestProcessCreatesQueuedJob(t *testing.T) {
 	}
 }
 
+func TestProcessStoresStreamerLayoutOptions(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	server := NewServerWithStore(config.Config{}, store)
+	req := httptest.NewRequest(http.MethodPost, "/api/process", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true,"layout_format":"streamer_stack","facecam_size":"large"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", res.Code, res.Body.String())
+	}
+	var payload struct {
+		JobID string `json:"job_id"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	job, ok := store.Get(context.Background(), payload.JobID)
+	if !ok {
+		t.Fatal("job was not stored")
+	}
+	if job.Metadata["layout_format"] != "streamer_stack" || job.Metadata["facecam_size"] != "large" {
+		t.Fatalf("layout options were not stored: %#v", job.Metadata)
+	}
+}
+
+func TestProcessRejectsInvalidStreamerLayoutOptions(t *testing.T) {
+	server := NewServer(config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/process", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true,"layout_format":"split_screen"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest || !strings.Contains(res.Body.String(), "layout_format") {
+		t.Fatalf("expected layout validation error, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestProcessRejectsInvalidFacecamSize(t *testing.T) {
+	server := NewServer(config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/process", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true,"facecam_size":"huge"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest || !strings.Contains(res.Body.String(), "facecam_size") {
+		t.Fatalf("expected facecam validation error, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
 func TestProcessStartsConfiguredWorker(t *testing.T) {
 	store := jobs.NewMemoryStore()
 	runner := &jobs.Runner{Store: store, Worker: completingWorker{}}
@@ -676,6 +723,8 @@ func TestProcessAcceptsMultipartVideoAndStoresWorkerSourcePath(t *testing.T) {
 	_, _ = file.Write([]byte("fake-video"))
 	_ = writer.WriteField("acknowledged", "true")
 	_ = writer.WriteField("source_url", "https://youtube.com/watch?v=1")
+	_ = writer.WriteField("layout_format", "streamer_stack")
+	_ = writer.WriteField("facecam_size", "large")
 	_ = writer.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/process?clip_count=4", &body)
@@ -701,6 +750,9 @@ func TestProcessAcceptsMultipartVideoAndStoresWorkerSourcePath(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("uploaded source was not saved: %v", err)
+	}
+	if job.Metadata["layout_format"] != "streamer_stack" || job.Metadata["facecam_size"] != "large" {
+		t.Fatalf("multipart layout options were not stored: %#v", job.Metadata)
 	}
 }
 

@@ -56,6 +56,15 @@ def build_clip_generation_command(request: Mapping[str, Any]) -> list[str]:
 
     clip_count = int(request.get("clip_count") or 6)
     command.extend(["--target-clips", str(clip_count)])
+    layout_format = str(request.get("layout_format") or "").strip()
+    facecam_size = str(request.get("facecam_size") or "").strip()
+    if layout_format or facecam_size:
+        command.extend([
+            "--layout-format",
+            layout_format or "standard",
+            "--facecam-size",
+            facecam_size or "medium",
+        ])
     if name != "source_object":
         command.append("--keep-original")
     command.extend(["-o", str(request.get("output_dir") or "")])

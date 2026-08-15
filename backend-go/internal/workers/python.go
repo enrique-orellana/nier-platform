@@ -56,17 +56,24 @@ func (a PythonAdapter) Run(ctx context.Context, job domain.Job, outputDir string
 	if clipCount == 0 {
 		clipCount = 6
 	}
+	args := []string{
+		"-u", mainScript,
+		"--direct-url", job.SourceURL,
+		"--target-clips", strconv.Itoa(clipCount),
+	}
+	if layoutFormat, ok := job.Metadata["layout_format"].(string); ok && strings.TrimSpace(layoutFormat) != "" {
+		args = append(args, "--layout-format", layoutFormat)
+	}
+	if facecamSize, ok := job.Metadata["facecam_size"].(string); ok && strings.TrimSpace(facecamSize) != "" {
+		args = append(args, "--facecam-size", facecamSize)
+	}
+	args = append(args, "-o", outputDir)
 
 	lines := &lineSink{onLine: onLog}
 	err := runner.Run(ctx, CommandSpec{
 		Name: pythonBinary,
-		Args: []string{
-			"-u", mainScript,
-			"--direct-url", job.SourceURL,
-			"--target-clips", strconv.Itoa(clipCount),
-			"-o", outputDir,
-		},
-		Env: []string{"PYTHONUNBUFFERED=1"},
+		Args: args,
+		Env:  []string{"PYTHONUNBUFFERED=1"},
 	}, lines)
 	lines.Flush()
 	return err

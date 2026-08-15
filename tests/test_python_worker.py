@@ -49,6 +49,26 @@ def test_build_clip_generation_command_preserves_job_inputs():
     ]
 
 
+def test_build_clip_generation_command_forwards_streamer_layout_options():
+    request = parse_request(
+        json.dumps(
+            {
+                "id": "job-1",
+                "operation": "clip_generation",
+                "source_path": "source.mp4",
+                "output_dir": "output/job-1",
+                "layout_format": "streamer_stack",
+                "facecam_size": "large",
+            }
+        )
+    )
+
+    command = build_clip_generation_command(request)
+
+    assert command[command.index("--layout-format") + 1] == "streamer_stack"
+    assert command[command.index("--facecam-size") + 1] == "large"
+
+
 def test_build_clip_generation_command_rejects_missing_source():
     request = parse_request(
         json.dumps(

@@ -155,6 +155,8 @@ func TestPythonWorkerAdapterSendsJSONLJobRequest(t *testing.T) {
 				"X-AI-Provider": "openrouter",
 				"X-AI-Api-Key":  "secret",
 			},
+			"layout_format": "streamer_stack",
+			"facecam_size":  "large",
 		},
 	}
 	var logs []string
@@ -179,6 +181,9 @@ func TestPythonWorkerAdapterSendsJSONLJobRequest(t *testing.T) {
 	}
 	if runner.request["source_url"] != job.SourceURL || runner.request["output_dir"] != "output/job-1" {
 		t.Fatalf("unexpected job inputs: %#v", runner.request)
+	}
+	if runner.request["layout_format"] != "streamer_stack" || runner.request["facecam_size"] != "large" {
+		t.Fatalf("layout options were not forwarded: %#v", runner.request)
 	}
 	headers, ok := runner.request["headers"].(map[string]string)
 	if !ok || headers["X-AI-Provider"] != "openrouter" || headers["X-AI-Api-Key"] != "secret" {

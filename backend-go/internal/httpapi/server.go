@@ -986,6 +986,8 @@ type processRequest struct {
 	SourcePath   string         `json:"-"`
 	Acknowledged bool           `json:"acknowledged"`
 	ClipCount    int            `json:"clip_count"`
+	LayoutFormat string         `json:"layout_format"`
+	FacecamSize  string         `json:"facecam_size"`
 }
 
 func (s *Server) process(w http.ResponseWriter, r *http.Request) {
@@ -1046,6 +1048,11 @@ func (s *Server) process(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "clip_count must be between 3 and 15"})
 		return
 	}
+	layoutFormat, facecamSize, err := normalizeProcessLayoutOptions(payload.LayoutFormat, payload.FacecamSize)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
 
 	metadata := map[string]any{}
 	if payload.SourceURL != "" {
@@ -1057,6 +1064,8 @@ func (s *Server) process(w http.ResponseWriter, r *http.Request) {
 	if payload.SourcePath != "" {
 		metadata["source_path"] = payload.SourcePath
 	}
+	metadata["layout_format"] = layoutFormat
+	metadata["facecam_size"] = facecamSize
 	job, err := s.store.Create(r.Context(), domain.CreateJobInput{
 		Kind:      "clip-generation",
 		SourceURL: payload.URL,
@@ -2478,7 +2487,15 @@ func (s *Server) decodeProcessRequest(r *http.Request) (processRequest, error) {
 			return processRequest{}, errors.New("clip_count must be an integer")
 		}
 	}
-	return processRequest{URL: r.FormValue("url"), SourceURL: r.FormValue("source_url"), SourcePath: sourcePath, Acknowledged: acknowledged, ClipCount: clipCount}, nil
+	return processRequest{
+		URL:          r.FormValue("url"),
+		SourceURL:    r.FormValue("source_url"),
+		SourcePath:   sourcePath,
+		Acknowledged: acknowledged,
+		ClipCount:    clipCount,
+		LayoutFormat: r.FormValue("layout_format"),
+		FacecamSize:  r.FormValue("facecam_size"),
+	}, nil
 }
 
 func parseBool(value string) (bool, error) {
@@ -2504,4 +2521,23 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func normalizeProcessLayoutOptions(layoutFormat, facecamSize string) (string, string, error) {
+	layoutFormat = strings.ToLower(strings.TrimSpace(layoutFormat))
+	if layoutFormat == "" {
+		layoutFormat = "standard"
+	}
+	if layoutFormat != "standard" && layoutFormat != "streamer_stack" {
+		return "", "", fmt.Errorf("invalid layout_format: %s", layoutFormat)
+	}
+
+	facecamSize = strings.ToLower(strings.TrimSpace(facecamSize))
+	if facecamSize == "" {
+		facecamSize = "medium"
+	}
+	if facecamSize != "small" && facecamSize != "medium" && facecamSize != "large" {
+		return "", "", fmt.Errorf("invalid facecam_size: %s", facecamSize)
+	}
+	return layoutFormat, facecamSize, nil
 }

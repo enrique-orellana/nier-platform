@@ -43,6 +43,7 @@ from local_editor_subtitles import (
 from media_probe import probe_media
 from video_output_validation import validate_clip_output
 from minio_sources import download_source_object, list_source_objects, validate_source_object
+from streamer_layout import normalize_clip_layout
 
 load_dotenv()
 
@@ -951,6 +952,8 @@ async def process_endpoint(
     url: Optional[str] = Form(None),
     source_url: Optional[str] = Form(None),
     acknowledged: Optional[str] = Form(None),
+    layout_format: Optional[str] = Form(None),
+    facecam_size: Optional[str] = Form(None),
     clip_count: int = Query(6, ge=3, le=15),
     x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
     x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
@@ -983,6 +986,13 @@ async def process_endpoint(
         source_url = body.get("source_url")
         source_object = body.get("source_object")
         ack_flag = bool(body.get("acknowledged"))
+        layout_format = body.get("layout_format")
+        facecam_size = body.get("facecam_size")
+
+    try:
+        layout_options = normalize_clip_layout(layout_format, facecam_size)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     provided_sources = sum(bool(value) for value in (url, file, source_object))
     if provided_sources != 1:
@@ -1059,6 +1069,8 @@ async def process_endpoint(
         cmd.extend(["--source-url", source_url])
 
     cmd.extend(["--target-clips", str(clip_count)])
+    cmd.extend(["--layout-format", layout_options.layout_format])
+    cmd.extend(["--facecam-size", layout_options.facecam_size])
     if not normalized_source_object:
         # Preserve the existing URL/file behavior until those workflows are migrated.
         cmd.append("--keep-original")
@@ -1075,6 +1087,8 @@ async def process_endpoint(
         'output_dir': job_output_dir,
         'attestation': attestation,
         'source_object': normalized_source_object,
+        'layout_format': layout_options.layout_format,
+        'facecam_size': layout_options.facecam_size,
     }
 
     await job_queue.put(job_id)

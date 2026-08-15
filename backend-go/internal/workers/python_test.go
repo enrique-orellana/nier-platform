@@ -30,6 +30,10 @@ func TestPythonAdapterBuildsMediaCommandAndStreamsLogs(t *testing.T) {
 		ID:        "job-1",
 		SourceURL: "https://example.com/source.mp4",
 		ClipCount: 4,
+		Metadata: map[string]any{
+			"layout_format": "streamer_stack",
+			"facecam_size":  "large",
+		},
 	}
 	var logs []string
 
@@ -42,7 +46,7 @@ func TestPythonAdapterBuildsMediaCommandAndStreamsLogs(t *testing.T) {
 	if recorder.spec.Name != "python-test" {
 		t.Fatalf("unexpected command name: %q", recorder.spec.Name)
 	}
-	expectedArgs := []string{"-u", "main.py", "--direct-url", "https://example.com/source.mp4", "--target-clips", "4", "-o", "output/job-1"}
+	expectedArgs := []string{"-u", "main.py", "--direct-url", "https://example.com/source.mp4", "--target-clips", "4", "--layout-format", "streamer_stack", "--facecam-size", "large", "-o", "output/job-1"}
 	if len(recorder.spec.Args) != len(expectedArgs) {
 		t.Fatalf("unexpected args: %#v", recorder.spec.Args)
 	}
