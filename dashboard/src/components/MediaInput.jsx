@@ -13,6 +13,8 @@ export default function MediaInput({
     const [sourceUrl, setSourceUrl] = useState('');
     const [file, setFile] = useState(null);
     const [acknowledged, setAcknowledged] = useState(false);
+    const [layoutFormat, setLayoutFormat] = useState('standard');
+    const [facecamSize, setFacecamSize] = useState('medium');
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -23,9 +25,18 @@ export default function MediaInput({
                 payload: { bucket: selectedObject.bucket, key: selectedObject.key },
                 sourceUrl: sourceUrl.trim(),
                 acknowledged: true,
+                layoutFormat,
+                facecamSize,
             });
         } else if (mode === 'file' && file) {
-            onProcess({ type: 'file', payload: file, sourceUrl: sourceUrl.trim(), acknowledged: true });
+            onProcess({
+                type: 'file',
+                payload: file,
+                sourceUrl: sourceUrl.trim(),
+                acknowledged: true,
+                layoutFormat,
+                facecamSize,
+            });
         }
     };
 
@@ -117,6 +128,38 @@ export default function MediaInput({
                     <p className="text-xs text-zinc-500">
                         Add the original YouTube or Twitch page to improve creator, topic, event, and location accuracy. It is used for context only, not to download the processing video.
                     </p>
+                </div>
+
+                <div className="mt-5">
+                    <label htmlFor="video-format" className="text-xs uppercase tracking-[0.2em] text-zinc-500">
+                        Video format
+                    </label>
+                    <select
+                        id="video-format"
+                        value={layoutFormat}
+                        onChange={(e) => setLayoutFormat(e.target.value)}
+                        className="input-field mt-2"
+                    >
+                        <option value="standard">Standard 9:16</option>
+                        <option value="streamer_stack">Streamer Stack</option>
+                    </select>
+                    {layoutFormat === 'streamer_stack' && (
+                        <>
+                            <label htmlFor="facecam-size" className="block text-xs uppercase tracking-[0.2em] text-zinc-500 mt-4">
+                                Facecam size
+                            </label>
+                            <select
+                                id="facecam-size"
+                                value={facecamSize}
+                                onChange={(e) => setFacecamSize(e.target.value)}
+                                className="input-field mt-2"
+                            >
+                                <option value="small">Small</option>
+                                <option value="medium">Medium</option>
+                                <option value="large">Large</option>
+                            </select>
+                        </>
+                    )}
                 </div>
 
                 <div className="mt-5">

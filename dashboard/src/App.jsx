@@ -865,17 +865,23 @@ function App() {
               source_object: data.payload,
               source_url: data.sourceUrl?.trim() || undefined,
               acknowledged: !!data.acknowledged,
+              layout_format: data.layoutFormat || 'standard',
+              facecam_size: data.facecamSize || 'medium',
             }
           : {
               url: data.payload,
               source_url: data.sourceUrl?.trim() || undefined,
               acknowledged: !!data.acknowledged,
+              layout_format: data.layoutFormat || 'standard',
+              facecam_size: data.facecamSize || 'medium',
             });
       } else {
         const formData = new FormData();
         formData.append('file', data.payload);
         formData.append('acknowledged', data.acknowledged ? 'true' : 'false');
         if (data.sourceUrl?.trim()) formData.append('source_url', data.sourceUrl.trim());
+        formData.append('layout_format', data.layoutFormat || 'standard');
+        formData.append('facecam_size', data.facecamSize || 'medium');
         body = formData;
       }
 

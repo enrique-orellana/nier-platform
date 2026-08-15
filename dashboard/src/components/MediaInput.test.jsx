@@ -35,6 +35,8 @@ describe('MediaInput', () => {
       payload: { bucket: 'youtube-downloads', key: 'videos/source.mp4' },
       sourceUrl: 'https://www.twitch.tv/videos/2842570758',
       acknowledged: true,
+      layoutFormat: 'standard',
+      facecamSize: 'medium',
     });
   });
 
@@ -54,6 +56,29 @@ describe('MediaInput', () => {
       type: 'file',
       sourceUrl: 'https://www.youtube.com/watch?v=source123',
       acknowledged: true,
+      layoutFormat: 'standard',
+      facecamSize: 'medium',
+    }));
+  });
+
+  it('submits Streamer Stack with the selected facecam size and no pre-generation hook control', () => {
+    const onProcess = vi.fn();
+    const { container } = render(<MediaInput onProcess={onProcess} isProcessing={false} targetClipCount={6} onTargetClipCountChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /upload file/i }));
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: { files: [new File(['video'], 'source.mp4', { type: 'video/mp4' })] },
+    });
+    fireEvent.change(screen.getByLabelText(/video format/i), { target: { value: 'streamer_stack' } });
+    fireEvent.change(screen.getByLabelText(/facecam size/i), { target: { value: 'large' } });
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: /generate clips/i }));
+
+    expect(screen.queryByLabelText(/hook/i)).not.toBeInTheDocument();
+    expect(onProcess).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'file',
+      layoutFormat: 'streamer_stack',
+      facecamSize: 'large',
     }));
   });
 });
