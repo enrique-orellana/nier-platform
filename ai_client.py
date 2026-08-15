@@ -73,6 +73,8 @@ class AIConfig:
 
         cleaned = self.base_url.strip().rstrip("/")
         if self.is_openrouter():
+            if cleaned.lower() == "https://openrouter.ai":
+                return OPENROUTER_BASE_URL
             return cleaned
         parsed = urlsplit(cleaned)
         if not parsed.scheme or not parsed.netloc:

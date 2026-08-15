@@ -66,6 +66,14 @@ class OpenRouterTests(unittest.TestCase):
         self.assertEqual(config.transcription_provider, "local")
         self.assertEqual(config.transcription_model, "openai/whisper-large-v3")
 
+    def test_openrouter_root_base_url_is_normalized_to_api_root(self):
+        config = ai_client.AIConfig(
+            provider="openrouter",
+            base_url="https://openrouter.ai",
+        )
+
+        self.assertEqual(config.resolved_base_url(), "https://openrouter.ai/api/v1")
+
     @patch("ai_client.httpx.Client", RecordingClient)
     def test_chat_completion_uses_openrouter_compatible_endpoint(self):
         config = ai_client.AIConfig(
