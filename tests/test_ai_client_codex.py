@@ -59,9 +59,10 @@ class FakeCodexStreamClient:
     last_url = None
     last_headers = None
     last_payload = None
+    last_timeout = None
 
     def __init__(self, *args, **kwargs):
-        pass
+        self.__class__.last_timeout = kwargs.get("timeout")
 
     def __enter__(self):
         return self
@@ -194,6 +195,19 @@ def test_codex_transport_aggregates_response_output_text_deltas(monkeypatch):
     assert FakeCodexStreamClient.last_payload["model"] == ai_client.CODEX_DEFAULT_MODEL
     assert FakeCodexStreamClient.last_payload["stream"] is True
     assert FakeCodexStreamClient.last_payload["store"] is False
+
+
+def test_codex_transport_caps_requested_timeout_at_40_seconds(monkeypatch):
+    config = ai_client.AIConfig(provider="openai-codex", text_model="auto")
+    monkeypatch.setattr(ai_client, "get_access_token", lambda: "access")
+    monkeypatch.setattr(ai_client, "get_codex_account_id", lambda: "account")
+    monkeypatch.setattr(ai_client.httpx, "Client", FakeCodexStreamClient)
+    monkeypatch.setattr(ai_client.time, "monotonic", lambda: 100.0)
+
+    ai_client.chat_completion(config, "Return JSON", timeout=300.0)
+
+    assert ai_client.CODEX_MAX_TIMEOUT_SECONDS == 40.0
+    assert FakeCodexStreamClient.last_timeout == 40.0
 
 
 def test_codex_transport_sends_selected_reasoning_effort(monkeypatch):

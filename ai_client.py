@@ -27,6 +27,7 @@ OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS = 3
 OPENROUTER_TRANSCRIPTION_RETRY_BACKOFF_SECONDS = 1.0
 CODEX_STREAM_MAX_ATTEMPTS = 3
 CODEX_STREAM_RETRY_BACKOFF_SECONDS = 0.5
+CODEX_MAX_TIMEOUT_SECONDS = 40.0
 CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.4")
 CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
 AUTO_MODEL_VALUES = {"", "auto", "default"}
@@ -674,6 +675,13 @@ def _build_codex_input(prompt: str, images: Optional[Sequence[Any]] = None) -> l
     return [{"role": "user", "content": content}]
 
 
+def _codex_timeout(timeout: float) -> float:
+    """Keep Codex requests bounded so a stalled generation cannot block a job for minutes."""
+    if timeout <= 0:
+        return timeout
+    return min(float(timeout), CODEX_MAX_TIMEOUT_SECONDS)
+
+
 def _extract_codex_sse_text(lines: Sequence[Any], *, deadline: float | None = None) -> str:
     chunks: list[str] = []
     for raw_line in lines:
@@ -708,6 +716,7 @@ def _codex_chat(
     timeout: float = 300.0,
 ) -> str:
     del json_mode
+    timeout = _codex_timeout(timeout)
     resolved_model = _normalize_model_for_provider(model or config.text_model, "openai-codex", "text")
     if resolved_model.lower() in AUTO_MODEL_VALUES:
         resolved_model = _codex_default_model()

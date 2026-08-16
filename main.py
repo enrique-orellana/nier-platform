@@ -44,10 +44,6 @@ try:
 except ImportError:  # pragma: no cover - required only for URL ingestion
     yt_dlp = None
 
-try:
-    import mediapipe as mp
-except ImportError:  # pragma: no cover - required only for tracking renders
-    mp = None
 # import whisper (replaced by faster_whisper inside function)
 from dotenv import load_dotenv
 import json
@@ -167,16 +163,9 @@ OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by pre
 }}
 """
 
-# Load the YOLO model once, only if the face detector needs its fallback.
+# Load the YOLO model once for GPU-backed face/person analysis and fallback framing.
 model = None
-
-# --- MediaPipe Setup ---
-# Use standard Face Detection (BlazeFace) for speed
-face_detection = None
-_scene_face_detection_local = threading.local()
-if mp is not None:
-    mp_face_detection = mp.solutions.face_detection
-    face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
+_yolo_inference_lock = threading.Lock()
 
 class SmoothedCameraman:
     """
@@ -379,55 +368,53 @@ class SpeakerTracker:
             
         return None
 
-def detect_face_candidates(frame, detector=None):
-    """
-    Returns list of all detected faces using lightweight FaceDetection.
-    """
-    detector = detector or face_detection
-    if detector is None:
-        raise RuntimeError("MediaPipe is required for face tracking")
+def _get_yolo_model():
+    global model
+    if model is None:
+        with _yolo_inference_lock:
+            if model is None:
+                from ultralytics import YOLO
 
-    height, width, _ = frame.shape
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = detector.process(rgb_frame)
-    
+                model = YOLO("yolov8n.pt")
+    return model
+
+
+def _run_yolo_person_detection(frame, detector=None):
+    detector = detector or _get_yolo_model()
+    device = preferred_device()
+    with _yolo_inference_lock:
+        try:
+            return detector(frame, verbose=False, classes=[0], device=device)
+        except Exception:
+            if device != "cuda":
+                raise
+            return detector(frame, verbose=False, classes=[0], device="cpu")
+
+
+def _yolo_person_boxes(frame, detector=None):
+    for result in _run_yolo_person_detection(frame, detector=detector) or []:
+        for box in result.boxes:
+            x1, y1, x2, y2 = [int(value) for value in box.xyxy[0]]
+            width = x2 - x1
+            height = y2 - y1
+            if width > 0 and height > 0:
+                yield x1, y1, width, height
+
+
+def detect_face_candidates(frame, detector=None):
+    """Return GPU-backed face-region candidates from detected people."""
     candidates = []
-    
-    if not results.detections:
-        return []
-        
-    for detection in results.detections:
-        bboxC = detection.location_data.relative_bounding_box
-        x = int(bboxC.xmin * width)
-        y = int(bboxC.ymin * height)
-        w = int(bboxC.width * width)
-        h = int(bboxC.height * height)
-        
+    for x, y, width, height in _yolo_person_boxes(frame, detector=detector):
+        face_height = max(1, int(height * 0.4))
         candidates.append({
-            'box': [x, y, w, h],
-            'score': w * h # Area as score
+            "box": [x, y, width, face_height],
+            "score": width * face_height,
         })
-            
     return candidates
 
 
-def _scene_face_detector():
-    """Return a detector owned by the current worker thread."""
-    if face_detection is None:
-        return None
-    detector = getattr(_scene_face_detection_local, "detector", None)
-    if detector is None:
-        detector = mp.solutions.face_detection.FaceDetection(
-            model_selection=1,
-            min_detection_confidence=0.5,
-        )
-        _scene_face_detection_local.detector = detector
-    return detector
-
-
 def _count_scene_faces(frame):
-    detector = _scene_face_detector()
-    return len(detect_face_candidates(frame, detector=detector))
+    return len(detect_face_candidates(frame))
 
 
 def resize_scene_strategy_frame(frame, max_dimension=SCENE_STRATEGY_MAX_DIMENSION):
@@ -452,41 +439,15 @@ def detect_person_yolo(frame):
     Fallback: Detect largest person using YOLO when face detection fails.
     Returns [x, y, w, h] of the person's 'upper body' approximation.
     """
-    global model
-    if model is None:
-        from ultralytics import YOLO
-
-        model = YOLO("yolov8n.pt")
-
-    device = preferred_device()
-    try:
-        results = model(frame, verbose=False, classes=[0], device=device) # class 0 is person
-    except Exception:
-        if device != "cuda":
-            raise
-        results = model(frame, verbose=False, classes=[0], device="cpu")
-    
-    if not results:
-        return None
-        
     best_box = None
     max_area = 0
-    
-    for result in results:
-        boxes = result.boxes
-        for box in boxes:
-            x1, y1, x2, y2 = [int(i) for i in box.xyxy[0]]
-            w = x2 - x1
-            h = y2 - y1
-            area = w * h
-            
-            if area > max_area:
-                max_area = area
-                # Focus on the top 40% of the person (head/chest) for framing
-                # This approximates where the face is if we can't detect it directly
-                face_h = int(h * 0.4)
-                best_box = [x1, y1, w, face_h]
-                
+    for x, y, width, height in _yolo_person_boxes(frame):
+        area = width * height
+        if area > max_area:
+            max_area = area
+            # Focus on the top 40% of the person (head/chest) for framing.
+            best_box = [x, y, width, max(1, int(height * 0.4))]
+
     return best_box
 
 def create_general_frame(frame, output_width, output_height):

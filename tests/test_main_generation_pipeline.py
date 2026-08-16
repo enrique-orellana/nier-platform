@@ -383,6 +383,30 @@ class MainGenerationPipelineTests(unittest.TestCase):
 
         self.assertEqual(calls[0]["device"], "cuda")
 
+    def test_face_candidates_use_yolo_on_selected_accelerator(self):
+        calls = []
+
+        class FakeBox:
+            xyxy = [np.array([10, 20, 110, 220], dtype=np.float32)]
+
+        class FakeResult:
+            boxes = [FakeBox()]
+
+        class FakeYolo:
+            def __call__(self, frame, **kwargs):
+                calls.append(kwargs)
+                return [FakeResult()]
+
+        with patch.object(main, "model", FakeYolo()), patch.object(
+            main, "preferred_device", return_value="cuda"
+        ):
+            candidates = main.detect_face_candidates(
+                np.zeros((240, 320, 3), dtype=np.uint8)
+            )
+
+        self.assertEqual(calls[0]["device"], "cuda")
+        self.assertEqual(candidates, [{"box": [10, 20, 100, 80], "score": 8000}])
+
     def test_detect_scenes_passes_frame_skip_to_scene_manager(self):
         scene_manager = Mock()
         scene_manager.get_scene_list.return_value = []
