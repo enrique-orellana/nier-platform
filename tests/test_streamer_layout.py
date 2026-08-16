@@ -4,8 +4,12 @@ import numpy as np
 from streamer_layout import (
     ClipLayoutOptions,
     compose_streamer_stack_frame,
+    crop_webcam_region,
+    filter_candidates_outside_webcam_region,
     normalize_clip_layout,
+    normalize_webcam_region,
     streamer_panel_heights,
+    webcam_region_pixel_bounds,
 )
 
 
@@ -24,6 +28,72 @@ def test_invalid_values_fail_before_rendering():
         normalize_clip_layout("split_screen", "medium")
     with pytest.raises(ValueError, match="facecam_size"):
         normalize_clip_layout("streamer_stack", "huge")
+
+
+@pytest.mark.parametrize(
+    "region",
+    [
+        {"x": 0.0, "y": 0.0, "width": 1.0, "height": 1.0},
+        {"x": 0.02, "y": 0.18, "width": 0.23, "height": 0.43},
+    ],
+)
+def test_normalize_webcam_region_accepts_bounded_finite_values(region):
+    assert normalize_webcam_region(region) == region
+
+
+@pytest.mark.parametrize(
+    "region",
+    [
+        None,
+        {},
+        {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.5},
+        {"x": 0.0, "y": 0.0, "width": -0.1, "height": 0.5},
+        {"x": 0.8, "y": 0.0, "width": 0.3, "height": 0.5},
+        {"x": 0.0, "y": 0.8, "width": 0.5, "height": 0.3},
+        {"x": float("nan"), "y": 0.0, "width": 0.5, "height": 0.5},
+        {"x": 0.0, "y": float("inf"), "width": 0.5, "height": 0.5},
+        {"x": 0.0, "y": 0.0, "width": 0.5},
+        [0.0, 0.0, 0.5, 0.5],
+    ],
+)
+def test_normalize_webcam_region_rejects_invalid_values(region):
+    with pytest.raises(ValueError, match="webcam_region"):
+        normalize_webcam_region(region)
+
+
+def test_webcam_region_converts_to_source_pixel_bounds():
+    assert webcam_region_pixel_bounds(
+        {"x": 0.25, "y": 0.1, "width": 0.5, "height": 0.6},
+        frame_width=200,
+        frame_height=100,
+    ) == (50, 10, 150, 70)
+
+
+def test_crop_webcam_region_preserves_selection_without_stretching():
+    source = np.zeros((100, 200, 3), dtype=np.uint8)
+    source[:, :, 0] = np.arange(200, dtype=np.uint8)
+    region = {"x": 0.25, "y": 0.2, "width": 0.5, "height": 0.5}
+
+    result = crop_webcam_region(source, region, target_width=40, target_height=40)
+
+    assert result.shape == (40, 40, 3)
+    assert 70 <= int(result[:, :, 0].mean()) <= 130
+
+
+def test_filter_candidates_rejects_webcam_region_and_touching_boxes():
+    region = {"x": 0.25, "y": 0.25, "width": 0.25, "height": 0.5}
+    candidates = [
+        {"box": [0, 0, 40, 40], "score": 1},
+        {"box": [50, 25, 10, 30], "score": 2},
+        {"box": [60, 40, 20, 40], "score": 3},
+        {"box": [120, 40, 20, 40], "score": 4},
+    ]
+
+    retained = filter_candidates_outside_webcam_region(
+        candidates, region, frame_width=200, frame_height=100
+    )
+
+    assert [candidate["score"] for candidate in retained] == [1, 4]
 
 
 def test_streamer_stack_composes_facecam_over_gameplay():

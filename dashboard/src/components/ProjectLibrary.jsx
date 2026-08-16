@@ -84,6 +84,8 @@ export default function ProjectLibrary({
   const [clipRenderJobs, setClipRenderJobs] = useState({});
   const [statusError, setStatusError] = useState('');
   const [savingStatusIndex, setSavingStatusIndex] = useState(null);
+  const [webcamRegionSavingIndex, setWebcamRegionSavingIndex] = useState(null);
+  const [webcamRegionErrors, setWebcamRegionErrors] = useState({});
 
   const loadProjects = useCallback(async () => {
     setIsLoading(true);
@@ -159,6 +161,8 @@ export default function ProjectLibrary({
       setClipStatuses({});
       setClipRenderJobs({});
       setStatusError('');
+      setWebcamRegionSavingIndex(null);
+      setWebcamRegionErrors({});
       return;
     }
 
@@ -172,6 +176,8 @@ export default function ProjectLibrary({
     setClipStatuses({});
     setClipRenderJobs({});
     setStatusError('');
+    setWebcamRegionSavingIndex(null);
+    setWebcamRegionErrors({});
     if (!matchingProject.clips?.length) loadProjectClips(matchingProject);
   }, [loadProjectClips, projectId, projects]);
 
@@ -191,6 +197,8 @@ export default function ProjectLibrary({
     setClipStatuses({});
     setClipRenderJobs({});
     setStatusError('');
+    setWebcamRegionSavingIndex(null);
+    setWebcamRegionErrors({});
     if (!project?.clips?.length) {
       loadProjectClips(project);
     }
@@ -300,6 +308,34 @@ export default function ProjectLibrary({
           ? { ...clip, render_status: 'failed', render_error: error.message }
           : clip;
       }));
+    }
+  };
+
+  const handleSaveWebcamRegion = async (clipIndex, webcamRegion) => {
+    const jobId = selectedProject?.job_id || selectedProject?.session_id || selectedProject?.id;
+    if (!jobId) return false;
+    const key = String(clipIndex);
+    setWebcamRegionSavingIndex(key);
+    setWebcamRegionErrors((current) => ({ ...current, [key]: '' }));
+    try {
+      const response = await fetch(getApiUrl(`/api/jobs/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipIndex)}/webcam-region`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webcam_region: webcamRegion }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || 'Could not save webcam area');
+      const savedRegion = payload.webcam_region || webcamRegion;
+      setProjectClips((current) => current.map((clip, index) => {
+        const currentIndex = Number.isInteger(clip.index) ? clip.index : index;
+        return currentIndex === clipIndex ? { ...clip, webcam_region: savedRegion } : clip;
+      }));
+      return savedRegion;
+    } catch (error) {
+      setWebcamRegionErrors((current) => ({ ...current, [key]: error.message || 'Could not save webcam area.' }));
+      return false;
+    } finally {
+      setWebcamRegionSavingIndex(null);
     }
   };
 
@@ -498,6 +534,9 @@ export default function ProjectLibrary({
                     onRenderClip={handleRenderClip}
                     renderStatus={clip.render_status}
                     renderError={clip.render_error}
+                    onSaveWebcamRegion={handleSaveWebcamRegion}
+                    webcamRegionSaving={webcamRegionSavingIndex === String(clip.index ?? index)}
+                    webcamRegionError={webcamRegionErrors[String(clip.index ?? index)]}
                   />
                 ))}
               </div>

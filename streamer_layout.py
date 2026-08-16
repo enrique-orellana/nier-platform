@@ -1,6 +1,8 @@
 """Layout and frame-composition helpers for streamer-style vertical clips."""
 
 from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+import math
 
 import cv2
 import numpy as np
@@ -33,6 +35,113 @@ def normalize_clip_layout(
     if normalized_facecam_size not in FACECAM_HEIGHT_RATIOS:
         raise ValueError(f"invalid facecam_size: {facecam_size}")
     return ClipLayoutOptions(normalized_layout, normalized_facecam_size)
+
+
+def normalize_webcam_region(region: Mapping[str, object] | None) -> dict[str, float]:
+    """Validate and normalize a source-frame webcam rectangle."""
+
+    if not isinstance(region, Mapping):
+        raise ValueError("webcam_region must be an object")
+
+    values: dict[str, float] = {}
+    for key in ("x", "y", "width", "height"):
+        value = region.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"webcam_region.{key} must be a finite number")
+        numeric_value = float(value)
+        if not math.isfinite(numeric_value):
+            raise ValueError(f"webcam_region.{key} must be a finite number")
+        values[key] = numeric_value
+
+    if values["width"] <= 0 or values["height"] <= 0:
+        raise ValueError("webcam_region width and height must be positive")
+    if values["x"] < 0 or values["y"] < 0:
+        raise ValueError("webcam_region x and y must be non-negative")
+    if values["x"] + values["width"] > 1 or values["y"] + values["height"] > 1:
+        raise ValueError("webcam_region must fit inside the source frame")
+    return values
+
+
+def webcam_region_pixel_bounds(
+    region: Mapping[str, object], frame_width: int, frame_height: int
+) -> tuple[int, int, int, int]:
+    """Convert a normalized region into clamped ``left, top, right, bottom`` pixels."""
+
+    if frame_width <= 0 or frame_height <= 0:
+        raise ValueError("frame dimensions must be positive")
+    normalized = normalize_webcam_region(region)
+    left = max(0, min(frame_width - 1, int(round(normalized["x"] * frame_width))))
+    top = max(0, min(frame_height - 1, int(round(normalized["y"] * frame_height))))
+    right = max(left + 1, min(frame_width, int(round((normalized["x"] + normalized["width"]) * frame_width))))
+    bottom = max(top + 1, min(frame_height, int(round((normalized["y"] + normalized["height"]) * frame_height))))
+    return left, top, right, bottom
+
+
+def crop_webcam_region(
+    frame: np.ndarray,
+    region: Mapping[str, object],
+    target_width: int,
+    target_height: int,
+) -> np.ndarray:
+    """Crop the selected source region to a panel aspect without stretching it."""
+
+    if target_width <= 0 or target_height <= 0:
+        raise ValueError("target dimensions must be positive")
+    left, top, right, bottom = webcam_region_pixel_bounds(
+        region, frame.shape[1], frame.shape[0]
+    )
+    selected = frame[top:bottom, left:right]
+    selected_height, selected_width = selected.shape[:2]
+    target_aspect = target_width / target_height
+    selected_aspect = selected_width / selected_height
+
+    if selected_aspect >= target_aspect:
+        crop_height = selected_height
+        crop_width = max(1, min(selected_width, int(round(crop_height * target_aspect))))
+    else:
+        crop_width = selected_width
+        crop_height = max(1, min(selected_height, int(round(crop_width / target_aspect))))
+
+    crop_left = max(0, (selected_width - crop_width) // 2)
+    crop_top = max(0, (selected_height - crop_height) // 2)
+    cropped = selected[crop_top:crop_top + crop_height, crop_left:crop_left + crop_width]
+    return cv2.resize(cropped, (target_width, target_height), interpolation=cv2.INTER_AREA)
+
+
+def filter_candidates_outside_webcam_region(
+    candidates: Sequence[Mapping[str, object]],
+    region: Mapping[str, object],
+    frame_width: int,
+    frame_height: int,
+) -> list[Mapping[str, object]]:
+    """Keep only detection candidates that do not touch the selected webcam area."""
+
+    left, top, right, bottom = webcam_region_pixel_bounds(
+        region, frame_width, frame_height
+    )
+    retained: list[Mapping[str, object]] = []
+    for candidate in candidates:
+        box = candidate.get("box") if isinstance(candidate, Mapping) else None
+        if not isinstance(box, Sequence) or isinstance(box, (str, bytes)) or len(box) < 4:
+            retained.append(candidate)
+            continue
+        try:
+            box_left = float(box[0])
+            box_top = float(box[1])
+            box_right = box_left + float(box[2])
+            box_bottom = box_top + float(box[3])
+        except (TypeError, ValueError):
+            retained.append(candidate)
+            continue
+        touches_region = not (
+            box_right < left
+            or box_left > right
+            or box_bottom < top
+            or box_top > bottom
+        )
+        if not touches_region:
+            retained.append(candidate)
+    return retained
 
 
 def streamer_panel_heights(
@@ -91,24 +200,34 @@ def compose_streamer_stack_frame(
     output_height: int,
     facecam_size: str = "medium",
     face_focus: tuple[float, float] | None = None,
+    webcam_region: Mapping[str, object] | None = None,
+    gameplay_focus: tuple[float, float] | None = None,
 ) -> np.ndarray:
     """Create a facecam-over-gameplay frame from one source recording."""
 
     facecam_height, gameplay_height = streamer_panel_heights(
         output_width, output_height, facecam_size
     )
-    facecam = _crop_to_aspect(
-        frame,
-        output_width,
-        facecam_height,
-        face_focus,
-        zoom=1.6,
-    )
+    if webcam_region is not None:
+        facecam = crop_webcam_region(
+            frame,
+            webcam_region,
+            target_width=output_width,
+            target_height=facecam_height,
+        )
+    else:
+        facecam = _crop_to_aspect(
+            frame,
+            output_width,
+            facecam_height,
+            face_focus,
+            zoom=1.6,
+        )
     gameplay = _crop_to_aspect(
         frame,
         output_width,
         gameplay_height,
-        focus=(0.5, 0.58),
+        focus=gameplay_focus or (0.5, 0.58),
         # A bounded zoom gives the lower-biased focus room to move on
         # landscape sources, where an unzoomed portrait crop uses full height.
         zoom=1.12,

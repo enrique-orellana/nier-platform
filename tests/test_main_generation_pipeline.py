@@ -16,6 +16,9 @@ from video_analysis import SourceAnalysis
 from video_metrics import JobVideoMetrics
 
 
+WEBCAM_REGION = {"x": 0.02, "y": 0.18, "width": 0.23, "height": 0.43}
+
+
 def source_media():
     return MediaProbe(
         path="source.mp4",
@@ -342,6 +345,83 @@ class MainGenerationPipelineTests(unittest.TestCase):
         )
         render.assert_called_once()
 
+    def test_render_deferred_clip_forwards_saved_webcam_region(self):
+        clips_data = {
+            "shorts": [
+                {
+                    "start": 1.0,
+                    "end": 4.0,
+                    "layout_format": "streamer_stack",
+                    "facecam_size": "medium",
+                    "webcam_region": WEBCAM_REGION,
+                }
+            ]
+        }
+        analysis = SourceAnalysis(
+            source_fingerprint={"size": 1},
+            source_fps=30.0,
+            total_frames=300,
+            width=1920,
+            height=1080,
+            scene_boundaries=[(0, 300)],
+            scene_strategies=["TRACK"],
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory) / "output"
+            output_dir.mkdir()
+            source_path = output_dir / "source.mp4"
+            source_path.write_bytes(b"source")
+            main.persist_discovered_clip_plan(
+                clips_data,
+                output_dir=str(output_dir),
+                video_title="source",
+                source_path=str(source_path),
+                source_asset={"relative_path": "source.mp4", "asset_id": "source"},
+                source_media=source_media(),
+                transcript={},
+            )
+
+            def fake_render(**kwargs):
+                clip = kwargs["clips"][0]
+                clip["video_filename"] = "source_clip_1.mp4"
+                (output_dir / clip["video_filename"]).write_bytes(b"rendered")
+                return [clip]
+
+            with patch.object(main, "probe_media", return_value=source_media()), patch.object(
+                main, "build_clip_source_analysis_for_job", return_value=analysis
+            ), patch.object(main, "render_clip_plan", side_effect=fake_render) as render:
+                main.render_deferred_clip(
+                    input_video=str(source_path), output_dir=str(output_dir), clip_index=0
+                )
+
+        self.assertEqual(render.call_args.kwargs["webcam_region"], WEBCAM_REGION)
+
+    def test_render_clip_plan_requires_webcam_region_for_streamer_stack(self):
+        analysis = SourceAnalysis(
+            source_fingerprint={"size": 1},
+            source_fps=30.0,
+            total_frames=300,
+            width=1920,
+            height=1080,
+            scene_boundaries=[(0, 300)],
+            scene_strategies=["TRACK"],
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "webcam_region is required"):
+                main.render_clip_plan(
+                    input_video="source.mp4",
+                    output_dir=directory,
+                    video_title="source",
+                    clips=[{"start": 0.0, "end": 2.0}],
+                    source_analysis=analysis,
+                    transcript={},
+                    source_asset={"asset_id": "source"},
+                    source_media=source_media(),
+                    layout_format="streamer_stack",
+                )
+
     def test_yolo_person_fallback_uses_selected_accelerator(self):
         calls = []
 
@@ -603,13 +683,16 @@ class MainGenerationPipelineTests(unittest.TestCase):
                         source_media=source_media(),
                         layout_format="streamer_stack",
                         facecam_size="large",
+                        webcam_region=WEBCAM_REGION,
                     )
 
         self.assertEqual(render.call_count, 1)
         self.assertEqual(render.call_args.kwargs["layout_format"], "streamer_stack")
         self.assertEqual(render.call_args.kwargs["facecam_size"], "large")
+        self.assertEqual(render.call_args.kwargs["webcam_region"], WEBCAM_REGION)
         self.assertEqual(result[0]["layout_format"], "streamer_stack")
         self.assertEqual(result[0]["facecam_size"], "large")
+        self.assertEqual(result[0]["webcam_region"], WEBCAM_REGION)
 
     def test_clip_manifest_records_streamer_layout_metadata(self):
         clip = {"start": 1.0, "end": 4.0}
@@ -625,14 +708,19 @@ class MainGenerationPipelineTests(unittest.TestCase):
                 {},
                 layout_format="streamer_stack",
                 facecam_size="large",
+                webcam_region=WEBCAM_REGION,
             )
             manifest = json.loads(
                 (Path(directory) / manifest_path).read_text(encoding="utf-8")
             )
 
-        self.assertEqual(manifest["layers"]["layout"], {"format": "streamer_stack", "facecam_size": "large"})
+        self.assertEqual(
+            manifest["layers"]["layout"],
+            {"format": "streamer_stack", "facecam_size": "large", "webcam_region": WEBCAM_REGION},
+        )
         self.assertEqual(manifest["export_policy"]["layout_format"], "streamer_stack")
         self.assertEqual(manifest["export_policy"]["facecam_size"], "large")
+        self.assertEqual(manifest["export_policy"]["webcam_region"], WEBCAM_REGION)
 
     def test_streamer_render_validates_master_dimensions_fps_and_audio(self):
         analysis = SourceAnalysis(
@@ -666,6 +754,7 @@ class MainGenerationPipelineTests(unittest.TestCase):
                     source_media=source_media(),
                     layout_format="streamer_stack",
                     facecam_size="large",
+                    webcam_region=WEBCAM_REGION,
                 )
 
         self.assertTrue(result)
@@ -705,9 +794,59 @@ class MainGenerationPipelineTests(unittest.TestCase):
                         source_analysis=analysis,
                         source_media=source_media(),
                         layout_format="streamer_stack",
+                        webcam_region=WEBCAM_REGION,
                     )
 
         self.assertTrue(process.terminated)
+
+    def test_streamer_render_uses_only_non_webcam_candidates_for_gameplay_focus(self):
+        analysis = SourceAnalysis(
+            source_fingerprint={"size": 1},
+            source_fps=30.0,
+            total_frames=2,
+            width=1920,
+            height=1080,
+            scene_boundaries=[(0, 2)],
+            scene_strategies=["TRACK"],
+        )
+        process = FakeProcess()
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "streamer.mp4"
+
+            def fake_run(command, **_kwargs):
+                Path(command[-1]).touch()
+
+            with patch.object(main, "FFmpegVideoStream", return_value=FakeStreamerCapture()), patch.object(
+                main,
+                "detect_face_candidates",
+                return_value=[
+                    {"box": [100, 250, 200, 250], "score": 50000},
+                    {"box": [1000, 200, 200, 300], "score": 60000},
+                ],
+            ), patch.object(main, "detect_person_yolo", return_value=None), patch.object(
+                main,
+                "compose_streamer_stack_frame",
+                return_value=np.zeros((1920, 1080, 3), dtype=np.uint8),
+            ) as compose, patch.object(main.subprocess, "Popen", return_value=process), patch.object(
+                main.subprocess, "run", side_effect=fake_run
+            ), patch.object(main, "validate_clip_output"):
+                main.process_video_to_vertical(
+                    "source.mp4",
+                    str(output_path),
+                    source_analysis=analysis,
+                    source_media=source_media(),
+                    layout_format="streamer_stack",
+                    webcam_region=WEBCAM_REGION,
+                )
+
+        assert compose.call_count == 2
+        for call in compose.call_args_list:
+            assert call.kwargs["webcam_region"] == WEBCAM_REGION
+            assert call.kwargs["gameplay_focus"] == (
+                (1000 + 100) / 1920,
+                (200 + 150) / 1080,
+            )
 
     def test_streamer_render_composes_real_facecam_and_gameplay_panels(self):
         analysis = SourceAnalysis(
@@ -758,6 +897,7 @@ class MainGenerationPipelineTests(unittest.TestCase):
                     source_media=media,
                     layout_format="streamer_stack",
                     facecam_size="medium",
+                    webcam_region=WEBCAM_REGION,
                 )
 
             self.assertTrue(result)

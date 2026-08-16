@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -18,13 +20,88 @@ type deferredClipResult struct {
 	SourcePath string           `json:"source_path"`
 }
 
-func (s *Server) clipRenderRoute(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
-		return
+type webcamRegionInput struct {
+	X      *float64 `json:"x"`
+	Y      *float64 `json:"y"`
+	Width  *float64 `json:"width"`
+	Height *float64 `json:"height"`
+}
+
+type webcamRegion struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+}
+
+func normalizeWebcamRegion(input *webcamRegionInput) (webcamRegion, error) {
+	if input == nil || input.X == nil || input.Y == nil || input.Width == nil || input.Height == nil {
+		return webcamRegion{}, fmt.Errorf("webcam_region must contain x, y, width, and height")
 	}
+	region := webcamRegion{X: *input.X, Y: *input.Y, Width: *input.Width, Height: *input.Height}
+	values := []float64{region.X, region.Y, region.Width, region.Height}
+	for _, value := range values {
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return webcamRegion{}, fmt.Errorf("webcam_region values must be finite")
+		}
+	}
+	if region.X < 0 || region.Y < 0 || region.X > 1 || region.Y > 1 {
+		return webcamRegion{}, fmt.Errorf("webcam_region x and y must be between 0 and 1")
+	}
+	if region.Width <= 0 || region.Height <= 0 {
+		return webcamRegion{}, fmt.Errorf("webcam_region width and height must be positive")
+	}
+	if region.Width > 1 || region.Height > 1 || region.X+region.Width > 1 || region.Y+region.Height > 1 {
+		return webcamRegion{}, fmt.Errorf("webcam_region must fit inside the source frame")
+	}
+	return region, nil
+}
+
+func parseStoredWebcamRegion(value any) (webcamRegion, error) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return webcamRegion{}, fmt.Errorf("invalid webcam_region: %w", err)
+	}
+	var input webcamRegionInput
+	if err := json.Unmarshal(encoded, &input); err != nil {
+		return webcamRegion{}, fmt.Errorf("invalid webcam_region: %w", err)
+	}
+	return normalizeWebcamRegion(&input)
+}
+
+func (region webcamRegion) asMap() map[string]any {
+	return map[string]any{
+		"x":      region.X,
+		"y":      region.Y,
+		"width":  region.Width,
+		"height": region.Height,
+	}
+}
+
+func writeJSONFileAtomic(path string, contents []byte) error {
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".webcam-region-*.tmp")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if _, err := temporary.Write(contents); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, path)
+}
+
+func (s *Server) clipRenderRoute(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/jobs/"), "/"), "/")
-	if len(parts) != 4 || parts[1] != "clips" || parts[3] != "render" || parts[0] == "" {
+	if len(parts) != 4 || parts[1] != "clips" || (parts[3] != "render" && parts[3] != "webcam-region") || parts[0] == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Clip render route not found"})
 		return
 	}
@@ -34,6 +111,18 @@ func (s *Server) clipRenderRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parentID := parts[0]
+	if parts[3] == "webcam-region" {
+		if r.Method != http.MethodPatch {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+			return
+		}
+		s.updateWebcamRegion(w, r, parentID, clipIndex)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
 	parent, ok := s.store.Get(r.Context(), parentID)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Parent job not found"})
@@ -93,6 +182,21 @@ func (s *Server) clipRenderRoute(w http.ResponseWriter, r *http.Request) {
 	if value, ok := clip["facecam_size"].(string); ok && value != "" {
 		metadata["facecam_size"] = value
 	}
+	layoutFormat, _ := metadata["layout_format"].(string)
+	if value, ok := clip["layout_format"].(string); ok && value != "" {
+		layoutFormat = value
+	}
+	if value, exists := clip["webcam_region"]; exists && value != nil {
+		region, regionErr := parseStoredWebcamRegion(value)
+		if regionErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": regionErr.Error()})
+			return
+		}
+		metadata["webcam_region"] = region.asMap()
+	} else if strings.EqualFold(strings.TrimSpace(layoutFormat), "streamer_stack") {
+		writeJSON(w, http.StatusConflict, map[string]string{"detail": "Select and save a webcam area before rendering this Streamer Stack clip"})
+		return
+	}
 	child, err := s.store.CreateClipRenderIfAbsent(r.Context(), domain.CreateJobInput{
 		Kind:        "clip-render",
 		SourceURL:   parent.SourceURL,
@@ -118,6 +222,99 @@ func (s *Server) clipRenderRoute(w http.ResponseWriter, r *http.Request) {
 		"parent_job_id": parent.ID,
 		"clip_index":    clipIndex,
 		"status":        string(child.Status),
+	})
+}
+
+func (s *Server) updateWebcamRegion(w http.ResponseWriter, r *http.Request, parentID string, clipIndex int) {
+	parent, ok := s.store.Get(r.Context(), parentID)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Parent job not found"})
+		return
+	}
+	if parent.Kind != "clip-generation" || !isDeferredClipJob(parent) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Parent job is not a deferred clip-generation job"})
+		return
+	}
+	if parent.Status != domain.JobStatusClipsReady && parent.Status != domain.JobStatusCompleted {
+		writeJSON(w, http.StatusConflict, map[string]string{"detail": "Clip candidates are not ready"})
+		return
+	}
+
+	var request struct {
+		WebcamRegion *webcamRegionInput `json:"webcam_region"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+	region, err := normalizeWebcamRegion(request.WebcamRegion)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+
+	var result deferredClipResult
+	if len(parent.Result) == 0 || json.Unmarshal(parent.Result, &result) != nil || clipIndex < 0 || clipIndex >= len(result.Clips) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Clip candidate not found"})
+		return
+	}
+	outputDir := parent.OutputDir
+	if strings.TrimSpace(outputDir) == "" {
+		root := s.config.OutputDir
+		if root == "" {
+			root = "output"
+		}
+		outputDir = filepath.Join(root, parent.ID)
+	}
+	metadataPath, err := firstMetadataPath(outputDir)
+	if err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"detail": "Deferred job metadata is not available"})
+		return
+	}
+	metadataContents, err := os.ReadFile(metadataPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not read deferred job metadata"})
+		return
+	}
+	metadata := map[string]any{}
+	if err := json.Unmarshal(metadataContents, &metadata); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Deferred job metadata is invalid"})
+		return
+	}
+	shorts, ok := metadata["shorts"].([]any)
+	if !ok || clipIndex >= len(shorts) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Deferred job metadata has no matching clip"})
+		return
+	}
+	metadataClip, ok := shorts[clipIndex].(map[string]any)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Deferred job metadata clip is invalid"})
+		return
+	}
+	regionMap := region.asMap()
+	metadataClip["webcam_region"] = regionMap
+	updatedMetadata, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not encode deferred job metadata"})
+		return
+	}
+	if err := writeJSONFileAtomic(metadataPath, updatedMetadata); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not persist webcam region"})
+		return
+	}
+	result.Clips[clipIndex]["webcam_region"] = regionMap
+	updatedResult, err := json.Marshal(result)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not encode clip result"})
+		return
+	}
+	if err := s.store.SetResult(r.Context(), parent.ID, updatedResult); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not persist clip result"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"clip_index":    clipIndex,
+		"webcam_region": regionMap,
 	})
 }
 

@@ -36,11 +36,12 @@ const toProxiedVideoUrl = (url) => {
 
 // Sub-components
 import VideoPreview from './ResultCard/VideoPreview';
+import WebcamRegionSelector from './ResultCard/WebcamRegionSelector';
 import CardContent from './ResultCard/CardContent';
 import CardActions from './ResultCard/CardActions';
 import PostModal from './ResultCard/PostModal';
 
-export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange, onRenderClip, renderStatus, renderError }) {
+export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange, onRenderClip, renderStatus, renderError, onSaveWebcamRegion, webcamRegionSaving = false, webcamRegionError = '' }) {
     const [showModal, setShowModal] = useState(false);
     const [showSubtitleModal, setShowSubtitleModal] = useState(false);
     const videoRef = React.useRef(null);
@@ -73,6 +74,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     const [showHookModal, setShowHookModal] = useState(false);
     const [showTranslateModal, setShowTranslateModal] = useState(false);
     const [showClipEditor, setShowClipEditor] = useState(false);
+    const [showWebcamRegionSelector, setShowWebcamRegionSelector] = useState(false);
     const [editError, setEditError] = useState(null);
     const editorSessionRef = React.useRef(null);
 
@@ -83,13 +85,24 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
 
     const hasVideo = Boolean(originalVideoUrl);
     const effectiveRenderStatus = renderStatus || clip.render_status || (hasVideo ? 'ready' : 'found');
+    const webcamSourceUrl = toProxiedVideoUrl(getApiUrl(clip.source_video_url || clip.original_video_url || clip.video_url));
+
+    const handleSaveWebcamRegion = async (region) => {
+        if (!onSaveWebcamRegion) {
+            setShowWebcamRegionSelector(false);
+            return true;
+        }
+        const saved = await onSaveWebcamRegion(index, region);
+        if (saved !== false) setShowWebcamRegionSelector(false);
+        return saved;
+    };
 
     useEffect(() => {
         if (originalVideoUrl && currentVideoUrl !== originalVideoUrl && !currentVideoUrl?.startsWith('blob:')) {
             setCurrentVideoUrl(originalVideoUrl);
             setPersistedVideoUrl(originalVideoUrl);
         }
-    }, [originalVideoUrl]);
+    }, [currentVideoUrl, originalVideoUrl]);
 
     useEffect(() => {
         if (lastObjectUrlRef.current && lastObjectUrlRef.current !== currentVideoUrl) {
@@ -600,6 +613,11 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                         status={effectiveRenderStatus}
                         error={renderError || clip.render_error}
                         onRender={() => onRenderClip(index)}
+                        layoutFormat={clip.layout_format || 'standard'}
+                        webcamRegion={clip.webcam_region}
+                        onSelectWebcamRegion={() => setShowWebcamRegionSelector(true)}
+                        isSavingWebcamRegion={webcamRegionSaving}
+                        webcamRegionError={webcamRegionError}
                     />
                 )}
                 <CardContent clip={clip} />
@@ -673,6 +691,17 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 videoUrl={currentVideoUrl}
                 hasApiKey={!!elevenLabsKey}
             />
+            {showWebcamRegionSelector && (
+                <WebcamRegionSelector
+                    videoUrl={webcamSourceUrl}
+                    startTime={clip.start}
+                    initialRegion={clip.webcam_region}
+                    onSave={handleSaveWebcamRegion}
+                    onClose={() => setShowWebcamRegionSelector(false)}
+                    isSaving={webcamRegionSaving}
+                    error={webcamRegionError}
+                />
+            )}
             <FullScreenEditor
                 isOpen={editorOpen || showClipEditor}
                 initialVersionId={editorVersionId}

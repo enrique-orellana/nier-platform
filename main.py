@@ -60,7 +60,9 @@ from clip_timeline import resolve_clip_frame_range
 from streamer_layout import (
     STREAMER_STACK_LAYOUT,
     compose_streamer_stack_frame,
+    filter_candidates_outside_webcam_region,
     normalize_clip_layout,
+    normalize_webcam_region,
 )
 from video_analysis import SourceAnalysis, load_or_build_source_analysis
 from video_output_validation import validate_clip_output
@@ -1227,12 +1229,18 @@ def process_video_to_vertical(
     metrics: JobVideoMetrics | None = None,
     layout_format: str = "standard",
     facecam_size: str = "medium",
+    webcam_region: dict | None = None,
 ):
     """
     Core logic to convert horizontal video to vertical using scene detection and Active Speaker Tracking (MediaPipe).
     """
     script_start_time = time.time()
     layout_options = normalize_clip_layout(layout_format, facecam_size)
+    normalized_webcam_region = None
+    if layout_options.layout_format == STREAMER_STACK_LAYOUT:
+        if webcam_region is None:
+            raise ValueError("webcam_region is required for streamer_stack rendering")
+        normalized_webcam_region = normalize_webcam_region(webcam_region)
     
     # Define temporary file paths based on the output name
     base_name = os.path.splitext(final_output_video)[0]
@@ -1290,7 +1298,7 @@ def process_video_to_vertical(
         if layout_options.layout_format != STREAMER_STACK_LAYOUT
         else None
     )
-    streamer_face_focus = None
+    streamer_gameplay_focus = None
     
     print("\n   ✂️ Step 2: Processing video frames...")
     
@@ -1362,13 +1370,25 @@ def process_video_to_vertical(
                 # Apply Strategy
                 if layout_options.layout_format == STREAMER_STACK_LAYOUT:
                     if frame_number % 2 == 0:
-                        candidates = detect_face_candidates(frame)
+                        candidates = filter_candidates_outside_webcam_region(
+                            detect_face_candidates(frame),
+                            normalized_webcam_region,
+                            original_width,
+                            original_height,
+                        )
                         target_box = speaker_tracker.get_target(candidates, frame_number, original_width)
                         if target_box is None:
-                            target_box = detect_person_yolo(frame)
+                            fallback_box = detect_person_yolo(frame)
+                            if fallback_box and filter_candidates_outside_webcam_region(
+                                [{"box": fallback_box}],
+                                normalized_webcam_region,
+                                original_width,
+                                original_height,
+                            ):
+                                target_box = fallback_box
                         if target_box:
                             x, y, width, height = target_box
-                            streamer_face_focus = (
+                            streamer_gameplay_focus = (
                                 (x + width / 2) / max(original_width, 1),
                                 (y + height / 2) / max(original_height, 1),
                             )
@@ -1377,7 +1397,8 @@ def process_video_to_vertical(
                         OUTPUT_WIDTH,
                         OUTPUT_HEIGHT,
                         facecam_size=layout_options.facecam_size,
-                        face_focus=streamer_face_focus,
+                        webcam_region=normalized_webcam_region,
+                        gameplay_focus=streamer_gameplay_focus,
                     )
                 elif current_strategy == 'GENERAL':
                     # "Plano General" -> Blur Background + Fit Width
@@ -1563,6 +1584,7 @@ def _write_clip_manifest(
     source_object: dict | None = None,
     layout_format: str = "standard",
     facecam_size: str = "medium",
+    webcam_region: dict | None = None,
 ) -> str:
     width = source_media.display_width
     height = source_media.display_height
@@ -1573,6 +1595,15 @@ def _write_clip_manifest(
         (CropKeyframe(float(clip["start"]), crop), CropKeyframe(float(clip["end"]), crop)),
     ),))
     layout_options = normalize_clip_layout(layout_format, facecam_size)
+    normalized_webcam_region = (
+        normalize_webcam_region(webcam_region) if webcam_region is not None else None
+    )
+    layout_manifest = {
+        "format": layout_options.layout_format,
+        "facecam_size": layout_options.facecam_size,
+    }
+    if normalized_webcam_region is not None:
+        layout_manifest["webcam_region"] = normalized_webcam_region
     manifest = {
         "schema_version": 1,
         "project_id": os.path.basename(output_dir),
@@ -1591,8 +1622,7 @@ def _write_clip_manifest(
             "effects": None,
             "audio": None,
             "layout": {
-                "format": layout_options.layout_format,
-                "facecam_size": layout_options.facecam_size,
+                **layout_manifest,
             },
         },
         "export_policy": {
@@ -1603,6 +1633,8 @@ def _write_clip_manifest(
         },
         "master": None,
     }
+    if normalized_webcam_region is not None:
+        manifest["export_policy"]["webcam_region"] = normalized_webcam_region
     manifest_path = os.path.join(output_dir, "manifests", f"clip_{clip_index}.json")
     save_manifest_atomic(Path(manifest_path), manifest)
     return os.path.relpath(manifest_path, output_dir).replace(os.sep, "/")
@@ -1721,6 +1753,7 @@ def render_deferred_clip(
             metrics=metrics,
             layout_format=clip.get("layout_format", "standard"),
             facecam_size=clip.get("facecam_size", "medium"),
+            webcam_region=clip.get("webcam_region"),
         )
         if not rendered:
             raise RuntimeError("Clip rendering produced no artifact")
@@ -1749,6 +1782,7 @@ def render_clip_plan(
     metrics: JobVideoMetrics | None = None,
     layout_format: str = "standard",
     facecam_size: str = "medium",
+    webcam_region: dict | None = None,
     clip_indices: list[int] | None = None,
 ) -> list[dict]:
     """Render a clip plan using one immutable source analysis object."""
@@ -1768,6 +1802,13 @@ def render_clip_plan(
         end = clip["end"]
         clip_filename = f"{video_title}_clip_{index}.mp4"
         clip_final_path = os.path.join(output_dir, clip_filename)
+        clip_webcam_region = clip.get("webcam_region", webcam_region)
+        if clip_webcam_region is not None:
+            clip_webcam_region = normalize_webcam_region(clip_webcam_region)
+        if layout_options.layout_format == STREAMER_STACK_LAYOUT and clip_webcam_region is None:
+            raise ValueError("webcam_region is required for streamer_stack rendering")
+        if clip_webcam_region is not None:
+            clip["webcam_region"] = clip_webcam_region
 
         manifest_path = _write_clip_manifest(
             output_dir,
@@ -1780,6 +1821,7 @@ def render_clip_plan(
             source_object,
             layout_options.layout_format,
             layout_options.facecam_size,
+            webcam_region=clip_webcam_region,
         )
         clip["manifest_path"] = manifest_path
         clip["source_video_filename"] = source_video_filename
@@ -1806,6 +1848,7 @@ def render_clip_plan(
             metrics=metrics,
             layout_format=layout_options.layout_format,
             facecam_size=layout_options.facecam_size,
+            webcam_region=clip_webcam_region,
         )
         if success:
             rendered_clips.append(clip)
