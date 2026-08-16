@@ -129,11 +129,17 @@ spec:
                 secretKeyRef:
                   name: openshorts-minio
                   key: AWS_SECRET_ACCESS_KEY
+            - name: HSA_ENABLE_DXG_DETECTION
+              value: "1"
           volumeMounts:
             - name: workdir
               mountPath: /app/output
             - name: uploads
               mountPath: /app/uploads
+            - name: amd-dxg
+              mountPath: /dev/dxg
+            - name: wsl-dxcore
+              mountPath: /usr/lib/libdxcore.so
           readinessProbe:
             httpGet:
               path: /ready
@@ -154,15 +160,31 @@ spec:
               cpu: "12000m"
               memory: "12Gi"
           securityContext:
-            allowPrivilegeEscalation: false
+            # Docker Desktop Kubernetes cannot express Docker's --device
+            # cgroup rule for /dev/dxg; privileged is required for ROCm DXG.
+            allowPrivilegeEscalation: true
+            privileged: true
             runAsNonRoot: true
             runAsUser: 1000
+            capabilities:
+              add:
+                - SYS_PTRACE
+            seccompProfile:
+              type: Unconfined
       volumes:
         - name: workdir
           persistentVolumeClaim:
             claimName: openshorts-workdir
         - name: uploads
           emptyDir: {}
+        - name: amd-dxg
+          hostPath:
+            path: /dev/dxg
+            type: CharDevice
+        - name: wsl-dxcore
+          hostPath:
+            path: /usr/lib/wsl/lib/libdxcore.so
+            type: File
 ---
 apiVersion: v1
 kind: Service
