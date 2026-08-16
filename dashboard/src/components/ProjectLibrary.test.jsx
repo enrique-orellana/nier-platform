@@ -57,6 +57,82 @@ describe('ProjectLibrary', () => {
     });
   });
 
+  it('previews an unrendered candidate from the stored source video', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url) => {
+        if (String(url).includes('/api/projects/history')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              projects: [{
+                job_id: 'job-3',
+                title: 'Candidate project',
+                clips: [{
+                  index: 0,
+                  start: 12,
+                  end: 20,
+                  source_video_url: '/videos/job-3/source.mp4',
+                  render_status: 'found',
+                }],
+                clip_count: 1,
+              }],
+            }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({ clips: {} }) });
+      }),
+    );
+
+    render(<ProjectLibrary projectId="job-3" />);
+
+    await waitFor(() => {
+      expect(document.querySelector('video')?.getAttribute('src')).toBe('/videos/job-3/source.mp4');
+    });
+  });
+
+  it('queues rendering from a historical candidate card', async () => {
+    const fetchMock = vi.fn((url, options = {}) => {
+      if (String(url).includes('/api/projects/history')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            projects: [{
+              job_id: 'job-4',
+              title: 'Candidate project',
+              clips: [{
+                index: 0,
+                start: 12,
+                end: 20,
+                source_video_url: '/videos/job-4/source.mp4',
+                render_status: 'found',
+              }],
+              clip_count: 1,
+            }],
+          }),
+        });
+      }
+      if (String(url).includes('/api/jobs/job-4/clips/0/render')) {
+        expect(options.method).toBe('POST');
+        return Promise.resolve({ ok: true, json: async () => ({ job_id: 'render-4' }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ clips: {} }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<ProjectLibrary projectId="job-4" />);
+
+    const button = await screen.findByRole('button', { name: 'Analyze & Render' });
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/jobs/job-4/clips/0/render',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+  });
+
   it('loads and updates a status independently for each clip', async () => {
     const fetchMock = vi.fn((url, options = {}) => {
       if (String(url).includes('/api/projects/history')) {
@@ -82,7 +158,7 @@ describe('ProjectLibrary', () => {
             version: 1,
             clips: {
               '0': { status: 'reviewing' },
-              '1': { status: 'edited' },
+              '1': { status: 'discarded' },
             },
           }),
         });
@@ -105,17 +181,17 @@ describe('ProjectLibrary', () => {
       const loadedSelects = screen.getAllByLabelText('Clip status');
       expect(loadedSelects).toHaveLength(2);
       expect(loadedSelects[0]).toHaveValue('reviewing');
-      expect(loadedSelects[1]).toHaveValue('edited');
+      expect(loadedSelects[1]).toHaveValue('discarded');
     });
     const selects = screen.getAllByLabelText('Clip status');
     expect(selects[0]).toHaveValue('reviewing');
-    expect(selects[1]).toHaveValue('edited');
+    expect(selects[1]).toHaveValue('discarded');
 
     fireEvent.change(selects[0], { target: { value: 'edited' } });
 
     await waitFor(() => expect(screen.getAllByLabelText('Clip status')[0]).toHaveValue('edited'));
-    expect(screen.getAllByLabelText('Clip status')[1]).toHaveValue('edited');
-    expect(screen.getByText(/2 edited/)).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Clip status')[1]).toHaveValue('discarded');
+    expect(screen.getByText(/1 edited · 1 discarded/)).toBeInTheDocument();
   });
 
   it('rolls back an optimistic status update when saving fails', async () => {

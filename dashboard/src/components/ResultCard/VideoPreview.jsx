@@ -15,6 +15,13 @@ export default function VideoPreview({
 }) {
     const hasEdits = trueOriginalUrl && currentVideoUrl && trueOriginalUrl !== currentVideoUrl;
     const [viewOriginal, setViewOriginal] = useState(false);
+    const sourcePreview = clip?.source_preview === true;
+    const previewStart = sourcePreview && Number.isFinite(Number(clip?.start))
+        ? Math.max(0, Number(clip.start))
+        : 0;
+    const previewEnd = sourcePreview && Number.isFinite(Number(clip?.end)) && Number(clip.end) > previewStart
+        ? Number(clip.end)
+        : null;
 
     // Automatically switch to the edited view if the video URL changes (e.g., after an edit finishes)
     useEffect(() => {
@@ -25,6 +32,22 @@ export default function VideoPreview({
 
     const displayUrl = (hasEdits && viewOriginal) ? trueOriginalUrl : currentVideoUrl;
 
+    const seekToPreviewStart = () => {
+        if (!sourcePreview || !videoRef.current) return;
+        const duration = Number(videoRef.current.duration);
+        videoRef.current.currentTime = Number.isFinite(duration) && duration > 0
+            ? Math.min(previewStart, duration)
+            : previewStart;
+    };
+
+    const handleTimeUpdate = () => {
+        if (!sourcePreview || !previewEnd || !videoRef.current) return;
+        if (videoRef.current.currentTime >= previewEnd) {
+            videoRef.current.pause();
+            seekToPreviewStart();
+        }
+    };
+
     return (
         <div className="w-full bg-black relative shrink-0 aspect-[9/16] group/video">
             <video
@@ -33,14 +56,16 @@ export default function VideoPreview({
                 controls
                 className="w-full h-full object-cover"
                 playsInline
+                onLoadedMetadata={seekToPreviewStart}
+                onTimeUpdate={handleTimeUpdate}
                 onPlay={() => {
                     const currentTime = videoRef.current ? videoRef.current.currentTime : 0;
-                    onPlay && onPlay(clip.start + currentTime);
+                    onPlay && onPlay(sourcePreview ? currentTime : clip.start + currentTime);
                 }}
                 onPause={() => onPause && onPause()}
                 onEnded={() => {
                     if (videoRef.current) {
-                        videoRef.current.currentTime = 0;
+                        videoRef.current.currentTime = sourcePreview ? previewStart : 0;
                         videoRef.current.play();
                     }
                 }}

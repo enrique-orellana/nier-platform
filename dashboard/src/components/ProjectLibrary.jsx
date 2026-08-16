@@ -30,7 +30,8 @@ function safeNumber(value, fallback = 0) {
 }
 
 function normalizeClipForResultCard(clip, index, fallbackJobId) {
-  const videoUrl = clip.video_url || clip.url || '';
+  const renderedVideoUrl = clip.video_url || clip.url || '';
+  const videoUrl = renderedVideoUrl || clip.source_video_url || '';
   const title = clip.video_title_for_youtube_short || clip.title || `Clip ${index + 1}`;
   const descriptionTiktok = clip.video_description_for_tiktok || clip.tiktok_desc || clip.description || '';
   const descriptionInstagram = clip.video_description_for_instagram || clip.insta_desc || clip.description || descriptionTiktok;
@@ -46,6 +47,7 @@ function normalizeClipForResultCard(clip, index, fallbackJobId) {
   return {
     ...clip,
     video_url: toProxiedVideoUrl(videoUrl),
+    source_preview: !renderedVideoUrl && Boolean(clip.source_video_url),
     video_title_for_youtube_short: title,
     video_description_for_tiktok: descriptionTiktok,
     video_description_for_instagram: descriptionInstagram,
@@ -79,6 +81,7 @@ export default function ProjectLibrary({
   const [projectClips, setProjectClips] = useState([]);
   const [isLoadingClips, setIsLoadingClips] = useState(false);
   const [clipStatuses, setClipStatuses] = useState({});
+  const [clipRenderJobs, setClipRenderJobs] = useState({});
   const [statusError, setStatusError] = useState('');
   const [savingStatusIndex, setSavingStatusIndex] = useState(null);
 
@@ -154,6 +157,7 @@ export default function ProjectLibrary({
       setSelectedProject(null);
       setProjectClips([]);
       setClipStatuses({});
+      setClipRenderJobs({});
       setStatusError('');
       return;
     }
@@ -166,6 +170,7 @@ export default function ProjectLibrary({
     setSelectedProject(matchingProject);
     setProjectClips(Array.isArray(matchingProject.clips) ? matchingProject.clips : []);
     setClipStatuses({});
+    setClipRenderJobs({});
     setStatusError('');
     if (!matchingProject.clips?.length) loadProjectClips(matchingProject);
   }, [loadProjectClips, projectId, projects]);
@@ -184,6 +189,7 @@ export default function ProjectLibrary({
     setSelectedProject(project);
     setProjectClips(Array.isArray(project?.clips) ? project.clips : []);
     setClipStatuses({});
+    setClipRenderJobs({});
     setStatusError('');
     if (!project?.clips?.length) {
       loadProjectClips(project);
@@ -268,6 +274,72 @@ export default function ProjectLibrary({
       setSavingStatusIndex(null);
     }
   };
+
+  const handleRenderClip = async (clipIndex) => {
+    const jobId = selectedProject?.job_id || selectedProject?.session_id || selectedProject?.id;
+    if (!jobId) return;
+
+    try {
+      const response = await fetch(getApiUrl(`/api/jobs/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipIndex)}/render`), {
+        method: 'POST',
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || 'Could not queue clip render');
+
+      setClipRenderJobs((current) => ({ ...current, [String(clipIndex)]: payload.job_id }));
+      setProjectClips((current) => current.map((clip, index) => {
+        const currentIndex = Number.isInteger(clip.index) ? clip.index : index;
+        return currentIndex === clipIndex
+          ? { ...clip, render_status: 'queued', render_job_id: payload.job_id }
+          : clip;
+      }));
+    } catch (error) {
+      setProjectClips((current) => current.map((clip, index) => {
+        const currentIndex = Number.isInteger(clip.index) ? clip.index : index;
+        return currentIndex === clipIndex
+          ? { ...clip, render_status: 'failed', render_error: error.message }
+          : clip;
+      }));
+    }
+  };
+
+  useEffect(() => {
+    const entries = Object.entries(clipRenderJobs);
+    if (!selectedProject || entries.length === 0) return undefined;
+
+    let cancelled = false;
+    const pollClipRenders = async () => {
+      const finished = [];
+      await Promise.all(entries.map(async ([clipIndex, renderJobId]) => {
+        try {
+          const response = await fetch(getApiUrl(`/api/status/${encodeURIComponent(renderJobId)}`));
+          if (!response.ok) return;
+          const payload = await response.json();
+          if (payload.status === 'completed' || payload.status === 'failed') {
+            finished.push({ clipIndex, payload });
+          }
+        } catch (error) {
+          console.error('Project clip render polling error:', error);
+        }
+      }));
+
+      if (cancelled || finished.length === 0) return;
+      await loadProjectClips(selectedProject);
+      if (cancelled) return;
+      setClipRenderJobs((current) => {
+        const next = { ...current };
+        finished.forEach(({ clipIndex }) => delete next[clipIndex]);
+        return next;
+      });
+    };
+
+    pollClipRenders().catch(() => {});
+    const timer = setInterval(() => pollClipRenders().catch(() => {}), 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [clipRenderJobs, loadProjectClips, selectedProject]);
 
   const statusSummary = CLIP_WORKFLOW_STATUSES
     .map(({ value, label }) => {
@@ -423,6 +495,9 @@ export default function ProjectLibrary({
                     onEditorOpen={() => onOpenEditor?.(selectedProject.job_id || selectedProject.session_id || selectedProject.id, clip.index ?? index, versionId)}
                     onEditorClose={onCloseEditor}
                     onEditorVersionChange={onVersionChange}
+                    onRenderClip={handleRenderClip}
+                    renderStatus={clip.render_status}
+                    renderError={clip.render_error}
                   />
                 ))}
               </div>
