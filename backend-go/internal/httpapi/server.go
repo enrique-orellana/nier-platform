@@ -1075,7 +1075,9 @@ func (s *Server) process(w http.ResponseWriter, r *http.Request) {
 	}
 	metadata["layout_format"] = layoutFormat
 	metadata["facecam_size"] = facecamSize
-	metadata["defer_render"] = payload.DeferRender
+	// Clip-generation jobs discover candidates first. Expensive scene/face/layout
+	// analysis and rendering start only when the user explicitly renders a clip.
+	metadata["defer_render"] = true
 	outputRoot := s.config.OutputDir
 	if outputRoot == "" {
 		outputRoot = "output"

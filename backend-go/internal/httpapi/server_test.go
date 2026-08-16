@@ -437,7 +437,7 @@ func TestProcessStartsConfiguredWorker(t *testing.T) {
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
 		job, ok := store.Get(context.Background(), payload.JobID)
-		if ok && job.Status == domain.JobStatusCompleted {
+		if ok && job.Status == domain.JobStatusClipsReady {
 			if len(job.Logs) != 3 || job.Logs[2].Message != "python worker completed" {
 				t.Fatalf("unexpected worker logs: %#v", job.Logs)
 			}
@@ -795,6 +795,31 @@ func TestProcessPersistsDeferredModeAndDurableOutputDir(t *testing.T) {
 	}
 	if job.OutputDir != filepath.Join(outputDir, job.ID) {
 		t.Fatalf("unexpected durable output directory: %q", job.OutputDir)
+	}
+}
+
+func TestProcessDefaultsToDeferredClipDiscovery(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	server := NewServerWithStore(config.Config{OutputDir: t.TempDir()}, store)
+	req := httptest.NewRequest(http.MethodPost, "/api/process?clip_count=3", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true,"layout_format":"streamer_stack","facecam_size":"large"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusAccepted {
+		t.Fatalf("expected process accepted, got %d: %s", res.Code, res.Body.String())
+	}
+	var payload struct {
+		JobID string `json:"job_id"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode process response: %v", err)
+	}
+	job, ok := store.Get(context.Background(), payload.JobID)
+	if !ok {
+		t.Fatal("job was not stored")
+	}
+	if job.Metadata["defer_render"] != true {
+		t.Fatalf("clip discovery was not deferred by default: %#v", job.Metadata)
 	}
 }
 
