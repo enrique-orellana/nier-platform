@@ -4,6 +4,7 @@ import atexit
 import cv2
 import subprocess
 import argparse
+import threading
 import re
 import sys
 import tempfile
@@ -11,6 +12,7 @@ import os
 import shutil
 import numpy as np
 import httpx
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit, urlunsplit
 
 try:
@@ -30,6 +32,9 @@ except ImportError:  # pragma: no cover - production installs tqdm
             return False
 
         def update(self, _count=1):
+            return None
+
+        def close(self):
             return None
 
     tqdm = _TqdmFallback
@@ -68,6 +73,7 @@ from video_analysis import SourceAnalysis, load_or_build_source_analysis
 from video_output_validation import validate_clip_output
 from video_rendering import build_audio_extract_command, seek_capture_to_frame
 from video_metrics import JobVideoMetrics
+from runtime_acceleration import build_whisper_model, preferred_device
 
 # Load environment variables
 load_dotenv()
@@ -77,6 +83,11 @@ ASPECT_RATIO = 9 / 16
 DIRECT_VIDEO_MAX_BYTES = int(os.environ.get("MAX_FILE_SIZE_MB", "2048")) * 1024 * 1024
 DEFAULT_SCENE_FRAME_SKIP = 2
 SCENE_STRATEGY_MAX_DIMENSION = 640
+SCENE_ANALYSIS_PROXY_MAX_DIMENSION = 480
+DEFAULT_SCENE_STRATEGY_SAMPLE_COUNT = 1
+MAX_SCENE_STRATEGY_SAMPLE_COUNT = 3
+DEFAULT_SCENE_STRATEGY_WORKERS = max(1, min(8, os.cpu_count() or 1))
+MAX_SCENE_STRATEGY_WORKERS = 32
 
 
 def scene_detection_frame_skip() -> int:
@@ -86,6 +97,28 @@ def scene_detection_frame_skip() -> int:
     except (TypeError, ValueError):
         return DEFAULT_SCENE_FRAME_SKIP
     return value if value >= 0 else DEFAULT_SCENE_FRAME_SKIP
+
+
+def scene_strategy_sample_count() -> int:
+    raw_value = os.environ.get(
+        "SCENE_STRATEGY_SAMPLE_COUNT", str(DEFAULT_SCENE_STRATEGY_SAMPLE_COUNT)
+    )
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return DEFAULT_SCENE_STRATEGY_SAMPLE_COUNT
+    return min(max(value, 1), MAX_SCENE_STRATEGY_SAMPLE_COUNT)
+
+
+def scene_strategy_workers() -> int:
+    raw_value = os.environ.get(
+        "SCENE_STRATEGY_WORKERS", str(DEFAULT_SCENE_STRATEGY_WORKERS)
+    )
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return DEFAULT_SCENE_STRATEGY_WORKERS
+    return min(max(value, 1), MAX_SCENE_STRATEGY_WORKERS)
 
 GEMINI_PROMPT_TEMPLATE = """
 You are a senior short-form video editor. Read the ENTIRE transcript and word-level timestamps to choose the 3–15 MOST VIRAL moments for TikTok/IG Reels/YouTube Shorts. Each clip must be between 15 and 60 seconds long.
@@ -140,6 +173,7 @@ model = None
 # --- MediaPipe Setup ---
 # Use standard Face Detection (BlazeFace) for speed
 face_detection = None
+_scene_face_detection_local = threading.local()
 if mp is not None:
     mp_face_detection = mp.solutions.face_detection
     face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
@@ -345,16 +379,17 @@ class SpeakerTracker:
             
         return None
 
-def detect_face_candidates(frame):
+def detect_face_candidates(frame, detector=None):
     """
     Returns list of all detected faces using lightweight FaceDetection.
     """
-    if face_detection is None:
+    detector = detector or face_detection
+    if detector is None:
         raise RuntimeError("MediaPipe is required for face tracking")
 
     height, width, _ = frame.shape
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = face_detection.process(rgb_frame)
+    results = detector.process(rgb_frame)
     
     candidates = []
     
@@ -374,6 +409,25 @@ def detect_face_candidates(frame):
         })
             
     return candidates
+
+
+def _scene_face_detector():
+    """Return a detector owned by the current worker thread."""
+    if face_detection is None:
+        return None
+    detector = getattr(_scene_face_detection_local, "detector", None)
+    if detector is None:
+        detector = mp.solutions.face_detection.FaceDetection(
+            model_selection=1,
+            min_detection_confidence=0.5,
+        )
+        _scene_face_detection_local.detector = detector
+    return detector
+
+
+def _count_scene_faces(frame):
+    detector = _scene_face_detector()
+    return len(detect_face_candidates(frame, detector=detector))
 
 
 def resize_scene_strategy_frame(frame, max_dimension=SCENE_STRATEGY_MAX_DIMENSION):
@@ -404,7 +458,13 @@ def detect_person_yolo(frame):
 
         model = YOLO("yolov8n.pt")
 
-    results = model(frame, verbose=False, classes=[0]) # class 0 is person
+    device = preferred_device()
+    try:
+        results = model(frame, verbose=False, classes=[0], device=device) # class 0 is person
+    except Exception:
+        if device != "cuda":
+            raise
+        results = model(frame, verbose=False, classes=[0], device="cpu")
     
     if not results:
         return None
@@ -467,63 +527,168 @@ def create_general_frame(frame, output_width, output_height):
     
     return final_frame
 
+
+def ensure_scene_analysis_proxy(
+    video_path,
+    output_dir,
+    *,
+    max_dimension=SCENE_ANALYSIS_PROXY_MAX_DIMENSION,
+):
+    """Create or reuse a low-resolution, frame-preserving analysis proxy."""
+    source_path = Path(video_path)
+    proxy_path = Path(output_dir) / "_scene_analysis_proxy.mp4"
+    source_mtime_ns = source_path.stat().st_mtime_ns
+    if proxy_path.exists() and proxy_path.stat().st_mtime_ns >= source_mtime_ns:
+        return proxy_path
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    temporary_proxy = proxy_path.with_name(f".{proxy_path.name}.tmp.mp4")
+    if temporary_proxy.exists():
+        temporary_proxy.unlink()
+
+    scale_filter = (
+        f"scale='if(gt(iw,ih),min(iw,{int(max_dimension)}),-2)':"
+        f"'if(gt(iw,ih),-2,min(ih,{int(max_dimension)}))'"
+    )
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(source_path),
+        "-vf",
+        scale_filter,
+        "-fps_mode",
+        "passthrough",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "30",
+        "-pix_fmt",
+        "yuv420p",
+        str(temporary_proxy),
+    ]
+    try:
+        subprocess.run(
+            command,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        os.replace(temporary_proxy, proxy_path)
+    finally:
+        if temporary_proxy.exists():
+            temporary_proxy.unlink()
+    return proxy_path
+
+
+def _scene_strategy_sample_positions(start_frame, end_frame, sample_count):
+    if sample_count == 1:
+        positions = [int((start_frame + end_frame) / 2)]
+    else:
+        positions = [start_frame + 5, int((start_frame + end_frame) / 2), end_frame - 5]
+
+    last_frame = max(start_frame, end_frame - 1)
+    return list(dict.fromkeys(max(start_frame, min(last_frame, position)) for position in positions))
+
+
+def _scene_strategy_decision(face_counts):
+    avg_faces = sum(face_counts) / len(face_counts) if face_counts else 0
+    return "GENERAL" if avg_faces > 1.2 or avg_faces < 0.5 else "TRACK"
+
+
 def analyze_scenes_strategy(
     video_path,
     scenes,
     *,
     max_dimension=SCENE_STRATEGY_MAX_DIMENSION,
+    sample_count=DEFAULT_SCENE_STRATEGY_SAMPLE_COUNT,
+    workers=DEFAULT_SCENE_STRATEGY_WORKERS,
     metrics=None,
 ):
     """
     Analyzes each scene to determine if it should be TRACK (Single person) or GENERAL (Group/Wide).
     Returns list of strategies corresponding to scenes.
     """
-    cap = cv2.VideoCapture(video_path)
-    strategies = []
-    
-    if not cap.isOpened():
-        return ['TRACK'] * len(scenes)
-        
-    for start, end in tqdm(scenes, desc="   Analyzing Scenes"):
+    if not scenes:
+        return []
+
+    sample_count = min(max(int(sample_count), 1), MAX_SCENE_STRATEGY_SAMPLE_COUNT)
+
+    scene_positions = []
+    position_to_scenes = {}
+    for scene_index, (start, end) in enumerate(scenes):
         start_frame = int(getattr(start, "frame_num", start))
         end_frame = int(getattr(end, "frame_num", end))
-        # Sample 3 frames (start, middle, end)
-        frames_to_check = [
-            start_frame + 5,
-            int((start_frame + end_frame) / 2),
-            end_frame - 5
-        ]
-        
-        face_counts = []
-        for f_idx in frames_to_check:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, f_idx)
+        positions = _scene_strategy_sample_positions(
+            start_frame, end_frame, sample_count
+        )
+        scene_positions.append(positions)
+        for position in positions:
+            position_to_scenes.setdefault(position, []).append(scene_index)
+
+    cap = cv2.VideoCapture(video_path)
+    strategies = ["GENERAL"] * len(scenes)
+    face_counts = [[] for _ in scenes]
+    decoded_samples = [0] * len(scenes)
+    progress = tqdm(total=len(scenes), desc="   Analyzing Scenes")
+    worker_count = min(
+        min(max(int(workers), 1), MAX_SCENE_STRATEGY_WORKERS),
+        len(scenes),
+    )
+    detector_pool = ThreadPoolExecutor(max_workers=worker_count)
+    pending_frames = []
+
+    def flush_pending_frames():
+        if not pending_frames:
+            return
+        pending_scene_indexes = [item[0] for item in pending_frames]
+        pending_images = [item[1] for item in pending_frames]
+        detected_face_counts = detector_pool.map(_count_scene_faces, pending_images)
+        for target_scenes, face_count in zip(
+            pending_scene_indexes, detected_face_counts
+        ):
+            for scene_index in target_scenes:
+                face_counts[scene_index].append(face_count)
+                decoded_samples[scene_index] += 1
+                if decoded_samples[scene_index] == len(scene_positions[scene_index]):
+                    strategies[scene_index] = _scene_strategy_decision(
+                        face_counts[scene_index]
+                    )
+                    progress.update(1)
+        pending_frames.clear()
+
+    try:
+        is_opened = getattr(cap, "isOpened", lambda: True)
+        if not is_opened():
+            return ["TRACK"] * len(scenes)
+
+        last_sample_frame = max(position_to_scenes)
+        frame_number = 0
+        while frame_number <= last_sample_frame:
             ret, frame = cap.read()
-            if not ret: continue
-            if metrics is not None:
-                metrics.increment("scene_strategy_samples")
-            
-            # Detect faces on a bounded analysis frame; render frames remain full resolution.
-            analysis_frame = resize_scene_strategy_frame(frame, max_dimension)
-            candidates = detect_face_candidates(analysis_frame)
-            face_counts.append(len(candidates))
-            
-        # Decision Logic
-        if not face_counts:
-            avg_faces = 0
-        else:
-            avg_faces = sum(face_counts) / len(face_counts)
-            
-        # Strategy:
-        # 0 faces -> GENERAL (Landscape/B-roll)
-        # 1 face -> TRACK
-        # > 1.2 faces -> GENERAL (Group)
-        
-        if avg_faces > 1.2 or avg_faces < 0.5:
-            strategies.append('GENERAL')
-        else:
-            strategies.append('TRACK')
-            
-    cap.release()
+            if not ret:
+                break
+
+            target_scenes = position_to_scenes.get(frame_number)
+            if target_scenes:
+                analysis_frame = resize_scene_strategy_frame(frame, max_dimension)
+                analysis_frame.flags.writeable = False
+                pending_frames.append((target_scenes, analysis_frame))
+                if len(pending_frames) >= worker_count:
+                    flush_pending_frames()
+            frame_number += 1
+        flush_pending_frames()
+    finally:
+        cap.release()
+        detector_pool.shutdown(wait=True)
+        progress.close()
+
+    if metrics is not None:
+        metrics.increment("scene_strategy_samples", sum(decoded_samples))
+
     return strategies
 
 def detect_scenes(video_path, *, frame_skip=None):
@@ -593,6 +758,10 @@ def build_source_analysis_for_job(
     source_media = probe_media(source_path)
     scene_frame_skip = scene_detection_frame_skip()
     scene_strategy_max_dimension = SCENE_STRATEGY_MAX_DIMENSION
+    scene_analysis_proxy_max_dimension = SCENE_ANALYSIS_PROXY_MAX_DIMENSION
+    scene_strategy_sample_count_value = scene_strategy_sample_count()
+    scene_strategy_worker_count = scene_strategy_workers()
+    analysis_video_path = None
     capture = cv2.VideoCapture(str(source_path))
     try:
         is_opened = getattr(capture, "isOpened", lambda: True)
@@ -620,13 +789,29 @@ def build_source_analysis_for_job(
         "height": height,
         "scene_frame_skip": scene_frame_skip,
         "scene_strategy_max_dimension": scene_strategy_max_dimension,
+        "scene_analysis_proxy_max_dimension": scene_analysis_proxy_max_dimension,
+        "scene_strategy_sample_count": scene_strategy_sample_count_value,
     }
+
+    def scene_analysis_source_path():
+        nonlocal analysis_video_path
+        if analysis_video_path is None:
+            try:
+                analysis_video_path = ensure_scene_analysis_proxy(
+                    source_path,
+                    output_dir,
+                    max_dimension=scene_analysis_proxy_max_dimension,
+                )
+            except Exception as error:
+                print(f"   Scene analysis proxy unavailable; using source: {error}")
+                analysis_video_path = source_path
+        return str(analysis_video_path)
 
     def scene_builder():
         started = time.monotonic()
         try:
             scenes, _detected_fps = detect_scenes(
-                str(source_path), frame_skip=scene_frame_skip
+                scene_analysis_source_path(), frame_skip=scene_frame_skip
             )
             if scenes:
                 return scenes
@@ -639,10 +824,14 @@ def build_source_analysis_for_job(
     def strategy_builder(scenes):
         started = time.monotonic()
         try:
-            kwargs = {"max_dimension": scene_strategy_max_dimension}
+            kwargs = {
+                "max_dimension": scene_strategy_max_dimension,
+                "sample_count": scene_strategy_sample_count_value,
+                "workers": scene_strategy_worker_count,
+            }
             if metrics is not None:
                 kwargs["metrics"] = metrics
-            return analyze_scenes_strategy(str(source_path), scenes, **kwargs)
+            return analyze_scenes_strategy(scene_analysis_source_path(), scenes, **kwargs)
         finally:
             if metrics is not None:
                 metrics.add_duration("scene_strategy", time.monotonic() - started)
@@ -1520,11 +1709,8 @@ def transcribe_video(video_path, *, duration_seconds=None, emit_log=None, header
             headers=headers,
         )
 
-    print("🎙️  Transcribing video with Faster-Whisper (CPU Optimized)...")
-    from faster_whisper import WhisperModel
-    
-    # Run on CPU with INT8 quantization for speed
-    model = WhisperModel("large-v3", device="cpu", compute_type="int8")
+    print("🎙️  Transcribing video with Faster-Whisper (auto device)...")
+    model = build_whisper_model("large-v3")
     
     segments, info = model.transcribe(video_path, word_timestamps=True)
     

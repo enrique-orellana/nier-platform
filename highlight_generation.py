@@ -120,9 +120,9 @@ def plan_transcription_chunks(
 
 
 def _load_whisper_model():
-    from faster_whisper import WhisperModel
+    from runtime_acceleration import build_whisper_model
 
-    return WhisperModel("large-v3", device="cpu", compute_type="int8")
+    return build_whisper_model("large-v3")
 
 
 def _extract_audio_chunk(source_path: Path, start: float, end: float, destination: Path) -> None:

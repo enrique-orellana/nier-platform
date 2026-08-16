@@ -2,6 +2,9 @@ scenedetect==0.7
 ultralytics==8.4.46
 torch==2.11.0
 torchvision==0.26.0
+# CUDA 12 runtime libraries used by Faster-Whisper when an NVIDIA GPU is exposed.
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
 tqdm==4.67.3
 yt-dlp
 faster-whisper==1.2.1

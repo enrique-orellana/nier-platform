@@ -50,6 +50,10 @@ metadata:
 data:
   MAX_CONCURRENT_JOBS: "5"
   MAX_MINIO_SOURCE_SIZE_MB: "16384"
+  SCENE_DETECTION_FRAME_SKIP: "4"
+  SCENE_STRATEGY_SAMPLE_COUNT: "1"
+  SCENE_STRATEGY_WORKERS: "8"
+  OPENSHORTS_DEVICE: "auto"
   AI_PROVIDER: openrouter
   AI_BASE_URL: https://openrouter.ai/api/v1
   AI_QUALITY_PRESET: balanced
@@ -144,11 +148,11 @@ spec:
             periodSeconds: 20
           resources:
             requests:
-              cpu: "1000m"
-              memory: "2Gi"
-            limits:
               cpu: "4000m"
-              memory: "8Gi"
+              memory: "4Gi"
+            limits:
+              cpu: "12000m"
+              memory: "12Gi"
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
