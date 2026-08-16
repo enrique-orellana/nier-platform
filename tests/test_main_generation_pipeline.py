@@ -131,9 +131,21 @@ class FakeProcess:
         self.stdin = FakePipe()
         self.stderr = FakePipe()
         self.returncode = 0
+        self.terminated = False
 
-    def wait(self):
+    def wait(self, timeout=None):
         return self.returncode
+
+    def poll(self):
+        return self.returncode
+
+    def terminate(self):
+        self.terminated = True
+        self.returncode = -15
+
+    def kill(self):
+        self.terminated = True
+        self.returncode = -9
 
 
 class MainGenerationPipelineTests(unittest.TestCase):
@@ -665,6 +677,37 @@ class MainGenerationPipelineTests(unittest.TestCase):
             expected_fps=30.0,
             source_has_audio=True,
         )
+
+    def test_streamer_render_cleans_up_encoder_when_frame_processing_fails(self):
+        analysis = SourceAnalysis(
+            source_fingerprint={"size": 1},
+            source_fps=30.0,
+            total_frames=2,
+            width=1920,
+            height=1080,
+            scene_boundaries=[(0, 2)],
+            scene_strategies=["TRACK"],
+        )
+        process = FakeProcess()
+        process.returncode = None
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "streamer.mp4"
+            with patch.object(main, "FFmpegVideoStream", return_value=FakeStreamerCapture()), patch.object(
+                main, "detect_face_candidates", return_value=[]
+            ), patch.object(main, "detect_person_yolo", return_value=None), patch.object(
+                main, "compose_streamer_stack_frame", side_effect=RuntimeError("frame failure")
+            ), patch.object(main.subprocess, "Popen", return_value=process):
+                with self.assertRaisesRegex(RuntimeError, "frame failure"):
+                    main.process_video_to_vertical(
+                        "source.mp4",
+                        str(output_path),
+                        source_analysis=analysis,
+                        source_media=source_media(),
+                        layout_format="streamer_stack",
+                    )
+
+        self.assertTrue(process.terminated)
 
     def test_streamer_render_composes_real_facecam_and_gameplay_panels(self):
         analysis = SourceAnalysis(

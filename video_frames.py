@@ -176,14 +176,26 @@ class FFmpegVideoStream:
                 break
             payload.extend(chunk)
         if not payload:
+            returncode = self._process.wait()
+            stderr = b""
+            if self._process.stderr is not None:
+                stderr = self._process.stderr.read() or b""
+            if returncode != 0:
+                detail = stderr.decode(errors="replace").strip()
+                raise RuntimeError(
+                    f"FFmpeg failed while decoding {self._path} (exit code {returncode})"
+                    + (f": {detail}" if detail else "")
+                )
             return None
         if len(payload) != self._frame_bytes:
+            returncode = self._process.wait()
             stderr = b""
             if self._process.stderr is not None:
                 stderr = self._process.stderr.read() or b""
             detail = stderr.decode(errors="replace").strip()
             raise RuntimeError(
                 f"FFmpeg ended mid-frame while decoding {self._path}"
+                + f" (exit code {returncode})"
                 + (f": {detail}" if detail else "")
             )
         return bytes(payload)

@@ -29,6 +29,16 @@ class FakeProcess:
         self.returncode = -9
 
 
+class FailingProcess(FakeProcess):
+    def __init__(self, error):
+        super().__init__(b"")
+        self.stderr = io.BytesIO(error)
+        self.returncode = 1
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+
 def _frame_payload(*values):
     return b"".join(np.full((1, 2, 3), value, dtype=np.uint8).tobytes() for value in values)
 
@@ -99,3 +109,24 @@ def test_ffmpeg_stream_preserves_absolute_frame_numbers_for_bounded_ranges():
     command = popen.call_args.args[0]
     assert command[command.index("-ss") + 1] == "0.133333"
     assert command[command.index("-frames:v") + 1] == "2"
+
+
+def test_ffmpeg_stream_surfaces_decoder_errors_instead_of_treating_them_as_eof():
+    process = FailingProcess(b"invalid input")
+
+    with patch("video_frames.subprocess.Popen", return_value=process):
+        stream = FFmpegVideoStream(
+            "broken.av1.mp4",
+            width=2,
+            height=1,
+            fps=Fraction(30, 1),
+        )
+        try:
+            try:
+                stream.read()
+            except RuntimeError as error:
+                assert "invalid input" in str(error)
+            else:
+                raise AssertionError("decoder failure was treated as EOF")
+        finally:
+            stream.close()

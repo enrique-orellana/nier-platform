@@ -1325,10 +1325,17 @@ def process_video_to_vertical(
     # Global tracker for single-person shots
     speaker_tracker = SpeakerTracker(cooldown_frames=30)
 
-    ffmpeg_process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-
+    ffmpeg_process = None
+    stderr_output = ""
+    encoder_finalized = False
     frame_processing_started = time.monotonic()
     try:
+        ffmpeg_process = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
         with tqdm(total=trim.frame_count, desc="   Processing", file=sys.stdout) as pbar:
             while cap.frame_number < trim.end_frame:
                 frame = cap.read()
@@ -1414,17 +1421,33 @@ def process_video_to_vertical(
                 if metrics is not None:
                     metrics.increment("output_frames")
                 pbar.update(1)
+        ffmpeg_process.stdin.close()
+        stderr_output = ffmpeg_process.stderr.read().decode()
+        ffmpeg_process.wait()
+        encoder_finalized = True
     finally:
         cap.close()
+        if ffmpeg_process is not None and not encoder_finalized:
+            if ffmpeg_process.poll() is None:
+                if ffmpeg_process.stdin is not None:
+                    try:
+                        ffmpeg_process.stdin.close()
+                    except OSError:
+                        pass
+                ffmpeg_process.terminate()
+                try:
+                    ffmpeg_process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    ffmpeg_process.kill()
+                    ffmpeg_process.wait()
+            if ffmpeg_process.stderr is not None:
+                ffmpeg_process.stderr.close()
 
     if metrics is not None:
         metrics.add_duration(
             "frame_processing", time.monotonic() - frame_processing_started
         )
-    
-    ffmpeg_process.stdin.close()
-    stderr_output = ffmpeg_process.stderr.read().decode()
-    ffmpeg_process.wait()
+    ffmpeg_process.stderr.close()
 
     if ffmpeg_process.returncode != 0:
         print("\n   ❌ FFmpeg frame processing failed.")
