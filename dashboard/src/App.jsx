@@ -227,6 +227,7 @@ function App() {
   const [jobId, setJobId] = useState(null);
   const [status, setStatus] = useState('idle'); // idle, processing, complete, error
   const [results, setResults] = useState(null);
+  const [clipRenderJobs, setClipRenderJobs] = useState({});
   const [logs, setLogs] = useState([]);
   const [logsVisible, setLogsVisible] = useState(true);
   const [processingMedia, setProcessingMedia] = useState(null);
@@ -541,6 +542,7 @@ function App() {
       if (session.jobId && session.status && session.status !== 'idle') {
         setJobId(session.jobId);
         setResults(session.results || null);
+        setClipRenderJobs(session.clipRenderJobs || {});
         if (session.processingMedia) setProcessingMedia(session.processingMedia);
         // If was processing, resume polling; if complete/error, just show results
         setStatus(session.status === 'processing' ? 'processing' : session.status);
@@ -563,6 +565,7 @@ function App() {
         jobId,
         status,
         results,
+        clipRenderJobs,
         processingMedia: ['url', 'minio-object'].includes(processingMedia?.type) ? processingMedia : null,
         activeTab,
         timestamp: Date.now()
@@ -571,7 +574,7 @@ function App() {
     } catch (e) {
       // localStorage full or serialization error - ignore
     }
-  }, [jobId, status, results, activeTab, processingMedia]);
+  }, [jobId, status, results, clipRenderJobs, activeTab, processingMedia]);
 
   useEffect(() => {
     // Encrypt Gemini Key too for consistency if desired, but user asked specifically about Social integration not saving well.
@@ -797,7 +800,8 @@ function App() {
 
   useEffect(() => {
     let interval;
-    if ((status === 'processing' || status === 'completed') && jobId) {
+    const hasActiveClipRenders = Object.keys(clipRenderJobs).length > 0;
+    if ((status === 'processing' || status === 'completed' || (status === 'clips-ready' && hasActiveClipRenders)) && jobId) {
       interval = setInterval(async () => {
         try {
           const data = await pollJob(jobId);
@@ -808,7 +812,20 @@ function App() {
             setResults(data.result);
           }
 
-          if (data.status === 'completed') {
+          if (data.status === 'clips_ready') {
+            setStatus('clips-ready');
+            if (data.clip_renders) {
+              setClipRenderJobs((current) => {
+                const next = { ...current };
+                data.clip_renders.forEach((renderJob) => {
+                  if (renderJob.status === 'queued' || renderJob.status === 'rendering') {
+                    next[renderJob.clip_index] = renderJob.job_id;
+                  }
+                });
+                return next;
+              });
+            }
+          } else if (data.status === 'completed') {
             setStatus('complete');
             clearInterval(interval);
           } else if (data.status === 'failed') {
@@ -826,7 +843,55 @@ function App() {
       }, 2000);
     }
     return () => clearInterval(interval);
-  }, [status, jobId]);
+  }, [status, jobId, clipRenderJobs]);
+
+  useEffect(() => {
+    const entries = Object.entries(clipRenderJobs);
+    if (entries.length === 0) return undefined;
+    let cancelled = false;
+    const pollClipRenders = async () => {
+      const completed = [];
+      await Promise.all(entries.map(async ([clipIndex, renderJobId]) => {
+        try {
+          const data = await pollJob(renderJobId);
+          if (data.status === 'completed' || data.status === 'failed') {
+            completed.push({ clipIndex: Number(clipIndex), data });
+          }
+        } catch (error) {
+          console.error('Clip render polling error', error);
+        }
+      }));
+      if (cancelled || completed.length === 0) return;
+      const parent = await pollJob(jobId);
+      if (cancelled) return;
+      if (parent.result) setResults(parent.result);
+      setClipRenderJobs((current) => {
+        const next = { ...current };
+        completed.forEach(({ clipIndex, data }) => {
+          if (data.status === 'failed') {
+            setResults((currentResult) => {
+              if (!currentResult?.clips?.[clipIndex]) return currentResult;
+              const clips = [...currentResult.clips];
+              clips[clipIndex] = {
+                ...clips[clipIndex],
+                render_status: 'failed',
+                render_error: data.error || 'Clip render failed',
+              };
+              return { ...currentResult, clips };
+            });
+          }
+          delete next[clipIndex];
+        });
+        return next;
+      });
+    };
+    pollClipRenders();
+    const timer = setInterval(pollClipRenders, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [clipRenderJobs, jobId]);
 
 
   const handleProcess = async (data) => {
@@ -851,6 +916,7 @@ function App() {
     setStatus('processing');
     setLogs(["Starting process..."]);
     setResults(null);
+    setClipRenderJobs({});
     setProcessingMedia(data);
 
     try {
@@ -866,6 +932,7 @@ function App() {
               source_object: data.payload,
               source_url: data.sourceUrl?.trim() || undefined,
               acknowledged: !!data.acknowledged,
+              defer_render: true,
               layout_format: data.layoutFormat || 'standard',
               facecam_size: data.facecamSize || 'medium',
             }
@@ -873,6 +940,7 @@ function App() {
               url: data.payload,
               source_url: data.sourceUrl?.trim() || undefined,
               acknowledged: !!data.acknowledged,
+              defer_render: true,
               layout_format: data.layoutFormat || 'standard',
               facecam_size: data.facecamSize || 'medium',
             });
@@ -880,6 +948,7 @@ function App() {
         const formData = new FormData();
         formData.append('file', data.payload);
         formData.append('acknowledged', data.acknowledged ? 'true' : 'false');
+        formData.append('defer_render', 'true');
         if (data.sourceUrl?.trim()) formData.append('source_url', data.sourceUrl.trim());
         formData.append('layout_format', data.layoutFormat || 'standard');
         formData.append('facecam_size', data.facecamSize || 'medium');
@@ -906,9 +975,43 @@ function App() {
     setStatus('idle');
     setJobId(null);
     setResults(null);
+    setClipRenderJobs({});
     setLogs([]);
     setProcessingMedia(null);
     localStorage.removeItem(SESSION_KEY);
+  };
+
+  const handleRenderClip = async (clipIndex) => {
+    if (!jobId) return;
+    try {
+      const response = await fetch(getApiUrl(`/api/jobs/${jobId}/clips/${clipIndex}/render`), {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Could not queue clip render');
+      setClipRenderJobs((current) => ({ ...current, [clipIndex]: data.job_id }));
+      setResults((current) => {
+        if (!current?.clips?.[clipIndex]) return current;
+        const clips = [...current.clips];
+        clips[clipIndex] = {
+          ...clips[clipIndex],
+          render_status: 'queued',
+          render_job_id: data.job_id,
+        };
+        return { ...current, clips };
+      });
+    } catch (error) {
+      setResults((current) => {
+        if (!current?.clips?.[clipIndex]) return current;
+        const clips = [...current.clips];
+        clips[clipIndex] = {
+          ...clips[clipIndex],
+          render_status: 'failed',
+          render_error: error.message,
+        };
+        return { ...current, clips };
+      });
+    }
   };
 
   // --- UI Components ---
@@ -1512,18 +1615,18 @@ function App() {
           )}
 
           {/* View: Processing / Results (Split View) */}
-          {activeTab === 'dashboard' && (status === 'processing' || status === 'complete' || status === 'error') && (
+          {activeTab === 'dashboard' && (status === 'processing' || status === 'clips-ready' || status === 'complete' || status === 'error') && (
             <div className="h-full flex flex-col md:flex-row animate-[fadeIn_0.3s_ease-out]">
 
               {/* Left Panel: Preview & Status */}
-              <div className={`${status === 'complete' ? 'w-full md:w-[30%] lg:w-[25%]' : 'w-full md:w-[55%] lg:w-[60%]'} h-full flex flex-col border-r border-white/5 bg-black/20 p-6 overflow-y-auto custom-scrollbar transition-all duration-700 ease-in-out`}>
+              <div className={`${status === 'complete' || status === 'clips-ready' ? 'w-full md:w-[30%] lg:w-[25%]' : 'w-full md:w-[55%] lg:w-[60%]'} h-full flex flex-col border-r border-white/5 bg-black/20 p-6 overflow-y-auto custom-scrollbar transition-all duration-700 ease-in-out`}>
                 <div className="mb-6 flex items-center justify-between">
                   <h2 className="text-lg font-semibold flex items-center gap-2">
                     <Activity className={`text-primary ${status === 'processing' ? 'animate-pulse' : ''}`} size={20} />
                     Live Analysis
                   </h2>
                   <span className={`text-xs px-2 py-1 rounded-full border ${status === 'processing' ? 'bg-primary/10 border-primary/20 text-primary' :
-                    status === 'complete' ? 'bg-green-500/10 border-green-500/20 text-green-400' :
+                    status === 'complete' || status === 'clips-ready' ? 'bg-green-500/10 border-green-500/20 text-green-400' :
                       'bg-red-500/10 border-red-500/20 text-red-400'
                     }`}>
                     {status.toUpperCase()}
@@ -1534,7 +1637,7 @@ function App() {
                 {processingMedia && (
                   <ProcessingAnimation
                     media={processingMedia}
-                    isComplete={status === 'complete'}
+                    isComplete={status === 'complete' || status === 'clips-ready'}
                     syncedTime={syncedTime}
                     isSyncedPlaying={isSyncedPlaying}
                     syncTrigger={syncTrigger}
@@ -1544,7 +1647,7 @@ function App() {
                 )}
 
                 {/* Logs Terminal */}
-                <div className={`bg-[#0c0c0e] rounded-xl border border-white/10 overflow-hidden flex flex-col transition-all duration-500 ${status === 'complete' ? 'h-32 min-h-0 opacity-50 hover:opacity-100' : 'flex-1 min-h-[200px]'}`}>
+                  <div className={`bg-[#0c0c0e] rounded-xl border border-white/10 overflow-hidden flex flex-col transition-all duration-500 ${status === 'complete' || status === 'clips-ready' ? 'h-32 min-h-0 opacity-50 hover:opacity-100' : 'flex-1 min-h-[200px]'}`}>
                   <div className="px-4 py-2 border-b border-white/5 flex items-center justify-between bg-white/5 shrink-0">
                     <span className="text-xs font-mono text-zinc-400 flex items-center gap-2">
                       <Terminal size={12} /> System Logs
@@ -1570,7 +1673,7 @@ function App() {
               </div>
 
               {/* Right Panel: Results Grid */}
-              <div className={`${status === 'complete' ? 'w-full md:w-[70%] lg:w-[75%]' : 'w-full md:w-[45%] lg:w-[40%]'} h-full flex flex-col bg-background p-6 transition-all duration-700 ease-in-out`}>
+              <div className={`${status === 'complete' || status === 'clips-ready' ? 'w-full md:w-[70%] lg:w-[75%]' : 'w-full md:w-[45%] lg:w-[40%]'} h-full flex flex-col bg-background p-6 transition-all duration-700 ease-in-out`}>
                 <h2 className="text-lg font-semibold mb-6 flex items-center gap-2 shrink-0">
                   <Sparkles className="text-yellow-400" size={20} />
                   Generated Shorts
@@ -1597,7 +1700,7 @@ function App() {
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
                   {results && results.clips && results.clips.length > 0 ? (
-                    <div className={`grid gap-4 pb-10 ${status === 'complete' ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}>
+                    <div className={`grid gap-4 pb-10 ${status === 'complete' || status === 'clips-ready' ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}>
                       {results.clips.map((clip, i) => (
                         <ResultCard
                           key={i}
@@ -1612,6 +1715,9 @@ function App() {
                           elevenLabsKey={elevenLabsKey}
                           onPlay={(time) => handleClipPlay(time)}
                           onPause={handleClipPause}
+                          onRenderClip={status === 'clips-ready' ? handleRenderClip : undefined}
+                          renderStatus={clip.render_status}
+                          renderError={clip.render_error}
                         />
                       ))}
                     </div>

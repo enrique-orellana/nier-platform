@@ -86,6 +86,7 @@ func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, 
 	mux.HandleFunc("/api/config", server.runtimeConfig)
 	mux.HandleFunc("/api/process", server.process)
 	mux.HandleFunc("/api/status/", server.status)
+	mux.HandleFunc("/api/jobs/", server.clipRenderRoute)
 	mux.HandleFunc("/api/highlights", server.highlights)
 	mux.HandleFunc("/api/highlights/", server.highlightRoute)
 	mux.HandleFunc("/api/render", server.renderProxy)
@@ -988,6 +989,7 @@ type processRequest struct {
 	ClipCount    int            `json:"clip_count"`
 	LayoutFormat string         `json:"layout_format"`
 	FacecamSize  string         `json:"facecam_size"`
+	DeferRender  bool           `json:"defer_render"`
 }
 
 func (s *Server) process(w http.ResponseWriter, r *http.Request) {
@@ -1073,14 +1075,24 @@ func (s *Server) process(w http.ResponseWriter, r *http.Request) {
 	}
 	metadata["layout_format"] = layoutFormat
 	metadata["facecam_size"] = facecamSize
+	metadata["defer_render"] = payload.DeferRender
+	outputRoot := s.config.OutputDir
+	if outputRoot == "" {
+		outputRoot = "output"
+	}
 	job, err := s.store.Create(r.Context(), domain.CreateJobInput{
 		Kind:      "clip-generation",
 		SourceURL: payload.URL,
 		ClipCount: payload.ClipCount,
+		OutputDir: filepath.Join(outputRoot, "pending"),
 		Metadata:  metadata,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Failed to create job"})
+		return
+	}
+	if err := s.store.SetOutputDir(r.Context(), job.ID, filepath.Join(outputRoot, job.ID)); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Failed to initialize job output"})
 		return
 	}
 	if err := s.store.AppendLog(r.Context(), job.ID, fmt.Sprintf("Job %s queued.", job.ID)); err != nil {
@@ -1124,20 +1136,18 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	for _, logEntry := range job.Logs {
 		logs = append(logs, logEntry.Message)
 	}
-	var result json.RawMessage
-	if len(job.Result) > 0 {
-		result = json.RawMessage(job.Result)
-	}
 	writeJSON(w, http.StatusOK, struct {
-		Status string          `json:"status"`
-		Logs   []string        `json:"logs"`
-		Result json.RawMessage `json:"result"`
-		Error  string          `json:"error"`
+		Status      string           `json:"status"`
+		Logs        []string         `json:"logs"`
+		Result      json.RawMessage  `json:"result"`
+		Error       string           `json:"error"`
+		ClipRenders []map[string]any `json:"clip_renders,omitempty"`
 	}{
-		Status: string(job.Status),
-		Logs:   logs,
-		Result: result,
-		Error:  job.Error,
+		Status:      string(job.Status),
+		Logs:        logs,
+		Result:      s.decorateDeferredClipResult(r.Context(), job),
+		Error:       job.Error,
+		ClipRenders: s.deferredClipRenders(r.Context(), job.ID),
 	})
 }
 
@@ -2494,6 +2504,10 @@ func (s *Server) decodeProcessRequest(r *http.Request) (processRequest, error) {
 			return processRequest{}, errors.New("clip_count must be an integer")
 		}
 	}
+	deferRender, err := parseBool(r.FormValue("defer_render"))
+	if err != nil {
+		return processRequest{}, errors.New("defer_render must be boolean")
+	}
 	return processRequest{
 		URL:          r.FormValue("url"),
 		SourceURL:    r.FormValue("source_url"),
@@ -2502,6 +2516,7 @@ func (s *Server) decodeProcessRequest(r *http.Request) (processRequest, error) {
 		ClipCount:    clipCount,
 		LayoutFormat: r.FormValue("layout_format"),
 		FacecamSize:  r.FormValue("facecam_size"),
+		DeferRender:  deferRender,
 	}, nil
 }
 

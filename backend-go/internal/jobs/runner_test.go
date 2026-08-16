@@ -58,6 +58,25 @@ func TestRunnerCompletesJobAndPersistsWorkerLogs(t *testing.T) {
 	}
 }
 
+func TestRunnerMarksDeferredClipDiscoveryAsClipsReady(t *testing.T) {
+	store := NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{
+		Kind:     "clip-generation",
+		Metadata: map[string]any{"defer_render": true},
+	})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	runner := Runner{Store: store, Worker: resultWorker{}}
+	if err := runner.RunOnce(context.Background(), job.ID); err != nil {
+		t.Fatalf("run deferred job: %v", err)
+	}
+	ready, _ := store.Get(context.Background(), job.ID)
+	if ready.Status != domain.JobStatusClipsReady {
+		t.Fatalf("expected clips_ready status, got %#v", ready)
+	}
+}
+
 func TestRunnerMarksFailedJobAndReturnsWorkerError(t *testing.T) {
 	store := NewMemoryStore()
 	job, err := store.Create(context.Background(), domain.CreateJobInput{

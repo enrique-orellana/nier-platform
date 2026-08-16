@@ -699,6 +699,105 @@ func TestProcessRequiresRightsAcknowledgement(t *testing.T) {
 	}
 }
 
+func TestDeferredClipRenderRouteCreatesOneChildPerClipAndExposesState(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	outputDir := t.TempDir()
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+	parent, err := store.Create(context.Background(), domain.CreateJobInput{
+		Kind:      "clip-generation",
+		OutputDir: filepath.Join(outputDir, "parent-1"),
+		Metadata:  map[string]any{"defer_render": true},
+	})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	if _, err := store.Claim(context.Background(), parent.ID); err != nil {
+		t.Fatalf("claim parent: %v", err)
+	}
+	if _, err := store.Transition(context.Background(), parent.ID, domain.JobStatusClipsReady, ""); err != nil {
+		t.Fatalf("mark parent ready: %v", err)
+	}
+	if err := store.SetResult(context.Background(), parent.ID, []byte(`{"source_path":"source.mp4","clips":[{"start":1,"end":4,"render_status":"found"},{"start":8,"end":12,"render_status":"found"}]}`)); err != nil {
+		t.Fatalf("set parent result: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/jobs/%s/clips/1/render", parent.ID)
+	first := httptest.NewRecorder()
+	server.Handler().ServeHTTP(first, httptest.NewRequest(http.MethodPost, path, nil))
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("expected first render request accepted, got %d: %s", first.Code, first.Body.String())
+	}
+	var firstPayload struct {
+		JobID string `json:"job_id"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &firstPayload); err != nil || firstPayload.JobID == "" {
+		t.Fatalf("unexpected first render response: %s", first.Body.String())
+	}
+
+	second := httptest.NewRecorder()
+	server.Handler().ServeHTTP(second, httptest.NewRequest(http.MethodPost, path, nil))
+	if second.Code != http.StatusAccepted {
+		t.Fatalf("expected duplicate render request accepted, got %d: %s", second.Code, second.Body.String())
+	}
+	var secondPayload struct {
+		JobID string `json:"job_id"`
+	}
+	if err := json.Unmarshal(second.Body.Bytes(), &secondPayload); err != nil || secondPayload.JobID != firstPayload.JobID {
+		t.Fatalf("duplicate render created another child: %s", second.Body.String())
+	}
+
+	status := httptest.NewRecorder()
+	server.Handler().ServeHTTP(status, httptest.NewRequest(http.MethodGet, "/api/status/"+parent.ID, nil))
+	if status.Code != http.StatusOK {
+		t.Fatalf("status lookup failed: %d %s", status.Code, status.Body.String())
+	}
+	var statusPayload struct {
+		Status string `json:"status"`
+		Result struct {
+			Clips []map[string]any `json:"clips"`
+		} `json:"result"`
+		ClipRenders []map[string]any `json:"clip_renders"`
+	}
+	if err := json.Unmarshal(status.Body.Bytes(), &statusPayload); err != nil {
+		t.Fatalf("decode staged status: %v", err)
+	}
+	if statusPayload.Status != string(domain.JobStatusClipsReady) || len(statusPayload.ClipRenders) != 1 || statusPayload.ClipRenders[0]["job_id"] != firstPayload.JobID {
+		t.Fatalf("unexpected staged status: %#v", statusPayload)
+	}
+	if statusPayload.Result.Clips[1]["render_status"] != "queued" || statusPayload.Result.Clips[1]["render_job_id"] != firstPayload.JobID {
+		t.Fatalf("render state was not merged into result: %#v", statusPayload.Result.Clips)
+	}
+}
+
+func TestProcessPersistsDeferredModeAndDurableOutputDir(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	outputDir := t.TempDir()
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+	req := httptest.NewRequest(http.MethodPost, "/api/process?clip_count=3", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true,"defer_render":true,"layout_format":"streamer_stack","facecam_size":"large"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusAccepted {
+		t.Fatalf("expected deferred process accepted, got %d: %s", res.Code, res.Body.String())
+	}
+	var payload struct {
+		JobID string `json:"job_id"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode process response: %v", err)
+	}
+	job, ok := store.Get(context.Background(), payload.JobID)
+	if !ok {
+		t.Fatal("deferred job was not stored")
+	}
+	if job.Metadata["defer_render"] != true || job.Metadata["layout_format"] != "streamer_stack" || job.Metadata["facecam_size"] != "large" {
+		t.Fatalf("deferred metadata was not persisted: %#v", job.Metadata)
+	}
+	if job.OutputDir != filepath.Join(outputDir, job.ID) {
+		t.Fatalf("unexpected durable output directory: %q", job.OutputDir)
+	}
+}
+
 func TestProcessRejectsOpenRouterTranscriptionWithoutAPIKey(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodPost, "/api/process", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true}`))

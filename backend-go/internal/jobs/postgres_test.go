@@ -52,3 +52,39 @@ func TestPostgresStorePersistsJobAcrossReopen(t *testing.T) {
 		t.Fatalf("job did not persist across reopen: %#v", loaded)
 	}
 }
+
+func TestPostgresStorePersistsClipRenderIdentityAndDeduplicates(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not configured")
+	}
+	ctx := context.Background()
+	store, err := OpenPostgresStore(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+
+	parent, err := store.Create(ctx, domain.CreateJobInput{Kind: "postgres-deferred-parent", OutputDir: "output/parent"})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	input := domain.CreateJobInput{
+		Kind:        "clip-render",
+		ParentJobID: parent.ID,
+		ClipIndex:   4,
+		OutputDir:   "output/parent",
+	}
+	child, err := store.CreateClipRenderIfAbsent(ctx, input)
+	if err != nil {
+		t.Fatalf("create child: %v", err)
+	}
+	defer store.db.ExecContext(ctx, `DELETE FROM jobs WHERE id = $1 OR id = $2`, parent.ID, child.ID)
+	duplicate, err := store.CreateClipRenderIfAbsent(ctx, input)
+	if err != nil {
+		t.Fatalf("deduplicate child: %v", err)
+	}
+	if duplicate.ID != child.ID || duplicate.ParentJobID != parent.ID || duplicate.ClipIndex != 4 {
+		t.Fatalf("unexpected deduplicated child: %#v", duplicate)
+	}
+}

@@ -607,6 +607,8 @@ def analyze_scenes_strategy(
     sample_count=DEFAULT_SCENE_STRATEGY_SAMPLE_COUNT,
     workers=DEFAULT_SCENE_STRATEGY_WORKERS,
     metrics=None,
+    frame_start=None,
+    frame_end=None,
 ):
     """
     Analyzes each scene to determine if it should be TRACK (Single person) or GENERAL (Group/Wide).
@@ -666,7 +668,12 @@ def analyze_scenes_strategy(
             return ["TRACK"] * len(scenes)
 
         last_sample_frame = max(position_to_scenes)
+        if frame_end is not None:
+            last_sample_frame = min(last_sample_frame, int(frame_end) - 1)
         frame_number = 0
+        if frame_start is not None and int(frame_start) > 0:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_start))
+            frame_number = int(frame_start)
         while frame_number <= last_sample_frame:
             ret, frame = cap.read()
             if not ret:
@@ -691,7 +698,7 @@ def analyze_scenes_strategy(
 
     return strategies
 
-def detect_scenes(video_path, *, frame_skip=None):
+def detect_scenes(video_path, *, frame_skip=None, start_frame=None, end_frame=None):
     try:
         from scenedetect import open_video, SceneManager
         from scenedetect.detectors import ContentDetector
@@ -704,8 +711,30 @@ def detect_scenes(video_path, *, frame_skip=None):
     video = open_video(video_path)
     scene_manager = SceneManager()
     scene_manager.add_detector(ContentDetector())
-    scene_manager.detect_scenes(video=video, frame_skip=frame_skip)
+    if start_frame is not None and hasattr(video, "seek"):
+        video.seek(int(start_frame))
+    detect_kwargs = {"video": video, "frame_skip": frame_skip}
+    if end_frame is not None:
+        detect_kwargs["end_in_scene"] = int(end_frame)
+    try:
+        scene_manager.detect_scenes(**detect_kwargs)
+    except TypeError:
+        # Older PySceneDetect releases do not expose end_in_scene. The seek
+        # still avoids decoding the prefix when the stream supports it.
+        detect_kwargs.pop("end_in_scene", None)
+        scene_manager.detect_scenes(**detect_kwargs)
     scene_list = scene_manager.get_scene_list()
+    if start_frame is not None or end_frame is not None:
+        bounded_scenes = []
+        lower = int(start_frame or 0)
+        upper = int(end_frame) if end_frame is not None else None
+        for start, end in scene_list:
+            start_number = int(getattr(start, "frame_num", start))
+            end_number = int(getattr(end, "frame_num", end))
+            if end_number <= lower or (upper is not None and start_number >= upper):
+                continue
+            bounded_scenes.append((max(start_number, lower), min(end_number, upper) if upper is not None else end_number))
+        scene_list = bounded_scenes
     fps = video.frame_rate
     return scene_list, fps
 
@@ -752,6 +781,9 @@ def build_source_analysis_for_job(
     output_dir: str,
     *,
     metrics: JobVideoMetrics | None = None,
+    cache_name: str = "_source_analysis.json",
+    frame_start: int | None = None,
+    frame_end: int | None = None,
 ) -> SourceAnalysis:
     """Build or load the expensive source analysis shared by all clip renders."""
     source_path = Path(input_video).resolve()
@@ -792,6 +824,10 @@ def build_source_analysis_for_job(
         "scene_analysis_proxy_max_dimension": scene_analysis_proxy_max_dimension,
         "scene_strategy_sample_count": scene_strategy_sample_count_value,
     }
+    if frame_start is not None:
+        source_fingerprint["analysis_frame_start"] = int(frame_start)
+    if frame_end is not None:
+        source_fingerprint["analysis_frame_end"] = int(frame_end)
 
     def scene_analysis_source_path():
         nonlocal analysis_video_path
@@ -810,12 +846,20 @@ def build_source_analysis_for_job(
     def scene_builder():
         started = time.monotonic()
         try:
+            scene_kwargs = {"frame_skip": scene_frame_skip}
+            if frame_start is not None:
+                scene_kwargs["start_frame"] = int(frame_start)
+            if frame_end is not None:
+                scene_kwargs["end_frame"] = int(frame_end)
             scenes, _detected_fps = detect_scenes(
-                scene_analysis_source_path(), frame_skip=scene_frame_skip
+                scene_analysis_source_path(), **scene_kwargs
             )
             if scenes:
                 return scenes
-            return [(0, total_frames)]
+            return [(
+                int(frame_start or 0),
+                int(frame_end if frame_end is not None else total_frames),
+            )]
         finally:
             if metrics is not None:
                 metrics.add_duration("scene_detection", time.monotonic() - started)
@@ -831,13 +875,17 @@ def build_source_analysis_for_job(
             }
             if metrics is not None:
                 kwargs["metrics"] = metrics
+            if frame_start is not None:
+                kwargs["frame_start"] = int(frame_start)
+            if frame_end is not None:
+                kwargs["frame_end"] = int(frame_end)
             return analyze_scenes_strategy(scene_analysis_source_path(), scenes, **kwargs)
         finally:
             if metrics is not None:
                 metrics.add_duration("scene_strategy", time.monotonic() - started)
 
     load_kwargs = {
-        "cache_path": Path(output_dir) / "_source_analysis.json",
+        "cache_path": Path(output_dir) / cache_name,
         "source_fingerprint": source_fingerprint,
         "source_fps": source_fps,
         "total_frames": total_frames,
@@ -853,6 +901,35 @@ def build_source_analysis_for_job(
         with metrics.timed("scene_analysis"):
             return load_or_build_source_analysis(**load_kwargs)
     return load_or_build_source_analysis(**load_kwargs)
+
+
+def build_clip_source_analysis_for_job(
+    input_video: str,
+    output_dir: str,
+    *,
+    clip_index: int,
+    start_sec: float,
+    end_sec: float,
+    metrics: JobVideoMetrics | None = None,
+) -> SourceAnalysis:
+    """Build a cached analysis limited to one candidate clip's frame range."""
+    media = probe_media(input_video)
+    if media.fps <= 0 or media.frame_count <= 0:
+        raise ValueError("clip source metadata is incomplete or invalid")
+    trim = resolve_clip_frame_range(
+        start_sec,
+        end_sec,
+        source_fps=float(media.fps),
+        total_frames=int(media.frame_count),
+    )
+    return build_source_analysis_for_job(
+        input_video,
+        output_dir,
+        metrics=metrics,
+        cache_name=f"_clip_{int(clip_index)}_analysis.json",
+        frame_start=trim.start_frame,
+        frame_end=trim.end_frame,
+    )
 
 
 def sanitize_filename(filename):
@@ -1621,6 +1698,133 @@ def _write_clip_manifest(
     return os.path.relpath(manifest_path, output_dir).replace(os.sep, "/")
 
 
+def persist_discovered_clip_plan(
+    clips_data: dict,
+    *,
+    output_dir: str,
+    video_title: str,
+    source_path: str,
+    source_asset: dict,
+    source_media,
+    transcript: dict,
+    source_object: dict | None = None,
+    layout_format: str = "standard",
+    facecam_size: str = "medium",
+) -> tuple[dict, str]:
+    """Persist candidate clips without paying for scene/face analysis or rendering."""
+    layout_options = normalize_clip_layout(layout_format, facecam_size)
+    master_spec = choose_master_spec(source_media, strategy="crop")
+    output_root = Path(output_dir).resolve()
+    source_path_value = os.path.relpath(os.path.abspath(source_path), output_root).replace(os.sep, "/")
+
+    clips_data["transcript"] = transcript
+    clips_data["source_asset"] = source_asset
+    clips_data["source_path"] = source_path_value
+    clips_data["video_title"] = video_title
+    if source_object:
+        clips_data["source_object"] = dict(source_object)
+
+    for clip in clips_data.get("shorts", []):
+        clip["render_status"] = "found"
+        clip["render_job_id"] = None
+        clip["source_video_filename"] = source_asset.get("relative_path", "")
+        clip["source_video_url"] = (
+            f"/videos/{os.path.basename(output_dir)}/{source_asset.get('relative_path', '')}"
+            if source_asset.get("relative_path")
+            else ""
+        )
+        clip["output_width"] = master_spec.width
+        clip["output_height"] = master_spec.height
+        clip["output_fps"] = master_spec.fps
+        clip["source_has_audio"] = source_media.audio is not None
+        clip["layout_format"] = layout_options.layout_format
+        clip["facecam_size"] = layout_options.facecam_size
+
+    metadata_path = Path(output_dir) / f"{video_title}_metadata.json"
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = metadata_path.with_name(f".{metadata_path.name}.tmp")
+    temporary_path.write_text(json.dumps(clips_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(temporary_path, metadata_path)
+    return clips_data, str(metadata_path)
+
+
+def _clip_metadata_path(output_dir: str) -> Path:
+    metadata_files = sorted(Path(output_dir).glob("*_metadata.json"))
+    if not metadata_files:
+        raise FileNotFoundError("Clip metadata not found")
+    return metadata_files[0]
+
+
+def _write_clip_metadata(metadata_path: Path, metadata: dict) -> None:
+    temporary_path = metadata_path.with_name(f".{metadata_path.name}.tmp")
+    temporary_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(temporary_path, metadata_path)
+
+
+def render_deferred_clip(
+    *,
+    input_video: str,
+    output_dir: str,
+    clip_index: int,
+    metrics: JobVideoMetrics | None = None,
+) -> dict:
+    """Render one persisted candidate and update only that candidate's metadata."""
+    metadata_path = _clip_metadata_path(output_dir)
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    clips = metadata.get("shorts") or []
+    if clip_index < 0 or clip_index >= len(clips):
+        raise IndexError("Clip not found")
+    clip = clips[clip_index]
+    existing_filename = str(clip.get("video_filename") or "").strip()
+    if clip.get("render_status") == "ready" and existing_filename:
+        existing_path = Path(output_dir) / Path(existing_filename).name
+        if existing_path.is_file():
+            return clip
+
+    clip["render_status"] = "analyzing"
+    clip.pop("render_error", None)
+    _write_clip_metadata(metadata_path, metadata)
+    try:
+        source_analysis = build_clip_source_analysis_for_job(
+            input_video,
+            output_dir,
+            clip_index=clip_index,
+            start_sec=float(clip["start"]),
+            end_sec=float(clip["end"]),
+            metrics=metrics,
+        )
+        clip["render_status"] = "rendering"
+        _write_clip_metadata(metadata_path, metadata)
+        source_asset = metadata.get("source_asset") or {}
+        source_media = probe_media(input_video)
+        rendered = render_clip_plan(
+            input_video=input_video,
+            output_dir=output_dir,
+            video_title=str(metadata.get("video_title") or Path(metadata_path).stem.replace("_metadata", "")),
+            clips=[clip],
+            clip_indices=[clip_index],
+            source_analysis=source_analysis,
+            transcript=metadata.get("transcript") or {},
+            source_asset=source_asset,
+            source_media=source_media,
+            source_object=metadata.get("source_object"),
+            metrics=metrics,
+            layout_format=clip.get("layout_format", "standard"),
+            facecam_size=clip.get("facecam_size", "medium"),
+        )
+        if not rendered:
+            raise RuntimeError("Clip rendering produced no artifact")
+        clip["render_status"] = "ready"
+        clip.pop("render_error", None)
+        _write_clip_metadata(metadata_path, metadata)
+        return clip
+    except Exception as error:
+        clip["render_status"] = "failed"
+        clip["render_error"] = str(error)
+        _write_clip_metadata(metadata_path, metadata)
+        raise
+
+
 def render_clip_plan(
     *,
     input_video: str,
@@ -1635,6 +1839,7 @@ def render_clip_plan(
     metrics: JobVideoMetrics | None = None,
     layout_format: str = "standard",
     facecam_size: str = "medium",
+    clip_indices: list[int] | None = None,
 ) -> list[dict]:
     """Render a clip plan using one immutable source analysis object."""
     layout_options = normalize_clip_layout(layout_format, facecam_size)
@@ -1647,7 +1852,8 @@ def render_clip_plan(
     )
     master_spec = choose_master_spec(source_media, strategy="crop")
 
-    for index, clip in enumerate(clips, start=1):
+    for position, clip in enumerate(clips):
+        index = (clip_indices[position] + 1) if clip_indices is not None else (position + 1)
         start = clip["start"]
         end = clip["end"]
         clip_filename = f"{video_title}_clip_{index}.mp4"
@@ -2038,6 +2244,8 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', type=str, help="Output directory or file (if processing whole video).")
     parser.add_argument('--keep-original', action='store_true', help="Keep the downloaded YouTube video.")
     parser.add_argument('--skip-analysis', action='store_true', help="Skip AI analysis and convert the whole video.")
+    parser.add_argument('--defer-render', action='store_true', help="Find candidate clips without rendering them.")
+    parser.add_argument('--render-clip', type=int, help="Render one zero-based candidate clip from persisted metadata.")
     parser.add_argument('--target-clips', type=int, default=6, help="Preferred number of viral clips to generate (3-15).")
     parser.add_argument(
         '--layout-format',
@@ -2053,6 +2261,12 @@ if __name__ == '__main__':
     )
     
     args = parser.parse_args()
+    if args.defer_render and args.render_clip is not None:
+        parser.error("--defer-render and --render-clip cannot be used together")
+    if args.render_clip is not None and args.skip_analysis:
+        parser.error("--render-clip cannot be combined with --skip-analysis")
+    if args.render_clip is not None and args.render_clip < 0:
+        parser.error("--render-clip must be non-negative")
     target_clips = min(max(3, args.target_clips), 15)
     try:
         source_object = parse_source_object_argument(args.source_object)
@@ -2108,18 +2322,35 @@ if __name__ == '__main__':
         exit(1)
 
     with job_metrics.timed("source_preparation"):
-        processing_video = prepare_opencv_video(input_video)
+        if args.defer_render:
+            # Discovery needs a durable source reference, not an AV1 working
+            # copy that would disappear before a later clip-render job.
+            processing_video = input_video
+        else:
+            processing_video = prepare_opencv_video(input_video)
         manifest_source_path, source_asset, source_media = _prepare_manifest_source(
             input_video,
             output_dir,
             source_object,
         )
-    source_analysis = build_source_analysis_for_job(
-        processing_video, output_dir, metrics=job_metrics
-    )
+    source_analysis = None
+    if not args.defer_render and args.render_clip is None:
+        source_analysis = build_source_analysis_for_job(
+            processing_video, output_dir, metrics=job_metrics
+        )
 
     # 2. Decision: Analyze clips or process whole?
-    if args.skip_analysis:
+    if args.render_clip is not None:
+        # The parent metadata is the source of truth for the selected clip;
+        # this path intentionally performs no discovery or work for siblings.
+        processing_video = prepare_opencv_video(manifest_source_path)
+        render_deferred_clip(
+            input_video=processing_video,
+            output_dir=output_dir,
+            clip_index=args.render_clip,
+            metrics=job_metrics,
+        )
+    elif args.skip_analysis:
         print("⏩ Skipping analysis, processing entire video...")
         output_file = args.output if args.output else os.path.join(output_dir, f"{video_title}_vertical.mp4")
         process_video_to_vertical(
@@ -2133,7 +2364,9 @@ if __name__ == '__main__':
         )
     else:
         # 3. Transcribe
-        duration = source_analysis.total_frames / source_analysis.source_fps
+        duration = float(source_media.duration_seconds)
+        if duration <= 0:
+            duration = source_analysis.total_frames / source_analysis.source_fps
         with job_metrics.timed("transcription"):
             transcript = transcribe_video(processing_video, duration_seconds=duration)
 
@@ -2162,35 +2395,46 @@ if __name__ == '__main__':
             )
         else:
             print(f"🔥 Found {len(clips_data['shorts'])} viral clips!")
-            
-            # Save metadata
-            clips_data['transcript'] = transcript # Save full transcript for subtitles
             attach_source_context_to_clip_plan(clips_data, source_context_record)
-            if source_object:
-                clips_data["source_object"] = dict(source_object)
-            metadata_file = os.path.join(output_dir, f"{video_title}_metadata.json")
-            with open(metadata_file, 'w') as f:
-                json.dump(clips_data, f, indent=2)
-            print(f"   Saved metadata to {metadata_file}")
-
-            # 5. Process each clip from the shared source analysis.
-            clips_data["shorts"] = render_clip_plan(
-                input_video=processing_video,
-                output_dir=output_dir,
-                video_title=video_title,
-                clips=clips_data["shorts"],
-                source_analysis=source_analysis,
-                transcript=transcript,
-                source_asset=source_asset,
-                source_media=source_media,
-                source_object=source_object,
-                metrics=job_metrics,
-                layout_format=args.layout_format,
-                facecam_size=args.facecam_size,
-            )
-                
-            with open(metadata_file, 'w', encoding='utf-8') as f:
-                json.dump(clips_data, f, indent=2)
+            if args.defer_render:
+                _, metadata_file = persist_discovered_clip_plan(
+                    clips_data,
+                    output_dir=output_dir,
+                    video_title=video_title,
+                    source_path=manifest_source_path,
+                    source_asset=source_asset,
+                    source_media=source_media,
+                    transcript=transcript,
+                    source_object=source_object,
+                    layout_format=args.layout_format,
+                    facecam_size=args.facecam_size,
+                )
+                print(f"   Saved discovery metadata to {metadata_file}")
+            else:
+                # Preserve the legacy automatic all-clips rendering behavior.
+                clips_data['transcript'] = transcript
+                if source_object:
+                    clips_data["source_object"] = dict(source_object)
+                metadata_file = os.path.join(output_dir, f"{video_title}_metadata.json")
+                with open(metadata_file, 'w') as f:
+                    json.dump(clips_data, f, indent=2)
+                print(f"   Saved metadata to {metadata_file}")
+                clips_data["shorts"] = render_clip_plan(
+                    input_video=processing_video,
+                    output_dir=output_dir,
+                    video_title=video_title,
+                    clips=clips_data["shorts"],
+                    source_analysis=source_analysis,
+                    transcript=transcript,
+                    source_asset=source_asset,
+                    source_media=source_media,
+                    source_object=source_object,
+                    metrics=job_metrics,
+                    layout_format=args.layout_format,
+                    facecam_size=args.facecam_size,
+                )
+                with open(metadata_file, 'w', encoding='utf-8') as f:
+                    json.dump(clips_data, f, indent=2)
 
     # Clean up original if requested
     if args.url and not args.keep_original and os.path.exists(input_video):
@@ -2198,6 +2442,11 @@ if __name__ == '__main__':
         print(f"🗑️  Cleaned up downloaded video.")
 
     job_metrics.add_duration("total_wall_clock", time.time() - script_start_time)
-    job_metrics.write_json(os.path.join(output_dir, "generation_metrics.json"))
+    metrics_filename = (
+        f"clip_{args.render_clip}_metrics.json"
+        if args.render_clip is not None
+        else "generation_metrics.json"
+    )
+    job_metrics.write_json(os.path.join(output_dir, metrics_filename))
     total_time = time.time() - script_start_time
     print(f"\n⏱️  Total execution time: {total_time:.2f}s")

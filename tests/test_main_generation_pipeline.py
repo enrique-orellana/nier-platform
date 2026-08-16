@@ -215,6 +215,133 @@ class MainGenerationPipelineTests(unittest.TestCase):
         scene_calls.assert_called_once_with(str(proxy_path), frame_skip=2)
         self.assertEqual(strategy_calls.call_args.args[:2], (str(proxy_path), [(0, 100)]))
 
+    def test_persist_discovered_clip_plan_marks_candidates_without_rendering(self):
+        clips_data = {
+            "shorts": [
+                {"start": 1.0, "end": 4.0, "video_title_for_youtube_short": "First"},
+                {"start": 8.0, "end": 12.0, "video_title_for_youtube_short": "Second"},
+            ],
+            "cost_analysis": {"total": 1.2},
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory) / "output"
+            output_dir.mkdir()
+            result, metadata_path = main.persist_discovered_clip_plan(
+                clips_data,
+                output_dir=str(output_dir),
+                video_title="source",
+                source_path=str(output_dir / "source.mp4"),
+                source_asset={"relative_path": "source.mp4", "asset_id": "source"},
+                source_media=source_media(),
+                transcript={"segments": []},
+                source_object=None,
+                layout_format="streamer_stack",
+                facecam_size="large",
+            )
+
+            persisted = json.loads(Path(metadata_path).read_text(encoding="utf-8"))
+
+        assert [clip["render_status"] for clip in result["shorts"]] == ["found", "found"]
+        assert all(clip["render_job_id"] is None for clip in result["shorts"])
+        assert result["source_path"] == "source.mp4"
+        assert result["shorts"][0]["layout_format"] == "streamer_stack"
+        assert persisted["transcript"] == {"segments": []}
+        assert persisted["source_asset"]["asset_id"] == "source"
+
+    def test_clip_source_analysis_uses_clip_cache_and_range(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source_path = Path(directory) / "source.mp4"
+            output_dir = Path(directory) / "output"
+            source_path.write_bytes(b"source")
+            output_dir.mkdir()
+            scene_calls = Mock(return_value=([(60, 90)], 30.0))
+            strategy_calls = Mock(return_value=["TRACK"])
+
+            with patch.object(main, "probe_media", return_value=source_media()), patch.object(
+                main.cv2, "VideoCapture", return_value=FakeCapture()
+            ), patch.object(
+                main, "ensure_scene_analysis_proxy", return_value=source_path
+            ), patch.object(main, "detect_scenes", scene_calls), patch.object(
+                main, "analyze_scenes_strategy", strategy_calls
+            ):
+                analysis = main.build_clip_source_analysis_for_job(
+                    str(source_path),
+                    str(output_dir),
+                    clip_index=2,
+                    start_sec=2.0,
+                    end_sec=4.0,
+                )
+            self.assertTrue((output_dir / "_clip_2_analysis.json").is_file())
+
+        self.assertEqual(analysis.scene_boundaries, [(60, 90)])
+        scene_calls.assert_called_once_with(
+            str(source_path), frame_skip=2, start_frame=60, end_frame=120
+        )
+        self.assertEqual(strategy_calls.call_args.kwargs["frame_start"], 60)
+        self.assertEqual(strategy_calls.call_args.kwargs["frame_end"], 120)
+
+    def test_render_deferred_clip_updates_one_candidate_and_is_idempotent(self):
+        clips_data = {
+            "shorts": [
+                {"start": 1.0, "end": 4.0},
+                {"start": 8.0, "end": 12.0},
+            ]
+        }
+        analysis = SourceAnalysis(
+            source_fingerprint={"size": 1},
+            source_fps=30.0,
+            total_frames=300,
+            width=1920,
+            height=1080,
+            scene_boundaries=[(0, 300)],
+            scene_strategies=["TRACK"],
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory) / "output"
+            output_dir.mkdir()
+            source_path = output_dir / "source.mp4"
+            source_path.write_bytes(b"source")
+            persist_discovered, _ = main.persist_discovered_clip_plan(
+                clips_data,
+                output_dir=str(output_dir),
+                video_title="source",
+                source_path=str(source_path),
+                source_asset={"relative_path": "source.mp4", "asset_id": "source"},
+                source_media=source_media(),
+                transcript={},
+            )
+
+            def fake_render(**kwargs):
+                clip = kwargs["clips"][0]
+                clip["video_filename"] = "source_clip_2.mp4"
+                (output_dir / clip["video_filename"]).write_bytes(b"rendered")
+                return [clip]
+
+            with patch.object(main, "probe_media", return_value=source_media()), patch.object(
+                main, "build_clip_source_analysis_for_job", return_value=analysis
+            ) as build_analysis, patch.object(
+                main, "render_clip_plan", side_effect=fake_render
+            ) as render:
+                ready = main.render_deferred_clip(
+                    input_video=str(source_path), output_dir=str(output_dir), clip_index=1
+                )
+                ready_again = main.render_deferred_clip(
+                    input_video=str(source_path), output_dir=str(output_dir), clip_index=1
+                )
+
+            metadata = json.loads((output_dir / "source_metadata.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(ready["render_status"], "ready")
+        self.assertEqual(ready_again["render_status"], "ready")
+        self.assertEqual(metadata["shorts"][0]["render_status"], "found")
+        self.assertEqual(metadata["shorts"][1]["render_status"], "ready")
+        build_analysis.assert_called_once_with(
+            str(source_path), str(output_dir), clip_index=1, start_sec=8.0, end_sec=12.0, metrics=None
+        )
+        render.assert_called_once()
+
     def test_scene_analysis_proxy_builds_low_resolution_cached_video(self):
         with tempfile.TemporaryDirectory() as directory:
             source_path = Path(directory) / "source.mp4"

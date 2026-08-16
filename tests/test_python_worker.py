@@ -8,6 +8,7 @@ import pytest
 from python_worker import (
     _legacy_api,
     build_clip_generation_command,
+    build_clip_render_command,
     build_clip_generation_environment,
     handle_request,
     load_generation_result,
@@ -67,6 +68,57 @@ def test_build_clip_generation_command_forwards_streamer_layout_options():
 
     assert command[command.index("--layout-format") + 1] == "streamer_stack"
     assert command[command.index("--facecam-size") + 1] == "large"
+
+
+def test_build_clip_generation_command_supports_deferred_discovery():
+    request = parse_request(
+        json.dumps(
+            {
+                "id": "job-1",
+                "operation": "clip_generation",
+                "source_path": "source.mp4",
+                "output_dir": "output/job-1",
+                "defer_render": True,
+            }
+        )
+    )
+
+    command = build_clip_generation_command(request)
+
+    assert "--defer-render" in command
+
+
+def test_build_clip_render_command_targets_one_clip():
+    request = parse_request(
+        json.dumps(
+            {
+                "id": "render-1",
+                "operation": "clip_render",
+                "source_path": "output/job-1/source.mp4",
+                "output_dir": "output/job-1",
+                "clip_index": 2,
+                "layout_format": "streamer_stack",
+                "facecam_size": "large",
+            }
+        )
+    )
+
+    command = build_clip_render_command(request)
+
+    assert command == [
+        "-u",
+        "main.py",
+        "--input",
+        "output/job-1/source.mp4",
+        "--render-clip",
+        "2",
+        "--layout-format",
+        "streamer_stack",
+        "--facecam-size",
+        "large",
+        "-o",
+        "output/job-1",
+    ]
 
 
 def test_build_clip_generation_command_rejects_missing_source():

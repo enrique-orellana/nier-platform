@@ -65,8 +65,35 @@ def build_clip_generation_command(request: Mapping[str, Any]) -> list[str]:
             "--facecam-size",
             facecam_size or "medium",
         ])
+    if bool(request.get("defer_render")):
+        command.append("--defer-render")
     if name != "source_object":
         command.append("--keep-original")
+    command.extend(["-o", str(request.get("output_dir") or "")])
+    return command
+
+
+def build_clip_render_command(request: Mapping[str, Any]) -> list[str]:
+    source_path = str(request.get("source_path") or "").strip()
+    if not source_path:
+        raise ValueError("clip render source path is required")
+    try:
+        clip_index = int(request.get("clip_index"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("clip render index is required") from exc
+    if clip_index < 0:
+        raise ValueError("clip render index must be non-negative")
+
+    command = ["-u", "main.py", "--input", source_path, "--render-clip", str(clip_index)]
+    layout_format = str(request.get("layout_format") or "").strip()
+    facecam_size = str(request.get("facecam_size") or "").strip()
+    if layout_format or facecam_size:
+        command.extend([
+            "--layout-format",
+            layout_format or "standard",
+            "--facecam-size",
+            facecam_size or "medium",
+        ])
     command.extend(["-o", str(request.get("output_dir") or "")])
     return command
 
@@ -77,10 +104,14 @@ def load_generation_result(output_dir: str) -> dict[str, Any]:
         raise FileNotFoundError("No metadata file generated")
     with metadata_files[0].open("r", encoding="utf-8") as source:
         data = json.load(source)
-    return {
+    result = {
         "clips": data.get("shorts", []),
         "cost_analysis": data.get("cost_analysis"),
     }
+    for key in ("source_path", "source_asset", "source_object", "video_title", "transcript"):
+        if key in data:
+            result[key] = data[key]
+    return result
 
 
 def build_clip_generation_environment(request: Mapping[str, Any]) -> dict[str, str]:
@@ -103,7 +134,11 @@ def _emit(event: Mapping[str, Any]) -> None:
 
 
 def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any] | None]:
-    command = build_clip_generation_command(request)
+    command = (
+        build_clip_render_command(request)
+        if str(request.get("operation") or "") == "clip_render"
+        else build_clip_generation_command(request)
+    )
     environment = build_clip_generation_environment(request)
 
     process = subprocess.Popen(
@@ -664,7 +699,7 @@ def handle_request(request: Mapping[str, Any]) -> None:
             result = run_highlight_generation(request, lambda message: _emit({"id": request_id, "type": "log", "message": message}))
             _emit({"id": request_id, "type": "result", "result": result})
             return
-        if operation != "clip_generation":
+        if operation not in {"clip_generation", "clip_render"}:
             raise ValueError(f"unsupported operation: {operation}")
         _emit({"id": request_id, "type": "started", "operation": operation})
         exit_code, result = _run_clip_generation(request)

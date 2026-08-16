@@ -94,6 +94,12 @@ func (r Runner) RunOnce(ctx context.Context, jobID string) error {
 			return err
 		}
 	}
-	_, err = r.Store.Transition(ctx, jobID, domain.JobStatusCompleted, "")
+	completionStatus := domain.JobStatusCompleted
+	if job.Kind == "clip-generation" {
+		if deferred, ok := job.Metadata["defer_render"].(bool); ok && deferred {
+			completionStatus = domain.JobStatusClipsReady
+		}
+	}
+	_, err = r.Store.Transition(ctx, jobID, completionStatus, "")
 	return err
 }

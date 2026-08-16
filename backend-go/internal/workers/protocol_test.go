@@ -194,6 +194,73 @@ func TestPythonWorkerAdapterSendsJSONLJobRequest(t *testing.T) {
 	}
 }
 
+func TestPythonWorkerAdapterSendsDeferredDiscoveryFlag(t *testing.T) {
+	runner := &recordingProtocolRunner{}
+	adapter := PythonWorkerAdapter{Runner: runner}
+	job := domain.Job{
+		ID:        "job-deferred",
+		Kind:      "clip-generation",
+		SourceURL: "https://example.com/video.mp4",
+		Metadata:  map[string]any{"defer_render": true},
+	}
+	if err := adapter.Run(context.Background(), job, "output/job-deferred", nil); err != nil {
+		t.Fatalf("run deferred worker: %v", err)
+	}
+	if runner.request["operation"] != "clip_generation" || runner.request["defer_render"] != true {
+		t.Fatalf("unexpected deferred worker request: %#v", runner.request)
+	}
+}
+
+func TestPythonWorkerAdapterSendsOneClipRenderRequest(t *testing.T) {
+	runner := &recordingProtocolRunner{}
+	adapter := PythonWorkerAdapter{Runner: runner}
+	job := domain.Job{
+		ID:          "render-job-1",
+		Kind:        "clip-render",
+		ParentJobID: "parent-job-1",
+		ClipIndex:   3,
+		Metadata: map[string]any{
+			"source_path":   "output/parent/source.mp4",
+			"layout_format": "streamer_stack",
+			"facecam_size":  "large",
+		},
+	}
+	if err := adapter.Run(context.Background(), job, "output/parent", nil); err != nil {
+		t.Fatalf("run clip render worker: %v", err)
+	}
+	if runner.request["operation"] != "clip_render" || runner.request["clip_index"] != 3 || runner.request["parent_job_id"] != "parent-job-1" {
+		t.Fatalf("unexpected clip render request: %#v", runner.request)
+	}
+	if runner.request["source_path"] != "output/parent/source.mp4" || runner.request["layout_format"] != "streamer_stack" || runner.request["facecam_size"] != "large" {
+		t.Fatalf("clip render inputs were not forwarded: %#v", runner.request)
+	}
+}
+
+func TestPythonWorkerAdapterReusesPersistedSourceForClipRender(t *testing.T) {
+	runner := &recordingProtocolRunner{}
+	downloader := &recordingSourceDownloader{}
+	adapter := PythonWorkerAdapter{Runner: runner, SourceDownloader: downloader}
+	job := domain.Job{
+		ID:          "render-job-2",
+		Kind:        "clip-render",
+		ParentJobID: "parent-job-1",
+		ClipIndex:   1,
+		Metadata: map[string]any{
+			"source_object": map[string]any{"bucket": "videos", "key": "source.mp4"},
+			"source_path":   "output/parent/source.mp4",
+		},
+	}
+	if err := adapter.Run(context.Background(), job, "output/parent", nil); err != nil {
+		t.Fatalf("run clip render worker: %v", err)
+	}
+	if downloader.bucket != "" || downloader.key != "" {
+		t.Fatalf("clip render re-downloaded persisted source: %#v", downloader)
+	}
+	if runner.request["source_path"] != "output/parent/source.mp4" || runner.request["source_object"] != nil {
+		t.Fatalf("unexpected persisted source request: %#v", runner.request)
+	}
+}
+
 func TestPythonWorkerAdapterSendsHighlightOperationAndAIHeaders(t *testing.T) {
 	runner := &recordingProtocolRunner{}
 	adapter := PythonWorkerAdapter{Runner: runner}

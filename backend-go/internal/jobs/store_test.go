@@ -57,6 +57,80 @@ func TestJobTransitionsFromQueuedToCompleted(t *testing.T) {
 	}
 }
 
+func TestDeferredGenerationCanTransitionToClipsReady(t *testing.T) {
+	store := NewMemoryStore()
+	created, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if _, err := store.Transition(context.Background(), created.ID, domain.JobStatusProcessing, ""); err != nil {
+		t.Fatalf("transition to processing: %v", err)
+	}
+	ready, err := store.Transition(context.Background(), created.ID, domain.JobStatusClipsReady, "")
+	if err != nil {
+		t.Fatalf("transition to clips_ready: %v", err)
+	}
+	if ready.Status != domain.JobStatusClipsReady || ready.Error != "" {
+		t.Fatalf("unexpected clips-ready job: %#v", ready)
+	}
+}
+
+func TestCreateClipRenderIfAbsentIsIdempotentAndRetriesFailures(t *testing.T) {
+	store := NewMemoryStore()
+	input := domain.CreateJobInput{
+		Kind:        "clip-render",
+		ParentJobID: "parent-1",
+		ClipIndex:   2,
+		OutputDir:   "output/parent-1",
+	}
+
+	first, err := store.CreateClipRenderIfAbsent(context.Background(), input)
+	if err != nil {
+		t.Fatalf("create first clip render: %v", err)
+	}
+	claimed, err := store.Claim(context.Background(), first.ID)
+	if err != nil {
+		t.Fatalf("claim first clip render: %v", err)
+	}
+	active, err := store.CreateClipRenderIfAbsent(context.Background(), input)
+	if err != nil {
+		t.Fatalf("get active clip render: %v", err)
+	}
+	if active.ID != claimed.ID || active.Status != domain.JobStatusProcessing {
+		t.Fatalf("expected active render to be reused: %#v", active)
+	}
+	if _, err := store.Transition(context.Background(), first.ID, domain.JobStatusCompleted, ""); err != nil {
+		t.Fatalf("complete first clip render: %v", err)
+	}
+	ready, err := store.CreateClipRenderIfAbsent(context.Background(), input)
+	if err != nil {
+		t.Fatalf("get completed clip render: %v", err)
+	}
+	if ready.ID != first.ID || ready.Status != domain.JobStatusCompleted {
+		t.Fatalf("expected completed render to be reused: %#v", ready)
+	}
+
+	failedInput := input
+	failedInput.ClipIndex = 3
+	failed, err := store.CreateClipRenderIfAbsent(context.Background(), failedInput)
+	if err != nil {
+		t.Fatalf("create retry fixture: %v", err)
+	}
+	if _, err := store.Claim(context.Background(), failed.ID); err != nil {
+		t.Fatalf("claim retry fixture: %v", err)
+	}
+	if _, err := store.Transition(context.Background(), failed.ID, domain.JobStatusFailed, "render failed"); err != nil {
+		t.Fatalf("fail retry fixture: %v", err)
+	}
+	retry, err := store.CreateClipRenderIfAbsent(context.Background(), failedInput)
+	if err != nil {
+		t.Fatalf("create failed render retry: %v", err)
+	}
+	if retry.ID == failed.ID || retry.Status != domain.JobStatusQueued {
+		t.Fatalf("expected failed render to be retried: %#v", retry)
+	}
+}
+
 func TestInvalidJobTransitionIsRejected(t *testing.T) {
 	store := NewMemoryStore()
 	created, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})

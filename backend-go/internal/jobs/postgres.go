@@ -20,6 +20,9 @@ var jobsSchema string
 //go:embed migrations/002_highlight_projects.sql
 var highlightProjectsSchema string
 
+//go:embed migrations/003_deferred_clip_rendering.sql
+var deferredClipRenderingSchema string
+
 type PostgresStore struct {
 	db *sql.DB
 }
@@ -65,6 +68,9 @@ func (s *PostgresStore) Migrate(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, highlightProjectsSchema); err != nil {
 		return fmt.Errorf("run highlight projects migration: %w", err)
 	}
+	if _, err := s.db.ExecContext(ctx, deferredClipRenderingSchema); err != nil {
+		return fmt.Errorf("run deferred clip rendering migration: %w", err)
+	}
 	return nil
 }
 
@@ -85,11 +91,11 @@ func (s *PostgresStore) Create(ctx context.Context, input domain.CreateJobInput)
 	}
 	var job domain.Job
 	err = s.db.QueryRowContext(ctx, `
-		INSERT INTO jobs (id, kind, project_id, status, source_url, clip_count, output_dir, metadata)
-		VALUES ($1, $2, NULLIF($3, '')::uuid, 'queued', NULLIF($4, ''), COALESCE(NULLIF($5, 0), 6), $6, $7::jsonb)
-		RETURNING id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, metadata, result, COALESCE(error, ''), created_at, updated_at
-	`, id, input.Kind, input.ProjectID, input.SourceURL, input.ClipCount, input.OutputDir, metadata).Scan(
-		&job.ID, &job.Kind, &job.ProjectID, &job.Status, &job.SourceURL, &job.ClipCount, &job.OutputDir,
+		INSERT INTO jobs (id, kind, project_id, status, source_url, clip_count, output_dir, parent_job_id, clip_index, metadata)
+		VALUES ($1, $2, NULLIF($3, '')::uuid, 'queued', NULLIF($4, ''), COALESCE(NULLIF($5, 0), 6), $6, NULLIF($7, '')::uuid, $8, $9::jsonb)
+		RETURNING id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, COALESCE(parent_job_id::text, ''), clip_index, metadata, result, COALESCE(error, ''), created_at, updated_at
+	`, id, input.Kind, input.ProjectID, input.SourceURL, input.ClipCount, input.OutputDir, input.ParentJobID, input.ClipIndex, metadata).Scan(
+		&job.ID, &job.Kind, &job.ProjectID, &job.Status, &job.SourceURL, &job.ClipCount, &job.OutputDir, &job.ParentJobID, &job.ClipIndex,
 		&metadata, &job.Result, &job.Error, &job.CreatedAt, &job.UpdatedAt,
 	)
 	if err != nil {
@@ -97,6 +103,67 @@ func (s *PostgresStore) Create(ctx context.Context, input domain.CreateJobInput)
 	}
 	job.Metadata = decodeMetadata(metadata)
 	return job, nil
+}
+
+func (s *PostgresStore) CreateClipRenderIfAbsent(ctx context.Context, input domain.CreateJobInput) (domain.Job, error) {
+	if input.Kind != "clip-render" {
+		return domain.Job{}, errors.New("clip render job kind is required")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Job{}, err
+	}
+	defer tx.Rollback()
+	lockKey := fmt.Sprintf("clip-render:%s:%d", input.ParentJobID, input.ClipIndex)
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, lockKey); err != nil {
+		return domain.Job{}, err
+	}
+	var existing domain.Job
+	existing, err = scanJob(tx.QueryRowContext(ctx, `
+		SELECT id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir,
+		       COALESCE(parent_job_id::text, ''), clip_index, metadata, result, COALESCE(error, ''), created_at, updated_at
+		FROM jobs
+		WHERE kind = 'clip-render' AND parent_job_id = NULLIF($1, '')::uuid AND clip_index = $2
+		  AND status IN ('queued', 'processing', 'completed')
+		ORDER BY created_at DESC, id DESC
+		LIMIT 1
+	`, input.ParentJobID, input.ClipIndex))
+	if err == nil {
+		if err := tx.Commit(); err != nil {
+			return domain.Job{}, err
+		}
+		return existing, nil
+	}
+	if !errors.Is(err, ErrJobNotFound) {
+		return domain.Job{}, err
+	}
+	id, err := newID()
+	if err != nil {
+		return domain.Job{}, fmt.Errorf("generate id: %w", err)
+	}
+	metadata, err := json.Marshal(input.Metadata)
+	if err != nil {
+		return domain.Job{}, fmt.Errorf("encode job metadata: %w", err)
+	}
+	if input.Metadata == nil {
+		metadata = []byte(`{}`)
+	}
+	err = tx.QueryRowContext(ctx, `
+		INSERT INTO jobs (id, kind, project_id, status, source_url, clip_count, output_dir, parent_job_id, clip_index, metadata)
+		VALUES ($1, $2, NULLIF($3, '')::uuid, 'queued', NULLIF($4, ''), COALESCE(NULLIF($5, 0), 6), $6, NULLIF($7, '')::uuid, $8, $9::jsonb)
+		RETURNING id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, COALESCE(parent_job_id::text, ''), clip_index, metadata, result, COALESCE(error, ''), created_at, updated_at
+	`, id, input.Kind, input.ProjectID, input.SourceURL, input.ClipCount, input.OutputDir, input.ParentJobID, input.ClipIndex, metadata).Scan(
+		&existing.ID, &existing.Kind, &existing.ProjectID, &existing.Status, &existing.SourceURL, &existing.ClipCount, &existing.OutputDir, &existing.ParentJobID, &existing.ClipIndex,
+		&metadata, &existing.Result, &existing.Error, &existing.CreatedAt, &existing.UpdatedAt,
+	)
+	if err != nil {
+		return domain.Job{}, fmt.Errorf("create clip render job: %w", err)
+	}
+	existing.Metadata = decodeMetadata(metadata)
+	if err := tx.Commit(); err != nil {
+		return domain.Job{}, err
+	}
+	return existing, nil
 }
 
 func (s *PostgresStore) CreateIfNoActive(ctx context.Context, kind string, input domain.CreateJobInput) (domain.Job, error) {
@@ -131,11 +198,11 @@ func (s *PostgresStore) CreateIfNoActive(ctx context.Context, kind string, input
 	}
 	var job domain.Job
 	err = tx.QueryRowContext(ctx, `
-		INSERT INTO jobs (id, kind, project_id, status, source_url, clip_count, output_dir, metadata)
-		VALUES ($1, $2, NULLIF($3, '')::uuid, 'queued', NULLIF($4, ''), COALESCE(NULLIF($5, 0), 6), $6, $7::jsonb)
-		RETURNING id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, metadata, result, COALESCE(error, ''), created_at, updated_at
-	`, id, input.Kind, input.ProjectID, input.SourceURL, input.ClipCount, input.OutputDir, metadata).Scan(
-		&job.ID, &job.Kind, &job.ProjectID, &job.Status, &job.SourceURL, &job.ClipCount, &job.OutputDir,
+		INSERT INTO jobs (id, kind, project_id, status, source_url, clip_count, output_dir, parent_job_id, clip_index, metadata)
+		VALUES ($1, $2, NULLIF($3, '')::uuid, 'queued', NULLIF($4, ''), COALESCE(NULLIF($5, 0), 6), $6, NULLIF($7, '')::uuid, $8, $9::jsonb)
+		RETURNING id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, COALESCE(parent_job_id::text, ''), clip_index, metadata, result, COALESCE(error, ''), created_at, updated_at
+	`, id, input.Kind, input.ProjectID, input.SourceURL, input.ClipCount, input.OutputDir, input.ParentJobID, input.ClipIndex, metadata).Scan(
+		&job.ID, &job.Kind, &job.ProjectID, &job.Status, &job.SourceURL, &job.ClipCount, &job.OutputDir, &job.ParentJobID, &job.ClipIndex,
 		&metadata, &job.Result, &job.Error, &job.CreatedAt, &job.UpdatedAt,
 	)
 	if err != nil {
@@ -492,7 +559,7 @@ func (s *PostgresStore) SetResult(ctx context.Context, id string, result []byte)
 }
 
 func (s *PostgresStore) ListByStatus(ctx context.Context, status domain.JobStatus) ([]domain.Job, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, metadata, result, COALESCE(error, ''), created_at, updated_at FROM jobs WHERE status = $1 ORDER BY created_at, id`, status)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, COALESCE(parent_job_id::text, ''), clip_index, metadata, result, COALESCE(error, ''), created_at, updated_at FROM jobs WHERE status = $1 ORDER BY created_at, id`, status)
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +590,7 @@ func (s *PostgresStore) SetOutputDir(ctx context.Context, id, outputDir string) 
 }
 
 func (s *PostgresStore) ListByKind(ctx context.Context, kind string) ([]domain.Job, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, metadata, result, COALESCE(error, ''), created_at, updated_at FROM jobs WHERE kind = $1 ORDER BY created_at, id`, kind)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, COALESCE(parent_job_id::text, ''), clip_index, metadata, result, COALESCE(error, ''), created_at, updated_at FROM jobs WHERE kind = $1 ORDER BY created_at, id`, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -549,7 +616,7 @@ type sqlQueryer interface {
 }
 
 func (s *PostgresStore) get(ctx context.Context, queryer sqlQueryer, id string) (domain.Job, error) {
-	job, err := scanJob(queryer.QueryRowContext(ctx, `SELECT id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, metadata, result, COALESCE(error, ''), created_at, updated_at FROM jobs WHERE id = $1`, id))
+	job, err := scanJob(queryer.QueryRowContext(ctx, `SELECT id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, COALESCE(parent_job_id::text, ''), clip_index, metadata, result, COALESCE(error, ''), created_at, updated_at FROM jobs WHERE id = $1`, id))
 	if err != nil {
 		return domain.Job{}, err
 	}
@@ -569,7 +636,7 @@ func (s *PostgresStore) get(ctx context.Context, queryer sqlQueryer, id string) 
 }
 
 func (s *PostgresStore) getForUpdate(ctx context.Context, tx *sql.Tx, id string) (domain.Job, error) {
-	return scanJob(tx.QueryRowContext(ctx, `SELECT id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, metadata, result, COALESCE(error, ''), created_at, updated_at FROM jobs WHERE id = $1 FOR UPDATE`, id))
+	return scanJob(tx.QueryRowContext(ctx, `SELECT id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, COALESCE(parent_job_id::text, ''), clip_index, metadata, result, COALESCE(error, ''), created_at, updated_at FROM jobs WHERE id = $1 FOR UPDATE`, id))
 }
 
 type rowScanner interface{ Scan(...any) error }
@@ -578,7 +645,7 @@ func scanJob(row rowScanner) (domain.Job, error) {
 	var job domain.Job
 	var status string
 	var metadata, result []byte
-	if err := row.Scan(&job.ID, &job.Kind, &job.ProjectID, &status, &job.SourceURL, &job.ClipCount, &job.OutputDir, &metadata, &result, &job.Error, &job.CreatedAt, &job.UpdatedAt); err != nil {
+	if err := row.Scan(&job.ID, &job.Kind, &job.ProjectID, &status, &job.SourceURL, &job.ClipCount, &job.OutputDir, &job.ParentJobID, &job.ClipIndex, &metadata, &result, &job.Error, &job.CreatedAt, &job.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.Job{}, ErrJobNotFound
 		}

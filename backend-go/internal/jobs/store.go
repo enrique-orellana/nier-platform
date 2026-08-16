@@ -26,6 +26,7 @@ var (
 
 type Store interface {
 	Create(context.Context, domain.CreateJobInput) (domain.Job, error)
+	CreateClipRenderIfAbsent(context.Context, domain.CreateJobInput) (domain.Job, error)
 	CreateIfNoActive(context.Context, string, domain.CreateJobInput) (domain.Job, error)
 	CreateHighlightProject(context.Context, domain.CreateHighlightProjectInput) (domain.HighlightProject, domain.Job, error)
 	ListHighlightProjects(context.Context) ([]domain.HighlightProject, error)
@@ -57,6 +58,31 @@ func NewMemoryStore() *MemoryStore {
 func (s *MemoryStore) Create(_ context.Context, input domain.CreateJobInput) (domain.Job, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.createLocked(input)
+}
+
+func (s *MemoryStore) CreateClipRenderIfAbsent(_ context.Context, input domain.CreateJobInput) (domain.Job, error) {
+	if input.Kind != "clip-render" {
+		return domain.Job{}, fmt.Errorf("clip render job kind is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var completed *domain.Job
+	for _, job := range s.jobs {
+		if job.Kind != "clip-render" || job.ParentJobID != input.ParentJobID || job.ClipIndex != input.ClipIndex {
+			continue
+		}
+		if job.Status == domain.JobStatusQueued || job.Status == domain.JobStatusProcessing {
+			return cloneJob(job), nil
+		}
+		if job.Status == domain.JobStatusCompleted {
+			candidate := cloneJob(job)
+			completed = &candidate
+		}
+	}
+	if completed != nil {
+		return *completed, nil
+	}
 	return s.createLocked(input)
 }
 
@@ -234,16 +260,18 @@ func (s *MemoryStore) createLocked(input domain.CreateJobInput) (domain.Job, err
 	}
 	now := time.Now().UTC()
 	job := domain.Job{
-		ID:        id,
-		Kind:      input.Kind,
-		ProjectID: input.ProjectID,
-		Status:    domain.JobStatusQueued,
-		SourceURL: input.SourceURL,
-		ClipCount: input.ClipCount,
-		OutputDir: input.OutputDir,
-		Metadata:  cloneMetadata(input.Metadata),
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          id,
+		Kind:        input.Kind,
+		ProjectID:   input.ProjectID,
+		Status:      domain.JobStatusQueued,
+		SourceURL:   input.SourceURL,
+		ClipCount:   input.ClipCount,
+		OutputDir:   input.OutputDir,
+		ParentJobID: input.ParentJobID,
+		ClipIndex:   input.ClipIndex,
+		Metadata:    cloneMetadata(input.Metadata),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	s.jobs[id] = job
@@ -400,7 +428,7 @@ func allowedTransition(current, next domain.JobStatus) bool {
 	case domain.JobStatusQueued:
 		return next == domain.JobStatusProcessing || next == domain.JobStatusFailed || next == domain.JobStatusCancelled
 	case domain.JobStatusProcessing:
-		return next == domain.JobStatusCompleted || next == domain.JobStatusFailed || next == domain.JobStatusCancelled
+		return next == domain.JobStatusClipsReady || next == domain.JobStatusCompleted || next == domain.JobStatusFailed || next == domain.JobStatusCancelled
 	default:
 		return false
 	}

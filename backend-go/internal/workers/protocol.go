@@ -144,11 +144,22 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 	if workerScript == "" {
 		workerScript = "python_worker.py"
 	}
+	operation := "clip_generation"
+	if job.Kind == "clip-render" {
+		operation = "clip_render"
+	}
 	request := map[string]any{
 		"id":         job.ID,
-		"operation":  "clip_generation",
+		"operation":  operation,
 		"output_dir": outputDir,
 		"clip_count": job.ClipCount,
+	}
+	if deferred, ok := job.Metadata["defer_render"].(bool); ok && deferred {
+		request["defer_render"] = true
+	}
+	if operation == "clip_render" {
+		request["parent_job_id"] = job.ParentJobID
+		request["clip_index"] = job.ClipIndex
 	}
 	if layoutFormat, ok := job.Metadata["layout_format"].(string); ok && layoutFormat != "" {
 		request["layout_format"] = layoutFormat
@@ -182,7 +193,11 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 	if job.SourceURL != "" {
 		request["source_url"] = job.SourceURL
 	}
-	if sourceObject, ok := job.Metadata["source_object"].(map[string]any); ok {
+	sourcePath, hasSourcePath := job.Metadata["source_path"].(string)
+	if hasSourcePath && sourcePath != "" {
+		request["source_path"] = sourcePath
+	}
+	if sourceObject, ok := job.Metadata["source_object"].(map[string]any); ok && !hasSourcePath {
 		if a.SourceDownloader == nil {
 			request["source_object"] = sourceObject
 		} else {
@@ -198,9 +213,6 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 			}
 			request["source_path"] = destination
 		}
-	}
-	if sourcePath, ok := job.Metadata["source_path"].(string); ok && sourcePath != "" {
-		request["source_path"] = sourcePath
 	}
 	if sourceContext, ok := job.Metadata["source_url"].(string); ok {
 		request["source_context_url"] = sourceContext

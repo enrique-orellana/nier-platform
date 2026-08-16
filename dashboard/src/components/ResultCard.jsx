@@ -6,6 +6,7 @@ import SubtitleModal from './SubtitleModal';
 import TranslateModal from './TranslateModal';
 import ClipWorkflowStatus from './ClipWorkflowStatus';
 import FullScreenEditor from './editor/FullScreenEditor';
+import ClipRenderControls from './ClipRenderControls';
 
 // Route MinIO presigned URLs through the backend proxy to fix CORS/loopback issues.
 // Both browser-side and server-side Remotion flows use same-origin proxy URLs.
@@ -39,7 +40,7 @@ import CardContent from './ResultCard/CardContent';
 import CardActions from './ResultCard/CardActions';
 import PostModal from './ResultCard/PostModal';
 
-export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange }) {
+export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange, onRenderClip, renderStatus, renderError }) {
     const [showModal, setShowModal] = useState(false);
     const [showSubtitleModal, setShowSubtitleModal] = useState(false);
     const videoRef = React.useRef(null);
@@ -79,6 +80,16 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
 
     // Accumulate Remotion layers across operations
     const [activeLayers, setActiveLayers] = useState({ subtitles: null, hook: null, effects: null });
+
+    const hasVideo = Boolean(originalVideoUrl);
+    const effectiveRenderStatus = renderStatus || clip.render_status || (hasVideo ? 'ready' : 'found');
+
+    useEffect(() => {
+        if (originalVideoUrl && currentVideoUrl !== originalVideoUrl && !currentVideoUrl?.startsWith('blob:')) {
+            setCurrentVideoUrl(originalVideoUrl);
+            setPersistedVideoUrl(originalVideoUrl);
+        }
+    }, [originalVideoUrl]);
 
     useEffect(() => {
         if (lastObjectUrlRef.current && lastObjectUrlRef.current !== currentVideoUrl) {
@@ -557,17 +568,26 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
 
     return (
         <div className="bg-surface border border-white/5 rounded-2xl overflow-hidden flex flex-col group hover:border-white/10 transition-all animate-[fadeIn_0.5s_ease-out] h-full" style={{ animationDelay: `${index * 0.1}s` }}>
-            <VideoPreview
-                videoRef={videoRef}
-                currentVideoUrl={currentVideoUrl}
-                trueOriginalUrl={trueOriginalUrl}
-                index={index}
-                isEditing={isEditing}
-                isConvertingNativeShort={isConvertingNativeShort}
-                onPlay={onPlay}
-                onPause={onPause}
-                clip={clip}
-            />
+            {hasVideo ? (
+                <VideoPreview
+                    videoRef={videoRef}
+                    currentVideoUrl={currentVideoUrl}
+                    trueOriginalUrl={trueOriginalUrl}
+                    index={index}
+                    isEditing={isEditing}
+                    isConvertingNativeShort={isConvertingNativeShort}
+                    onPlay={onPlay}
+                    onPause={onPause}
+                    clip={clip}
+                />
+            ) : (
+                <div className="w-full bg-black relative shrink-0 aspect-[9/16] flex items-center justify-center p-6 text-center">
+                    <div>
+                        <div className="text-white font-semibold">Clip {index + 1}</div>
+                        <p className="mt-2 text-xs text-zinc-500">Candidate found. Render it when you are ready.</p>
+                    </div>
+                </div>
+            )}
 
             <div className="flex-1 p-5 flex flex-col bg-[#121214] overflow-hidden min-w-0">
                 <ClipWorkflowStatus
@@ -575,9 +595,16 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     saving={workflowStatusSaving}
                     onChange={onWorkflowStatusChange}
                 />
+                {onRenderClip && (
+                    <ClipRenderControls
+                        status={effectiveRenderStatus}
+                        error={renderError || clip.render_error}
+                        onRender={() => onRenderClip(index)}
+                    />
+                )}
                 <CardContent clip={clip} />
 
-                <CardActions
+                {hasVideo && <CardActions
                     handleAutoEdit={handleAutoEdit}
                     isEditing={isEditing}
                     handleConvertNativeShort={handleConvertNativeShort}
@@ -592,7 +619,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     editError={editError}
                     setShowClipEditor={onEditorOpen || setShowClipEditor}
                     handleDownload={handleDownload}
-                />
+                />}
             </div>
 
             <PostModal
