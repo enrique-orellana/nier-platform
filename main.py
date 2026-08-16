@@ -1,13 +1,11 @@
 # LEGACY WORKER: Invoked by the Go control plane for media/AI generation.
 import time
-import atexit
 import cv2
 import subprocess
 import argparse
 import threading
 import re
 import sys
-import tempfile
 import os
 import shutil
 import numpy as np
@@ -64,10 +62,10 @@ from streamer_layout import (
     compose_streamer_stack_frame,
     normalize_clip_layout,
 )
-from video_decode import build_decode_compatibility_command, requires_decode_compatibility
 from video_analysis import SourceAnalysis, load_or_build_source_analysis
 from video_output_validation import validate_clip_output
-from video_rendering import build_audio_extract_command, seek_capture_to_frame
+from video_frames import FFmpegVideoStream
+from video_rendering import build_audio_extract_command
 from video_metrics import JobVideoMetrics
 from runtime_acceleration import build_whisper_model, preferred_device
 
@@ -79,7 +77,7 @@ ASPECT_RATIO = 9 / 16
 DIRECT_VIDEO_MAX_BYTES = int(os.environ.get("MAX_FILE_SIZE_MB", "2048")) * 1024 * 1024
 DEFAULT_SCENE_FRAME_SKIP = 2
 SCENE_STRATEGY_MAX_DIMENSION = 640
-SCENE_ANALYSIS_PROXY_MAX_DIMENSION = 480
+SCENE_DETECTION_MAX_DIMENSION = 480
 DEFAULT_SCENE_STRATEGY_SAMPLE_COUNT = 1
 MAX_SCENE_STRATEGY_SAMPLE_COUNT = 3
 DEFAULT_SCENE_STRATEGY_WORKERS = max(1, min(8, os.cpu_count() or 1))
@@ -488,63 +486,6 @@ def create_general_frame(frame, output_width, output_height):
     
     return final_frame
 
-
-def ensure_scene_analysis_proxy(
-    video_path,
-    output_dir,
-    *,
-    max_dimension=SCENE_ANALYSIS_PROXY_MAX_DIMENSION,
-):
-    """Create or reuse a low-resolution, frame-preserving analysis proxy."""
-    source_path = Path(video_path)
-    proxy_path = Path(output_dir) / "_scene_analysis_proxy.mp4"
-    source_mtime_ns = source_path.stat().st_mtime_ns
-    if proxy_path.exists() and proxy_path.stat().st_mtime_ns >= source_mtime_ns:
-        return proxy_path
-
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-    temporary_proxy = proxy_path.with_name(f".{proxy_path.name}.tmp.mp4")
-    if temporary_proxy.exists():
-        temporary_proxy.unlink()
-
-    scale_filter = (
-        f"scale='if(gt(iw,ih),min(iw,{int(max_dimension)}),-2)':"
-        f"'if(gt(iw,ih),-2,min(ih,{int(max_dimension)}))'"
-    )
-    command = [
-        "ffmpeg",
-        "-y",
-        "-i",
-        str(source_path),
-        "-vf",
-        scale_filter,
-        "-fps_mode",
-        "passthrough",
-        "-an",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "ultrafast",
-        "-crf",
-        "30",
-        "-pix_fmt",
-        "yuv420p",
-        str(temporary_proxy),
-    ]
-    try:
-        subprocess.run(
-            command,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
-        os.replace(temporary_proxy, proxy_path)
-    finally:
-        if temporary_proxy.exists():
-            temporary_proxy.unlink()
-    return proxy_path
-
-
 def _scene_strategy_sample_positions(start_frame, end_frame, sample_count):
     if sample_count == 1:
         positions = [int((start_frame + end_frame) / 2)]
@@ -570,6 +511,7 @@ def analyze_scenes_strategy(
     metrics=None,
     frame_start=None,
     frame_end=None,
+    source_media=None,
 ):
     """
     Analyzes each scene to determine if it should be TRACK (Single person) or GENERAL (Group/Wide).
@@ -592,7 +534,26 @@ def analyze_scenes_strategy(
         for position in positions:
             position_to_scenes.setdefault(position, []).append(scene_index)
 
-    cap = cv2.VideoCapture(video_path)
+    source_media = source_media or probe_media(video_path)
+    total_frames = int(
+        source_media.frame_count
+        or round(float(source_media.duration_seconds) * float(source_media.fps))
+    )
+    first_frame = int(frame_start or 0)
+    last_sample_frame = max(position_to_scenes)
+    if frame_end is not None:
+        last_sample_frame = min(last_sample_frame, int(frame_end) - 1)
+    stream_end = min(total_frames, last_sample_frame + 1)
+    cap = FFmpegVideoStream(
+        video_path,
+        width=source_media.width,
+        height=source_media.height,
+        fps=source_media.fps,
+        total_frames=total_frames,
+        start_frame=first_frame,
+        end_frame=stream_end,
+        max_dimension=max_dimension,
+    )
     strategies = ["GENERAL"] * len(scenes)
     face_counts = [[] for _ in scenes]
     decoded_samples = [0] * len(scenes)
@@ -628,18 +589,12 @@ def analyze_scenes_strategy(
         if not is_opened():
             return ["TRACK"] * len(scenes)
 
-        last_sample_frame = max(position_to_scenes)
-        if frame_end is not None:
-            last_sample_frame = min(last_sample_frame, int(frame_end) - 1)
-        frame_number = 0
-        if frame_start is not None and int(frame_start) > 0:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_start))
-            frame_number = int(frame_start)
-        while frame_number <= last_sample_frame:
-            ret, frame = cap.read()
-            if not ret:
+        while cap.frame_number <= last_sample_frame:
+            frame = cap.read()
+            if frame is False:
                 break
 
+            frame_number = cap.frame_number - 1
             target_scenes = position_to_scenes.get(frame_number)
             if target_scenes:
                 analysis_frame = resize_scene_strategy_frame(frame, max_dimension)
@@ -647,10 +602,9 @@ def analyze_scenes_strategy(
                 pending_frames.append((target_scenes, analysis_frame))
                 if len(pending_frames) >= worker_count:
                     flush_pending_frames()
-            frame_number += 1
         flush_pending_frames()
     finally:
-        cap.release()
+        cap.close()
         detector_pool.shutdown(wait=True)
         progress.close()
 
@@ -659,9 +613,16 @@ def analyze_scenes_strategy(
 
     return strategies
 
-def detect_scenes(video_path, *, frame_skip=None, start_frame=None, end_frame=None):
+def detect_scenes(
+    video_path,
+    *,
+    frame_skip=None,
+    start_frame=None,
+    end_frame=None,
+    source_media=None,
+):
     try:
-        from scenedetect import open_video, SceneManager
+        from scenedetect import SceneManager
         from scenedetect.detectors import ContentDetector
     except ImportError as error:
         raise RuntimeError("PySceneDetect is required for scene analysis") from error
@@ -669,22 +630,29 @@ def detect_scenes(video_path, *, frame_skip=None, start_frame=None, end_frame=No
     if frame_skip is None:
         frame_skip = scene_detection_frame_skip()
 
-    video = open_video(video_path)
+    source_media = source_media or probe_media(video_path)
+    total_frames = int(
+        source_media.frame_count
+        or round(float(source_media.duration_seconds) * float(source_media.fps))
+    )
+    video = FFmpegVideoStream(
+        video_path,
+        width=source_media.width,
+        height=source_media.height,
+        fps=source_media.fps,
+        total_frames=total_frames,
+        start_frame=int(start_frame or 0),
+        end_frame=end_frame,
+        max_dimension=SCENE_DETECTION_MAX_DIMENSION,
+    )
     scene_manager = SceneManager()
     scene_manager.add_detector(ContentDetector())
-    if start_frame is not None and hasattr(video, "seek"):
-        video.seek(int(start_frame))
-    detect_kwargs = {"video": video, "frame_skip": frame_skip}
-    if end_frame is not None:
-        detect_kwargs["end_in_scene"] = int(end_frame)
     try:
-        scene_manager.detect_scenes(**detect_kwargs)
-    except TypeError:
-        # Older PySceneDetect releases do not expose end_in_scene. The seek
-        # still avoids decoding the prefix when the stream supports it.
-        detect_kwargs.pop("end_in_scene", None)
-        scene_manager.detect_scenes(**detect_kwargs)
-    scene_list = scene_manager.get_scene_list()
+        scene_manager.detect_scenes(video=video, frame_skip=frame_skip)
+        scene_list = scene_manager.get_scene_list()
+    finally:
+        fps = float(video.frame_rate)
+        video.close()
     if start_frame is not None or end_frame is not None:
         bounded_scenes = []
         lower = int(start_frame or 0)
@@ -696,45 +664,16 @@ def detect_scenes(video_path, *, frame_skip=None, start_frame=None, end_frame=No
                 continue
             bounded_scenes.append((max(start_number, lower), min(end_number, upper) if upper is not None else end_number))
         scene_list = bounded_scenes
-    fps = video.frame_rate
     return scene_list, fps
 
 def get_video_resolution(video_path):
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise IOError(f"Could not open video file {video_path}")
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    cap.release()
-    return width, height
+    media = probe_media(video_path)
+    return media.width, media.height
 
 
 def prepare_opencv_video(input_video: str) -> str:
-    """Transcode AV1 sources once because this OpenCV build cannot decode them."""
-    source_media = probe_media(input_video)
-    if not requires_decode_compatibility(source_media.codec):
-        return input_video
-
-    file_descriptor, working_video = tempfile.mkstemp(prefix="openshorts-av1-", suffix=".mp4")
-    os.close(file_descriptor)
-    try:
-        subprocess.run(
-            build_decode_compatibility_command(input_video, working_video),
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
-        working_media = probe_media(working_video)
-        if working_media.codec != "h264" or working_media.duration_seconds <= 0:
-            raise RuntimeError("AV1 compatibility transcode produced an invalid working video")
-    except Exception:
-        if os.path.exists(working_video):
-            os.remove(working_video)
-        raise
-
-    atexit.register(lambda: os.path.exists(working_video) and os.remove(working_video))
-    print(f"   AV1 source detected; using H.264 working copy: {working_video}")
-    return working_video
+    """Keep the original source; FFmpeg decodes AV1 directly when frames are needed."""
+    return input_video
 
 
 def build_source_analysis_for_job(
@@ -751,21 +690,16 @@ def build_source_analysis_for_job(
     source_media = probe_media(source_path)
     scene_frame_skip = scene_detection_frame_skip()
     scene_strategy_max_dimension = SCENE_STRATEGY_MAX_DIMENSION
-    scene_analysis_proxy_max_dimension = SCENE_ANALYSIS_PROXY_MAX_DIMENSION
+    scene_detection_max_dimension = SCENE_DETECTION_MAX_DIMENSION
     scene_strategy_sample_count_value = scene_strategy_sample_count()
     scene_strategy_worker_count = scene_strategy_workers()
-    analysis_video_path = None
-    capture = cv2.VideoCapture(str(source_path))
-    try:
-        is_opened = getattr(capture, "isOpened", lambda: True)
-        if not is_opened():
-            raise RuntimeError(f"Could not open video file {source_path}")
-        source_fps = float(capture.get(cv2.CAP_PROP_FPS) or source_media.fps)
-        total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or source_media.frame_count or 0)
-        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or source_media.width)
-        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or source_media.height)
-    finally:
-        capture.release()
+    source_fps = float(source_media.fps)
+    total_frames = int(
+        source_media.frame_count
+        or round(float(source_media.duration_seconds) * source_fps)
+    )
+    width = int(source_media.width)
+    height = int(source_media.height)
 
     if source_fps <= 0 or total_frames <= 0 or width <= 0 or height <= 0:
         raise ValueError("source video metadata is incomplete or invalid")
@@ -782,27 +716,13 @@ def build_source_analysis_for_job(
         "height": height,
         "scene_frame_skip": scene_frame_skip,
         "scene_strategy_max_dimension": scene_strategy_max_dimension,
-        "scene_analysis_proxy_max_dimension": scene_analysis_proxy_max_dimension,
+        "scene_detection_max_dimension": scene_detection_max_dimension,
         "scene_strategy_sample_count": scene_strategy_sample_count_value,
     }
     if frame_start is not None:
         source_fingerprint["analysis_frame_start"] = int(frame_start)
     if frame_end is not None:
         source_fingerprint["analysis_frame_end"] = int(frame_end)
-
-    def scene_analysis_source_path():
-        nonlocal analysis_video_path
-        if analysis_video_path is None:
-            try:
-                analysis_video_path = ensure_scene_analysis_proxy(
-                    source_path,
-                    output_dir,
-                    max_dimension=scene_analysis_proxy_max_dimension,
-                )
-            except Exception as error:
-                print(f"   Scene analysis proxy unavailable; using source: {error}")
-                analysis_video_path = source_path
-        return str(analysis_video_path)
 
     def scene_builder():
         started = time.monotonic()
@@ -813,7 +733,7 @@ def build_source_analysis_for_job(
             if frame_end is not None:
                 scene_kwargs["end_frame"] = int(frame_end)
             scenes, _detected_fps = detect_scenes(
-                scene_analysis_source_path(), **scene_kwargs
+                str(source_path), source_media=source_media, **scene_kwargs
             )
             if scenes:
                 return scenes
@@ -840,7 +760,8 @@ def build_source_analysis_for_job(
                 kwargs["frame_start"] = int(frame_start)
             if frame_end is not None:
                 kwargs["frame_end"] = int(frame_end)
-            return analyze_scenes_strategy(scene_analysis_source_path(), scenes, **kwargs)
+            kwargs["source_media"] = source_media
+            return analyze_scenes_strategy(str(source_path), scenes, **kwargs)
         finally:
             if metrics is not None:
                 metrics.add_duration("scene_strategy", time.monotonic() - started)
@@ -1381,12 +1302,16 @@ def process_video_to_vertical(
         '-an', temp_video_output
     ]
 
-    cap = cv2.VideoCapture(input_video)
-    seek_started = time.monotonic()
-    frame_number, discarded_preroll_frames = seek_capture_to_frame(cap, trim.start_frame)
+    cap = FFmpegVideoStream(
+        input_video,
+        width=source_analysis.width,
+        height=source_analysis.height,
+        fps=source_fps,
+        total_frames=total_frames,
+        start_frame=trim.start_frame,
+        end_frame=trim.end_frame,
+    )
     if metrics is not None:
-        metrics.add_duration("seek_preroll", time.monotonic() - seek_started)
-        metrics.increment("decoded_preroll_frames", discarded_preroll_frames)
         metrics.increment("clips_started")
     processed_frames = 0
     current_scene_index = 0
@@ -1403,92 +1328,94 @@ def process_video_to_vertical(
     ffmpeg_process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
     frame_processing_started = time.monotonic()
-    with tqdm(total=trim.frame_count, desc="   Processing", file=sys.stdout) as pbar:
-        while cap.isOpened() and frame_number < trim.end_frame:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            if metrics is not None:
-                metrics.increment("decoded_frames")
+    try:
+        with tqdm(total=trim.frame_count, desc="   Processing", file=sys.stdout) as pbar:
+            while cap.frame_number < trim.end_frame:
+                frame = cap.read()
+                if frame is False:
+                    break
+                frame_number = cap.frame_number - 1
+                if metrics is not None:
+                    metrics.increment("decoded_frames")
 
-            if (frame_number - trim.start_frame) % frame_stride != 0:
-                frame_number += 1
-                pbar.update(1)
-                continue
+                if (frame_number - trim.start_frame) % frame_stride != 0:
+                    pbar.update(1)
+                    continue
 
-            # Update Scene Index
-            if current_scene_index < len(scene_boundaries):
-                start_f, end_f = scene_boundaries[current_scene_index]
-                while frame_number >= end_f and current_scene_index < len(scene_boundaries) - 1:
-                    current_scene_index += 1
+                # Update Scene Index
+                if current_scene_index < len(scene_boundaries):
                     start_f, end_f = scene_boundaries[current_scene_index]
-            
-            # Determine Strategy for current frame based on scene
-            current_strategy = scene_strategies[current_scene_index] if current_scene_index < len(scene_strategies) else 'TRACK'
-            
-            # Apply Strategy
-            if layout_options.layout_format == STREAMER_STACK_LAYOUT:
-                if frame_number % 2 == 0:
-                    candidates = detect_face_candidates(frame)
-                    target_box = speaker_tracker.get_target(candidates, frame_number, original_width)
-                    if target_box is None:
-                        target_box = detect_person_yolo(frame)
-                    if target_box:
-                        x, y, width, height = target_box
-                        streamer_face_focus = (
-                            (x + width / 2) / max(original_width, 1),
-                            (y + height / 2) / max(original_height, 1),
-                        )
-                output_frame = compose_streamer_stack_frame(
-                    frame,
-                    OUTPUT_WIDTH,
-                    OUTPUT_HEIGHT,
-                    facecam_size=layout_options.facecam_size,
-                    face_focus=streamer_face_focus,
-                )
-            elif current_strategy == 'GENERAL':
-                # "Plano General" -> Blur Background + Fit Width
-                output_frame = create_general_frame(frame, OUTPUT_WIDTH, OUTPUT_HEIGHT)
+                    while frame_number >= end_f and current_scene_index < len(scene_boundaries) - 1:
+                        current_scene_index += 1
+                        start_f, end_f = scene_boundaries[current_scene_index]
                 
-                # Reset cameraman/tracker so they don't drift while inactive
-                cameraman.current_center_x = original_width / 2
-                cameraman.target_center_x = original_width / 2
+                # Determine Strategy for current frame based on scene
+                current_strategy = scene_strategies[current_scene_index] if current_scene_index < len(scene_strategies) else 'TRACK'
                 
-            else:
-                # "Single Speaker" -> Track & Crop
-                
-                # Detect every 2nd frame for performance
-                if frame_number % 2 == 0:
-                    candidates = detect_face_candidates(frame)
-                    target_box = speaker_tracker.get_target(candidates, frame_number, original_width)
-                    if target_box:
-                        cameraman.update_target(target_box)
-                    else:
-                        person_box = detect_person_yolo(frame)
-                        if person_box:
-                            cameraman.update_target(person_box)
+                # Apply Strategy
+                if layout_options.layout_format == STREAMER_STACK_LAYOUT:
+                    if frame_number % 2 == 0:
+                        candidates = detect_face_candidates(frame)
+                        target_box = speaker_tracker.get_target(candidates, frame_number, original_width)
+                        if target_box is None:
+                            target_box = detect_person_yolo(frame)
+                        if target_box:
+                            x, y, width, height = target_box
+                            streamer_face_focus = (
+                                (x + width / 2) / max(original_width, 1),
+                                (y + height / 2) / max(original_height, 1),
+                            )
+                    output_frame = compose_streamer_stack_frame(
+                        frame,
+                        OUTPUT_WIDTH,
+                        OUTPUT_HEIGHT,
+                        facecam_size=layout_options.facecam_size,
+                        face_focus=streamer_face_focus,
+                    )
+                elif current_strategy == 'GENERAL':
+                    # "Plano General" -> Blur Background + Fit Width
+                    output_frame = create_general_frame(frame, OUTPUT_WIDTH, OUTPUT_HEIGHT)
 
-                # Snap camera on scene change to avoid panning from previous scene position
-                is_scene_start = (
-                    frame_number == trim.start_frame
-                    or frame_number == scene_boundaries[current_scene_index][0]
-                )
-                
-                x1, y1, x2, y2 = cameraman.get_crop_box(force_snap=is_scene_start)
-                
-                # Crop
-                if y2 > y1 and x2 > x1:
-                    cropped = frame[y1:y2, x1:x2]
-                    output_frame = cv2.resize(cropped, (OUTPUT_WIDTH, OUTPUT_HEIGHT))
+                    # Reset cameraman/tracker so they don't drift while inactive
+                    cameraman.current_center_x = original_width / 2
+                    cameraman.target_center_x = original_width / 2
+
                 else:
-                    output_frame = cv2.resize(frame, (OUTPUT_WIDTH, OUTPUT_HEIGHT))
+                    # "Single Speaker" -> Track & Crop
 
-            ffmpeg_process.stdin.write(output_frame.tobytes())
-            frame_number += 1
-            processed_frames += 1
-            if metrics is not None:
-                metrics.increment("output_frames")
-            pbar.update(1)
+                    # Detect every 2nd frame for performance
+                    if frame_number % 2 == 0:
+                        candidates = detect_face_candidates(frame)
+                        target_box = speaker_tracker.get_target(candidates, frame_number, original_width)
+                        if target_box:
+                            cameraman.update_target(target_box)
+                        else:
+                            person_box = detect_person_yolo(frame)
+                            if person_box:
+                                cameraman.update_target(person_box)
+
+                    # Snap camera on scene change to avoid panning from previous scene position
+                    is_scene_start = (
+                        frame_number == trim.start_frame
+                        or frame_number == scene_boundaries[current_scene_index][0]
+                    )
+
+                    x1, y1, x2, y2 = cameraman.get_crop_box(force_snap=is_scene_start)
+
+                    # Crop
+                    if y2 > y1 and x2 > x1:
+                        cropped = frame[y1:y2, x1:x2]
+                        output_frame = cv2.resize(cropped, (OUTPUT_WIDTH, OUTPUT_HEIGHT))
+                    else:
+                        output_frame = cv2.resize(frame, (OUTPUT_WIDTH, OUTPUT_HEIGHT))
+
+                ffmpeg_process.stdin.write(output_frame.tobytes())
+                processed_frames += 1
+                if metrics is not None:
+                    metrics.increment("output_frames")
+                pbar.update(1)
+    finally:
+        cap.close()
 
     if metrics is not None:
         metrics.add_duration(
@@ -1498,7 +1425,6 @@ def process_video_to_vertical(
     ffmpeg_process.stdin.close()
     stderr_output = ffmpeg_process.stderr.read().decode()
     ffmpeg_process.wait()
-    cap.release()
 
     if ffmpeg_process.returncode != 0:
         print("\n   ❌ FFmpeg frame processing failed.")

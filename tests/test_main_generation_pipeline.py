@@ -63,20 +63,16 @@ class FakeStrategyCapture:
         self.read_count = 0
         self.max_reads = 100
         self.released = False
+        self.frame_number = 0
 
-    def isOpened(self):
-        return self.read_count < self.max_reads
-
-    def set(self, _property_id, _value):
-        return True
-
-    def read(self):
+    def read(self, decode=True):
         if self.read_count >= self.max_reads:
-            return False, None
+            return False
         self.read_count += 1
-        return True, self.frame.copy()
+        self.frame_number = self.read_count
+        return self.frame.copy() if decode else True
 
-    def release(self):
+    def close(self):
         self.released = True
 
 
@@ -86,22 +82,17 @@ class FakeSequentialStrategyCapture:
         self.index = 0
         self.released = False
         self.set_calls = []
+        self.frame_number = 0
 
-    def isOpened(self):
-        return self.index < len(self.frames)
-
-    def set(self, property_id, value):
-        self.set_calls.append((property_id, value))
-        raise AssertionError("scene strategy should decode samples sequentially")
-
-    def read(self):
+    def read(self, decode=True):
         if self.index >= len(self.frames):
-            return False, None
+            return False
         frame = self.frames[self.index]
         self.index += 1
-        return True, frame
+        self.frame_number = self.index
+        return frame if decode else True
 
-    def release(self):
+    def close(self):
         self.released = True
 
 
@@ -110,18 +101,17 @@ class FakeStreamerCapture:
         self.frames = [np.zeros((1080, 1920, 3), dtype=np.uint8) for _ in range(2)]
         self.index = 0
         self.released = False
+        self.frame_number = 0
 
-    def isOpened(self):
-        return self.index < len(self.frames)
-
-    def read(self):
+    def read(self, decode=True):
         if self.index >= len(self.frames):
-            return False, None
+            return False
         frame = self.frames[self.index]
         self.index += 1
-        return True, frame
+        self.frame_number = self.index
+        return frame if decode else True
 
-    def release(self):
+    def close(self):
         self.released = True
 
 
@@ -171,49 +161,48 @@ class MainGenerationPipelineTests(unittest.TestCase):
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
         capture = FakeStrategyCapture(frame)
         metrics = JobVideoMetrics()
-        with patch.object(main.cv2, "VideoCapture", return_value=capture), patch.object(
+        with patch.object(main, "FFmpegVideoStream", return_value=capture), patch.object(
             main, "detect_face_candidates", return_value=[]
         ):
             result = main.analyze_scenes_strategy(
-                "source.mp4", [(0, 90)], sample_count=1, workers=1, metrics=metrics
+                "source.mp4", [(0, 90)], sample_count=1, workers=1, metrics=metrics,
+                source_media=source_media(),
             )
         self.assertEqual(result, ["GENERAL"])
         self.assertEqual(metrics.to_dict()["counters"]["scene_strategy_samples"], 1)
 
     def test_scene_strategy_decodes_samples_sequentially(self):
         capture = FakeSequentialStrategyCapture()
-        with patch.object(main.cv2, "VideoCapture", return_value=capture), patch.object(
+        with patch.object(main, "FFmpegVideoStream", return_value=capture), patch.object(
             main, "detect_face_candidates", return_value=[]
         ):
             result = main.analyze_scenes_strategy(
-                "proxy.mp4", [(0, 2), (2, 5)], sample_count=1, workers=8
+                "proxy.mp4", [(0, 2), (2, 5)], sample_count=1, workers=8,
+                source_media=source_media(),
             )
         self.assertEqual(result, ["GENERAL", "GENERAL"])
         self.assertEqual(capture.set_calls, [])
         self.assertTrue(capture.released)
 
-    def test_scene_analysis_proxy_is_shared_by_detection_and_strategy(self):
+    def test_source_analysis_reuses_original_source_for_detection_and_strategy(self):
         with tempfile.TemporaryDirectory() as directory:
             source_path = Path(directory) / "source.mp4"
             output_dir = Path(directory) / "output"
             source_path.write_bytes(b"source")
             output_dir.mkdir()
-            proxy_path = Path(directory) / "scene-proxy.mp4"
             scene_calls = Mock(return_value=([(0, 100)], 30.0))
             strategy_calls = Mock(return_value=["TRACK"])
 
             with patch.object(main, "probe_media", return_value=source_media()), patch.object(
-                main.cv2, "VideoCapture", return_value=FakeCapture()
-            ), patch.object(
-                main, "ensure_scene_analysis_proxy", return_value=proxy_path
-            ) as ensure_proxy, patch.object(main, "detect_scenes", scene_calls), patch.object(
-                main, "analyze_scenes_strategy", strategy_calls
-            ):
+                main, "detect_scenes", scene_calls
+            ), patch.object(main, "analyze_scenes_strategy", strategy_calls):
                 main.build_source_analysis_for_job(str(source_path), str(output_dir))
 
-        ensure_proxy.assert_called_once()
-        scene_calls.assert_called_once_with(str(proxy_path), frame_skip=2)
-        self.assertEqual(strategy_calls.call_args.args[:2], (str(proxy_path), [(0, 100)]))
+        scene_calls.assert_called_once_with(
+            str(source_path), frame_skip=2, source_media=source_media()
+        )
+        self.assertEqual(strategy_calls.call_args.args[:2], (str(source_path), [(0, 100)]))
+        self.assertEqual(strategy_calls.call_args.kwargs["source_media"], source_media())
 
     def test_persist_discovered_clip_plan_marks_candidates_without_rendering(self):
         clips_data = {
@@ -259,10 +248,8 @@ class MainGenerationPipelineTests(unittest.TestCase):
             strategy_calls = Mock(return_value=["TRACK"])
 
             with patch.object(main, "probe_media", return_value=source_media()), patch.object(
-                main.cv2, "VideoCapture", return_value=FakeCapture()
+                main, "detect_scenes", scene_calls
             ), patch.object(
-                main, "ensure_scene_analysis_proxy", return_value=source_path
-            ), patch.object(main, "detect_scenes", scene_calls), patch.object(
                 main, "analyze_scenes_strategy", strategy_calls
             ):
                 analysis = main.build_clip_source_analysis_for_job(
@@ -276,7 +263,8 @@ class MainGenerationPipelineTests(unittest.TestCase):
 
         self.assertEqual(analysis.scene_boundaries, [(60, 90)])
         scene_calls.assert_called_once_with(
-            str(source_path), frame_skip=2, start_frame=60, end_frame=120
+            str(source_path), frame_skip=2, start_frame=60, end_frame=120,
+            source_media=source_media(),
         )
         self.assertEqual(strategy_calls.call_args.kwargs["frame_start"], 60)
         self.assertEqual(strategy_calls.call_args.kwargs["frame_end"], 120)
@@ -342,32 +330,6 @@ class MainGenerationPipelineTests(unittest.TestCase):
         )
         render.assert_called_once()
 
-    def test_scene_analysis_proxy_builds_low_resolution_cached_video(self):
-        with tempfile.TemporaryDirectory() as directory:
-            source_path = Path(directory) / "source.mp4"
-            output_dir = Path(directory) / "output"
-            source_path.write_bytes(b"source")
-
-            def fake_ffmpeg(command, **_kwargs):
-                Path(command[-1]).write_bytes(b"proxy")
-
-            with patch.object(main.subprocess, "run", side_effect=fake_ffmpeg) as run:
-                proxy_path = main.ensure_scene_analysis_proxy(
-                    source_path, output_dir, max_dimension=480
-                )
-                second_path = main.ensure_scene_analysis_proxy(
-                    source_path, output_dir, max_dimension=480
-                )
-                proxy_bytes = proxy_path.read_bytes()
-
-        self.assertEqual(proxy_path, second_path)
-        self.assertEqual(proxy_bytes, b"proxy")
-        run.assert_called_once()
-        command = run.call_args.args[0]
-        self.assertIn("min(iw,480)", command[command.index("-vf") + 1])
-        self.assertEqual(command[command.index("-fps_mode") + 1], "passthrough")
-        self.assertEqual(command[command.index("-preset") + 1], "ultrafast")
-
     def test_yolo_person_fallback_uses_selected_accelerator(self):
         calls = []
 
@@ -413,25 +375,29 @@ class MainGenerationPipelineTests(unittest.TestCase):
         video = Mock(frame_rate=30.0)
         fake_scenedetect = types.ModuleType("scenedetect")
         fake_detectors = types.ModuleType("scenedetect.detectors")
-        fake_scenedetect.open_video = Mock(return_value=video)
         fake_scenedetect.SceneManager = Mock(return_value=scene_manager)
         fake_detectors.ContentDetector = Mock()
         with patch.dict(
             sys.modules,
             {"scenedetect": fake_scenedetect, "scenedetect.detectors": fake_detectors},
-        ):
-            scenes, fps = main.detect_scenes("source.mp4", frame_skip=2)
+        ), patch.object(main, "FFmpegVideoStream", return_value=video) as stream:
+            scenes, fps = main.detect_scenes(
+                "source.mp4", frame_skip=2, source_media=source_media()
+            )
         self.assertEqual(scenes, [])
         self.assertEqual(fps, 30.0)
         scene_manager.detect_scenes.assert_called_once_with(video=video, frame_skip=2)
+        stream.assert_called_once()
 
     def test_scene_strategy_downscales_face_samples(self):
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
         capture = FakeStrategyCapture(frame)
-        with patch.object(main.cv2, "VideoCapture", return_value=capture), patch.object(
+        with patch.object(main, "FFmpegVideoStream", return_value=capture), patch.object(
             main, "detect_face_candidates", return_value=[]
         ) as detect_faces:
-            result = main.analyze_scenes_strategy("source.mp4", [(0, 90)])
+            result = main.analyze_scenes_strategy(
+                "source.mp4", [(0, 90)], source_media=source_media()
+            )
         self.assertEqual(result, ["GENERAL"])
         analyzed_frame = detect_faces.call_args.args[0]
         self.assertEqual(max(analyzed_frame.shape[:2]), 640)
@@ -440,10 +406,12 @@ class MainGenerationPipelineTests(unittest.TestCase):
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
         capture = FakeStrategyCapture(frame)
         metrics = JobVideoMetrics()
-        with patch.object(main.cv2, "VideoCapture", return_value=capture), patch.object(
+        with patch.object(main, "FFmpegVideoStream", return_value=capture), patch.object(
             main, "detect_face_candidates", return_value=[]
         ):
-            main.analyze_scenes_strategy("source.mp4", [(0, 90)], metrics=metrics)
+            main.analyze_scenes_strategy(
+                "source.mp4", [(0, 90)], metrics=metrics, source_media=source_media()
+            )
         self.assertEqual(metrics.to_dict()["counters"]["scene_strategy_samples"], 1)
 
     def test_source_analysis_metrics_record_scene_stages(self):
@@ -454,10 +422,8 @@ class MainGenerationPipelineTests(unittest.TestCase):
             output_dir.mkdir()
             metrics = JobVideoMetrics()
             with patch.object(main, "probe_media", return_value=source_media()), patch.object(
-                main.cv2, "VideoCapture", return_value=FakeCapture()
+                main, "detect_scenes", return_value=([(0, 100)], 30.0)
             ), patch.object(
-                main, "ensure_scene_analysis_proxy", return_value=source_path
-            ), patch.object(main, "detect_scenes", return_value=([(0, 100)], 30.0)), patch.object(
                 main, "analyze_scenes_strategy", return_value=["TRACK"]
             ):
                 main.build_source_analysis_for_job(
@@ -479,17 +445,17 @@ class MainGenerationPipelineTests(unittest.TestCase):
             strategy_calls = Mock(return_value=["TRACK", "GENERAL"])
 
             with patch.object(main, "probe_media", return_value=source_media()), patch.object(
-                main.cv2, "VideoCapture", return_value=FakeCapture()
+                main, "detect_scenes", scene_calls
             ), patch.object(
-                main, "ensure_scene_analysis_proxy", return_value=source_path
-            ), patch.object(main, "detect_scenes", scene_calls), patch.object(
                 main, "analyze_scenes_strategy", strategy_calls
             ):
                 first = main.build_source_analysis_for_job(str(source_path), str(output_dir))
                 second = main.build_source_analysis_for_job(str(source_path), str(output_dir))
 
         self.assertEqual(first, second)
-        scene_calls.assert_called_once_with(str(source_path), frame_skip=2)
+        scene_calls.assert_called_once_with(
+            str(source_path), frame_skip=2, source_media=source_media()
+        )
         strategy_calls.assert_called_once()
 
     def test_source_analysis_cache_rebuilds_when_scene_frame_skip_changes(self):
@@ -502,10 +468,8 @@ class MainGenerationPipelineTests(unittest.TestCase):
             strategy_calls = Mock(return_value=["TRACK", "GENERAL"])
 
             with patch.object(main, "probe_media", return_value=source_media()), patch.object(
-                main.cv2, "VideoCapture", return_value=FakeCapture()
+                main, "detect_scenes", scene_calls
             ), patch.object(
-                main, "ensure_scene_analysis_proxy", return_value=source_path
-            ), patch.object(main, "detect_scenes", scene_calls), patch.object(
                 main, "analyze_scenes_strategy", strategy_calls
             ), patch.dict(main.os.environ, {"SCENE_DETECTION_FRAME_SKIP": "2"}, clear=False):
                 main.build_source_analysis_for_job(str(source_path), str(output_dir))
@@ -525,10 +489,8 @@ class MainGenerationPipelineTests(unittest.TestCase):
             strategy_calls = Mock(return_value=["TRACK", "GENERAL"])
 
             with patch.object(main, "probe_media", return_value=source_media()), patch.object(
-                main.cv2, "VideoCapture", return_value=FakeCapture()
+                main, "detect_scenes", scene_calls
             ), patch.object(
-                main, "ensure_scene_analysis_proxy", return_value=source_path
-            ), patch.object(main, "detect_scenes", scene_calls), patch.object(
                 main, "analyze_scenes_strategy", strategy_calls
             ), patch.dict(main.os.environ, {"SCENE_STRATEGY_SAMPLE_COUNT": "1"}, clear=False):
                 main.build_source_analysis_for_job(str(source_path), str(output_dir))
@@ -546,10 +508,8 @@ class MainGenerationPipelineTests(unittest.TestCase):
             output_dir.mkdir()
 
             with patch.object(main, "probe_media", return_value=source_media()), patch.object(
-                main.cv2, "VideoCapture", return_value=FakeCapture()
+                main, "detect_scenes", return_value=([], 30.0)
             ), patch.object(
-                main, "ensure_scene_analysis_proxy", return_value=source_path
-            ), patch.object(main, "detect_scenes", return_value=([], 30.0)), patch.object(
                 main, "analyze_scenes_strategy", return_value=["GENERAL"]
             ) as strategy:
                 analysis = main.build_source_analysis_for_job(str(source_path), str(output_dir))
@@ -679,9 +639,8 @@ class MainGenerationPipelineTests(unittest.TestCase):
             def fake_run(command, **_kwargs):
                 Path(command[-1]).touch()
 
-            with patch.object(main.cv2, "VideoCapture", return_value=FakeStreamerCapture()), patch.object(
-                main, "seek_capture_to_frame", return_value=(0, 0)
-            ), patch.object(main, "detect_face_candidates", return_value=[]), patch.object(
+            with patch.object(main, "FFmpegVideoStream", return_value=FakeStreamerCapture()), patch.object(
+                main, "detect_face_candidates", return_value=[]), patch.object(
                 main, "detect_person_yolo", return_value=None
             ), patch.object(main, "compose_streamer_stack_frame", return_value=np.zeros((1920, 1080, 3), dtype=np.uint8)) as compose, patch.object(
                 main.subprocess, "Popen", return_value=FakeProcess()
