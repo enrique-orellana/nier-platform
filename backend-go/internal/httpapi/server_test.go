@@ -946,18 +946,18 @@ func TestProjectClipStatusesUseGoSidecarContract(t *testing.T) {
 	}
 	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
 
-	patchReq := httptest.NewRequest(http.MethodPatch, "/api/projects/"+job.ID+"/clips/0/status", strings.NewReader(`{"status":"editing"}`))
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/projects/"+job.ID+"/clips/0/status", strings.NewReader(`{"status":"discarded"}`))
 	patchReq.Header.Set("Content-Type", "application/json")
 	patchRes := httptest.NewRecorder()
 	server.Handler().ServeHTTP(patchRes, patchReq)
-	if patchRes.Code != http.StatusOK || !strings.Contains(patchRes.Body.String(), `"status":"editing"`) {
+	if patchRes.Code != http.StatusOK || !strings.Contains(patchRes.Body.String(), `"status":"discarded"`) {
 		t.Fatalf("unexpected status update: %d %s", patchRes.Code, patchRes.Body.String())
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/api/projects/"+job.ID+"/statuses", nil)
 	getRes := httptest.NewRecorder()
 	server.Handler().ServeHTTP(getRes, getReq)
-	if getRes.Code != http.StatusOK || !strings.Contains(getRes.Body.String(), `"0"`) || !strings.Contains(getRes.Body.String(), `"editing"`) {
+	if getRes.Code != http.StatusOK || !strings.Contains(getRes.Body.String(), `"0"`) || !strings.Contains(getRes.Body.String(), `"discarded"`) {
 		t.Fatalf("unexpected statuses response: %d %s", getRes.Code, getRes.Body.String())
 	}
 }

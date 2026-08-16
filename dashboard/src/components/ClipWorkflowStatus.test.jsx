@@ -13,6 +13,7 @@ describe('ClipWorkflowStatus', () => {
     expect(screen.getByRole('option', { name: 'Reviewing' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Editing' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Edited' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Discarded' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Published' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Clip status'), { target: { value: 'edited' } });

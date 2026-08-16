@@ -29,7 +29,7 @@ def test_get_statuses_defaults_existing_project_to_not_reviewed(monkeypatch):
     assert response.json() == {"version": 1, "clips": {}}
 
 
-def test_patch_clip_status_persists_a_valid_status(monkeypatch):
+def test_patch_clip_status_persists_discarded_status(monkeypatch):
     setup_job(monkeypatch)
     document = {"version": 1, "clips": {}}
     saved = []
@@ -42,12 +42,12 @@ def test_patch_clip_status_persists_a_valid_status(monkeypatch):
 
     response = TestClient(app_module.app).patch(
         "/api/projects/job-1/clips/1/status",
-        json={"status": "edited"},
+        json={"status": "discarded"},
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == "edited"
-    assert saved[0]["1"]["status"] == "edited"
+    assert response.json()["status"] == "discarded"
+    assert saved[0]["1"]["status"] == "discarded"
 
 
 def test_patch_clip_status_rejects_unknown_status(monkeypatch):

@@ -2113,7 +2113,7 @@ func (s *Server) updateProjectStatus(w http.ResponseWriter, r *http.Request, job
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
 		return
 	}
-	allowed := map[string]bool{"not_reviewed": true, "reviewing": true, "editing": true, "edited": true, "published": true}
+	allowed := map[string]bool{"not_reviewed": true, "reviewing": true, "editing": true, "edited": true, "discarded": true, "published": true}
 	if !allowed[request.Status] {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"detail": "Invalid clip status"})
 		return

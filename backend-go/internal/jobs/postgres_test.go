@@ -3,10 +3,24 @@ package jobs
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
 )
+
+func TestClipStatusSchemaIncludesDiscarded(t *testing.T) {
+	if !strings.Contains(jobsSchema, "'discarded'") {
+		t.Fatal("clip status schema does not allow discarded")
+	}
+	contents, err := os.ReadFile("migrations/004_discarded_clip_status.sql")
+	if err != nil {
+		t.Fatalf("read discarded clip status migration: %v", err)
+	}
+	if !strings.Contains(string(contents), "'discarded'") {
+		t.Fatal("discarded clip status migration does not allow discarded")
+	}
+}
 
 func TestNewPostgresStoreRequiresDatabase(t *testing.T) {
 	if _, err := NewPostgresStore(nil); err == nil {

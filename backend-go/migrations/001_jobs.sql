@@ -47,7 +47,7 @@ CREATE INDEX clip_versions_project_idx ON clip_versions (project_id, clip_index,
 CREATE TABLE clip_statuses (
     project_id TEXT NOT NULL,
     clip_index INTEGER NOT NULL CHECK (clip_index >= 0),
-    status TEXT NOT NULL CHECK (status IN ('not_reviewed', 'reviewing', 'editing', 'edited', 'published')),
+    status TEXT NOT NULL CHECK (status IN ('not_reviewed', 'reviewing', 'editing', 'edited', 'discarded', 'published')),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (project_id, clip_index)
 );

@@ -20,6 +20,11 @@ export const CLIP_WORKFLOW_STATUSES = [
     className: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20',
   },
   {
+    value: 'discarded',
+    label: 'Discarded',
+    className: 'bg-red-500/15 text-red-300 border-red-400/20',
+  },
+  {
     value: 'published',
     label: 'Published',
     className: 'bg-violet-500/15 text-violet-300 border-violet-400/20',

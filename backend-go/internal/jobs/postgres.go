@@ -23,6 +23,9 @@ var highlightProjectsSchema string
 //go:embed migrations/003_deferred_clip_rendering.sql
 var deferredClipRenderingSchema string
 
+//go:embed migrations/004_discarded_clip_status.sql
+var discardedClipStatusSchema string
+
 type PostgresStore struct {
 	db *sql.DB
 }
@@ -70,6 +73,9 @@ func (s *PostgresStore) Migrate(ctx context.Context) error {
 	}
 	if _, err := s.db.ExecContext(ctx, deferredClipRenderingSchema); err != nil {
 		return fmt.Errorf("run deferred clip rendering migration: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, discardedClipStatusSchema); err != nil {
+		return fmt.Errorf("run discarded clip status migration: %w", err)
 	}
 	return nil
 }

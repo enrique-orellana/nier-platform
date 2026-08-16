@@ -572,6 +572,7 @@ CLIP_WORKFLOW_STATUSES = {
     "reviewing",
     "editing",
     "edited",
+    "discarded",
     "published",
 }
 
