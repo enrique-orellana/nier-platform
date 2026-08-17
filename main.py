@@ -73,6 +73,7 @@ from video_frames import FFmpegVideoStream
 from video_rendering import build_audio_extract_command
 from video_metrics import JobVideoMetrics
 from runtime_acceleration import build_whisper_model, preferred_device
+from subtitles import build_subtitle_segments, burn_subtitles, generate_srt
 
 # Load environment variables
 load_dotenv()
@@ -1528,7 +1529,7 @@ def process_video_to_vertical(
         merge_command = [
             'ffmpeg', '-y', '-i', temp_video_output, '-i', temp_audio_output,
             '-map', '0:v:0', '-map', '1:a:0',
-            '-c:v', 'copy', '-c:a', 'copy', '-shortest',
+            '-c:v', 'copy', '-c:a', 'copy',
             '-movflags', '+faststart', final_output_video
         ]
     else:
@@ -1602,6 +1603,60 @@ def _prepare_manifest_source(
     return source_path, asset, media
 
 
+def _build_clip_subtitle_track(
+    transcript: dict,
+    clip_start: float,
+    clip_end: float,
+    srt_filename: str,
+) -> dict | None:
+    cues = build_subtitle_segments(transcript or {}, clip_start, clip_end)
+    if not cues:
+        return None
+    normalized_cues = [
+        {
+            "text": cue["text"],
+            "startMs": round(float(cue["start"]) * 1000),
+            "endMs": round(float(cue["end"]) * 1000),
+        }
+        for cue in cues
+    ]
+    return {
+        "id": "original",
+        "language": transcript.get("language", "und"),
+        "label": "Original",
+        "origin": "original",
+        "cues": normalized_cues,
+        "captions": normalized_cues,
+        "srt_filename": srt_filename,
+    }
+
+
+def _burn_clip_subtitles(
+    video_path: str,
+    output_dir: str,
+    transcript: dict,
+    clip_start: float,
+    clip_end: float,
+    subtitle_track: dict | None,
+) -> bool:
+    if subtitle_track is None:
+        return False
+
+    srt_path = os.path.join(output_dir, subtitle_track["srt_filename"])
+    if not generate_srt(transcript or {}, clip_start, clip_end, srt_path):
+        return False
+
+    base, extension = os.path.splitext(video_path)
+    subtitled_path = f"{base}_with_subtitles{extension}"
+    if os.path.exists(subtitled_path):
+        os.remove(subtitled_path)
+    burn_subtitles(video_path, srt_path, subtitled_path)
+    if not os.path.isfile(subtitled_path):
+        raise RuntimeError("Subtitle rendering completed without producing a video")
+    os.replace(subtitled_path, video_path)
+    return True
+
+
 def _write_clip_manifest(
     output_dir: str,
     video_title: str,
@@ -1617,6 +1672,7 @@ def _write_clip_manifest(
     gameplay_region: dict | None = None,
     gameplay_zoom: float = 1.0,
     streamer_tracking_enabled: bool = False,
+    subtitle_track: dict | None = None,
 ) -> str:
     width = source_media.display_width
     height = source_media.display_height
@@ -1658,8 +1714,10 @@ def _write_clip_manifest(
             "crop_track": track.to_dict(),
             "transcript": transcript,
         },
+        "subtitle_tracks": [subtitle_track] if subtitle_track else [],
+        "active_subtitle_track_id": "original" if subtitle_track else None,
         "layers": {
-            "subtitles": None,
+            "subtitles": subtitle_track,
             "hook": None,
             "effects": None,
             "audio": None,
@@ -1879,6 +1937,12 @@ def render_clip_plan(
         if layout_options.layout_format == STREAMER_STACK_LAYOUT:
             clip["streamer_tracking_enabled"] = clip_tracking_enabled
             clip["gameplay_zoom"] = clip_gameplay_zoom
+        subtitle_track = _build_clip_subtitle_track(
+            transcript,
+            float(start),
+            float(end),
+            f"{video_title}_clip_{index}.srt",
+        )
 
         manifest_path = _write_clip_manifest(
             output_dir,
@@ -1895,6 +1959,7 @@ def render_clip_plan(
             gameplay_region=clip_gameplay_region,
             gameplay_zoom=clip_gameplay_zoom,
             streamer_tracking_enabled=clip_tracking_enabled,
+            subtitle_track=subtitle_track,
         )
         clip["manifest_path"] = manifest_path
         clip["source_video_filename"] = source_video_filename
@@ -1927,6 +1992,20 @@ def render_clip_plan(
             streamer_tracking_enabled=clip_tracking_enabled,
         )
         if success:
+            if subtitle_track is not None:
+                _burn_clip_subtitles(
+                    clip_final_path,
+                    output_dir,
+                    transcript,
+                    start,
+                    end,
+                    subtitle_track,
+                )
+                clip["subtitle_filename"] = subtitle_track["srt_filename"]
+                clip["subtitle_url"] = (
+                    f"/videos/{os.path.basename(output_dir)}/{subtitle_track['srt_filename']}"
+                )
+                clip["subtitles"] = subtitle_track
             rendered_clips.append(clip)
 
     return rendered_clips

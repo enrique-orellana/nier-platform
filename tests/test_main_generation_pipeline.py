@@ -714,6 +714,59 @@ class MainGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(result[0]["facecam_size"], "large")
         self.assertEqual(result[0]["webcam_region"], WEBCAM_REGION)
 
+    def test_render_clip_plan_persists_and_burns_transcript_subtitles(self):
+        analysis = SourceAnalysis(
+            source_fingerprint={"size": 1},
+            source_fps=30.0,
+            total_frames=300,
+            width=1920,
+            height=1080,
+            scene_boundaries=[(0, 300)],
+            scene_strategies=["TRACK"],
+        )
+        clips = [{"start": 1.0, "end": 3.0, "video_title_for_youtube_short": "one"}]
+        transcript = {
+            "language": "en",
+            "segments": [{
+                "words": [
+                    {"word": "Hello", "start": 1.0, "end": 1.4},
+                    {"word": "world", "start": 1.4, "end": 1.8},
+                ],
+            }],
+        }
+
+        def fake_render(_input, output, **_kwargs):
+            Path(output).touch()
+            return True
+
+        def fake_burn(_input, _srt, output, **_kwargs):
+            Path(output).touch()
+            return True
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(main, "process_video_to_vertical", side_effect=fake_render), patch.object(
+                main, "burn_subtitles", side_effect=fake_burn
+            ) as burn:
+                result = main.render_clip_plan(
+                    input_video="source.mp4",
+                    output_dir=directory,
+                    video_title="source",
+                    clips=clips,
+                    source_analysis=analysis,
+                    transcript=transcript,
+                    source_asset={"asset_id": "source"},
+                    source_media=source_media(),
+                )
+
+            self.assertEqual(burn.call_count, 1)
+            self.assertEqual(result[0]["subtitle_filename"], "source_clip_1.srt")
+            self.assertTrue((Path(directory) / "source_clip_1.srt").is_file())
+            manifest = json.loads(
+                (Path(directory) / result[0]["manifest_path"]).read_text(encoding="utf-8")
+            )
+            self.assertEqual(manifest["layers"]["subtitles"]["captions"][0]["text"], "Hello world")
+            self.assertEqual(manifest["active_subtitle_track_id"], "original")
+
     def test_clip_manifest_records_streamer_layout_metadata(self):
         clip = {"start": 1.0, "end": 4.0}
 
@@ -799,6 +852,46 @@ class MainGenerationPipelineTests(unittest.TestCase):
             expected_fps=30.0,
             source_has_audio=True,
         )
+
+    def test_render_merge_does_not_shortest_trim_copied_video(self):
+        analysis = SourceAnalysis(
+            source_fingerprint={"size": 1},
+            source_fps=30.0,
+            total_frames=2,
+            width=1920,
+            height=1080,
+            scene_boundaries=[(0, 2)],
+            scene_strategies=["TRACK"],
+        )
+        commands = []
+
+        def fake_run(command, **_kwargs):
+            commands.append(command)
+            Path(command[-1]).touch()
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "streamer.mp4"
+            with patch.object(main, "FFmpegVideoStream", return_value=FakeStreamerCapture()), patch.object(
+                main, "detect_face_candidates", return_value=[]
+            ), patch.object(main, "detect_person_yolo", return_value=None), patch.object(
+                main,
+                "compose_streamer_stack_frame",
+                return_value=np.zeros((1920, 1080, 3), dtype=np.uint8),
+            ), patch.object(main.subprocess, "Popen", return_value=FakeProcess()), patch.object(
+                main.subprocess, "run", side_effect=fake_run
+            ), patch.object(main, "validate_clip_output"):
+                main.process_video_to_vertical(
+                    "source.mp4",
+                    str(output_path),
+                    source_analysis=analysis,
+                    source_media=source_media(),
+                    layout_format="streamer_stack",
+                    webcam_region=WEBCAM_REGION,
+                    gameplay_region=GAMEPLAY_REGION,
+                )
+
+        merge_command = next(command for command in commands if "0:v:0" in command)
+        self.assertNotIn("-shortest", merge_command)
 
     def test_streamer_render_cleans_up_encoder_when_frame_processing_fails(self):
         analysis = SourceAnalysis(
