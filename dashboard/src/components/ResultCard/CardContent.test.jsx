@@ -21,4 +21,22 @@ describe('CardContent', () => {
       'Start 02:56 · End 03:24 · Master 59:37',
     );
   });
+
+  it('shows only the timestamps that are available', () => {
+    render(
+      <CardContent
+        clip={{
+          start: 176,
+          end: null,
+          video_title_for_youtube_short: 'A partial clip',
+          video_description_for_tiktok: 'Caption',
+        }}
+        masterDuration={null}
+      />,
+    );
+
+    expect(screen.getByTestId('clip-source-range')).toHaveTextContent('Start 02:56');
+    expect(screen.getByTestId('clip-source-range')).not.toHaveTextContent('End');
+    expect(screen.getByTestId('clip-source-range')).not.toHaveTextContent('Master');
+  });
 });

@@ -10,8 +10,21 @@ const formatSourceTime = (seconds) => {
     return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
 };
 
+const hasTimestamp = (value) => (
+    value !== null
+    && value !== undefined
+    && value !== ''
+    && Number.isFinite(Number(value))
+);
+
 export default function CardContent({ clip, masterDuration }) {
-    const hasSourceRange = Number.isFinite(Number(clip.start)) && Number.isFinite(Number(clip.end));
+    const sourceMetadata = [
+        hasTimestamp(clip.start) ? `Start ${formatSourceTime(clip.start)}` : null,
+        hasTimestamp(clip.end) ? `End ${formatSourceTime(clip.end)}` : null,
+        hasTimestamp(masterDuration) && Number(masterDuration) > 0
+            ? `Master ${formatSourceTime(masterDuration)}`
+            : null,
+    ].filter(Boolean);
 
     return (
         <div className="flex-1 p-5 flex flex-col bg-[#121214] overflow-hidden min-w-0">
@@ -24,12 +37,9 @@ export default function CardContent({ clip, masterDuration }) {
                     <span className="bg-white/5 px-1.5 py-0.5 rounded border border-white/5 shrink-0">#shorts</span>
                     <span className="bg-white/5 px-1.5 py-0.5 rounded border border-white/5 shrink-0">#viral</span>
                 </div>
-                {hasSourceRange && (
+                {sourceMetadata.length > 0 && (
                     <div data-testid="clip-source-range" className="mt-2 text-[10px] text-zinc-400 font-mono">
-                        Start {formatSourceTime(clip.start)} · End {formatSourceTime(clip.end)}
-                        {Number.isFinite(Number(masterDuration)) && Number(masterDuration) > 0
-                            ? ` · Master ${formatSourceTime(masterDuration)}`
-                            : ''}
+                        {sourceMetadata.join(' · ')}
                     </div>
                 )}
             </div>
