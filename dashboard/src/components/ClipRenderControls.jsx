@@ -38,6 +38,7 @@ export default function ClipRenderControls({
   onSelectGameplayRegion,
   isSavingWebcamRegion = false,
   isSavingGameplayRegion = false,
+  trackingSaving = false,
   webcamRegionError = '',
   gameplayRegionError = '',
 }) {
@@ -74,7 +75,7 @@ export default function ClipRenderControls({
         {webcamRegionError && <p className="text-xs text-red-300">{webcamRegionError}</p>}
         {gameplayRegionError && <p className="text-xs text-red-300">{gameplayRegionError}</p>}
         <label className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300">
-          <input type="checkbox" checked={streamerTrackingEnabled === true} onChange={(event) => onTrackingChange?.(event.target.checked)} />
+          <input type="checkbox" checked={streamerTrackingEnabled === true} disabled={trackingSaving} onChange={(event) => onTrackingChange?.(event.target.checked)} />
           <span>Use Face/Person Tracking</span>
         </label>
         <button

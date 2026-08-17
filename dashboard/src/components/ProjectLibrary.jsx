@@ -86,6 +86,10 @@ export default function ProjectLibrary({
   const [savingStatusIndex, setSavingStatusIndex] = useState(null);
   const [webcamRegionSavingIndex, setWebcamRegionSavingIndex] = useState(null);
   const [webcamRegionErrors, setWebcamRegionErrors] = useState({});
+  const [gameplayRegionSavingIndex, setGameplayRegionSavingIndex] = useState(null);
+  const [gameplayRegionErrors, setGameplayRegionErrors] = useState({});
+  const [trackingSavingIndex, setTrackingSavingIndex] = useState(null);
+  const [trackingErrors, setTrackingErrors] = useState({});
 
   const loadProjects = useCallback(async () => {
     setIsLoading(true);
@@ -163,6 +167,10 @@ export default function ProjectLibrary({
       setStatusError('');
       setWebcamRegionSavingIndex(null);
       setWebcamRegionErrors({});
+      setGameplayRegionSavingIndex(null);
+      setGameplayRegionErrors({});
+      setTrackingSavingIndex(null);
+      setTrackingErrors({});
       return;
     }
 
@@ -178,6 +186,10 @@ export default function ProjectLibrary({
     setStatusError('');
     setWebcamRegionSavingIndex(null);
     setWebcamRegionErrors({});
+    setGameplayRegionSavingIndex(null);
+    setGameplayRegionErrors({});
+    setTrackingSavingIndex(null);
+    setTrackingErrors({});
     if (!matchingProject.clips?.length) loadProjectClips(matchingProject);
   }, [loadProjectClips, projectId, projects]);
 
@@ -199,6 +211,10 @@ export default function ProjectLibrary({
     setStatusError('');
     setWebcamRegionSavingIndex(null);
     setWebcamRegionErrors({});
+    setGameplayRegionSavingIndex(null);
+    setGameplayRegionErrors({});
+    setTrackingSavingIndex(null);
+    setTrackingErrors({});
     if (!project?.clips?.length) {
       loadProjectClips(project);
     }
@@ -336,6 +352,71 @@ export default function ProjectLibrary({
       return false;
     } finally {
       setWebcamRegionSavingIndex(null);
+    }
+  };
+
+  const handleSaveGameplayRegion = async (clipIndex, gameplayRegion) => {
+    const jobId = selectedProject?.job_id || selectedProject?.session_id || selectedProject?.id;
+    if (!jobId) return false;
+    const key = String(clipIndex);
+    setGameplayRegionSavingIndex(key);
+    setGameplayRegionErrors((current) => ({ ...current, [key]: '' }));
+    try {
+      const response = await fetch(getApiUrl(`/api/jobs/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipIndex)}/gameplay-region`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameplay_region: gameplayRegion }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || 'Could not save gameplay area');
+      const savedRegion = payload.gameplay_region || gameplayRegion;
+      setProjectClips((current) => current.map((clip, index) => {
+        const currentIndex = Number.isInteger(clip.index) ? clip.index : index;
+        return currentIndex === clipIndex ? { ...clip, gameplay_region: savedRegion } : clip;
+      }));
+      return savedRegion;
+    } catch (error) {
+      setGameplayRegionErrors((current) => ({ ...current, [key]: error.message || 'Could not save gameplay area.' }));
+      return false;
+    } finally {
+      setGameplayRegionSavingIndex(null);
+    }
+  };
+
+  const handleStreamerTrackingChange = async (clipIndex, enabled) => {
+    const jobId = selectedProject?.job_id || selectedProject?.session_id || selectedProject?.id;
+    if (!jobId) return false;
+    const key = String(clipIndex);
+    const previous = projectClips.find((clip, index) => (Number.isInteger(clip.index) ? clip.index : index) === clipIndex)?.streamer_tracking_enabled === true;
+    setTrackingSavingIndex(key);
+    setTrackingErrors((current) => ({ ...current, [key]: '' }));
+    setProjectClips((current) => current.map((clip, index) => {
+      const currentIndex = Number.isInteger(clip.index) ? clip.index : index;
+      return currentIndex === clipIndex ? { ...clip, streamer_tracking_enabled: enabled === true } : clip;
+    }));
+    try {
+      const response = await fetch(getApiUrl(`/api/jobs/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipIndex)}/streamer-tracking`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ streamer_tracking_enabled: enabled === true }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || 'Could not save tracking setting');
+      const savedValue = payload.streamer_tracking_enabled === true;
+      setProjectClips((current) => current.map((clip, index) => {
+        const currentIndex = Number.isInteger(clip.index) ? clip.index : index;
+        return currentIndex === clipIndex ? { ...clip, streamer_tracking_enabled: savedValue } : clip;
+      }));
+      return savedValue;
+    } catch (error) {
+      setProjectClips((current) => current.map((clip, index) => {
+        const currentIndex = Number.isInteger(clip.index) ? clip.index : index;
+        return currentIndex === clipIndex ? { ...clip, streamer_tracking_enabled: previous } : clip;
+      }));
+      setTrackingErrors((current) => ({ ...current, [key]: error.message || 'Could not save tracking setting.' }));
+      return false;
+    } finally {
+      setTrackingSavingIndex(null);
     }
   };
 
@@ -537,6 +618,12 @@ export default function ProjectLibrary({
                     onSaveWebcamRegion={handleSaveWebcamRegion}
                     webcamRegionSaving={webcamRegionSavingIndex === String(clip.index ?? index)}
                     webcamRegionError={webcamRegionErrors[String(clip.index ?? index)]}
+                    onSaveGameplayRegion={handleSaveGameplayRegion}
+                    gameplayRegionSaving={gameplayRegionSavingIndex === String(clip.index ?? index)}
+                    gameplayRegionError={gameplayRegionErrors[String(clip.index ?? index)]}
+                    onStreamerTrackingChange={handleStreamerTrackingChange}
+                    trackingSaving={trackingSavingIndex === String(clip.index ?? index)}
+                    trackingError={trackingErrors[String(clip.index ?? index)]}
                   />
                 ))}
               </div>

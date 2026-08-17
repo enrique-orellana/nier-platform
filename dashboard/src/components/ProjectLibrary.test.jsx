@@ -148,6 +148,7 @@ describe('ProjectLibrary', () => {
                 end: 20,
                 source_video_url: '/videos/job-5/source.mp4',
                 layout_format: 'streamer_stack',
+                streamer_tracking_enabled: false,
                 render_status: 'found',
               }],
               clip_count: 1,
@@ -161,6 +162,22 @@ describe('ProjectLibrary', () => {
         return Promise.resolve({
           ok: true,
           json: async () => ({ webcam_region: { x: 0.05, y: 0.1, width: 0.25, height: 0.4 } }),
+        });
+      }
+      if (String(url).includes('/api/jobs/job-5/clips/0/gameplay-region')) {
+        expect(options.method).toBe('PATCH');
+        expect(JSON.parse(options.body).gameplay_region).toEqual(expect.objectContaining({ width: expect.any(Number) }));
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ gameplay_region: { x: 0.3, y: 0.1, width: 0.6, height: 0.8 } }),
+        });
+      }
+      if (String(url).includes('/api/jobs/job-5/clips/0/streamer-tracking')) {
+        expect(options.method).toBe('PATCH');
+        expect(JSON.parse(options.body)).toEqual({ streamer_tracking_enabled: true });
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ streamer_tracking_enabled: true }),
         });
       }
       if (String(url).includes('/api/jobs/job-5/clips/0/render')) {
@@ -202,7 +219,43 @@ describe('ProjectLibrary', () => {
         expect.objectContaining({ method: 'PATCH' }),
       );
     });
+
+    expect(screen.getByRole('button', { name: 'Analyze & Render' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Select Gameplay Area' }));
+    const gameplayStage = screen.getByTestId('gameplay-region-stage');
+    const gameplayVideo = screen.getByTestId('gameplay-region-video');
+    Object.defineProperty(gameplayStage, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 0, top: 0, width: 400, height: 225, right: 400, bottom: 225 }),
+    });
+    Object.defineProperty(gameplayVideo, 'videoWidth', { configurable: true, value: 1600 });
+    Object.defineProperty(gameplayVideo, 'videoHeight', { configurable: true, value: 900 });
+    fireEvent.loadedMetadata(gameplayVideo);
+    const gameplayDown = new Event('pointerdown', { bubbles: true });
+    Object.defineProperty(gameplayDown, 'clientX', { value: 140 });
+    Object.defineProperty(gameplayDown, 'clientY', { value: 25 });
+    fireEvent(gameplayStage, gameplayDown);
+    const gameplayMove = new Event('pointermove');
+    Object.defineProperty(gameplayMove, 'clientX', { value: 350 });
+    Object.defineProperty(gameplayMove, 'clientY', { value: 200 });
+    fireEvent(window, gameplayMove);
+    fireEvent(window, new Event('pointerup'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save gameplay area' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/jobs/job-5/clips/0/gameplay-region',
+        expect.objectContaining({ method: 'PATCH' }),
+      );
+    });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze & Render' })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Use Face/Person Tracking' }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/jobs/job-5/clips/0/streamer-tracking',
+        expect.objectContaining({ method: 'PATCH' }),
+      );
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Analyze & Render' }));
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(

@@ -37,11 +37,12 @@ const toProxiedVideoUrl = (url) => {
 // Sub-components
 import VideoPreview from './ResultCard/VideoPreview';
 import WebcamRegionSelector from './ResultCard/WebcamRegionSelector';
+import GameplayRegionSelector from './ResultCard/GameplayRegionSelector';
 import CardContent from './ResultCard/CardContent';
 import CardActions from './ResultCard/CardActions';
 import PostModal from './ResultCard/PostModal';
 
-export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange, onRenderClip, renderStatus, renderError, onSaveWebcamRegion, webcamRegionSaving = false, webcamRegionError = '' }) {
+export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange, onRenderClip, renderStatus, renderError, onSaveWebcamRegion, webcamRegionSaving = false, webcamRegionError = '', onSaveGameplayRegion, gameplayRegionSaving = false, gameplayRegionError = '', onStreamerTrackingChange, trackingSaving = false, trackingError = '' }) {
     const [showModal, setShowModal] = useState(false);
     const [showSubtitleModal, setShowSubtitleModal] = useState(false);
     const videoRef = React.useRef(null);
@@ -75,6 +76,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     const [showTranslateModal, setShowTranslateModal] = useState(false);
     const [showClipEditor, setShowClipEditor] = useState(false);
     const [showWebcamRegionSelector, setShowWebcamRegionSelector] = useState(false);
+    const [showGameplayRegionSelector, setShowGameplayRegionSelector] = useState(false);
     const [editError, setEditError] = useState(null);
     const editorSessionRef = React.useRef(null);
 
@@ -95,6 +97,21 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
         const saved = await onSaveWebcamRegion(index, region);
         if (saved !== false) setShowWebcamRegionSelector(false);
         return saved;
+    };
+
+    const handleSaveGameplayRegion = async (region) => {
+        if (!onSaveGameplayRegion) {
+            setShowGameplayRegionSelector(false);
+            return true;
+        }
+        const saved = await onSaveGameplayRegion(index, region);
+        if (saved !== false) setShowGameplayRegionSelector(false);
+        return saved;
+    };
+
+    const handleTrackingChange = async (enabled) => {
+        if (!onStreamerTrackingChange) return;
+        await onStreamerTrackingChange(index, enabled);
     };
 
     useEffect(() => {
@@ -615,9 +632,16 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                         onRender={() => onRenderClip(index)}
                         layoutFormat={clip.layout_format || 'standard'}
                         webcamRegion={clip.webcam_region}
+                        gameplayRegion={clip.gameplay_region}
+                        streamerTrackingEnabled={clip.streamer_tracking_enabled === true}
+                        onTrackingChange={handleTrackingChange}
                         onSelectWebcamRegion={() => setShowWebcamRegionSelector(true)}
+                        onSelectGameplayRegion={() => setShowGameplayRegionSelector(true)}
                         isSavingWebcamRegion={webcamRegionSaving}
                         webcamRegionError={webcamRegionError}
+                        isSavingGameplayRegion={gameplayRegionSaving}
+                        gameplayRegionError={gameplayRegionError || trackingError}
+                        trackingSaving={trackingSaving}
                     />
                 )}
                 <CardContent clip={clip} />
@@ -700,6 +724,17 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     onClose={() => setShowWebcamRegionSelector(false)}
                     isSaving={webcamRegionSaving}
                     error={webcamRegionError}
+                />
+            )}
+            {showGameplayRegionSelector && (
+                <GameplayRegionSelector
+                    videoUrl={webcamSourceUrl}
+                    startTime={clip.start}
+                    initialRegion={clip.gameplay_region}
+                    onSave={handleSaveGameplayRegion}
+                    onClose={() => setShowGameplayRegionSelector(false)}
+                    isSaving={gameplayRegionSaving}
+                    error={gameplayRegionError}
                 />
             )}
             <FullScreenEditor
