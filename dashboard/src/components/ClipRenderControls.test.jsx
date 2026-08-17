@@ -4,6 +4,28 @@ import { describe, expect, it, vi } from 'vitest';
 import ClipRenderControls from './ClipRenderControls';
 
 describe('ClipRenderControls', () => {
+  it('opens the Standard 9:16 preview when gameplay is selected', () => {
+    const onPreview = vi.fn();
+    render(
+      <ClipRenderControls
+        status="found"
+        gameplayRegion={{ x: 0.3, y: 0.1, width: 0.6, height: 0.8 }}
+        onPreviewGameplayRegion={onPreview}
+        onRender={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview 9:16' }));
+    expect(onPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the preview until a gameplay area exists', () => {
+    render(<ClipRenderControls status="found" onPreviewGameplayRegion={vi.fn()} onRender={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Preview 9:16' })).toBeDisabled();
+    expect(screen.getByText('Select Gameplay Area First')).toBeInTheDocument();
+  });
+
   it('lets a found clip start analysis and rendering', () => {
     const onRender = vi.fn();
     render(<ClipRenderControls status="found" onRender={onRender} />);

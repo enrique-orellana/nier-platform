@@ -25,6 +25,22 @@ function RegionButton({ label, onClick, disabled, saving }) {
   );
 }
 
+function PreviewButton({ enabled, onClick }) {
+  return (
+    <div className="space-y-1">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={!enabled}
+        className="w-full rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Preview 9:16
+      </button>
+      {!enabled && <p className="text-[11px] text-zinc-500">Select Gameplay Area First</p>}
+    </div>
+  );
+}
+
 export default function ClipRenderControls({
   status = 'found',
   error = '',
@@ -34,6 +50,7 @@ export default function ClipRenderControls({
   gameplayRegion = null,
   streamerTrackingEnabled = false,
   onTrackingChange,
+  onPreviewGameplayRegion,
   onSelectWebcamRegion,
   onSelectGameplayRegion,
   isSavingWebcamRegion = false,
@@ -72,6 +89,7 @@ export default function ClipRenderControls({
         {status === 'failed' && <p className="text-xs text-amber-200">Select both source areas before retrying Streamer Stack analysis.</p>}
         <RegionButton label={webcamLabel} onClick={onSelectWebcamRegion} disabled={isSavingWebcamRegion} saving={isSavingWebcamRegion} />
         <RegionButton label={gameplayLabel} onClick={onSelectGameplayRegion} disabled={isSavingGameplayRegion} saving={isSavingGameplayRegion} />
+        <PreviewButton enabled={validGameplayRegion} onClick={onPreviewGameplayRegion} />
         {webcamRegionError && <p className="text-xs text-red-300">{webcamRegionError}</p>}
         {gameplayRegionError && <p className="text-xs text-red-300">{gameplayRegionError}</p>}
         <label className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300">
@@ -99,5 +117,10 @@ export default function ClipRenderControls({
     );
   }
 
-  return <button type="button" onClick={onRender} className="mb-4 w-full rounded-xl border border-primary/30 bg-primary/15 px-3 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/25">Analyze &amp; Render</button>;
+  return (
+    <div className="mb-4 space-y-2">
+      <PreviewButton enabled={validGameplayRegion} onClick={onPreviewGameplayRegion} />
+      <button type="button" onClick={onRender} className="w-full rounded-xl border border-primary/30 bg-primary/15 px-3 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/25">Analyze &amp; Render</button>
+    </div>
+  );
 }
