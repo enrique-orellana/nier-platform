@@ -4,9 +4,12 @@ import numpy as np
 from streamer_layout import (
     ClipLayoutOptions,
     compose_streamer_stack_frame,
+    clamp_focus_to_region,
+    crop_gameplay_region,
     crop_webcam_region,
     filter_candidates_outside_webcam_region,
     normalize_clip_layout,
+    normalize_gameplay_region,
     normalize_webcam_region,
     streamer_panel_heights,
     webcam_region_pixel_bounds,
@@ -39,6 +42,48 @@ def test_invalid_values_fail_before_rendering():
 )
 def test_normalize_webcam_region_accepts_bounded_finite_values(region):
     assert normalize_webcam_region(region) == region
+
+
+def test_normalize_gameplay_region_rejects_out_of_bounds_values():
+    with pytest.raises(ValueError, match="gameplay_region must fit inside"):
+        normalize_gameplay_region({"x": 0.8, "y": 0.1, "width": 0.3, "height": 0.2})
+
+
+def test_crop_gameplay_region_fills_panel_from_selected_rectangle():
+    source = np.zeros((100, 200, 3), dtype=np.uint8)
+    source[:, :, 0] = np.arange(200, dtype=np.uint8)
+    region = {"x": 0.25, "y": 0.0, "width": 0.5, "height": 1.0}
+
+    result = crop_gameplay_region(source, region, target_width=40, target_height=80)
+
+    assert result.shape == (80, 40, 3)
+    assert int(result[:, :, 0].min()) >= 50
+    assert int(result[:, :, 0].max()) <= 150
+
+
+def test_gameplay_focus_is_clamped_inside_selected_region():
+    region = {"x": 0.25, "y": 0.2, "width": 0.5, "height": 0.6}
+
+    assert clamp_focus_to_region((0.0, 1.0), region) == (0.25, 0.8)
+
+
+def test_streamer_stack_manual_gameplay_region_composes_without_detection_focus():
+    source = np.zeros((100, 200, 3), dtype=np.uint8)
+    source[:, :100] = (0, 0, 255)
+    source[:, 100:] = (0, 255, 0)
+
+    result = compose_streamer_stack_frame(
+        source,
+        output_width=40,
+        output_height=80,
+        facecam_size="medium",
+        webcam_region={"x": 0.0, "y": 0.0, "width": 0.25, "height": 1.0},
+        gameplay_region={"x": 0.5, "y": 0.0, "width": 0.5, "height": 1.0},
+    )
+
+    _, gameplay_height = streamer_panel_heights(40, 80, "medium")
+    assert result.shape == (80, 40, 3)
+    assert result[-gameplay_height:, :, 1].mean() > result[-gameplay_height:, :, 2].mean()
 
 
 @pytest.mark.parametrize(
