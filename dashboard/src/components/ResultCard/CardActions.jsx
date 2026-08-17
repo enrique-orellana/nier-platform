@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Wand2, Crop, Type, Languages, Share2, Download, AlertCircle, Clock3 } from 'lucide-react';
+import { Loader2, Wand2, Crop, Type, FileText, Languages, Share2, Download, AlertCircle, Clock3 } from 'lucide-react';
 
 export default function CardActions({
     handleAutoEdit,
@@ -7,6 +7,7 @@ export default function CardActions({
     handleConvertNativeShort,
     isConvertingNativeShort,
     setShowSubtitleModal,
+    setShowSubtitleDetails,
     isSubtitling,
     setShowHookModal,
     isHooking,
@@ -55,6 +56,13 @@ export default function CardActions({
                 >
                     {isSubtitling ? <Loader2 size={14} className="animate-spin" /> : <Type size={14} />}
                     {isSubtitling ? 'Adding...' : 'Subtitles'}
+                </button>
+
+                <button
+                    onClick={() => setShowSubtitleDetails(true)}
+                    className="col-span-2 mb-1 flex items-center justify-center gap-2 rounded-lg border border-cyan-400/20 bg-cyan-400/5 py-2 text-xs font-semibold text-cyan-200 transition-all hover:bg-cyan-400/10"
+                >
+                    <FileText size={14} /> Subtitle details
                 </button>
 
                 <button

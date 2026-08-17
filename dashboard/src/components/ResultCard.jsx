@@ -43,10 +43,12 @@ import CardContent from './ResultCard/CardContent';
 import CardActions from './ResultCard/CardActions';
 import PostModal from './ResultCard/PostModal';
 import ClipSourceRangeEditor from './ResultCard/ClipSourceRangeEditor';
+import SubtitleDetailsModal from './ResultCard/SubtitleDetailsModal';
 
 export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange, onRenderClip, renderStatus, renderError, onSaveClipRange, onSaveWebcamRegion, webcamRegionSaving = false, webcamRegionError = '', onSaveGameplayRegion, gameplayRegionSaving = false, gameplayRegionError = '', onStreamerTrackingChange, trackingSaving = false, trackingError = '', onSaveGameplayZoom, gameplayZoomSaving = false, gameplayZoomError = '', masterDuration }) {
     const [showModal, setShowModal] = useState(false);
     const [showSubtitleModal, setShowSubtitleModal] = useState(false);
+    const [showSubtitleDetails, setShowSubtitleDetails] = useState(false);
     const videoRef = React.useRef(null);
     const resolvedClipVideoUrl = resolveClipVideoUrl(clip, jobId);
     clip = resolvedClipVideoUrl ? { ...clip, video_url: resolvedClipVideoUrl } : clip;
@@ -695,6 +697,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     handleConvertNativeShort={handleConvertNativeShort}
                     isConvertingNativeShort={isConvertingNativeShort}
                     setShowSubtitleModal={setShowSubtitleModal}
+                    setShowSubtitleDetails={setShowSubtitleDetails}
                     isSubtitling={isSubtitling}
                     setShowHookModal={setShowHookModal}
                     isHooking={isHooking}
@@ -735,6 +738,16 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                 jobId={jobId}
                 clipIndex={index}
                 existingHook={activeLayers.hook}
+            />
+
+            <SubtitleDetailsModal
+                isOpen={showSubtitleDetails}
+                onClose={() => setShowSubtitleDetails(false)}
+                clip={clip}
+                videoUrl={trueOriginalUrl}
+                jobId={jobId}
+                clipIndex={index}
+                initialLayer={activeLayers.subtitles}
             />
 
             <HookModal
