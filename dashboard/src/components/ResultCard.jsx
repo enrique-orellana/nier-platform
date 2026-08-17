@@ -38,6 +38,7 @@ const toProxiedVideoUrl = (url) => {
 import VideoPreview from './ResultCard/VideoPreview';
 import WebcamRegionSelector from './ResultCard/WebcamRegionSelector';
 import GameplayRegionSelector from './ResultCard/GameplayRegionSelector';
+import Standard916Preview from './ResultCard/Standard916Preview';
 import CardContent from './ResultCard/CardContent';
 import CardActions from './ResultCard/CardActions';
 import PostModal from './ResultCard/PostModal';
@@ -77,6 +78,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     const [showClipEditor, setShowClipEditor] = useState(false);
     const [showWebcamRegionSelector, setShowWebcamRegionSelector] = useState(false);
     const [showGameplayRegionSelector, setShowGameplayRegionSelector] = useState(false);
+    const [showStandard916Preview, setShowStandard916Preview] = useState(false);
     const [editError, setEditError] = useState(null);
     const editorSessionRef = React.useRef(null);
 
@@ -635,6 +637,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                         gameplayRegion={clip.gameplay_region}
                         streamerTrackingEnabled={clip.streamer_tracking_enabled === true}
                         onTrackingChange={handleTrackingChange}
+                        onPreviewGameplayRegion={() => setShowStandard916Preview(true)}
                         onSelectWebcamRegion={() => setShowWebcamRegionSelector(true)}
                         onSelectGameplayRegion={() => setShowGameplayRegionSelector(true)}
                         isSavingWebcamRegion={webcamRegionSaving}
@@ -735,6 +738,15 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     onClose={() => setShowGameplayRegionSelector(false)}
                     isSaving={gameplayRegionSaving}
                     error={gameplayRegionError}
+                />
+            )}
+            {showStandard916Preview && (
+                <Standard916Preview
+                    videoUrl={webcamSourceUrl}
+                    startTime={clip.start}
+                    endTime={clip.end}
+                    gameplayRegion={clip.gameplay_region}
+                    onClose={() => setShowStandard916Preview(false)}
                 />
             )}
             <FullScreenEditor
