@@ -68,8 +68,14 @@ ENV USER=appuser
 # Pre-download YOLO model on build (now running as appuser, fully cached before source code copy)
 RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
 
-# Pre-download Whisper model on build (fully cached)
-RUN python -c "from faster_whisper import WhisperModel; WhisperModel('large-v3', device='cpu', compute_type='int8')"
+# LOCAL_WHISPER_REACTIVATE: Local Whisper is intentionally not preloaded into
+# the image. Transcription uses the configured remote provider by default, and
+# downloading large-v3 here made every uncached backend build unnecessarily
+# slow and large. The optional faster-whisper package remains installed for
+# local-editor/fallback compatibility when local transcription is explicitly
+# selected.
+# To reactivate the preload, uncomment this exact command:
+# RUN python -c "from faster_whisper import WhisperModel; WhisperModel('large-v3', device='cpu', compute_type='int8')"
 
 # Keep the Go binary copy after the large model layers. Backend source changes
 # now invalidate only the small control-plane layer instead of redownloading
