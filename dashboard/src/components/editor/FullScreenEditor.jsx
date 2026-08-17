@@ -275,6 +275,10 @@ export default function FullScreenEditor({
     () => ({ ...manifestToRenderProps(projectManifest, { activeSubtitleTrackId: activeTrackId }), videoUrl: proxyUrl(projectManifest.timeline?.source_video_url || clip.video_url) }),
     [activeTrackId, clip.video_url, projectManifest],
   );
+  const localEditorPreviewUrl = useMemo(
+    () => proxyUrl(clip.source_video_url || clip.source_url || projectManifest.timeline?.source_video_url || clip.video_url),
+    [clip.source_url, clip.source_video_url, clip.video_url, projectManifest.timeline?.source_video_url],
+  );
   const currentManifestRef = useRef(currentManifest);
   useEffect(() => {
     currentManifestRef.current = currentManifest;
@@ -522,8 +526,11 @@ export default function FullScreenEditor({
     return (
       <div className="fixed inset-0 z-[60] bg-background text-white" data-testid="full-screen-editor">
         <LocalEditorTab
-          initialVideoUrl={projectInputProps.videoUrl}
+          initialVideoUrl={localEditorPreviewUrl}
+          initialExportVideoUrl={proxyUrl(clip.video_url || projectInputProps.videoUrl)}
           initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
+          initialPlaybackStartMs={Math.max(0, Number(projectInputProps.videoStartSeconds || 0) * 1000)}
+          initialPlaybackDurationMs={Math.max(1, Number(durationSeconds || 0) * 1000)}
           initialEditorState={localDraft}
           initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}`}
           clipMetadata={{ ...clip, hashtags: publishingMetadata.hashtags }}

@@ -5,6 +5,28 @@ import { toProxiedVideoUrl } from '../lib/videoUrls';
 import { CLIP_WORKFLOW_STATUSES } from './clipWorkflowStatuses';
 import ResultCard from './ResultCard';
 
+const ACTIVE_RENDER_STATUSES = new Set(['queued', 'analyzing', 'rendering']);
+
+function mergeAuthoritativeRenderStatuses(clips, statusClips) {
+  if (!Array.isArray(statusClips)) return clips;
+
+  return clips.map((clip, index) => {
+    const clipIndex = Number.isInteger(clip.index) ? clip.index : index;
+    const authoritative = statusClips.find((candidate, candidateIndex) => {
+      const candidateClipIndex = Number.isInteger(candidate?.index) ? candidate.index : candidateIndex;
+      return candidateClipIndex === clipIndex;
+    });
+    if (!authoritative || !authoritative.render_status) return clip;
+
+    return {
+      ...clip,
+      render_status: authoritative.render_status,
+      render_job_id: authoritative.render_job_id || null,
+      render_error: authoritative.render_error || null,
+    };
+  });
+}
+
 function formatDate(value) {
   if (!value) return 'Unknown';
   try {
@@ -124,12 +146,25 @@ export default function ProjectLibrary({
 
     setIsLoadingClips(true);
     try {
-      const res = await fetch(getApiUrl(`/api/projects/clips/${encodeURIComponent(jobId)}?refresh=true`));
+      const [clipsResult, statusResult] = await Promise.allSettled([
+        fetch(getApiUrl(`/api/projects/clips/${encodeURIComponent(jobId)}?refresh=true`)),
+        fetch(getApiUrl(`/api/status/${encodeURIComponent(jobId)}`)),
+      ]);
+      if (clipsResult.status === 'rejected') throw clipsResult.reason;
+      const res = clipsResult.value;
+      const statusRes = statusResult.status === 'fulfilled' ? statusResult.value : null;
       if (!res.ok) {
         throw new Error(await res.text());
       }
       const data = await res.json();
-      setProjectClips(Array.isArray(data.clips) ? data.clips : []);
+      let clips = Array.isArray(data.clips) && (data.clips.length > 0 || !project.clips?.length)
+        ? data.clips
+        : (Array.isArray(project.clips) ? project.clips : []);
+      if (statusRes.ok) {
+        const statusPayload = await statusRes.json();
+        clips = mergeAuthoritativeRenderStatuses(clips, statusPayload?.result?.clips);
+      }
+      setProjectClips(clips);
     } catch (e) {
       console.error('Error loading project clips:', e);
       setProjectClips([]);
@@ -196,7 +231,7 @@ export default function ProjectLibrary({
     setGameplayZoomErrors({});
     setTrackingSavingIndex(null);
     setTrackingErrors({});
-    if (!matchingProject.clips?.length) loadProjectClips(matchingProject);
+    loadProjectClips(matchingProject);
   }, [loadProjectClips, projectId, projects]);
 
   useEffect(() => {
@@ -223,9 +258,7 @@ export default function ProjectLibrary({
     setGameplayZoomErrors({});
     setTrackingSavingIndex(null);
     setTrackingErrors({});
-    if (!project?.clips?.length) {
-      loadProjectClips(project);
-    }
+    loadProjectClips(project);
   };
 
   const handleProjectCardKeyDown = (event, project) => {
@@ -515,6 +548,24 @@ export default function ProjectLibrary({
       clearInterval(timer);
     };
   }, [clipRenderJobs, loadProjectClips, selectedProject]);
+
+  const hasActiveClipRender = projectClips.some((clip) => ACTIVE_RENDER_STATUSES.has(clip.render_status));
+
+  useEffect(() => {
+    if (!selectedProject || !hasActiveClipRender) return undefined;
+
+    let cancelled = false;
+    const refreshActiveClipRenders = async () => {
+      if (cancelled) return;
+      await loadProjectClips(selectedProject);
+    };
+
+    const timer = setInterval(() => refreshActiveClipRenders().catch(() => {}), 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [hasActiveClipRender, loadProjectClips, selectedProject]);
 
   const statusSummary = CLIP_WORKFLOW_STATUSES
     .map(({ value, label }) => {

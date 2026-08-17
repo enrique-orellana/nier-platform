@@ -117,6 +117,42 @@ describe('FullScreenEditor', () => {
         expect(screen.getByRole('button', { name: /save as new version/i })).toBeInTheDocument();
     });
 
+    it('previews the master at the clip start while retaining the trimmed export source', async () => {
+        const fetchMock = vi.fn().mockImplementation(async (url) => ({
+            ok: true,
+            blob: async () => new Blob([String(url)], { type: 'video/mp4' }),
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        Object.defineProperty(URL, 'createObjectURL', {
+            configurable: true,
+            writable: true,
+            value: vi.fn()
+                .mockReturnValueOnce('blob:trimmed-export')
+                .mockReturnValueOnce('blob:master-preview'),
+        });
+        const localManifest = {
+            timeline: { source_video_url: '', trim: { start_sec: 34.2, end_sec: 60.64 } },
+            layers: {},
+            subtitle_tracks: [],
+        };
+
+        render(<FullScreenEditor
+            useLocalEditor
+            jobId="job"
+            clipIndex={0}
+            clip={{ output_fps: 30, video_url: '/videos/job/source_clip_1.mp4', source_video_url: '/videos/job/source.mp4' }}
+            initialManifest={localManifest}
+            initialVersion={{ version_id: 'v1', status: 'done' }}
+            onClose={vi.fn()}
+        />);
+
+        await waitFor(() => expect(screen.getByRole('button', { name: /toggle subtitles settings/i })).toBeInTheDocument());
+        expect(fetchMock).toHaveBeenCalledWith('/videos/job/source.mp4');
+        expect(fetchMock).toHaveBeenCalledWith('/videos/job/source_clip_1.mp4');
+        expect(document.querySelector('video')).toHaveAttribute('src', 'blob:master-preview');
+        expect(screen.getAllByText('00:00 / 00:26')).toHaveLength(2);
+    });
+
     it('saves generated hashtags in the new version manifest', async () => {
         renderVersionMocks.saveAndRenderVersion.mockResolvedValue({ status: 'done', outputUrl: '/videos/job/generated.mp4', version: { version_id: 'v2', status: 'done' } });
         vi.stubGlobal('fetch', vi.fn((url) => String(url).includes('/api/local-editor/hashtags')

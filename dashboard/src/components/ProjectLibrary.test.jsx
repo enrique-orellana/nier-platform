@@ -133,6 +133,44 @@ describe('ProjectLibrary', () => {
     });
   });
 
+  it('reconciles stale rendering metadata so a failed render can be retried after returning to the project', async () => {
+    const fetchMock = vi.fn((url) => {
+      if (String(url).includes('/api/projects/history')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            projects: [{
+              job_id: 'job-stale',
+              title: 'Interrupted project',
+              clips: [{ index: 0, start: 10, end: 20, source_video_url: '/videos/job-stale/source.mp4', render_status: 'rendering' }],
+              clip_count: 1,
+            }],
+          }),
+        });
+      }
+      if (String(url).includes('/api/projects/clips/job-stale')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ clips: [{ index: 0, start: 10, end: 20, source_video_url: '/videos/job-stale/source.mp4', render_status: 'rendering' }] }),
+        });
+      }
+      if (String(url).includes('/api/status/job-stale')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: 'clips_ready', result: { clips: [{ render_status: 'failed', render_error: 'Database connection lost.' }] } }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ clips: {} }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<ProjectLibrary projectId="job-stale" />);
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.getByText('Database connection lost.')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/status/job-stale');
+  });
+
   it('saves a webcam region per Streamer Stack clip before enabling render', async () => {
     const fetchMock = vi.fn((url, options = {}) => {
       if (String(url).includes('/api/projects/history')) {

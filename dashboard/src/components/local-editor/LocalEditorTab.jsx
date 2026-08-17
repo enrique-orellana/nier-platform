@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Download, FastForward, FileText, Film, FolderOpen, Languages, Loader2, Maximize2, Minimize2, Pause, Play, Plus, Redo2, Repeat, Rewind, RotateCcw, Save, SkipBack, SkipForward, Square, Undo2, Upload, X } from 'lucide-react';
 import LocalEditorTimeline from './LocalEditorTimeline';
 import ClipMetadataPanel from './ClipMetadataPanel';
@@ -7,6 +7,7 @@ import { parseSubtitleFile, serializeSrt } from './subtitleFormats';
 import { activeCueAt, formatClock } from './localEditorExport';
 import { burnLocalEditorSubtitles, cueCaptionsForRender, renderLocalVideoOnBackend, syncSubtitleCue } from './localEditorRender';
 import { detectEmbeddedSideBars, getFilledFrameDimensions } from './localEditorVideo';
+import { clipTimeToSourceTime, sourceTimeToClipTime } from './localEditorPlayback';
 import { getApiUrl } from '../../config';
 import { createSubtitleCue } from '../../editor/timelineModel';
 import { groupCaptionsIntoBlocks } from '../../remotion/lib/captions';
@@ -277,7 +278,10 @@ function HookInspector({ hook, onChange, onRemove }) {
 
 export default function LocalEditorTab({
     initialVideoUrl = '',
+    initialExportVideoUrl = '',
     initialVideoName = '',
+    initialPlaybackStartMs = 0,
+    initialPlaybackDurationMs = null,
     initialEditorState = null,
     initialStateKey = null,
     onStateChange,
@@ -292,12 +296,14 @@ export default function LocalEditorTab({
     const videoRef = useRef(null);
     const playerRef = useRef(null);
     const objectUrlRef = useRef('');
+    const previewObjectUrlRef = useRef('');
     const subtitleInputRef = useRef(null);
     const timelineDragRef = useRef(null);
     const videoRestoreGenerationRef = useRef(0);
     const videoLoadStartedRef = useRef(false);
     const [videoFile, setVideoFile] = useState(null);
     const [videoUrl, setVideoUrl] = useState('');
+    const [previewVideoUrl, setPreviewVideoUrl] = useState('');
     const [durationMs, setDurationMs] = useState(DEFAULT_DURATION_MS);
     const [playheadMs, setPlayheadMs] = useState(0);
     const editorPreferencesRef = useRef(readEditorPreferences());
@@ -336,6 +342,11 @@ export default function LocalEditorTab({
     const [projectNameDraft, setProjectNameDraft] = useState('');
     const [projectStorageWarning, setProjectStorageWarning] = useState('');
     const [projectSaveNotice, setProjectSaveNotice] = useState('');
+
+    const playbackStartMs = Math.max(0, Number(initialPlaybackStartMs) || 0);
+    const requestedPlaybackDurationMs = Number(initialPlaybackDurationMs) > 0
+        ? Number(initialPlaybackDurationMs)
+        : null;
 
     const { subtitleCues, subtitleStyle, subtitleLanguage, hook } = editHistory.present;
     const editHistoryRef = useRef(editHistory);
@@ -397,31 +408,6 @@ export default function LocalEditorTab({
         setProjects(storedProjects);
         return storedProjects;
     };
-
-    useEffect(() => {
-        let active = true;
-        const initializeProjects = async () => {
-            await migrateLegacyProject({ hasLegacyHistory: legacyHistoryPresentRef.current });
-            const storedProjects = await listStoredProjects();
-            const storedActiveId = await getActiveProjectId();
-            if (!active) return;
-            setProjects(storedProjects);
-            if (initialVideoUrl || !storedActiveId || videoLoadStartedRef.current) return;
-            const stored = await loadStoredProject(storedActiveId);
-            if (!active) return;
-            if (!stored?.file) {
-                await setActiveProjectId(null);
-                return;
-            }
-            activeProjectIdRef.current = stored.project.id;
-            activeProjectNameRef.current = stored.project.name;
-            setActiveProjectIdState(stored.project.id);
-            setEditHistory(stored.project.history);
-            loadVideo(stored.file, { persist: false, projectId: stored.project.id, restoredDurationMs: stored.project.durationMs });
-        };
-        void initializeProjects();
-        return () => { active = false; };
-    }, [initialVideoUrl]);
 
     useEffect(() => () => {
         if (projectSaveTimerRef.current) window.clearTimeout(projectSaveTimerRef.current);
@@ -486,7 +472,7 @@ export default function LocalEditorTab({
         return subtitleCues.find((cue) => cue.id === selected.id) || null;
     }, [hook, selected, subtitleCues]);
 
-    const loadVideo = (file, { persist = true, projectId = null, restoredDurationMs = null } = {}) => {
+    const loadVideo = useCallback((file, { persist = true, projectId = null, restoredDurationMs = null, previewFile = file } = {}) => {
         if (!file?.type?.startsWith('video/')) {
             setError('Please choose a playable video file.');
             return;
@@ -500,10 +486,14 @@ export default function LocalEditorTab({
         }
         const nextUrl = URL.createObjectURL(file);
         if (objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrlRef.current);
+        if (previewObjectUrlRef.current && previewObjectUrlRef.current !== objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(previewObjectUrlRef.current);
         objectUrlRef.current = nextUrl;
+        const nextPreviewUrl = previewFile === file ? nextUrl : URL.createObjectURL(previewFile);
+        previewObjectUrlRef.current = nextPreviewUrl;
         setVideoFile(file);
         setVideoUrl(nextUrl);
-        setDurationMs(restoredDurationMs || DEFAULT_DURATION_MS);
+        setPreviewVideoUrl(nextPreviewUrl);
+        setDurationMs(requestedPlaybackDurationMs || restoredDurationMs || DEFAULT_DURATION_MS);
         setPlayheadMs(0);
         setIsPlaying(false);
         setIsLooping(false);
@@ -513,23 +503,53 @@ export default function LocalEditorTab({
         if (videoRef.current) videoRef.current.loop = false;
         if (videoRef.current) videoRef.current.muted = false;
         setError('');
-    };
+    }, [requestedPlaybackDurationMs]);
+
+    useEffect(() => {
+        let active = true;
+        const initializeProjects = async () => {
+            await migrateLegacyProject({ hasLegacyHistory: legacyHistoryPresentRef.current });
+            const storedProjects = await listStoredProjects();
+            const storedActiveId = await getActiveProjectId();
+            if (!active) return;
+            setProjects(storedProjects);
+            if (initialVideoUrl || !storedActiveId || videoLoadStartedRef.current) return;
+            const stored = await loadStoredProject(storedActiveId);
+            if (!active) return;
+            if (!stored?.file) {
+                await setActiveProjectId(null);
+                return;
+            }
+            activeProjectIdRef.current = stored.project.id;
+            activeProjectNameRef.current = stored.project.name;
+            setActiveProjectIdState(stored.project.id);
+            setEditHistory(stored.project.history);
+            loadVideo(stored.file, { persist: false, projectId: stored.project.id, restoredDurationMs: stored.project.durationMs });
+        };
+        void initializeProjects();
+        return () => { active = false; };
+    }, [initialVideoUrl, loadVideo]);
 
     useEffect(() => {
         if (!initialVideoUrl) return undefined;
         let active = true;
         videoLoadStartedRef.current = true;
         setRemoteVideoLoading(true);
-        fetch(initialVideoUrl)
-            .then((response) => {
+        const fetchVideoFile = (url) => fetch(url).then((response) => {
                 if (!response.ok) throw new Error(`Could not load project video (${response.status}).`);
                 return response.blob();
-            })
-            .then((blob) => {
-                if (!active) return;
+            }).then((blob) => {
                 const type = blob.type && blob.type.startsWith('video/') ? blob.type : 'video/mp4';
-                const name = initialVideoName || initialVideoUrl.split('?')[0].split('/').pop() || 'project-video.mp4';
-                loadVideo(new File([blob], name, { type }), { persist: false });
+                const name = initialVideoName || url.split('?')[0].split('/').pop() || 'project-video.mp4';
+                return new File([blob], name, { type });
+            });
+        const exportUrl = initialExportVideoUrl || initialVideoUrl;
+        const previewPromise = fetchVideoFile(initialVideoUrl);
+        const exportPromise = exportUrl === initialVideoUrl ? previewPromise : fetchVideoFile(exportUrl);
+        Promise.all([previewPromise, exportPromise])
+            .then(([previewFile, exportFile]) => {
+                if (!active) return;
+                loadVideo(exportFile, { persist: false, previewFile });
             })
             .catch((loadError) => {
                 if (active) setError(loadError.message || 'Could not load the project video.');
@@ -538,10 +558,17 @@ export default function LocalEditorTab({
                 if (active) setRemoteVideoLoading(false);
             });
         return () => { active = false; };
-    }, [initialVideoName, initialVideoUrl]);
+    }, [initialExportVideoUrl, initialVideoName, initialVideoUrl, loadVideo]);
 
     const handleMetadata = () => {
-        const nextDuration = Math.max(1, Math.round((videoRef.current?.duration || 30) * 1000));
+        const sourceDurationMs = Math.max(1, Math.round((videoRef.current?.duration || 30) * 1000));
+        const availableClipDurationMs = Math.max(1, sourceDurationMs - playbackStartMs);
+        const nextDuration = requestedPlaybackDurationMs
+            ? Math.min(requestedPlaybackDurationMs, availableClipDurationMs)
+            : sourceDurationMs;
+        if (videoRef.current && playbackStartMs > 0) {
+            videoRef.current.currentTime = playbackStartMs / 1000;
+        }
         setDurationMs(nextDuration);
         setEditHistory((current) => ({
             ...current,
@@ -738,18 +765,36 @@ export default function LocalEditorTab({
     const handleSeek = (nextMs) => {
         const clampedMs = clamp(nextMs, 0, durationMs);
         setPlayheadMs(clampedMs);
-        if (videoRef.current) videoRef.current.currentTime = clampedMs / 1000;
+        if (videoRef.current) videoRef.current.currentTime = clipTimeToSourceTime(clampedMs, playbackStartMs, durationMs) / 1000;
     };
 
     const handleVideoTimeUpdate = (event) => {
-        const nextMs = event.currentTarget.currentTime * 1000;
+        const sourceMs = event.currentTarget.currentTime * 1000;
+        if (sourceMs < playbackStartMs) {
+            event.currentTarget.currentTime = playbackStartMs / 1000;
+            setPlayheadMs(0);
+            return;
+        }
+        const nextMs = sourceTimeToClipTime(sourceMs, playbackStartMs, durationMs);
+        if (sourceMs >= playbackStartMs + durationMs) {
+            if (isLooping) {
+                event.currentTarget.currentTime = playbackStartMs / 1000;
+                setPlayheadMs(0);
+                return;
+            }
+            event.currentTarget.pause();
+            event.currentTarget.currentTime = clipTimeToSourceTime(durationMs, playbackStartMs, durationMs) / 1000;
+            setPlayheadMs(durationMs);
+            setIsPlaying(false);
+            return;
+        }
         const loopCue = subtitleTableLoop
             ? selected?.type === 'subtitle'
                 ? subtitleCues.find((cue) => cue.id === selected.id)
                 : activeCueAt(subtitleCues, playheadMs)
             : null;
         if (loopCue && nextMs >= loopCue.endMs) {
-            event.currentTarget.currentTime = loopCue.startMs / 1000;
+            event.currentTarget.currentTime = clipTimeToSourceTime(loopCue.startMs, playbackStartMs, durationMs) / 1000;
             setPlayheadMs(loopCue.startMs);
             return;
         }
@@ -757,8 +802,7 @@ export default function LocalEditorTab({
     };
 
     const seekBy = (deltaMs) => {
-        const currentMs = videoRef.current ? videoRef.current.currentTime * 1000 : playheadMs;
-        handleSeek(currentMs + deltaMs);
+        handleSeek(playheadMs + deltaMs);
     };
 
     const togglePlayback = async () => {
@@ -781,7 +825,7 @@ export default function LocalEditorTab({
         const video = videoRef.current;
         if (!video) return;
         video.pause();
-        video.currentTime = 0;
+        video.currentTime = playbackStartMs / 1000;
         setPlayheadMs(0);
         setIsPlaying(false);
     };
@@ -851,7 +895,7 @@ export default function LocalEditorTab({
             const cropForExport = videoViewMode === 'fill' || (videoViewMode === 'auto' && autoCrop);
             const outputDimensions = getFilledFrameDimensions(video.videoWidth, video.videoHeight);
             const renderParams = {
-                durationSeconds: Number(video.duration) > 0 ? video.duration : durationMs / 1000,
+                durationSeconds: durationMs / 1000,
                 fps: 30,
                 ...outputDimensions,
                 videoFit: cropForExport ? 'cover' : 'contain',
@@ -884,9 +928,12 @@ export default function LocalEditorTab({
         videoRef.current?.pause();
         if (videoRef.current) videoRef.current.loop = false;
         if (objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrlRef.current);
+        if (previewObjectUrlRef.current && previewObjectUrlRef.current !== objectUrlRef.current && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(previewObjectUrlRef.current);
         objectUrlRef.current = '';
+        previewObjectUrlRef.current = '';
         setVideoFile(null);
         setVideoUrl('');
+        setPreviewVideoUrl('');
         setEditHistory(createEmptyEditorHistory(editorPreferencesRef.current));
         setSelected(null);
         setPendingSubtitle(null);
@@ -1030,7 +1077,7 @@ export default function LocalEditorTab({
                         <ClipMetadataPanel clip={clipMetadata} subtitleCues={subtitleCues} hashtags={clipMetadata?.hashtags} onHashtagsChange={onHashtagsChange} />
                         <div ref={playerRef} data-testid="local-editor-player" tabIndex={0} role="region" aria-label="Video preview. Use Space or K to play or pause, arrow keys to seek, M to mute, and F for fullscreen." aria-keyshortcuts="Space K ArrowLeft ArrowRight Home End M F" onKeyDown={handlePlayerKeyDown} className={isFullscreen ? 'fixed inset-0 z-50 flex items-center justify-center bg-black p-4' : 'mx-auto flex h-[calc(100vh-180px)] max-h-[72vh] w-full max-w-[360px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl'}>
                         <div className="relative h-full max-h-full w-auto max-w-full aspect-[9/16]">
-                            <video ref={videoRef} src={videoUrl} controls={false} className={`h-full w-full ${shouldCropVideo ? 'object-cover' : 'object-contain'}`} onLoadedMetadata={handleMetadata} onLoadedData={detectVideoFraming} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onTimeUpdate={handleVideoTimeUpdate} />
+                            <video ref={videoRef} src={previewVideoUrl || videoUrl} controls={false} className={`h-full w-full ${shouldCropVideo ? 'object-cover' : 'object-contain'}`} onLoadedMetadata={handleMetadata} onLoadedData={detectVideoFraming} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => { setPlayheadMs(durationMs); setIsPlaying(false); }} onTimeUpdate={handleVideoTimeUpdate} />
                             <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className="absolute right-3 top-3 z-20 rounded-lg border border-white/20 bg-black/60 p-2 text-white shadow-lg backdrop-blur hover:bg-black/80">{isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
                             <div className="pointer-events-none absolute inset-0">
                                 {activeHook && <div className="absolute w-[88%]" style={{ left: '50%', ...getHookPositionStyle(activeHook.position) }}><div className="text-center" style={{ ...getHookBoxStyle(activeHook), ...hookEntranceStyle }}>{activeHook.text}</div></div>}
