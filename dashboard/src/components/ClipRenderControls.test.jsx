@@ -36,6 +36,7 @@ describe('ClipRenderControls', () => {
         status="found"
         layoutFormat="streamer_stack"
         webcamRegion={{ x: 0.1, y: 0.2, width: 0.3, height: 0.4 }}
+        gameplayRegion={{ x: 0.4, y: 0.1, width: 0.5, height: 0.8 }}
         onRender={onRender}
         onSelectWebcamRegion={onSelect}
       />,
@@ -45,6 +46,42 @@ describe('ClipRenderControls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Analyze & Render' }));
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onRender).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires both regions before Streamer Stack rendering', () => {
+    render(
+      <ClipRenderControls
+        status="found"
+        layoutFormat="streamer_stack"
+        webcamRegion={{ x: 0.1, y: 0.1, width: 0.2, height: 0.2 }}
+        onRender={vi.fn()}
+        onSelectWebcamRegion={vi.fn()}
+        onSelectGameplayRegion={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Select Gameplay Area' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Analyze & Render' })).toBeDisabled();
+  });
+
+  it('defaults tracking off and reports the explicit toggle value', () => {
+    const onTrackingChange = vi.fn();
+    render(
+      <ClipRenderControls
+        status="found"
+        layoutFormat="streamer_stack"
+        webcamRegion={{ x: 0.1, y: 0.1, width: 0.2, height: 0.2 }}
+        gameplayRegion={{ x: 0.3, y: 0.1, width: 0.6, height: 0.8 }}
+        streamerTrackingEnabled={false}
+        onTrackingChange={onTrackingChange}
+        onRender={vi.fn()}
+      />,
+    );
+
+    const toggle = screen.getByRole('checkbox', { name: 'Use Face/Person Tracking' });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    expect(onTrackingChange).toHaveBeenCalledWith(true);
   });
 
   it('shows independent progress without exposing another action', () => {
