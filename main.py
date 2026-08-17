@@ -1825,12 +1825,6 @@ def render_deferred_clip(
     if clip_index < 0 or clip_index >= len(clips):
         raise IndexError("Clip not found")
     clip = clips[clip_index]
-    existing_filename = str(clip.get("video_filename") or "").strip()
-    if clip.get("render_status") == "ready" and existing_filename:
-        existing_path = Path(output_dir) / Path(existing_filename).name
-        if existing_path.is_file():
-            return clip
-
     clip["render_status"] = "analyzing"
     clip.pop("render_error", None)
     _write_clip_metadata(metadata_path, metadata)
@@ -1898,8 +1892,9 @@ def render_clip_plan(
     gameplay_zoom: float = 1.0,
     streamer_tracking_enabled: bool = False,
     clip_indices: list[int] | None = None,
+    include_subtitles: bool = False,
 ) -> list[dict]:
-    """Render a clip plan using one immutable source analysis object."""
+    """Render a clip plan; subtitles are opt-in and disabled for plain Render."""
     layout_options = normalize_clip_layout(layout_format, facecam_size)
     rendered_clips = []
     source_video_filename = source_asset.get("relative_path", "")
@@ -1937,11 +1932,15 @@ def render_clip_plan(
         if layout_options.layout_format == STREAMER_STACK_LAYOUT:
             clip["streamer_tracking_enabled"] = clip_tracking_enabled
             clip["gameplay_zoom"] = clip_gameplay_zoom
-        subtitle_track = _build_clip_subtitle_track(
-            transcript,
-            float(start),
-            float(end),
-            f"{video_title}_clip_{index}.srt",
+        subtitle_track = (
+            _build_clip_subtitle_track(
+                transcript,
+                float(start),
+                float(end),
+                f"{video_title}_clip_{index}.srt",
+            )
+            if include_subtitles
+            else None
         )
 
         manifest_path = _write_clip_manifest(

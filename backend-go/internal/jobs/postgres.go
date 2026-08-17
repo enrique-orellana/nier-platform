@@ -130,7 +130,7 @@ func (s *PostgresStore) CreateClipRenderIfAbsent(ctx context.Context, input doma
 		       COALESCE(parent_job_id::text, ''), clip_index, metadata, result, COALESCE(error, ''), created_at, updated_at
 		FROM jobs
 		WHERE kind = 'clip-render' AND parent_job_id = NULLIF($1, '')::uuid AND clip_index = $2
-		  AND status IN ('queued', 'processing', 'completed')
+		  AND status IN ('queued', 'processing')
 		ORDER BY created_at DESC, id DESC
 		LIMIT 1
 	`, input.ParentJobID, input.ClipIndex))

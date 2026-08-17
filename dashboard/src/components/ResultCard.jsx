@@ -43,7 +43,7 @@ import CardContent from './ResultCard/CardContent';
 import CardActions from './ResultCard/CardActions';
 import PostModal from './ResultCard/PostModal';
 
-export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange, onRenderClip, renderStatus, renderError, onSaveWebcamRegion, webcamRegionSaving = false, webcamRegionError = '', onSaveGameplayRegion, gameplayRegionSaving = false, gameplayRegionError = '', onStreamerTrackingChange, trackingSaving = false, trackingError = '', onSaveGameplayZoom, gameplayZoomSaving = false, gameplayZoomError = '' }) {
+export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange, onRenderClip, renderStatus, renderError, onSaveWebcamRegion, webcamRegionSaving = false, webcamRegionError = '', onSaveGameplayRegion, gameplayRegionSaving = false, gameplayRegionError = '', onStreamerTrackingChange, trackingSaving = false, trackingError = '', onSaveGameplayZoom, gameplayZoomSaving = false, gameplayZoomError = '', masterDuration }) {
     const [showModal, setShowModal] = useState(false);
     const [showSubtitleModal, setShowSubtitleModal] = useState(false);
     const videoRef = React.useRef(null);
@@ -222,10 +222,30 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
         }
 
         const newVideoUrl = `/videos/${jobId}/${outputFilename}`;
+        const subtitleLayer = renderLayers?.subtitles || null;
+        const subtitleCaptions = subtitleLayer?.captions || subtitleLayer?.cues || [];
+        const subtitleTracks = subtitleLayer ? [{
+            id: 'original',
+            label: 'Original',
+            language: 'und',
+            origin: 'generated',
+            cues: subtitleCaptions,
+            captions: subtitleCaptions,
+        }] : undefined;
+        const persistedLayers = Object.fromEntries(
+            Object.entries(renderLayers || {}).filter(([, value]) => value !== null && value !== undefined),
+        );
         const persistRes = await fetch(getApiUrl(`/api/clip/${jobId}/${index}/video-url`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ new_video_url: newVideoUrl }),
+            body: JSON.stringify({
+                new_video_url: newVideoUrl,
+                layers: persistedLayers,
+                ...(subtitleTracks ? {
+                    subtitle_tracks: subtitleTracks,
+                    active_subtitle_track_id: 'original',
+                } : {}),
+            }),
         });
 
         if (!persistRes.ok) {
@@ -656,7 +676,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                         trackingSaving={trackingSaving}
                     />
                 )}
-                <CardContent clip={clip} />
+                <CardContent clip={clip} masterDuration={masterDuration} />
 
                 {hasVideo && <CardActions
                     handleAutoEdit={handleAutoEdit}

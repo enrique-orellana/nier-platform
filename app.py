@@ -195,6 +195,13 @@ def build_job_result(data: dict, ready_clips: list[dict], cost_analysis):
     """Build one result shape for live jobs and persisted-artifact reloads."""
     source_context = data.get("source_context")
     source_url = data.get("source_url")
+    source_asset = data.get("source_asset") or {}
+    source_probe = source_asset.get("probe") or {}
+    source_duration_seconds = (
+        data.get("source_duration_seconds")
+        or data.get("video_duration")
+        or source_probe.get("duration_seconds")
+    )
     enriched_clips = []
     for clip in ready_clips:
         enriched = dict(clip)
@@ -207,6 +214,7 @@ def build_job_result(data: dict, ready_clips: list[dict], cost_analysis):
         "clips": enriched_clips,
         "cost_analysis": cost_analysis,
         "source_url": source_url,
+        "source_duration_seconds": source_duration_seconds,
         "source_metadata": data.get("source_metadata"),
         "source_context": source_context,
         "source_context_status": data.get("source_context_status"),
@@ -1123,6 +1131,9 @@ class EditRequest(BaseModel):
 
 class UpdateClipVideoUrlRequest(BaseModel):
     new_video_url: str
+    layers: Optional[dict] = None
+    subtitle_tracks: Optional[list[dict]] = None
+    active_subtitle_track_id: Optional[str] = None
 
 
 class ManifestPatchRequest(BaseModel):
@@ -1207,8 +1218,16 @@ def normalize_generated_hashtags(value: object) -> list[str]:
     return normalized
 
 
-def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) -> None:
-    """Update the in-memory job record and persisted metadata for a clip URL."""
+def _persist_clip_video_url(
+    job_id: str,
+    clip_index: int,
+    new_video_url: str,
+    *,
+    layers: Optional[dict] = None,
+    subtitle_tracks: Optional[list[dict]] = None,
+    active_subtitle_track_id: Optional[str] = None,
+) -> None:
+    """Persist a rendered clip URL together with any layers used to produce it."""
     job = _get_job(job_id)
     if not job or "result" not in job or "clips" not in job["result"]:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -1222,6 +1241,14 @@ def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) ->
 
     clips[clip_index]["video_url"] = new_video_url
     clips[clip_index]["url"] = new_video_url
+    if layers is not None:
+        current_layers = dict(clips[clip_index].get("layers") or {})
+        current_layers.update(layers)
+        clips[clip_index]["layers"] = current_layers
+    if subtitle_tracks is not None:
+        clips[clip_index]["subtitle_tracks"] = subtitle_tracks
+    if active_subtitle_track_id is not None:
+        clips[clip_index]["active_subtitle_track_id"] = active_subtitle_track_id
 
     output_dir = os.path.join(OUTPUT_DIR, job_id)
     json_files = glob.glob(os.path.join(output_dir, "*_metadata.json"))
@@ -1241,6 +1268,14 @@ def _persist_clip_video_url(job_id: str, clip_index: int, new_video_url: str) ->
 
     metadata_clips[clip_index]["video_url"] = new_video_url
     metadata_clips[clip_index]["url"] = new_video_url
+    if layers is not None:
+        current_layers = dict(metadata_clips[clip_index].get("layers") or {})
+        current_layers.update(layers)
+        metadata_clips[clip_index]["layers"] = current_layers
+    if subtitle_tracks is not None:
+        metadata_clips[clip_index]["subtitle_tracks"] = subtitle_tracks
+    if active_subtitle_track_id is not None:
+        metadata_clips[clip_index]["active_subtitle_track_id"] = active_subtitle_track_id
     data["shorts"] = metadata_clips
 
     with open(metadata_path, "w") as f:
@@ -1497,16 +1532,16 @@ async def get_clip_transcript(job_id: str, clip_index: int):
     clip_start = clip_data.get('start', 0)
     clip_end = clip_data.get('end', 0)
 
-    # Extract words within clip range and convert to CaptionWord format
-    captions = []
-    for segment in transcript.get('segments', []):
-        for word_info in segment.get('words', []):
-            if word_info['end'] > clip_start and word_info['start'] < clip_end:
-                captions.append({
-                    "text": word_info.get('word', '').strip(),
-                    "startMs": int((max(0, word_info['start'] - clip_start)) * 1000),
-                    "endMs": int((max(0, word_info['end'] - clip_start)) * 1000),
-                })
+    # Use the shared subtitle builder so provider transcripts with segment
+    # timestamps but no word timestamps remain available for later preview.
+    captions = [
+        {
+            "text": cue["text"],
+            "startMs": int(cue["start"] * 1000),
+            "endMs": int(cue["end"] * 1000),
+        }
+        for cue in build_subtitle_segments(transcript, clip_start, clip_end)
+    ]
 
     duration_sec = clip_end - clip_start
 
@@ -1694,8 +1729,15 @@ async def video_proxy(request: Request, url: str = Query(...), filename: str | N
 
 @app.post("/api/clip/{job_id}/{clip_index}/video-url")
 async def update_clip_video_url(job_id: str, clip_index: int, req: UpdateClipVideoUrlRequest):
-    """Persist a new clip video URL in memory and in the metadata file."""
-    _persist_clip_video_url(job_id, clip_index, req.new_video_url)
+    """Persist a rendered clip and the layers/tracks used to create it."""
+    _persist_clip_video_url(
+        job_id,
+        clip_index,
+        req.new_video_url,
+        layers=req.layers,
+        subtitle_tracks=req.subtitle_tracks,
+        active_subtitle_track_id=req.active_subtitle_track_id,
+    )
     return {
         "success": True,
         "job_id": job_id,
@@ -2169,11 +2211,61 @@ async def add_subtitles(req: SubtitleRequest):
     # Update InMemory Jobs
     if req.clip_index < len(job['result']['clips']):
          job['result']['clips'][req.clip_index]['video_url'] = f"/videos/{req.job_id}/{output_filename}"
-    
+
+    subtitle_cues = build_subtitle_segments(transcript, clip_data['start'], clip_data['end'])
+    subtitle_captions = [
+        {
+            "text": cue["text"],
+            "startMs": round(cue["start"] * 1000),
+            "endMs": round(cue["end"] * 1000),
+        }
+        for cue in subtitle_cues
+    ]
+    subtitle_track = {
+        "id": "original",
+        "label": "Original",
+        "language": transcript.get("language", "und"),
+        "origin": "generated",
+        "srt_filename": srt_filename,
+        "cues": subtitle_captions,
+        "captions": subtitle_captions,
+    }
+    subtitle_layer = {
+        "captions": subtitle_captions,
+        "position": req.position,
+        "style": {
+            "fontFamily": req.font_name,
+            "fontSize": req.font_size,
+            "fontColor": req.font_color,
+            "borderColor": req.border_color,
+            "borderWidth": req.border_width,
+            "backgroundColor": req.bg_color,
+            "backgroundOpacity": req.bg_opacity,
+        },
+    }
+    if req.clip_index < len(job['result']['clips']):
+        job_clip = job['result']['clips'][req.clip_index]
+        job_clip['subtitle_filename'] = srt_filename
+        job_clip['subtitle_url'] = f"/videos/{req.job_id}/{srt_filename}"
+        job_clip['subtitles'] = subtitle_track
+        job_clip['subtitle_tracks'] = [subtitle_track]
+        job_clip['active_subtitle_track_id'] = "original"
+        current_layers = dict(job_clip.get('layers') or {})
+        current_layers['subtitles'] = subtitle_layer
+        job_clip['layers'] = current_layers
+
     # Update Metadata on Disk (Persistence)
     try:
         if req.clip_index < len(clips):
             clips[req.clip_index]['video_url'] = f"/videos/{req.job_id}/{output_filename}"
+            clips[req.clip_index]['subtitle_filename'] = srt_filename
+            clips[req.clip_index]['subtitle_url'] = f"/videos/{req.job_id}/{srt_filename}"
+            clips[req.clip_index]['subtitles'] = subtitle_track
+            clips[req.clip_index]['subtitle_tracks'] = [subtitle_track]
+            clips[req.clip_index]['active_subtitle_track_id'] = "original"
+            current_layers = dict(clips[req.clip_index].get('layers') or {})
+            current_layers['subtitles'] = subtitle_layer
+            clips[req.clip_index]['layers'] = current_layers
             # Update the main data structure
             data['shorts'] = clips
             

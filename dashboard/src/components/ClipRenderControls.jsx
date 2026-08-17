@@ -59,10 +59,6 @@ export default function ClipRenderControls({
   webcamRegionError = '',
   gameplayRegionError = '',
 }) {
-  if (status === 'ready') {
-    return <div className="mb-4 rounded-xl border border-green-500/20 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-300">Ready</div>;
-  }
-
   if (progressLabels[status]) {
     return <div className="mb-4 rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary animate-pulse">{progressLabels[status]}</div>;
   }
@@ -102,7 +98,7 @@ export default function ClipRenderControls({
           disabled={!hasAllStreamerRegions}
           className="w-full rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-sm font-semibold text-primary disabled:cursor-not-allowed disabled:text-primary/50"
         >
-          Analyze &amp; Render
+          {status === 'ready' ? 'Render from Master' : 'Analyze & Render'}
         </button>
       </div>
     );
@@ -120,7 +116,7 @@ export default function ClipRenderControls({
   return (
     <div className="mb-4 space-y-2">
       <PreviewButton enabled={validGameplayRegion} onClick={onPreviewGameplayRegion} />
-      <button type="button" onClick={onRender} className="w-full rounded-xl border border-primary/30 bg-primary/15 px-3 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/25">Analyze &amp; Render</button>
+      <button type="button" onClick={onRender} className="w-full rounded-xl border border-primary/30 bg-primary/15 px-3 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/25">{status === 'ready' ? 'Render from Master' : 'Analyze & Render'}</button>
     </div>
   );
 }

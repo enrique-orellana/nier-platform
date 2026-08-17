@@ -19,6 +19,7 @@ def test_result_payload_exposes_source_context_and_attaches_it_to_ready_clips():
     data = {
         "source_url": SOURCE_URL,
         "source_metadata": {"platform": "twitch", "title": "A live event"},
+        "source_asset": {"probe": {"duration_seconds": 3577.0}},
         "source_context": SOURCE_CONTEXT,
         "source_context_status": "available",
         "source_context_error": None,
@@ -29,6 +30,7 @@ def test_result_payload_exposes_source_context_and_attaches_it_to_ready_clips():
     assert result["source_url"] == SOURCE_URL
     assert result["source_context"] == SOURCE_CONTEXT
     assert result["clips"][0]["source_context"] == SOURCE_CONTEXT
+    assert result["source_duration_seconds"] == 3577.0
     assert result["cost_analysis"] == {"total_cost": 0}
 
 

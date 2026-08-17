@@ -1718,6 +1718,7 @@ function App() {
                           onRenderClip={status === 'clips-ready' ? handleRenderClip : undefined}
                           renderStatus={clip.render_status}
                           renderError={clip.render_error}
+                          masterDuration={results.source_duration_seconds}
                         />
                       ))}
                     </div>

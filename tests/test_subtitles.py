@@ -40,3 +40,23 @@ def test_build_subtitle_segments_starts_a_new_cue_after_sentence_punctuation():
         {"start": 0.0, "end": 1.0, "text": "sono un professionista."},
         {"start": 1.0, "end": 1.7, "text": "È importante"},
     ]
+
+
+def test_build_subtitle_segments_uses_provider_segments_without_word_timestamps():
+    transcript = {
+        "language": "es",
+        "segments": [{
+            "start": 10.0,
+            "end": 12.5,
+            "text": "Hola, esto sigue funcionando.",
+            "words": [],
+        }],
+    }
+
+    cues = build_subtitle_segments(transcript, 10.0, 12.5, max_chars=80, max_duration=5.0)
+
+    assert cues == [{
+        "start": 0.0,
+        "end": 2.5,
+        "text": "Hola, esto sigue funcionando.",
+    }]

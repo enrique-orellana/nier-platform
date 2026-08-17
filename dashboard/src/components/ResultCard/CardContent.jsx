@@ -1,7 +1,18 @@
 import React from 'react';
 import { Youtube, Video, Instagram } from 'lucide-react';
 
-export default function CardContent({ clip }) {
+const formatSourceTime = (seconds) => {
+    const totalSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const remainder = totalSeconds % 60;
+    if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+    return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+};
+
+export default function CardContent({ clip, masterDuration }) {
+    const hasSourceRange = Number.isFinite(Number(clip.start)) && Number.isFinite(Number(clip.end));
+
     return (
         <div className="flex-1 p-5 flex flex-col bg-[#121214] overflow-hidden min-w-0">
             <div className="mb-4">
@@ -13,6 +24,14 @@ export default function CardContent({ clip }) {
                     <span className="bg-white/5 px-1.5 py-0.5 rounded border border-white/5 shrink-0">#shorts</span>
                     <span className="bg-white/5 px-1.5 py-0.5 rounded border border-white/5 shrink-0">#viral</span>
                 </div>
+                {hasSourceRange && (
+                    <div data-testid="clip-source-range" className="mt-2 text-[10px] text-zinc-400 font-mono">
+                        Start {formatSourceTime(clip.start)} · End {formatSourceTime(clip.end)}
+                        {Number.isFinite(Number(masterDuration)) && Number(masterDuration) > 0
+                            ? ` · Master ${formatSourceTime(masterDuration)}`
+                            : ''}
+                    </div>
+                )}
             </div>
 
             {/* Scrollable Descriptions Area */}

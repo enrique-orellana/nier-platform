@@ -285,7 +285,7 @@ class MainGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(strategy_calls.call_args.kwargs["frame_start"], 60)
         self.assertEqual(strategy_calls.call_args.kwargs["frame_end"], 120)
 
-    def test_render_deferred_clip_updates_one_candidate_and_is_idempotent(self):
+    def test_render_deferred_clip_rerenders_ready_candidate_from_source(self):
         clips_data = {
             "shorts": [
                 {"start": 1.0, "end": 4.0},
@@ -318,10 +318,13 @@ class MainGenerationPipelineTests(unittest.TestCase):
             )
 
             def fake_render(**kwargs):
+                render_calls.append(kwargs)
                 clip = kwargs["clips"][0]
                 clip["video_filename"] = "source_clip_2.mp4"
                 (output_dir / clip["video_filename"]).write_bytes(b"rendered")
                 return [clip]
+
+            render_calls = []
 
             with patch.object(main, "probe_media", return_value=source_media()), patch.object(
                 main, "build_clip_source_analysis_for_job", return_value=analysis
@@ -341,10 +344,12 @@ class MainGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(ready_again["render_status"], "ready")
         self.assertEqual(metadata["shorts"][0]["render_status"], "found")
         self.assertEqual(metadata["shorts"][1]["render_status"], "ready")
-        build_analysis.assert_called_once_with(
+        self.assertEqual(len(render_calls), 2)
+        self.assertEqual(build_analysis.call_count, 2)
+        build_analysis.assert_any_call(
             str(source_path), str(output_dir), clip_index=1, start_sec=8.0, end_sec=12.0, metrics=None
         )
-        render.assert_called_once()
+        self.assertEqual(render.call_count, 2)
 
     def test_render_deferred_clip_forwards_saved_webcam_region(self):
         clips_data = {
@@ -714,7 +719,7 @@ class MainGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(result[0]["facecam_size"], "large")
         self.assertEqual(result[0]["webcam_region"], WEBCAM_REGION)
 
-    def test_render_clip_plan_persists_and_burns_transcript_subtitles(self):
+    def test_render_clip_plan_does_not_add_subtitles_by_default(self):
         analysis = SourceAnalysis(
             source_fingerprint={"size": 1},
             source_fps=30.0,
@@ -758,14 +763,15 @@ class MainGenerationPipelineTests(unittest.TestCase):
                     source_media=source_media(),
                 )
 
-            self.assertEqual(burn.call_count, 1)
-            self.assertEqual(result[0]["subtitle_filename"], "source_clip_1.srt")
-            self.assertTrue((Path(directory) / "source_clip_1.srt").is_file())
+            self.assertEqual(burn.call_count, 0)
+            self.assertNotIn("subtitle_filename", result[0])
+            self.assertFalse((Path(directory) / "source_clip_1.srt").exists())
             manifest = json.loads(
                 (Path(directory) / result[0]["manifest_path"]).read_text(encoding="utf-8")
             )
-            self.assertEqual(manifest["layers"]["subtitles"]["captions"][0]["text"], "Hello world")
-            self.assertEqual(manifest["active_subtitle_track_id"], "original")
+            self.assertEqual(manifest["subtitle_tracks"], [])
+            self.assertIsNone(manifest["active_subtitle_track_id"])
+            self.assertIsNone(manifest["layers"]["subtitles"])
 
     def test_clip_manifest_records_streamer_layout_metadata(self):
         clip = {"start": 1.0, "end": 4.0}

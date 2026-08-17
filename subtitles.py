@@ -67,13 +67,39 @@ def build_subtitle_segments(transcript, clip_start, clip_end, max_chars=20, max_
     """Build compact timed subtitle cues using the clip generator's rules."""
     words = []
     for segment in transcript.get('segments', []):
-        for word_info in segment.get('words', []):
-            if word_info['end'] > clip_start and word_info['start'] < clip_end:
+        segment_words = segment.get('words', []) or []
+        if segment_words:
+            for word_info in segment_words:
+                word_start = float(word_info.get('start', 0.0))
+                word_end = float(word_info.get('end', word_start))
+                if word_end <= clip_start or word_start >= clip_end:
+                    continue
                 words.append({
                     'word': str(word_info.get('word', '')).strip(),
-                    'start': float(word_info['start']),
-                    'end': float(word_info['end']),
+                    'start': word_start,
+                    'end': word_end,
                 })
+            continue
+
+        # Some providers return reliable segment timestamps but no word-level
+        # timestamps. Keep those subtitles usable later by distributing the
+        # segment duration across its words; the segment timing remains the
+        # source of truth for the generated captions.
+        segment_start = float(segment.get('start', 0.0))
+        segment_end = float(segment.get('end', segment_start))
+        segment_text = " ".join(str(segment.get('text', '') or '').split())
+        fallback_words = segment_text.split()
+        if not fallback_words or segment_end <= clip_start or segment_start >= clip_end:
+            continue
+        segment_duration = max(0.0, segment_end - segment_start)
+        for index, word in enumerate(fallback_words):
+            words.append({
+                'word': word,
+                'start': segment_start + segment_duration * index / len(fallback_words),
+                'end': segment_start + segment_duration * (index + 1) / len(fallback_words),
+            })
+
+    words.sort(key=lambda word: (word['start'], word['end']))
 
     cues = []
     current_block = []
@@ -83,8 +109,8 @@ def build_subtitle_segments(transcript, clip_start, clip_end, max_chars=20, max_
         if not current_block:
             return
         cues.append({
-            'start': current_block[0]['start'] - clip_start,
-            'end': current_block[-1]['end'] - clip_start,
+            'start': current_block[0]['start'],
+            'end': current_block[-1]['end'],
             'text': " ".join(word['word'] for word in current_block).strip(),
         })
 

@@ -75,7 +75,7 @@ func TestDeferredGenerationCanTransitionToClipsReady(t *testing.T) {
 	}
 }
 
-func TestCreateClipRenderIfAbsentIsIdempotentAndRetriesFailures(t *testing.T) {
+func TestCreateClipRenderIfAbsentReusesActiveAndRerendersCompleted(t *testing.T) {
 	store := NewMemoryStore()
 	input := domain.CreateJobInput{
 		Kind:        "clip-render",
@@ -104,10 +104,10 @@ func TestCreateClipRenderIfAbsentIsIdempotentAndRetriesFailures(t *testing.T) {
 	}
 	ready, err := store.CreateClipRenderIfAbsent(context.Background(), input)
 	if err != nil {
-		t.Fatalf("get completed clip render: %v", err)
+		t.Fatalf("create rerender after completed clip render: %v", err)
 	}
-	if ready.ID != first.ID || ready.Status != domain.JobStatusCompleted {
-		t.Fatalf("expected completed render to be reused: %#v", ready)
+	if ready.ID == first.ID || ready.Status != domain.JobStatusQueued {
+		t.Fatalf("expected completed render to create a new queued job: %#v", ready)
 	}
 
 	failedInput := input

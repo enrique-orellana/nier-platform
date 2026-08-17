@@ -67,7 +67,6 @@ func (s *MemoryStore) CreateClipRenderIfAbsent(_ context.Context, input domain.C
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var completed *domain.Job
 	for _, job := range s.jobs {
 		if job.Kind != "clip-render" || job.ParentJobID != input.ParentJobID || job.ClipIndex != input.ClipIndex {
 			continue
@@ -75,13 +74,6 @@ func (s *MemoryStore) CreateClipRenderIfAbsent(_ context.Context, input domain.C
 		if job.Status == domain.JobStatusQueued || job.Status == domain.JobStatusProcessing {
 			return cloneJob(job), nil
 		}
-		if job.Status == domain.JobStatusCompleted {
-			candidate := cloneJob(job)
-			completed = &candidate
-		}
-	}
-	if completed != nil {
-		return *completed, nil
 	}
 	return s.createLocked(input)
 }

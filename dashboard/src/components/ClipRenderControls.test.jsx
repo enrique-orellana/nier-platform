@@ -113,11 +113,13 @@ describe('ClipRenderControls', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('shows ready state after the artifact is available', () => {
-    render(<ClipRenderControls status="ready" onRender={vi.fn()} />);
+  it('keeps rerender controls available after the artifact is ready', () => {
+    const onRender = vi.fn();
+    render(<ClipRenderControls status="ready" onRender={onRender} />);
 
-    expect(screen.getByText('Ready')).toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Render from Master' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Render from Master' }));
+    expect(onRender).toHaveBeenCalledTimes(1);
   });
 
   it('lets a failed clip retry', () => {
