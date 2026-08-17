@@ -16,6 +16,7 @@ import { ShortVideo } from '../remotion/compositions/ShortVideo';
  */
 export default function RemotionPreview({
     videoUrl,
+    videoStartSeconds = 0,
     durationInSeconds = 30,
     fps = 30,
     width = 1080,
@@ -85,6 +86,7 @@ export default function RemotionPreview({
     const inputProps = useMemo(
         () => ({
             videoUrl,
+            videoStartSeconds,
             durationInFrames,
             fps,
             width,
@@ -95,7 +97,7 @@ export default function RemotionPreview({
             hook,
             effects,
         }),
-        [videoUrl, durationInFrames, fps, width, height, subtitles, subtitleTracks, activeSubtitleTrackId, hook, effects]
+        [videoUrl, videoStartSeconds, durationInFrames, fps, width, height, subtitles, subtitleTracks, activeSubtitleTrackId, hook, effects]
     );
 
     return (

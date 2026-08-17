@@ -105,4 +105,44 @@ describe('designcomboAdapter', () => {
         expect(props.activeSubtitleTrackId).toBe('es');
         expect(props.subtitles.captions).toEqual([{ text: 'Hola', startMs: 1200, endMs: 2400 }]);
     });
+
+    it('uses populated captions when a subtitle track has an empty cues array', () => {
+        const source = {
+            timeline: { trim: { start_sec: 0, end_sec: 4 } },
+            subtitle_tracks: [{
+                id: 'original',
+                language: 'es',
+                label: 'Original',
+                captions: [{ text: 'Hola', startMs: 500, endMs: 1500 }],
+                cues: [],
+            }],
+            active_subtitle_track_id: 'original',
+        };
+        const state = manifestToEditorState(source);
+        expect(state.tracks.find((track) => track.id === 'subtitles-original').items[0]).toMatchObject({ text: 'Hola', start: 0.5, end: 1.5 });
+        expect(manifestToRenderProps(source).subtitles.captions).toEqual([{ text: 'Hola', startMs: 500, endMs: 1500 }]);
+    });
+
+    it('exposes the master-video offset for a clip preview', () => {
+        const props = manifestToRenderProps({
+            ...manifest,
+            timeline: { ...manifest.timeline, trim: { start_sec: 1042.5, end_sec: 1050.5 } },
+        });
+        expect(props.videoStartSeconds).toBe(1042.5);
+    });
+
+    it('keeps saved transcript timestamps on the master-video clock', () => {
+        const source = {
+            timeline: {
+                trim: { start_sec: 10, end_sec: 14 },
+                transcript: { language: 'it', segments: [{ start: 10.5, end: 11.5, text: 'Ciao' }] },
+            },
+            subtitle_tracks: [{ id: 'original', language: 'it', label: 'Original', cues: [{ text: 'Ciao', startMs: 500, endMs: 1500 }] }],
+            active_subtitle_track_id: 'original',
+            layers: {},
+        };
+        const state = manifestToEditorState(source);
+        const next = editorStateToManifest(state, source);
+        expect(next.timeline.transcript.segments[0]).toMatchObject({ start: 10.5, end: 11.5 });
+    });
 });

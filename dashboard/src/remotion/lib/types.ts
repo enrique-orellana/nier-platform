@@ -87,6 +87,7 @@ export interface EffectsConfig {
 // --- Main composition props ---
 export interface ShortVideoProps {
   videoUrl: string;
+  videoStartSeconds?: number;
   durationInFrames: number;
   fps: number;
   width: number;
@@ -163,6 +164,7 @@ export const effectsConfigSchema = z.object({
 
 export const shortVideoPropsSchema = z.object({
   videoUrl: z.string(),
+  videoStartSeconds: z.number().min(0).optional(),
   durationInFrames: z.number().int().positive(),
   fps: z.number().positive(),
   width: z.number().int().positive(),

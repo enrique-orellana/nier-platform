@@ -50,15 +50,19 @@ const publishingMetadataFrom = (sourceManifest, clip) => {
   };
 };
 
-const localCuesFromTrack = (track) => (track?.cues || track?.captions || []).map((cue, index) => ({
-  id: cue.id || `${track?.id || "subtitle"}-${index}`,
-  type: "subtitle",
-  label: cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
-  text: cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
-  startMs: Number(cue.startMs || 0),
-  endMs: Number(cue.endMs || cue.startMs || 0),
-  captions: Array.isArray(cue.captions) ? cue.captions : undefined,
-}));
+const localCuesFromTrack = (track) => {
+  const cues = Array.isArray(track?.cues) ? track.cues : [];
+  const captions = Array.isArray(track?.captions) ? track.captions : [];
+  return (cues.length ? cues : captions).map((cue, index) => ({
+    id: cue.id || `${track?.id || "subtitle"}-${index}`,
+    type: "subtitle",
+    label: cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
+    text: cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
+    startMs: Number(cue.startMs || 0),
+    endMs: Number(cue.endMs || cue.startMs || 0),
+    captions: Array.isArray(cue.captions) ? cue.captions : undefined,
+  }));
+};
 
 const manifestToLocalEditorState = (sourceManifest, trackId) => {
   const source = manifestWithTranscriptCaptions(sourceManifest || {}, null);
@@ -600,6 +604,7 @@ export default function FullScreenEditor({
         >
           <RemotionPreview
             videoUrl={inputProps.videoUrl}
+            videoStartSeconds={inputProps.videoStartSeconds}
             durationInSeconds={durationSeconds}
             fps={fps}
             width={clip.output_width || 1080}

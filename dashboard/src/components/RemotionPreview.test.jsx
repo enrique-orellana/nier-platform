@@ -4,9 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 import RemotionPreview from './RemotionPreview';
 
 const playMock = vi.hoisted(() => vi.fn());
+const playerPropsMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@remotion/player', () => ({
-    Player: forwardRef(({ children }, ref) => {
+    Player: forwardRef(({ children, ...props }, ref) => {
+        playerPropsMock(props);
         const listeners = useRef({}).current;
         useImperativeHandle(ref, () => ({
             addEventListener: (name, callback) => { listeners[name] = callback; },
@@ -32,5 +34,13 @@ describe('RemotionPreview', () => {
         render(<RemotionPreview videoUrl="/video.mp4" playing={false} />);
         window.dispatchEvent(new CustomEvent('openshorts:playback-request', { detail: true }));
         expect(playMock).toHaveBeenCalled();
+    });
+
+    it('passes the master-video offset into the Remotion composition', () => {
+        playerPropsMock.mockClear();
+        render(<RemotionPreview videoUrl="/master.mp4" videoStartSeconds={1042.5} />);
+        expect(playerPropsMock).toHaveBeenLastCalledWith(expect.objectContaining({
+            inputProps: expect.objectContaining({ videoStartSeconds: 1042.5 }),
+        }));
     });
 });

@@ -1,6 +1,12 @@
 const clone = (value) => JSON.parse(JSON.stringify(value ?? {}));
 
-const trackCaptions = (track) => (track?.captions || track?.cues || []).map((cue) => ({
+const trackItems = (track) => {
+    const cues = Array.isArray(track?.cues) ? track.cues : [];
+    const captions = Array.isArray(track?.captions) ? track.captions : [];
+    return cues.length ? cues : captions;
+};
+
+const trackCaptions = (track) => trackItems(track).map((cue) => ({
     text: cue.text || cue.word || '',
     startMs: Number(cue.startMs || 0),
     endMs: Number(cue.endMs || cue.startMs || 0),
@@ -14,6 +20,7 @@ export function manifestToRenderProps(manifest = {}, { activeSubtitleTrackId = m
         : null;
     return {
         videoUrl: manifest.timeline?.source_video_url || '',
+        videoStartSeconds: Math.max(0, Number(manifest.timeline?.trim?.start_sec) || 0),
         subtitles,
         subtitleTracks,
         activeSubtitleTrackId: activeTrack?.id || null,
@@ -126,7 +133,7 @@ const durationFromManifest = (manifest) => {
 
 const cueText = (cue) => cue.text || cue.captions?.map((word) => word.text).join(' ') || '';
 
-const subtitleItems = (track) => (track?.cues || track?.captions || []).map((cue, index) => ({
+const subtitleItems = (track) => trackItems(track).map((cue, index) => ({
     id: `${track.id || 'subtitle'}-${index}`,
     type: 'subtitle',
     label: cueText(cue),
@@ -198,11 +205,12 @@ export function editorStateToManifest(state, sourceManifest) {
             const transcript = manifest.timeline?.transcript;
             if (transcript?.segments?.length) {
                 const existingSegments = transcript.segments;
+                const transcriptOffset = Number(manifest.timeline?.trim?.start_sec || 0);
                 const segments = original.items.map((item, index) => ({
                     ...(existingSegments[index] || {}),
                     text: item.text || item.label || '',
-                    start: item.start,
-                    end: item.end,
+                    start: item.start + transcriptOffset,
+                    end: item.end + transcriptOffset,
                 }));
                 manifest.timeline = { ...(manifest.timeline || {}), transcript: { ...transcript, segments } };
             }
