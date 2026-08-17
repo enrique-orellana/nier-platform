@@ -863,10 +863,144 @@ func TestDeferredClipWebcamRegionPatchRejectsInvalidCoordinates(t *testing.T) {
 	}
 }
 
+func TestDeferredClipGameplayRegionPatchPersistsResultAndMetadata(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	outputDir := t.TempDir()
+	parent, jobDir := createDeferredRegionTestJob(t, store, outputDir, `{"clips":[{"layout_format":"streamer_stack"},{"layout_format":"streamer_stack"}]}`)
+	if err := os.WriteFile(filepath.Join(jobDir, "source_metadata.json"), []byte(`{"shorts":[{},{}]}`), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		fmt.Sprintf("/api/jobs/%s/clips/0/gameplay-region", parent.ID),
+		strings.NewReader(`{"gameplay_region":{"x":0.28,"y":0.08,"width":0.70,"height":0.84}}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected gameplay region patch to succeed, got %d: %s", res.Code, res.Body.String())
+	}
+
+	updated, ok := store.Get(context.Background(), parent.ID)
+	if !ok {
+		t.Fatal("parent job disappeared")
+	}
+	var result struct {
+		Clips []map[string]any `json:"clips"`
+	}
+	if err := json.Unmarshal(updated.Result, &result); err != nil {
+		t.Fatalf("decode stored result: %v", err)
+	}
+	if result.Clips[0]["gameplay_region"].(map[string]any)["width"] != 0.70 {
+		t.Fatalf("stored result missing gameplay region: %#v", result.Clips)
+	}
+	if _, exists := result.Clips[1]["gameplay_region"]; exists {
+		t.Fatalf("patch changed neighboring clip: %#v", result.Clips)
+	}
+
+	metadata, err := os.ReadFile(filepath.Join(jobDir, "source_metadata.json"))
+	if err != nil {
+		t.Fatalf("read metadata: %v", err)
+	}
+	var document struct {
+		Shorts []map[string]any `json:"shorts"`
+	}
+	if err := json.Unmarshal(metadata, &document); err != nil {
+		t.Fatalf("decode metadata: %v", err)
+	}
+	if document.Shorts[0]["gameplay_region"].(map[string]any)["height"] != 0.84 {
+		t.Fatalf("metadata missing gameplay region: %#v", document.Shorts)
+	}
+	if _, exists := document.Shorts[1]["gameplay_region"]; exists {
+		t.Fatalf("metadata patch changed neighboring clip: %#v", document.Shorts)
+	}
+}
+
+func TestDeferredClipTrackingPatchPersistsResultAndMetadata(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	outputDir := t.TempDir()
+	parent, jobDir := createDeferredRegionTestJob(t, store, outputDir, `{"clips":[{"layout_format":"streamer_stack"}]}`)
+	if err := os.WriteFile(filepath.Join(jobDir, "source_metadata.json"), []byte(`{"shorts":[{}]}`), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		fmt.Sprintf("/api/jobs/%s/clips/0/streamer-tracking", parent.ID),
+		strings.NewReader(`{"streamer_tracking_enabled":true}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected tracking patch to succeed, got %d: %s", res.Code, res.Body.String())
+	}
+
+	updated, ok := store.Get(context.Background(), parent.ID)
+	if !ok {
+		t.Fatal("parent job disappeared")
+	}
+	var result struct {
+		Clips []map[string]any `json:"clips"`
+	}
+	if err := json.Unmarshal(updated.Result, &result); err != nil {
+		t.Fatalf("decode stored result: %v", err)
+	}
+	if result.Clips[0]["streamer_tracking_enabled"] != true {
+		t.Fatalf("stored result missing tracking flag: %#v", result.Clips)
+	}
+
+	metadata, err := os.ReadFile(filepath.Join(jobDir, "source_metadata.json"))
+	if err != nil {
+		t.Fatalf("read metadata: %v", err)
+	}
+	var document struct {
+		Shorts []map[string]any `json:"shorts"`
+	}
+	if err := json.Unmarshal(metadata, &document); err != nil {
+		t.Fatalf("decode metadata: %v", err)
+	}
+	if document.Shorts[0]["streamer_tracking_enabled"] != true {
+		t.Fatalf("metadata missing tracking flag: %#v", document.Shorts)
+	}
+}
+
+func TestDeferredClipGameplayRegionPatchRejectsInvalidCoordinates(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	outputDir := t.TempDir()
+	parent, jobDir := createDeferredRegionTestJob(t, store, outputDir, `{"clips":[{"layout_format":"streamer_stack"}]}`)
+	if err := os.WriteFile(filepath.Join(jobDir, "source_metadata.json"), []byte(`{"shorts":[{}]}`), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+
+	for _, body := range []string{
+		`{"gameplay_region":{"x":0.8,"y":0.1,"width":0.3,"height":0.2}}`,
+		`{"gameplay_region":{"x":0.1,"y":0.1,"width":0,"height":0.2}}`,
+		`{"gameplay_region":{"x":0.1,"y":0.1,"width":0.2}}`,
+	} {
+		req := httptest.NewRequest(
+			http.MethodPatch,
+			fmt.Sprintf("/api/jobs/%s/clips/0/gameplay-region", parent.ID),
+			strings.NewReader(body),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		res := httptest.NewRecorder()
+		server.Handler().ServeHTTP(res, req)
+		if res.Code != http.StatusBadRequest {
+			t.Fatalf("expected invalid gameplay region to return 400, got %d: %s", res.Code, res.Body.String())
+		}
+	}
+}
+
 func TestDeferredClipRenderCopiesWebcamRegionToChildMetadata(t *testing.T) {
 	store := jobs.NewMemoryStore()
 	outputDir := t.TempDir()
-	parent, _ := createDeferredRegionTestJob(t, store, outputDir, `{"source_path":"source.mp4","clips":[{"layout_format":"streamer_stack","webcam_region":{"x":0.02,"y":0.18,"width":0.23,"height":0.43}}]}`)
+	parent, _ := createDeferredRegionTestJob(t, store, outputDir, `{"source_path":"source.mp4","clips":[{"layout_format":"streamer_stack","webcam_region":{"x":0.02,"y":0.18,"width":0.23,"height":0.43},"gameplay_region":{"x":0.28,"y":0.08,"width":0.70,"height":0.84},"streamer_tracking_enabled":true}]}`)
 	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
 
 	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/jobs/%s/clips/0/render", parent.ID), nil)
@@ -881,6 +1015,33 @@ func TestDeferredClipRenderCopiesWebcamRegionToChildMetadata(t *testing.T) {
 	}
 	if children[0].Metadata["webcam_region"].(map[string]any)["width"] != 0.23 {
 		t.Fatalf("child job did not receive webcam region: %#v", children[0].Metadata)
+	}
+	if children[0].Metadata["gameplay_region"].(map[string]any)["height"] != 0.84 {
+		t.Fatalf("child job did not receive gameplay region: %#v", children[0].Metadata)
+	}
+	if children[0].Metadata["streamer_tracking_enabled"] != true {
+		t.Fatalf("child job did not receive tracking flag: %#v", children[0].Metadata)
+	}
+}
+
+func TestDeferredClipRenderRejectsStreamerStackWithoutGameplayRegion(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	outputDir := t.TempDir()
+	parent, _ := createDeferredRegionTestJob(t, store, outputDir, `{"source_path":"source.mp4","clips":[{"layout_format":"streamer_stack","webcam_region":{"x":0.02,"y":0.18,"width":0.23,"height":0.43}}]}`)
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/jobs/%s/clips/0/render", parent.ID), nil)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusConflict {
+		t.Fatalf("expected missing gameplay region to return 409, got %d: %s", res.Code, res.Body.String())
+	}
+	children, err := store.ListByKind(context.Background(), "clip-render")
+	if err != nil {
+		t.Fatalf("list child jobs: %v", err)
+	}
+	if len(children) != 0 {
+		t.Fatalf("missing gameplay region created child jobs: %#v", children)
 	}
 }
 
