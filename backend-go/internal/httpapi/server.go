@@ -788,30 +788,22 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid metadata"})
 		return
 	}
-	srt, err := media.BuildWordSRT(metadata.Transcript, metadata.Shorts[request.ClipIndex].Start, metadata.Shorts[request.ClipIndex].End)
+	clipStart := metadata.Shorts[request.ClipIndex].Start
+	clipEnd := metadata.Shorts[request.ClipIndex].End
+	srt, err := media.BuildWordSRT(metadata.Transcript, clipStart, clipEnd)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
 		return
 	}
-	srtFile, err := os.CreateTemp(root, ".subtitle-*.srt")
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
-		return
-	}
-	srtPath := srtFile.Name()
-	defer os.Remove(srtPath)
-	if _, err := srtFile.WriteString(srt); err != nil {
-		_ = srtFile.Close()
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
-		return
-	}
-	if err := srtFile.Close(); err != nil {
+	subtitleFilename := fmt.Sprintf("subtitles_%d.srt", request.ClipIndex)
+	subtitlePath := filepath.Join(root, subtitleFilename)
+	if err := os.WriteFile(subtitlePath, []byte(srt), 0o644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
 		return
 	}
 	outputFilename := "subtitled_" + filename
 	outputPath := filepath.Join(root, outputFilename)
-	if err := media.BurnSubtitles(r.Context(), s.mediaRunner, inputPath, srtPath, outputPath, media.SubtitleStyle{Alignment: request.Position, FontSize: request.FontSize, FontName: request.FontName, FontColor: request.FontColor, BorderColor: request.BorderColor, BorderWidth: request.BorderWidth, BackgroundColor: request.Background, BackgroundAlpha: request.BackgroundAlpha}); err != nil {
+	if err := media.BurnSubtitles(r.Context(), s.mediaRunner, inputPath, subtitlePath, outputPath, media.SubtitleStyle{Alignment: request.Position, FontSize: request.FontSize, FontName: request.FontName, FontColor: request.FontColor, BorderColor: request.BorderColor, BorderWidth: request.BorderWidth, BackgroundColor: request.Background, BackgroundAlpha: request.BackgroundAlpha}); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
 		return
 	}
@@ -820,7 +812,37 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	videoURL := "/videos/" + request.JobID + "/" + outputFilename
+	subtitleURL := "/videos/" + request.JobID + "/" + subtitleFilename
+	captions := media.BuildSubtitleCues(metadata.Transcript, clipStart, clipEnd)
+	language, _ := metadata.Transcript["language"].(string)
+	if language == "" {
+		language = "und"
+	}
+	subtitleTrack := map[string]any{
+		"id": "original", "label": "Original", "language": language, "origin": "generated",
+		"srt_filename": subtitleFilename, "cues": captions, "captions": captions,
+	}
+	subtitleLayer := map[string]any{
+		"captions": captions,
+		"position": request.Position,
+		"style": map[string]any{
+			"fontFamily": request.FontName, "fontSize": request.FontSize, "fontColor": request.FontColor,
+			"borderColor": request.BorderColor, "borderWidth": request.BorderWidth,
+			"backgroundColor": request.Background, "backgroundOpacity": request.BackgroundAlpha,
+		},
+	}
 	result.Clips[request.ClipIndex]["video_url"] = videoURL
+	result.Clips[request.ClipIndex]["subtitle_filename"] = subtitleFilename
+	result.Clips[request.ClipIndex]["subtitle_url"] = subtitleURL
+	result.Clips[request.ClipIndex]["subtitles"] = subtitleTrack
+	result.Clips[request.ClipIndex]["subtitle_tracks"] = []any{subtitleTrack}
+	result.Clips[request.ClipIndex]["active_subtitle_track_id"] = "original"
+	resultLayers, _ := result.Clips[request.ClipIndex]["layers"].(map[string]any)
+	if resultLayers == nil {
+		resultLayers = make(map[string]any)
+	}
+	resultLayers["subtitles"] = subtitleLayer
+	result.Clips[request.ClipIndex]["layers"] = resultLayers
 	if encoded, marshalErr := json.Marshal(result); marshalErr == nil {
 		_ = s.store.SetResult(r.Context(), request.JobID, encoded)
 	}
@@ -829,13 +851,24 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 		if shorts, ok := metadataData["shorts"].([]any); ok && request.ClipIndex < len(shorts) {
 			if item, ok := shorts[request.ClipIndex].(map[string]any); ok {
 				item["video_url"] = videoURL
+				item["subtitle_filename"] = subtitleFilename
+				item["subtitle_url"] = subtitleURL
+				item["subtitles"] = subtitleTrack
+				item["subtitle_tracks"] = []any{subtitleTrack}
+				item["active_subtitle_track_id"] = "original"
+				itemLayers, _ := item["layers"].(map[string]any)
+				if itemLayers == nil {
+					itemLayers = make(map[string]any)
+				}
+				itemLayers["subtitles"] = subtitleLayer
+				item["layers"] = itemLayers
 			}
 		}
 		if encoded, marshalErr := json.MarshalIndent(metadataData, "", "  "); marshalErr == nil {
 			_ = os.WriteFile(metadataPath, encoded, 0o644)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "new_video_url": videoURL})
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "new_video_url": videoURL, "subtitle_url": subtitleURL, "subtitle_tracks": []any{subtitleTrack}})
 }
 
 func (s *Server) translateClip(w http.ResponseWriter, r *http.Request) {
@@ -1897,17 +1930,8 @@ func (s *Server) clipTranscript(w http.ResponseWriter, jobID string, clipIndex i
 		return
 	}
 	var data struct {
-		Transcript struct {
-			Language string `json:"language"`
-			Segments []struct {
-				Words []struct {
-					Word  string  `json:"word"`
-					Start float64 `json:"start"`
-					End   float64 `json:"end"`
-				} `json:"words"`
-			} `json:"segments"`
-		} `json:"transcript"`
-		Shorts []struct {
+		Transcript map[string]any `json:"transcript"`
+		Shorts     []struct {
 			Start float64 `json:"start"`
 			End   float64 `json:"end"`
 		} `json:"shorts"`
@@ -1916,7 +1940,8 @@ func (s *Server) clipTranscript(w http.ResponseWriter, jobID string, clipIndex i
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid metadata"})
 		return
 	}
-	if data.Transcript.Language == "" || len(data.Transcript.Segments) == 0 {
+	segments, _ := data.Transcript["segments"].([]any)
+	if len(segments) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Transcript not found in metadata"})
 		return
 	}
@@ -1925,20 +1950,12 @@ func (s *Server) clipTranscript(w http.ResponseWriter, jobID string, clipIndex i
 		return
 	}
 	clipStart, clipEnd := data.Shorts[clipIndex].Start, data.Shorts[clipIndex].End
-	captions := make([]map[string]any, 0)
-	for _, segment := range data.Transcript.Segments {
-		for _, word := range segment.Words {
-			if word.End <= clipStart || word.Start >= clipEnd {
-				continue
-			}
-			captions = append(captions, map[string]any{
-				"text":    strings.TrimSpace(word.Word),
-				"startMs": int(maxFloat(0, word.Start-clipStart) * 1000),
-				"endMs":   int(maxFloat(0, word.End-clipStart) * 1000),
-			})
-		}
+	captions := media.BuildSubtitleCues(data.Transcript, clipStart, clipEnd)
+	language, _ := data.Transcript["language"].(string)
+	if language == "" {
+		language = "und"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"captions": captions, "durationSec": clipEnd - clipStart, "language": data.Transcript.Language})
+	writeJSON(w, http.StatusOK, map[string]any{"captions": captions, "durationSec": clipEnd - clipStart, "language": language})
 }
 
 func (s *Server) projectRoutes(w http.ResponseWriter, r *http.Request) {

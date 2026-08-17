@@ -67,6 +67,19 @@ func TestBuildWordSRTGroupsWordsIntoReadableCues(t *testing.T) {
 	}
 }
 
+func TestBuildWordSRTFallsBackToTranscriptSegments(t *testing.T) {
+	transcript := map[string]any{"segments": []any{
+		map[string]any{"start": 1.0, "end": 2.5, "text": "A segment caption"},
+	}}
+	srt, err := BuildWordSRT(transcript, 1, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(srt, "A segment caption") || !strings.Contains(srt, "0:00:00,000 --> 0:00:01,500") {
+		t.Fatalf("expected segment caption with clipped timing, got %q", srt)
+	}
+}
+
 func TestSafeMediaPathRejectsTraversal(t *testing.T) {
 	if SafeMediaPath("output/job", "output/job/clip.mp4") == false {
 		t.Fatal("expected path inside root to be accepted")

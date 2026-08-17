@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -140,16 +141,24 @@ func BurnSubtitles(ctx context.Context, runner CommandRunner, inputPath, subtitl
 	return runner.Run(ctx, "ffmpeg", SubtitleBurnArgs(inputPath, subtitlePath, outputPath, style)...)
 }
 
-func BuildWordSRT(transcript map[string]any, start, end float64) (string, error) {
+type SubtitleCue struct {
+	Text    string `json:"text"`
+	StartMs int    `json:"startMs"`
+	EndMs   int    `json:"endMs"`
+}
+
+type subtitleCueTiming struct {
+	text       string
+	start, end float64
+}
+
+func collectSubtitleCueTimings(transcript map[string]any, start, end float64) []subtitleCueTiming {
 	segments, _ := transcript["segments"].([]any)
-	type cueWord struct {
-		text       string
-		start, end float64
-	}
-	words := make([]cueWord, 0)
+	entries := make([]subtitleCueTiming, 0)
 	for _, rawSegment := range segments {
 		segment, _ := rawSegment.(map[string]any)
 		segmentWords, _ := segment["words"].([]any)
+		addedWord := false
 		for _, rawWord := range segmentWords {
 			word, _ := rawWord.(map[string]any)
 			wordStart, okStart := numberValue(word["start"])
@@ -158,12 +167,38 @@ func BuildWordSRT(transcript map[string]any, start, end float64) (string, error)
 			if !okStart || !okEnd || strings.TrimSpace(text) == "" || wordEnd <= start || wordStart >= end {
 				continue
 			}
-			words = append(words, cueWord{text: strings.TrimSpace(text), start: maxFloat64(wordStart-start, 0), end: minFloat(wordEnd-start, end-start)})
+			entries = append(entries, subtitleCueTiming{text: strings.TrimSpace(text), start: maxFloat64(wordStart-start, 0), end: minFloat(wordEnd-start, end-start)})
+			addedWord = true
 		}
+		if addedWord {
+			continue
+		}
+
+		segmentStart, okStart := numberValue(segment["start"])
+		segmentEnd, okEnd := numberValue(segment["end"])
+		text, _ := segment["text"].(string)
+		if !okStart || !okEnd || strings.TrimSpace(text) == "" || segmentEnd <= start || segmentStart >= end {
+			continue
+		}
+		entries = append(entries, subtitleCueTiming{text: strings.TrimSpace(text), start: maxFloat64(segmentStart-start, 0), end: minFloat(segmentEnd-start, end-start)})
 	}
+	return entries
+}
+
+func BuildSubtitleCues(transcript map[string]any, start, end float64) []SubtitleCue {
+	entries := collectSubtitleCueTimings(transcript, start, end)
+	cues := make([]SubtitleCue, 0, len(entries))
+	for _, entry := range entries {
+		cues = append(cues, SubtitleCue{Text: entry.text, StartMs: int(math.Round(entry.start * 1000)), EndMs: int(math.Round(entry.end * 1000))})
+	}
+	return cues
+}
+
+func BuildWordSRT(transcript map[string]any, start, end float64) (string, error) {
+	words := collectSubtitleCueTimings(transcript, start, end)
 	var output strings.Builder
 	sequence := 1
-	current := make([]cueWord, 0)
+	current := make([]subtitleCueTiming, 0)
 	writeCue := func() {
 		if len(current) == 0 {
 			return

@@ -1389,7 +1389,24 @@ func TestClipTranscriptRouteReadsWordTimingFromMetadata(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/clip/job-1/0/transcript", nil)
 	res := httptest.NewRecorder()
 	server.Handler().ServeHTTP(res, req)
-	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"language":"en"`) || !strings.Contains(res.Body.String(), `"startMs":199`) {
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"language":"en"`) || !strings.Contains(res.Body.String(), `"startMs":200`) {
+		t.Fatalf("unexpected transcript response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestClipTranscriptRouteReadsSegmentTimingFromMetadata(t *testing.T) {
+	outputDir := t.TempDir()
+	metadataPath := filepath.Join(outputDir, "job-segments", "source_metadata.json")
+	if err := os.MkdirAll(filepath.Dir(metadataPath), 0o755); err != nil {
+		t.Fatalf("create metadata directory: %v", err)
+	}
+	if err := os.WriteFile(metadataPath, []byte(`{"transcript":{"language":"en","segments":[{"start":1.2,"end":2.7,"text":"Segment caption"}]},"shorts":[{"start":1,"end":3}]}`), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+	server := NewServer(config.Config{OutputDir: outputDir})
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/clip/job-segments/0/transcript", nil))
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"text":"Segment caption"`) || !strings.Contains(res.Body.String(), `"startMs":200`) {
 		t.Fatalf("unexpected transcript response: %d %s", res.Code, res.Body.String())
 	}
 }
@@ -1599,7 +1616,7 @@ func TestSubtitleRouteBurnsWithGoFFmpegRunner(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(jobDir, "clip.mp4"), []byte("video"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	metadata := `{"transcript":{"segments":[{"words":[{"word":"Hello","start":0,"end":1}]}]},"shorts":[{"start":0,"end":1}]}`
+	metadata := `{"transcript":{"language":"en","segments":[{"start":0,"end":1,"text":"Hello from a segment"}]},"shorts":[{"start":0,"end":1}]}`
 	if err := os.WriteFile(filepath.Join(jobDir, "clip_metadata.json"), []byte(metadata), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1615,6 +1632,23 @@ func TestSubtitleRouteBurnsWithGoFFmpegRunner(t *testing.T) {
 	server.Handler().ServeHTTP(res, req)
 	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"success":true`) || len(runner.args) == 0 {
 		t.Fatalf("unexpected subtitle response: %d %s args=%#v", res.Code, res.Body.String(), runner.args)
+	}
+	if _, err := os.Stat(filepath.Join(jobDir, "subtitles_0.srt")); err != nil {
+		t.Fatalf("expected persisted subtitle file: %v", err)
+	}
+	var savedResult struct {
+		Clips []map[string]any `json:"clips"`
+	}
+	savedJob, ok := store.Get(context.Background(), job.ID)
+	if !ok || json.Unmarshal(savedJob.Result, &savedResult) != nil {
+		t.Fatalf("expected saved job result")
+	}
+	if savedResult.Clips[0]["active_subtitle_track_id"] != "original" || savedResult.Clips[0]["subtitle_url"] != "/videos/"+job.ID+"/subtitles_0.srt" {
+		t.Fatalf("subtitle track was not persisted in job result: %#v", savedResult.Clips[0])
+	}
+	metadataContents, err := os.ReadFile(filepath.Join(jobDir, "clip_metadata.json"))
+	if err != nil || !strings.Contains(string(metadataContents), `"subtitle_tracks"`) || !strings.Contains(string(metadataContents), `"layers"`) {
+		t.Fatalf("subtitle metadata was not persisted: %v %s", err, string(metadataContents))
 	}
 }
 
