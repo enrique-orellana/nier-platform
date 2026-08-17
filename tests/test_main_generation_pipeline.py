@@ -17,6 +17,7 @@ from video_metrics import JobVideoMetrics
 
 
 WEBCAM_REGION = {"x": 0.02, "y": 0.18, "width": 0.23, "height": 0.43}
+GAMEPLAY_REGION = {"x": 0.28, "y": 0.08, "width": 0.70, "height": 0.84}
 
 
 def source_media():
@@ -354,6 +355,8 @@ class MainGenerationPipelineTests(unittest.TestCase):
                     "layout_format": "streamer_stack",
                     "facecam_size": "medium",
                     "webcam_region": WEBCAM_REGION,
+                    "gameplay_region": GAMEPLAY_REGION,
+                    "streamer_tracking_enabled": True,
                 }
             ]
         }
@@ -396,6 +399,8 @@ class MainGenerationPipelineTests(unittest.TestCase):
                 )
 
         self.assertEqual(render.call_args.kwargs["webcam_region"], WEBCAM_REGION)
+        self.assertEqual(render.call_args.kwargs["gameplay_region"], GAMEPLAY_REGION)
+        self.assertTrue(render.call_args.kwargs["streamer_tracking_enabled"])
 
     def test_render_clip_plan_requires_webcam_region_for_streamer_stack(self):
         analysis = SourceAnalysis(
@@ -667,7 +672,15 @@ class MainGenerationPipelineTests(unittest.TestCase):
             scene_boundaries=[(0, 300)],
             scene_strategies=["TRACK"],
         )
-        clips = [{"start": 0.0, "end": 2.0}]
+        clips = [
+            {
+                "start": 0.0,
+                "end": 2.0,
+                "webcam_region": WEBCAM_REGION,
+                "gameplay_region": GAMEPLAY_REGION,
+                "streamer_tracking_enabled": True,
+            }
+        ]
 
         with tempfile.TemporaryDirectory() as directory:
             with patch.object(main, "process_video_to_vertical", return_value=True) as render:
@@ -684,12 +697,15 @@ class MainGenerationPipelineTests(unittest.TestCase):
                         layout_format="streamer_stack",
                         facecam_size="large",
                         webcam_region=WEBCAM_REGION,
+                        gameplay_region=GAMEPLAY_REGION,
                     )
 
         self.assertEqual(render.call_count, 1)
         self.assertEqual(render.call_args.kwargs["layout_format"], "streamer_stack")
         self.assertEqual(render.call_args.kwargs["facecam_size"], "large")
         self.assertEqual(render.call_args.kwargs["webcam_region"], WEBCAM_REGION)
+        self.assertEqual(render.call_args.kwargs["gameplay_region"], GAMEPLAY_REGION)
+        self.assertTrue(render.call_args.kwargs["streamer_tracking_enabled"])
         self.assertEqual(result[0]["layout_format"], "streamer_stack")
         self.assertEqual(result[0]["facecam_size"], "large")
         self.assertEqual(result[0]["webcam_region"], WEBCAM_REGION)
@@ -709,6 +725,8 @@ class MainGenerationPipelineTests(unittest.TestCase):
                 layout_format="streamer_stack",
                 facecam_size="large",
                 webcam_region=WEBCAM_REGION,
+                gameplay_region=GAMEPLAY_REGION,
+                streamer_tracking_enabled=True,
             )
             manifest = json.loads(
                 (Path(directory) / manifest_path).read_text(encoding="utf-8")
@@ -716,11 +734,19 @@ class MainGenerationPipelineTests(unittest.TestCase):
 
         self.assertEqual(
             manifest["layers"]["layout"],
-            {"format": "streamer_stack", "facecam_size": "large", "webcam_region": WEBCAM_REGION},
+            {
+                "format": "streamer_stack",
+                "facecam_size": "large",
+                "webcam_region": WEBCAM_REGION,
+                "gameplay_region": GAMEPLAY_REGION,
+                "streamer_tracking_enabled": True,
+            },
         )
         self.assertEqual(manifest["export_policy"]["layout_format"], "streamer_stack")
         self.assertEqual(manifest["export_policy"]["facecam_size"], "large")
         self.assertEqual(manifest["export_policy"]["webcam_region"], WEBCAM_REGION)
+        self.assertEqual(manifest["export_policy"]["gameplay_region"], GAMEPLAY_REGION)
+        self.assertTrue(manifest["export_policy"]["streamer_tracking_enabled"])
 
     def test_streamer_render_validates_master_dimensions_fps_and_audio(self):
         analysis = SourceAnalysis(
@@ -755,6 +781,7 @@ class MainGenerationPipelineTests(unittest.TestCase):
                     layout_format="streamer_stack",
                     facecam_size="large",
                     webcam_region=WEBCAM_REGION,
+                    gameplay_region=GAMEPLAY_REGION,
                 )
 
         self.assertTrue(result)
@@ -795,9 +822,54 @@ class MainGenerationPipelineTests(unittest.TestCase):
                         source_media=source_media(),
                         layout_format="streamer_stack",
                         webcam_region=WEBCAM_REGION,
+                        gameplay_region=GAMEPLAY_REGION,
                     )
 
         self.assertTrue(process.terminated)
+
+    def test_streamer_render_skips_detection_when_tracking_is_disabled(self):
+        analysis = SourceAnalysis(
+            source_fingerprint={"size": 1},
+            source_fps=30.0,
+            total_frames=2,
+            width=1920,
+            height=1080,
+            scene_boundaries=[(0, 2)],
+            scene_strategies=["TRACK"],
+        )
+        process = FakeProcess()
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "streamer.mp4"
+
+            def fake_run(command, **_kwargs):
+                Path(command[-1]).touch()
+
+            with patch.object(main, "FFmpegVideoStream", return_value=FakeStreamerCapture()), patch.object(
+                main, "detect_face_candidates"
+            ) as faces, patch.object(main, "detect_person_yolo") as people, patch.object(
+                main, "SpeakerTracker"
+            ) as tracker, patch.object(
+                main,
+                "compose_streamer_stack_frame",
+                return_value=np.zeros((1920, 1080, 3), dtype=np.uint8),
+            ), patch.object(main.subprocess, "Popen", return_value=process), patch.object(
+                main.subprocess, "run", side_effect=fake_run
+            ), patch.object(main, "validate_clip_output"):
+                main.process_video_to_vertical(
+                    "source.mp4",
+                    str(output_path),
+                    source_analysis=analysis,
+                    source_media=source_media(),
+                    layout_format="streamer_stack",
+                    webcam_region=WEBCAM_REGION,
+                    gameplay_region=GAMEPLAY_REGION,
+                    streamer_tracking_enabled=False,
+                )
+
+        faces.assert_not_called()
+        people.assert_not_called()
+        tracker.assert_not_called()
 
     def test_streamer_render_uses_only_non_webcam_candidates_for_gameplay_focus(self):
         analysis = SourceAnalysis(
@@ -838,6 +910,8 @@ class MainGenerationPipelineTests(unittest.TestCase):
                     source_media=source_media(),
                     layout_format="streamer_stack",
                     webcam_region=WEBCAM_REGION,
+                    gameplay_region=GAMEPLAY_REGION,
+                    streamer_tracking_enabled=True,
                 )
 
         assert compose.call_count == 2
@@ -898,6 +972,8 @@ class MainGenerationPipelineTests(unittest.TestCase):
                     layout_format="streamer_stack",
                     facecam_size="medium",
                     webcam_region=WEBCAM_REGION,
+                    gameplay_region=GAMEPLAY_REGION,
+                    streamer_tracking_enabled=True,
                 )
 
             self.assertTrue(result)

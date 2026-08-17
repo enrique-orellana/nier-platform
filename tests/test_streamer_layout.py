@@ -7,6 +7,7 @@ from streamer_layout import (
     clamp_focus_to_region,
     crop_gameplay_region,
     crop_webcam_region,
+    filter_candidates_inside_gameplay_region,
     filter_candidates_outside_webcam_region,
     normalize_clip_layout,
     normalize_gameplay_region,
@@ -65,6 +66,21 @@ def test_gameplay_focus_is_clamped_inside_selected_region():
     region = {"x": 0.25, "y": 0.2, "width": 0.5, "height": 0.6}
 
     assert clamp_focus_to_region((0.0, 1.0), region) == (0.25, 0.8)
+
+
+def test_filter_candidates_keeps_only_boxes_inside_gameplay_region():
+    region = {"x": 0.5, "y": 0.0, "width": 0.5, "height": 1.0}
+    candidates = [
+        {"box": [0, 0, 40, 40], "score": 1},
+        {"box": [100, 25, 10, 30], "score": 2},
+        {"box": [120, 40, 20, 40], "score": 3},
+    ]
+
+    retained = filter_candidates_inside_gameplay_region(
+        candidates, region, frame_width=200, frame_height=100
+    )
+
+    assert [candidate["score"] for candidate in retained] == [2, 3]
 
 
 def test_streamer_stack_manual_gameplay_region_composes_without_detection_focus():

@@ -60,8 +60,10 @@ from clip_timeline import resolve_clip_frame_range
 from streamer_layout import (
     STREAMER_STACK_LAYOUT,
     compose_streamer_stack_frame,
+    filter_candidates_inside_gameplay_region,
     filter_candidates_outside_webcam_region,
     normalize_clip_layout,
+    normalize_gameplay_region,
     normalize_webcam_region,
 )
 from video_analysis import SourceAnalysis, load_or_build_source_analysis
@@ -1230,6 +1232,8 @@ def process_video_to_vertical(
     layout_format: str = "standard",
     facecam_size: str = "medium",
     webcam_region: dict | None = None,
+    gameplay_region: dict | None = None,
+    streamer_tracking_enabled: bool = False,
 ):
     """
     Core logic to convert horizontal video to vertical using scene detection and Active Speaker Tracking (MediaPipe).
@@ -1237,10 +1241,14 @@ def process_video_to_vertical(
     script_start_time = time.time()
     layout_options = normalize_clip_layout(layout_format, facecam_size)
     normalized_webcam_region = None
+    normalized_gameplay_region = None
     if layout_options.layout_format == STREAMER_STACK_LAYOUT:
         if webcam_region is None:
             raise ValueError("webcam_region is required for streamer_stack rendering")
+        if gameplay_region is None:
+            raise ValueError("gameplay_region is required for streamer_stack rendering")
         normalized_webcam_region = normalize_webcam_region(webcam_region)
+        normalized_gameplay_region = normalize_gameplay_region(gameplay_region)
     
     # Define temporary file paths based on the output name
     base_name = os.path.splitext(final_output_video)[0]
@@ -1331,7 +1339,11 @@ def process_video_to_vertical(
         current_scene_index += 1
 
     # Global tracker for single-person shots
-    speaker_tracker = SpeakerTracker(cooldown_frames=30)
+    speaker_tracker = (
+        SpeakerTracker(cooldown_frames=30)
+        if layout_options.layout_format != STREAMER_STACK_LAYOUT or streamer_tracking_enabled
+        else None
+    )
 
     ffmpeg_process = None
     stderr_output = ""
@@ -1369,9 +1381,14 @@ def process_video_to_vertical(
                 
                 # Apply Strategy
                 if layout_options.layout_format == STREAMER_STACK_LAYOUT:
-                    if frame_number % 2 == 0:
+                    if streamer_tracking_enabled and frame_number % 2 == 0:
                         candidates = filter_candidates_outside_webcam_region(
-                            detect_face_candidates(frame),
+                            filter_candidates_inside_gameplay_region(
+                                detect_face_candidates(frame),
+                                normalized_gameplay_region,
+                                original_width,
+                                original_height,
+                            ),
                             normalized_webcam_region,
                             original_width,
                             original_height,
@@ -1379,8 +1396,14 @@ def process_video_to_vertical(
                         target_box = speaker_tracker.get_target(candidates, frame_number, original_width)
                         if target_box is None:
                             fallback_box = detect_person_yolo(frame)
-                            if fallback_box and filter_candidates_outside_webcam_region(
-                                [{"box": fallback_box}],
+                            fallback_candidates = filter_candidates_inside_gameplay_region(
+                                [{"box": fallback_box}] if fallback_box else [],
+                                normalized_gameplay_region,
+                                original_width,
+                                original_height,
+                            )
+                            if fallback_candidates and filter_candidates_outside_webcam_region(
+                                fallback_candidates,
                                 normalized_webcam_region,
                                 original_width,
                                 original_height,
@@ -1398,6 +1421,7 @@ def process_video_to_vertical(
                         OUTPUT_HEIGHT,
                         facecam_size=layout_options.facecam_size,
                         webcam_region=normalized_webcam_region,
+                        gameplay_region=normalized_gameplay_region,
                         gameplay_focus=streamer_gameplay_focus,
                     )
                 elif current_strategy == 'GENERAL':
@@ -1585,6 +1609,8 @@ def _write_clip_manifest(
     layout_format: str = "standard",
     facecam_size: str = "medium",
     webcam_region: dict | None = None,
+    gameplay_region: dict | None = None,
+    streamer_tracking_enabled: bool = False,
 ) -> str:
     width = source_media.display_width
     height = source_media.display_height
@@ -1598,12 +1624,19 @@ def _write_clip_manifest(
     normalized_webcam_region = (
         normalize_webcam_region(webcam_region) if webcam_region is not None else None
     )
+    normalized_gameplay_region = (
+        normalize_gameplay_region(gameplay_region) if gameplay_region is not None else None
+    )
     layout_manifest = {
         "format": layout_options.layout_format,
         "facecam_size": layout_options.facecam_size,
     }
     if normalized_webcam_region is not None:
         layout_manifest["webcam_region"] = normalized_webcam_region
+    if normalized_gameplay_region is not None:
+        layout_manifest["gameplay_region"] = normalized_gameplay_region
+    if layout_options.layout_format == STREAMER_STACK_LAYOUT:
+        layout_manifest["streamer_tracking_enabled"] = bool(streamer_tracking_enabled)
     manifest = {
         "schema_version": 1,
         "project_id": os.path.basename(output_dir),
@@ -1635,6 +1668,10 @@ def _write_clip_manifest(
     }
     if normalized_webcam_region is not None:
         manifest["export_policy"]["webcam_region"] = normalized_webcam_region
+    if normalized_gameplay_region is not None:
+        manifest["export_policy"]["gameplay_region"] = normalized_gameplay_region
+    if layout_options.layout_format == STREAMER_STACK_LAYOUT:
+        manifest["export_policy"]["streamer_tracking_enabled"] = bool(streamer_tracking_enabled)
     manifest_path = os.path.join(output_dir, "manifests", f"clip_{clip_index}.json")
     save_manifest_atomic(Path(manifest_path), manifest)
     return os.path.relpath(manifest_path, output_dir).replace(os.sep, "/")
@@ -1681,6 +1718,8 @@ def persist_discovered_clip_plan(
         clip["source_has_audio"] = source_media.audio is not None
         clip["layout_format"] = layout_options.layout_format
         clip["facecam_size"] = layout_options.facecam_size
+        if layout_options.layout_format == STREAMER_STACK_LAYOUT:
+            clip["streamer_tracking_enabled"] = False
 
     metadata_path = Path(output_dir) / f"{video_title}_metadata.json"
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1754,6 +1793,8 @@ def render_deferred_clip(
             layout_format=clip.get("layout_format", "standard"),
             facecam_size=clip.get("facecam_size", "medium"),
             webcam_region=clip.get("webcam_region"),
+            gameplay_region=clip.get("gameplay_region"),
+            streamer_tracking_enabled=bool(clip.get("streamer_tracking_enabled", False)),
         )
         if not rendered:
             raise RuntimeError("Clip rendering produced no artifact")
@@ -1783,6 +1824,8 @@ def render_clip_plan(
     layout_format: str = "standard",
     facecam_size: str = "medium",
     webcam_region: dict | None = None,
+    gameplay_region: dict | None = None,
+    streamer_tracking_enabled: bool = False,
     clip_indices: list[int] | None = None,
 ) -> list[dict]:
     """Render a clip plan using one immutable source analysis object."""
@@ -1805,10 +1848,22 @@ def render_clip_plan(
         clip_webcam_region = clip.get("webcam_region", webcam_region)
         if clip_webcam_region is not None:
             clip_webcam_region = normalize_webcam_region(clip_webcam_region)
+        clip_gameplay_region = clip.get("gameplay_region", gameplay_region)
+        if clip_gameplay_region is not None:
+            clip_gameplay_region = normalize_gameplay_region(clip_gameplay_region)
+        clip_tracking_enabled = bool(
+            clip.get("streamer_tracking_enabled", streamer_tracking_enabled)
+        )
         if layout_options.layout_format == STREAMER_STACK_LAYOUT and clip_webcam_region is None:
             raise ValueError("webcam_region is required for streamer_stack rendering")
+        if layout_options.layout_format == STREAMER_STACK_LAYOUT and clip_gameplay_region is None:
+            raise ValueError("gameplay_region is required for streamer_stack rendering")
         if clip_webcam_region is not None:
             clip["webcam_region"] = clip_webcam_region
+        if clip_gameplay_region is not None:
+            clip["gameplay_region"] = clip_gameplay_region
+        if layout_options.layout_format == STREAMER_STACK_LAYOUT:
+            clip["streamer_tracking_enabled"] = clip_tracking_enabled
 
         manifest_path = _write_clip_manifest(
             output_dir,
@@ -1822,6 +1877,8 @@ def render_clip_plan(
             layout_options.layout_format,
             layout_options.facecam_size,
             webcam_region=clip_webcam_region,
+            gameplay_region=clip_gameplay_region,
+            streamer_tracking_enabled=clip_tracking_enabled,
         )
         clip["manifest_path"] = manifest_path
         clip["source_video_filename"] = source_video_filename
@@ -1849,6 +1906,8 @@ def render_clip_plan(
             layout_format=layout_options.layout_format,
             facecam_size=layout_options.facecam_size,
             webcam_region=clip_webcam_region,
+            gameplay_region=clip_gameplay_region,
+            streamer_tracking_enabled=clip_tracking_enabled,
         )
         if success:
             rendered_clips.append(clip)

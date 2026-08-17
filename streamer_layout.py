@@ -231,6 +231,34 @@ def filter_candidates_outside_webcam_region(
     return retained
 
 
+def filter_candidates_inside_gameplay_region(
+    candidates: Sequence[Mapping[str, object]],
+    region: Mapping[str, object],
+    frame_width: int,
+    frame_height: int,
+) -> list[Mapping[str, object]]:
+    """Keep only detection candidates fully contained by the gameplay area."""
+
+    left, top, right, bottom = gameplay_region_pixel_bounds(
+        region, frame_width, frame_height
+    )
+    retained: list[Mapping[str, object]] = []
+    for candidate in candidates:
+        box = candidate.get("box") if isinstance(candidate, Mapping) else None
+        if not isinstance(box, Sequence) or isinstance(box, (str, bytes)) or len(box) < 4:
+            continue
+        try:
+            box_left = float(box[0])
+            box_top = float(box[1])
+            box_right = box_left + float(box[2])
+            box_bottom = box_top + float(box[3])
+        except (TypeError, ValueError):
+            continue
+        if box_left >= left and box_top >= top and box_right <= right and box_bottom <= bottom:
+            retained.append(candidate)
+    return retained
+
+
 def streamer_panel_heights(
     output_width: int,
     output_height: int,
