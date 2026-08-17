@@ -62,10 +62,54 @@ class SuccessfulTranscriptionResponse:
         }
 
 
+class DetailedTranscriptionResponse:
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {
+            "text": "Hola mundo",
+            "segments": [{
+                "start": 0.2,
+                "end": 1.4,
+                "text": "Hola mundo",
+            }],
+            "words": [
+                {"word": "Hola", "start": 0.2, "end": 0.7},
+                {"word": "mundo", "start": 0.8, "end": 1.4},
+            ],
+        }
+
+
 class RecordingTranscriptionClient(RecordingClient):
     def post(self, url, headers=None, json=None):
         type(self).last_url = url
+        type(self).last_json = json
         return SuccessfulTranscriptionResponse()
+
+
+class DetailedTranscriptionClient(RecordingClient):
+    def post(self, url, headers=None, json=None):
+        type(self).last_json = json
+        return DetailedTranscriptionResponse()
+
+
+class UnsupportedVerboseJsonResponse:
+    status_code = 400
+    text = '{"error":{"message":"The selected model does not support response_format \\\"verbose_json\\\". Use \\\"json\\\" instead."}}'
+
+    def raise_for_status(self):
+        raise AssertionError("the compatibility fallback should handle this response before raise_for_status")
+
+
+class VerboseJsonFallbackClient(RecordingClient):
+    payloads = []
+
+    def post(self, url, headers=None, json=None):
+        type(self).payloads.append(json)
+        if len(type(self).payloads) == 1:
+            return UnsupportedVerboseJsonResponse()
+        return DetailedTranscriptionResponse()
 
 
 class RetryableTranscriptionClient(RecordingClient):
@@ -132,6 +176,46 @@ class OpenRouterTests(unittest.TestCase):
             RecordingTranscriptionClient.last_url,
             "https://openrouter.ai/api/v1/audio/transcriptions",
         )
+
+    @patch("ai_client.httpx.Client", DetailedTranscriptionClient)
+    def test_transcription_preserves_word_timestamps_and_requests_detailed_format(self):
+        config = ai_client.AIConfig(
+            provider="openrouter",
+            api_key="secret",
+            transcription_model="qwen/qwen3-asr-1.7b",
+        )
+        with TemporaryDirectory() as directory:
+            audio_path = Path(directory) / "audio.wav"
+            audio_path.write_bytes(b"audio")
+
+            result = ai_client.transcribe_audio_openrouter(str(audio_path), config)
+
+        self.assertEqual(result["segments"][0]["words"], [
+            {"word": "Hola", "start": 0.2, "end": 0.7},
+            {"word": "mundo", "start": 0.8, "end": 1.4},
+        ])
+        self.assertEqual(DetailedTranscriptionClient.last_json["response_format"], "verbose_json")
+        self.assertEqual(DetailedTranscriptionClient.last_json["timestamp_granularities"], ["segment", "word"])
+
+    @patch("ai_client.httpx.Client", VerboseJsonFallbackClient)
+    def test_transcription_falls_back_to_json_for_models_without_timestamp_support(self):
+        VerboseJsonFallbackClient.payloads = []
+        config = ai_client.AIConfig(
+            provider="openrouter",
+            api_key="secret",
+            transcription_model="qwen/qwen3-asr-1.7b",
+        )
+        with TemporaryDirectory() as directory:
+            audio_path = Path(directory) / "audio.wav"
+            audio_path.write_bytes(b"audio")
+
+            result = ai_client.transcribe_audio_openrouter(str(audio_path), config)
+
+        assert result["text"] == "Hola mundo"
+        assert len(VerboseJsonFallbackClient.payloads) == 2
+        assert VerboseJsonFallbackClient.payloads[0]["response_format"] == "verbose_json"
+        assert VerboseJsonFallbackClient.payloads[1]["response_format"] == "json"
+        assert "timestamp_granularities" not in VerboseJsonFallbackClient.payloads[1]
 
     def test_transcription_requires_an_openrouter_api_key(self):
         config = ai_client.AIConfig(

@@ -241,11 +241,27 @@ def transcribe_video_with_config(
                 segment_end = float(segment.get("end", 0.0))
                 if segment_end <= segment_start:
                     segment_end = min(end - start, max(segment_start + 0.1, end - start))
+                words = []
+                for word in segment.get("words", []) or []:
+                    if not isinstance(word, Mapping):
+                        continue
+                    try:
+                        word_start = float(word.get("start"))
+                        word_end = float(word.get("end"))
+                    except (TypeError, ValueError):
+                        continue
+                    word_text = str(word.get("word") or word.get("text") or "").strip()
+                    if word_text and word_end > word_start:
+                        words.append({
+                            "word": word_text,
+                            "start": round(start + word_start, 3),
+                            "end": round(min(duration_seconds, start + word_end), 3),
+                        })
                 segments.append({
                     "text": str(segment.get("text") or "").strip(),
                     "start": round(start + segment_start, 3),
                     "end": round(min(duration_seconds, start + segment_end), 3),
-                    "words": [],
+                    "words": words,
                 })
             chunk_path.unlink(missing_ok=True)
     segments = merge_transcript_segments(segments)

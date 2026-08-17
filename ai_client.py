@@ -319,9 +319,11 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
         "model": config.transcription_model or OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL,
         "input_audio": {"data": encoded_audio, "format": suffix},
         "response_format": "verbose_json",
+        "timestamp_granularities": ["segment", "word"],
     }
     transcription_base_url = config.resolved_transcription_base_url()
     endpoint = f"{transcription_base_url}/audio/transcriptions"
+    response_format = "verbose_json"
     for attempt in range(OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS):
         try:
             with httpx.Client(timeout=timeout) as client:
@@ -330,6 +332,17 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
                     headers={**_build_bearer_headers(config.api_key), "Content-Type": "application/json"},
                     json=payload,
                 )
+            detail = str(getattr(response, "text", "") or "").strip()
+            if (
+                getattr(response, "status_code", 200) == 400
+                and response_format == "verbose_json"
+                and "verbose_json" in detail
+                and "json" in detail
+            ):
+                payload = {key: value for key, value in payload.items() if key != "timestamp_granularities"}
+                payload["response_format"] = "json"
+                response_format = "json"
+                continue
             break
         except httpx.RequestError as exc:
             if attempt == OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS - 1:
@@ -364,6 +377,7 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
     if not text:
         raise RuntimeError("OpenRouter returned an empty transcription")
     segments = []
+    provider_words = result.get("words", []) or []
     for raw_segment in result.get("segments", []) or []:
         if not isinstance(raw_segment, Mapping):
             continue
@@ -374,10 +388,38 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
             continue
         segment_text = str(raw_segment.get("text") or "").strip()
         if segment_text and end > start:
-            segments.append({"start": start, "end": end, "text": segment_text, "words": []})
+            raw_words = raw_segment.get("words") or []
+            if not raw_words and isinstance(provider_words, list):
+                raw_words = [
+                    word for word in provider_words
+                    if isinstance(word, Mapping)
+                    and _timestamp_overlaps_segment(word, start, end)
+                ]
+            words = []
+            for raw_word in raw_words:
+                if not isinstance(raw_word, Mapping):
+                    continue
+                try:
+                    word_start = float(raw_word.get("start"))
+                    word_end = float(raw_word.get("end"))
+                except (TypeError, ValueError):
+                    continue
+                word_text = str(raw_word.get("word") or raw_word.get("text") or "").strip()
+                if word_text and word_end > word_start:
+                    words.append({"word": word_text, "start": word_start, "end": word_end})
+            segments.append({"start": start, "end": end, "text": segment_text, "words": words})
     if not segments:
         segments = [{"start": 0.0, "end": 0.0, "text": text, "words": []}]
     return {"text": text, "segments": segments, "language": str(result.get("language") or "und")}
+
+
+def _timestamp_overlaps_segment(word: Mapping[str, Any], start: float, end: float) -> bool:
+    try:
+        word_start = float(word.get("start"))
+        word_end = float(word.get("end"))
+    except (TypeError, ValueError):
+        return False
+    return word_end > start and word_start < end
 
 
 def _normalize_lmstudio_model(model: Mapping[str, Any]) -> Optional[dict[str, Any]]:

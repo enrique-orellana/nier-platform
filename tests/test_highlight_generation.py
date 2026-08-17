@@ -61,13 +61,27 @@ def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch
     config = Mock(transcription_provider="openrouter")
     monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
     monkeypatch.setattr(highlight_generation, "_extract_openrouter_audio_chunk", lambda _source, _start, _end, destination: destination.write_bytes(b"audio"))
-    transcribe = Mock(return_value={"text": "Cloud text", "language": "en", "segments": [{"start": 1, "end": 4, "text": "Cloud text"}]})
+    transcribe = Mock(return_value={
+        "text": "Cloud text",
+        "language": "en",
+        "segments": [{
+            "start": 1,
+            "end": 4,
+            "text": "Cloud text",
+            "words": [{"word": "Cloud", "start": 1, "end": 2}, {"word": "text", "start": 2, "end": 4}],
+        }],
+    })
     monkeypatch.setattr(highlight_generation, "transcribe_audio_openrouter", transcribe)
 
     result = highlight_generation.transcribe_video_with_config(source, 60.0, headers={"X-AI-Provider": "openrouter"})
 
     assert result["text"] == "Cloud text"
-    assert result["segments"] == [{"text": "Cloud text", "start": 1.0, "end": 4.0, "words": []}]
+    assert result["segments"] == [{
+        "text": "Cloud text",
+        "start": 1.0,
+        "end": 4.0,
+        "words": [{"word": "Cloud", "start": 1.0, "end": 2.0}, {"word": "text", "start": 2.0, "end": 4.0}],
+    }]
     transcribe.assert_called_once()
 
 
