@@ -15,7 +15,7 @@ describe('AISettingsPanel', () => {
         aiAnalyzeModel="openai/gpt-4o-mini"
         aiVisionModel="openai/gpt-4o-mini"
         aiImageModel=""
-        transcriptionProvider="local"
+        transcriptionProvider="openrouter"
         transcriptionModel="openai/whisper-large-v3"
         lmStudioAvailable={false}
         lmStudioModels={{ textModels: [], visionModels: [] }}
@@ -26,7 +26,7 @@ describe('AISettingsPanel', () => {
     expect(screen.getByPlaceholderText('sk-or-v1-...')).toBeInTheDocument();
     expect(screen.getByLabelText('OpenRouter API key')).toBeInTheDocument();
     expect(screen.getByText(/only the API key is required/i)).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /OpenShorts local/i })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /OpenShorts local/i })).not.toBeInTheDocument();
   });
 
   it('shows lmstudio as an available local provider before discovery', () => {

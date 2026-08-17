@@ -108,7 +108,7 @@
               "name": "What is OpenShorts?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "OpenShorts is a free, open source AI clip generator that automatically transforms your long-form videos — podcasts, webinars, livestreams, vlogs, interviews — into viral-ready short clips (9:16 vertical format) for TikTok, Instagram Reels, and YouTube Shorts. It uses Google Gemini 3.0 Flash AI to detect the most engaging viral moments, then applies smart cropping with MediaPipe face tracking, automatic subtitles via faster-whisper, and optional AI voice dubbing in over 30 languages via ElevenLabs. According to HubSpot's 2025 State of Marketing report, short-form video delivers the highest ROI of any content format."
+                "text": "OpenShorts is a free, open source AI clip generator that automatically transforms your long-form videos — podcasts, webinars, livestreams, vlogs, interviews — into viral-ready short clips (9:16 vertical format) for TikTok, Instagram Reels, and YouTube Shorts. It uses remote transcription, configured AI providers, MediaPipe face tracking, automatic subtitles, and optional AI voice dubbing via ElevenLabs."
               }
             },
             {
@@ -116,7 +116,7 @@
               "name": "How does OpenShorts detect viral moments in videos?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "OpenShorts uses a multi-step AI pipeline: first, it transcribes the video with word-level timestamps using faster-whisper. Then, PySceneDetect identifies scene boundaries. Finally, Google Gemini 3.0 Flash AI analyzes the transcript and scene data to identify the 3 to 15 most engaging moments (15-60 seconds each), scoring them for viral potential based on emotional impact, hook strength, and shareability."
+                "text": "OpenShorts uses a multi-step AI pipeline: first, a remote transcription provider creates timed text. Then, PySceneDetect identifies scene boundaries. Finally, the configured AI provider analyzes the transcript and scene data to identify the most engaging moments, scoring them for viral potential based on emotional impact, hook strength, and shareability."
               }
             },
             {
@@ -148,7 +148,7 @@
               "name": "Can OpenShorts add subtitles and translate videos?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Yes. OpenShorts automatically generates subtitles using faster-whisper with word-level timestamps and burns them into the video using FFmpeg. For translation, it integrates with ElevenLabs AI dubbing to translate and dub video audio into over 30 languages, preserving the original speaker's voice characteristics. The dubbed video is automatically re-transcribed and subtitled in the new language."
+                "text": "Yes. OpenShorts automatically generates subtitles through the configured remote transcription provider with timed text and burns them into the video using FFmpeg. For translation, it integrates with ElevenLabs AI dubbing to translate and dub video audio into over 30 languages."
               }
             },
             {

@@ -34,7 +34,7 @@ uvicorn app:app --host 0.0.0.0 --port 8000
 
 ### Core Processing Pipeline
 1. **Ingest** - YouTube download (yt-dlp) or local upload
-2. **Transcription** - faster-whisper with word-level timestamps
+2. **Transcription** - remote provider with word-level timestamps
 3. **Scene Detection** - PySceneDetect for segment boundaries
 4. **AI Analysis** - Gemini identifies 3-15 viral moments (15-60 sec each)
 5. **FFmpeg Extraction** - Precise clip cutting
@@ -96,7 +96,7 @@ Async job queue with semaphore-based concurrency control. Configure via `MAX_CON
 > API keys are stored encrypted in the browser and sent via headers only when needed. Never stored server-side.
 
 ## Tech Stack
-- **Backend:** Python 3.11, FastAPI, google-genai, faster-whisper, ultralytics (YOLOv8), mediapipe, opencv-python, yt-dlp, FFmpeg, httpx
+- **Backend:** Python 3.11, FastAPI, google-genai, ultralytics (YOLOv8), mediapipe, opencv-python, yt-dlp, FFmpeg, httpx
 - **Frontend:** React 18, Vite 4, Tailwind CSS 3.4
 - **External APIs:** Google Gemini, ElevenLabs Dubbing, Upload-Post
 - **Infrastructure:** Docker + Docker Compose, AWS S3

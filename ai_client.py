@@ -52,7 +52,10 @@ class AIConfig:
     reasoning_effort: str = ""
     analyze_reasoning_effort: str = ""
     vision_reasoning_effort: str = ""
-    transcription_provider: str = "local"
+    # LOCAL_WHISPER_REACTIVATE: Local transcription is intentionally removed
+    # from the runtime. Reintroducing it requires restoring the dependency and
+    # replacing the explicit guards in the transcription entry points.
+    transcription_provider: str = "openrouter"
     transcription_model: str = OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL
 
     def normalized_provider(self) -> str:
@@ -92,7 +95,7 @@ class AIConfig:
         return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 
     def resolved_transcription_base_url(self) -> str:
-        if (self.transcription_provider or "local").strip().lower() == "openrouter":
+        if (self.transcription_provider or "openrouter").strip().lower() == "openrouter":
             return OPENROUTER_BASE_URL
         return self.resolved_base_url()
 
@@ -208,7 +211,7 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         source,
         "X-AI-Transcription-Provider",
         "AI_TRANSCRIPTION_PROVIDER",
-        default="local",
+        default="openrouter",
     ).strip().lower()
     if transcription_provider in {"openshorts-local", "local-editor", "faster-whisper"}:
         transcription_provider = "local"

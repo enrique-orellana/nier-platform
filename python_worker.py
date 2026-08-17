@@ -245,7 +245,11 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
             transcript = metadata.get("transcript")
             clip = metadata["shorts"][clip_index]
             if input_path.name.startswith("translated_"):
-                ok = generate_srt_from_video(str(input_path), str(srt_path))
+                ok = generate_srt_from_video(
+                    str(input_path),
+                    str(srt_path),
+                    headers=request.get("headers") if isinstance(request.get("headers"), Mapping) else None,
+                )
             else:
                 ok = generate_srt(transcript, clip.get("start", 0), clip.get("end", 0), str(srt_path))
             if not ok:
@@ -508,7 +512,7 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
             if not fal_key or not eleven_key: raise ValueError("Missing fal.ai or ElevenLabs API Key")
             job_id = str(payload.get("retry_job_id") or uuid.uuid4())
             job_dir = root / f"saas_{job_id}"; job_dir.mkdir(parents=True, exist_ok=True)
-            config = {"fal_key": fal_key, "elevenlabs_key": eleven_key, "voice_id": payload.get("voice_id") or "21m00Tcm4TlvDq8ikWAM", "actor_description": payload.get("actor_description"), "video_mode": payload.get("video_mode") or "lowcost"}
+            config = {"fal_key": fal_key, "elevenlabs_key": eleven_key, "voice_id": payload.get("voice_id") or "21m00Tcm4TlvDq8ikWAM", "actor_description": payload.get("actor_description"), "video_mode": payload.get("video_mode") or "lowcost", "headers": headers}
             result = generate_full_video(payload.get("script") or {}, config, str(job_dir), lambda _: None)
             response = {"job_id": job_id, "status": "completed", "result": {"video_url": f"/videos/saas_{job_id}/{result['video_filename']}", "video_filename": result["video_filename"], "duration": result.get("duration", 0), "cost_estimate": result.get("cost_estimate", {}), "script": payload.get("script") or {}}}
             (root / f".saas_{job_id}.json").write_text(json.dumps(response, ensure_ascii=False), encoding="utf-8")
@@ -564,7 +568,10 @@ def handle_request(request: Mapping[str, Any]) -> None:
             source_path = str((request.get("payload") or {}).get("source_path") or "").strip()
             if not source_path:
                 raise ValueError("transcription source path is required")
-            transcript = transcribe_audio(source_path)
+            transcript = transcribe_audio(
+                source_path,
+                headers=request.get("headers") if isinstance(request.get("headers"), Mapping) else None,
+            )
             _emit({
                 "id": request_id,
                 "type": "result",

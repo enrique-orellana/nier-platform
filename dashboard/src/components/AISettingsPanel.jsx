@@ -20,7 +20,7 @@ export default function AISettingsPanel({
   setAiVisionModel,
   aiImageModel,
   setAiImageModel,
-  transcriptionProvider = 'local',
+  transcriptionProvider = 'openrouter',
   setTranscriptionProvider = () => {},
   transcriptionModel = 'openai/whisper-large-v3',
   setTranscriptionModel = () => {},
@@ -344,7 +344,6 @@ export default function AISettingsPanel({
             <p className="mt-1 text-xs text-zinc-500">Highlights and other timed-text features use this setting.</p>
           </div>
           <select aria-label="Transcription provider" value={transcriptionProvider} onChange={(event) => setTranscriptionProvider(event.target.value)} className="input-field">
-            <option value="local">OpenShorts local (Faster-Whisper)</option>
             <option value="openrouter">OpenRouter audio transcription</option>
           </select>
           {(isOpenRouter || transcriptionProvider === 'openrouter') && (
@@ -363,7 +362,7 @@ export default function AISettingsPanel({
             </label>
           )}
           <input aria-label="Transcription model" value={transcriptionModel} onChange={(event) => setTranscriptionModel(event.target.value)} readOnly={transcriptionProvider !== 'openrouter'} className="input-field" placeholder="openai/whisper-large-v3" />
-          <p className="text-xs text-zinc-500">{transcriptionProvider === 'local' ? 'Uses the existing OpenShorts local transcription service.' : 'Uses OpenRouter with the configured API key. The default model is openai/whisper-large-v3.'}</p>
+          <p className="text-xs text-zinc-500">Uses OpenRouter with the configured API key. The default model is openai/whisper-large-v3.</p>
         </div>
       </div>
     </div>

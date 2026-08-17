@@ -72,7 +72,7 @@ export default function Landing({ onLaunchApp }) {
     {
       icon: Subtitles,
       title: "Automatic Subtitle Generation",
-      description: "Powered by faster-whisper with word-level timestamps. According to Verizon Media research, 80% of viewers are more likely to watch a video to completion when captions are available. Subtitles are auto-generated, styled, and burned into your clips."
+      description: "Powered by remote transcription with word-level timestamps. Subtitles are auto-generated, styled, and burned into your clips."
     },
     {
       icon: Languages,
@@ -132,7 +132,7 @@ export default function Landing({ onLaunchApp }) {
   const faqs = [
     {
       question: "What is OpenShorts and how does it work?",
-      answer: "OpenShorts is a free, open source AI clip generator that transforms your long-form videos — podcasts, webinars, livestreams, vlogs, interviews — into viral-ready short clips in 9:16 vertical format. It uses a multi-step AI pipeline: faster-whisper for transcription with word-level timestamps, PySceneDetect for scene boundary detection, and Google Gemini 3.0 Flash AI for identifying the most engaging viral moments. According to HubSpot's 2025 State of Marketing report, short-form video delivers the highest ROI of any content format, and repurposing long-form content into shorts increases total reach by up to 300%."
+      answer: "OpenShorts is a free, open source AI clip generator that transforms your long-form videos — podcasts, webinars, livestreams, vlogs, interviews — into viral-ready short clips in 9:16 vertical format. It uses remote transcription with word-level timestamps, PySceneDetect for scene boundary detection, and your configured AI provider for identifying the most engaging viral moments."
     },
     {
       question: "Is OpenShorts really free? What's the catch?",
@@ -144,7 +144,7 @@ export default function Landing({ onLaunchApp }) {
     },
     {
       question: "How do I turn a long-form video into TikTok or Reels clips?",
-      answer: "Upload your long-form video into OpenShorts, enter your free Gemini API key, and click Process. The AI transcribes it with faster-whisper, detects the best viral moments using Google Gemini 3.0 Flash, and crops them to 9:16 vertical format with MediaPipe face tracking. According to Wyzowl's 2025 Video Marketing Statistics report, 91% of businesses use video as a marketing tool, and repurposed short-form clips drive 2.5x more engagement than original content."
+      answer: "Upload your long-form video into OpenShorts, configure your transcription and AI provider keys, and click Process. The remote transcription service supplies timed text, the AI detects the best viral moments, and the clips are cropped to 9:16 vertical format with optional face tracking."
     },
     {
       question: "What AI does OpenShorts use for viral moment detection?",
@@ -164,7 +164,7 @@ export default function Landing({ onLaunchApp }) {
     },
     {
       question: "What are the system requirements to run OpenShorts?",
-      answer: "OpenShorts runs on any system with Docker installed. The recommended setup is 8GB+ RAM and a modern multi-core CPU. GPU acceleration (NVIDIA CUDA) is optional but speeds up video processing significantly. The Docker Compose setup handles all dependencies automatically — Python 3.11, FFmpeg, YOLOv8, MediaPipe, faster-whisper, and the React dashboard. It works on Linux, macOS, and Windows (via WSL2/Docker Desktop)."
+      answer: "OpenShorts runs on any system with Docker installed. The recommended setup is 8GB+ RAM and a modern multi-core CPU. GPU acceleration is optional but speeds up video processing significantly. The Docker Compose setup handles the application dependencies automatically, including FFmpeg, YOLOv8, MediaPipe, yt-dlp, and the React dashboard. It works on Linux, macOS, and Windows (via WSL2/Docker Desktop)."
     },
     {
       question: "Is there a free open source clip generator?",
@@ -446,7 +446,7 @@ export default function Landing({ onLaunchApp }) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
               { name: "Google Gemini 3.0", desc: "AI Analysis" },
-              { name: "faster-whisper", desc: "Transcription" },
+              { name: "OpenRouter ASR", desc: "Transcription" },
               { name: "YOLOv8", desc: "Object Detection" },
               { name: "MediaPipe", desc: "Face Tracking" },
               { name: "FFmpeg", desc: "Video Processing" },

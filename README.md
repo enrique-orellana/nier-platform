@@ -65,7 +65,7 @@ All generated videos and avatars are saved to a public gallery with SEO pages fo
 ### Clip Generator
 - **Viral Moment Detection**: Google Gemini 3.0 Flash analyzes transcripts and scene boundaries to detect 3-15 high-potential moments
 - **Smart 9:16 Cropping**: Dual-mode AI reframing — TRACK mode (MediaPipe + YOLOv8 face tracking) and GENERAL mode (blurred background)
-- **Auto Subtitles**: faster-whisper with word-level timestamps, styled and burned into clips
+- **Auto Subtitles**: remote transcription with word-level timestamps, styled and burned into clips
 - **AI Voice Dubbing**: ElevenLabs integration for 30+ languages with voice cloning
 - **Hook Text Overlays**: AI-generated attention-grabbing text overlays
 - **AI Video Effects**: Gemini-generated FFmpeg filters for professional effects
@@ -221,7 +221,7 @@ build commands, the `openshorts.yaml` bundle, and a remote-deploy update flow.
 
 ### Clip Generator
 1. **Ingest** — Local video upload (or self-hosted URL ingest via yt-dlp)
-2. **Transcribe** — faster-whisper with word-level timestamps
+2. **Transcribe** — configured remote transcription with word-level timestamps
 3. **Detect** — PySceneDetect for scene boundaries
 4. **Analyze** — Gemini identifies 3-15 viral moments (15-60s each)
 5. **Extract** — FFmpeg precise clip cutting
@@ -246,7 +246,7 @@ build commands, the `openshorts.yaml` bundle, and a remote-deploy update flow.
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go control plane, Python JSON-lines ML/media worker, google-genai, faster-whisper, ultralytics (YOLOv8), mediapipe, opencv-python, yt-dlp, FFmpeg, httpx |
+| Backend | Go control plane, Python JSON-lines ML/media worker, google-genai, ultralytics (YOLOv8), mediapipe, opencv-python, yt-dlp, FFmpeg, httpx |
 | Frontend | React 18, Vite 4, Tailwind CSS 3.4 |
 | AI APIs | Google Gemini, fal.ai (Flux, Hailuo, VEED, Kling), ElevenLabs |
 | Infrastructure | Docker + Docker Compose, AWS S3 |

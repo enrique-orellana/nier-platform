@@ -199,7 +199,10 @@ function App() {
   const [aiTextEffort, setAiTextEffort] = useState(() => localStorage.getItem('ai_text_effort_v1') || 'auto');
   const [aiAnalyzeEffort, setAiAnalyzeEffort] = useState(() => localStorage.getItem('ai_analyze_effort_v1') || 'auto');
   const [aiVisionEffort, setAiVisionEffort] = useState(() => localStorage.getItem('ai_vision_effort_v1') || 'auto');
-  const [transcriptionProvider, setTranscriptionProvider] = useState(() => localStorage.getItem('ai_transcription_provider_v1') || 'local');
+  const [transcriptionProvider, setTranscriptionProvider] = useState(() => {
+    const stored = localStorage.getItem('ai_transcription_provider_v1');
+    return stored === 'local' ? 'openrouter' : (stored || 'openrouter');
+  });
   const [transcriptionModel, setTranscriptionModel] = useState(() => localStorage.getItem('ai_transcription_model_v1') || OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL);
   // Social API State - Load encrypted or plain
   const [uploadPostKey, setUploadPostKey] = useState(() => {

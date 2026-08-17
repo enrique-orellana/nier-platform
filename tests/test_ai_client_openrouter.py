@@ -145,7 +145,7 @@ class OpenRouterTests(unittest.TestCase):
         self.assertEqual(config.resolved_base_url(), "https://openrouter.ai/api/v1")
         self.assertEqual(config.text_model, "openai/gpt-4o-mini")
         self.assertEqual(config.analyze_model, "openai/gpt-4o-mini")
-        self.assertEqual(config.transcription_provider, "local")
+        self.assertEqual(config.transcription_provider, "openrouter")
         self.assertEqual(config.transcription_model, "openai/whisper-large-v3")
 
     def test_openrouter_root_base_url_is_normalized_to_api_root(self):

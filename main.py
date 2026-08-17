@@ -42,7 +42,7 @@ try:
 except ImportError:  # pragma: no cover - required only for URL ingestion
     yt_dlp = None
 
-# import whisper (replaced by faster_whisper inside function)
+# Local Whisper was removed from the runtime; transcription uses the configured remote provider.
 from dotenv import load_dotenv
 import json
 from pathlib import Path
@@ -72,7 +72,7 @@ from video_output_validation import validate_clip_output
 from video_frames import FFmpegVideoStream
 from video_rendering import build_audio_extract_command
 from video_metrics import JobVideoMetrics
-from runtime_acceleration import build_whisper_model, preferred_device
+from runtime_acceleration import preferred_device
 from subtitles import build_subtitle_segments, burn_subtitles, generate_srt
 
 # Load environment variables
@@ -2012,55 +2012,18 @@ def render_clip_plan(
 
 def transcribe_video(video_path, *, duration_seconds=None, emit_log=None, headers=None):
     ai_config = load_ai_config(headers)
-    if ai_config.transcription_provider == "openrouter":
-        if duration_seconds is None:
-            duration_seconds = probe_media(video_path).duration_seconds
-        return transcribe_video_with_config(
-            video_path,
-            duration_seconds,
-            emit_log,
-            headers=headers,
+    if ai_config.transcription_provider != "openrouter":
+        raise RuntimeError(
+            "Local Whisper transcription is disabled. Configure OpenRouter transcription and retry."
         )
-
-    print("🎙️  Transcribing video with Faster-Whisper (auto device)...")
-    model = build_whisper_model("large-v3")
-    
-    segments, info = model.transcribe(video_path, word_timestamps=True)
-    
-    print(f"   Detected language '{info.language}' with probability {info.language_probability:.2f}")
-    
-    # Convert to openai-whisper compatible format
-    transcript_segments = []
-    full_text = ""
-    
-    for segment in segments:
-        # Print progress to keep user informed (and prevent timeouts feeling)
-        print(f"   [{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}")
-        
-        seg_dict = {
-            'text': segment.text,
-            'start': segment.start,
-            'end': segment.end,
-            'words': []
-        }
-        
-        if segment.words:
-            for word in segment.words:
-                seg_dict['words'].append({
-                    'word': word.word,
-                    'start': word.start,
-                    'end': word.end,
-                    'probability': word.probability
-                })
-        
-        transcript_segments.append(seg_dict)
-        full_text += segment.text + " "
-        
-    return {
-        'text': full_text.strip(),
-        'segments': transcript_segments,
-        'language': info.language
-    }
+    if duration_seconds is None:
+        duration_seconds = probe_media(video_path).duration_seconds
+    return transcribe_video_with_config(
+        video_path,
+        duration_seconds,
+        emit_log,
+        headers=headers,
+    )
 
 def _clip_text_snippet(text, fallback="Auto-generated fallback clip"):
     cleaned = re.sub(r"\s+", " ", (text or "").strip())

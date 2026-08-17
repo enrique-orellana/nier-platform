@@ -12,49 +12,6 @@ def test_plan_transcription_chunks_bounds_long_sources():
     assert chunks == [(0.0, 600.0), (590.0, 1190.0), (1180.0, 1200.0)]
 
 
-def test_transcribe_video_in_chunks_reuses_model_offsets_timestamps_and_cleans_chunks(tmp_path):
-    class FakeSegment:
-        def __init__(self, start, end, text):
-            self.start = start
-            self.end = end
-            self.text = text
-
-    class FakeModel:
-        def __init__(self):
-            self.calls = []
-
-        def transcribe(self, path, word_timestamps=False):
-            self.calls.append((path, word_timestamps))
-            return iter([FakeSegment(1.0, 4.0, "chunk text")]), Mock(language="en")
-
-    model = FakeModel()
-    extracted = []
-
-    def extract_chunk(_source, start, end, destination):
-        destination.write_bytes(b"audio")
-        extracted.append((start, end, destination))
-
-    logs = []
-    result = highlight_generation.transcribe_video_in_chunks(
-        tmp_path / "source.mp4",
-        1200.0,
-        logs.append,
-        model_factory=lambda: model,
-        extract_chunk=extract_chunk,
-        chunk_seconds=600.0,
-        overlap_seconds=10.0,
-        temp_dir=tmp_path,
-    )
-
-    assert len(model.calls) == 3
-    assert all(word_timestamps is False for _path, word_timestamps in model.calls)
-    assert [segment["start"] for segment in result["segments"]] == [1.0, 591.0, 1181.0]
-    assert [segment["end"] for segment in result["segments"]] == [4.0, 594.0, 1184.0]
-    assert result["text"] == "chunk text chunk text chunk text"
-    assert logs == ["Transcribing chunk 1/3", "Transcribing chunk 2/3", "Transcribing chunk 3/3"]
-    assert all(not destination.exists() for _start, _end, destination in extracted)
-
-
 def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
@@ -82,7 +39,19 @@ def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch
         "end": 4.0,
         "words": [{"word": "Cloud", "start": 1.0, "end": 2.0}, {"word": "text", "start": 2.0, "end": 4.0}],
     }]
-    transcribe.assert_called_once()
+
+
+def test_transcribe_video_with_config_rejects_local_whisper(monkeypatch, tmp_path):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    monkeypatch.setattr(
+        highlight_generation,
+        "load_ai_config",
+        lambda _headers=None: Mock(transcription_provider="local"),
+    )
+
+    with pytest.raises(RuntimeError, match="Local Whisper transcription is disabled"):
+        highlight_generation.transcribe_video_with_config(source, 60.0)
 
 
 def test_openrouter_transcription_uses_single_chunk_for_short_source(monkeypatch, tmp_path):
@@ -230,7 +199,7 @@ def test_run_highlight_generation_writes_manifest_and_video(monkeypatch, tmp_pat
     transcript = {"text": "A strong moment", "segments": [], "language": "en"}
 
     monkeypatch.setattr(highlight_generation, "probe_media", lambda _path: Mock(duration_seconds=90.0))
-    monkeypatch.setattr(highlight_generation, "transcribe_video_in_chunks", lambda _path, _duration, _emit_log: transcript)
+    monkeypatch.setattr(highlight_generation, "transcribe_video_with_config", lambda _path, _duration, _emit_log, **_kwargs: transcript)
     monkeypatch.setattr(
         highlight_generation,
         "rank_highlights",
@@ -256,7 +225,7 @@ def test_run_highlight_generation_requires_ai_candidates(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
     monkeypatch.setattr(highlight_generation, "probe_media", lambda _path: Mock(duration_seconds=60.0))
-    monkeypatch.setattr(highlight_generation, "transcribe_video_in_chunks", lambda _path, _duration, _emit_log: {"text": "", "segments": []})
+    monkeypatch.setattr(highlight_generation, "transcribe_video_with_config", lambda _path, _duration, _emit_log, **_kwargs: {"text": "", "segments": []})
     monkeypatch.setattr(highlight_generation, "rank_highlights", lambda *_args, **_kwargs: {"method": "ai", "candidates": []})
 
     with pytest.raises(ValueError, match="no usable highlight candidates"):

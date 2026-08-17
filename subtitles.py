@@ -1,56 +1,34 @@
 import os
 import re
 import subprocess
+from collections.abc import Mapping
 from master_policy import master_video_encode_args, master_video_filter
 
 
 SENTENCE_END_RE = re.compile(r"[.!?…]+(?:[\"'’”»)\]]+)?$")
 
 
-def transcribe_audio(video_path):
-    """
-    Transcribe audio from a video file using faster-whisper.
-    Returns transcript in the same format as main.py for compatibility.
-    """
-    from runtime_acceleration import build_whisper_model
+def transcribe_audio(video_path, headers: Mapping[str, object] | None = None):
+    """Transcribe audio through OpenRouter; local Whisper is not available at runtime."""
+    from ai_client import load_ai_config
+    from highlight_generation import transcribe_video_with_config
+    from media_probe import probe_media
 
-    print(f"🎙️  Transcribing audio from: {video_path}")
-
-    model = build_whisper_model("large-v3")
-
-    segments, info = model.transcribe(video_path, word_timestamps=True)
-
-    transcript = {
-        "segments": [],
-        "language": info.language
-    }
-
-    for segment in segments:
-        seg_data = {
-            "start": segment.start,
-            "end": segment.end,
-            "text": segment.text,
-            "words": []
-        }
-        if segment.words:
-            for word in segment.words:
-                seg_data["words"].append({
-                    "word": word.word.strip(),
-                    "start": word.start,
-                    "end": word.end
-                })
-        transcript["segments"].append(seg_data)
-
-    print(f"✅ Transcription complete. Language: {info.language}")
-    return transcript
+    config = load_ai_config(headers)
+    if config.transcription_provider != "openrouter":
+        raise RuntimeError(
+            "Local Whisper transcription is disabled. Configure OpenRouter transcription and retry."
+        )
+    duration_seconds = probe_media(video_path).duration_seconds
+    return transcribe_video_with_config(video_path, duration_seconds, headers=headers)
 
 
-def generate_srt_from_video(video_path, output_path, max_chars=20, max_duration=2.0):
+def generate_srt_from_video(video_path, output_path, max_chars=20, max_duration=2.0, headers=None):
     """
     Transcribe a video and generate SRT directly.
     Used for dubbed videos that don't have a pre-existing transcript.
     """
-    transcript = transcribe_audio(video_path)
+    transcript = transcribe_audio(video_path, headers=headers)
 
     # Get video duration to use as clip_end
     import cv2

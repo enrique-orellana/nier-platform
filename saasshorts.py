@@ -21,7 +21,7 @@ import httpx
 from urllib.parse import urljoin
 from typing import Optional, List, Dict, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from ai_client import AIConfig, load_ai_config, chat_json
+from ai_client import AIConfig, chat_json, load_ai_config, transcribe_audio_openrouter
 from master_policy import master_video_encode_args, choose_master_spec, master_video_filter
 from media_probe import probe_media
 
@@ -1047,39 +1047,53 @@ def _format_ass_time(seconds: float) -> str:
     return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
 
-def transcribe_audio_for_subs(audio_path: str) -> list:
-    """
-    Transcribe audio with word-level timestamps using faster-whisper.
-    Returns list of {"word": str, "start": float, "end": float}.
-    """
-    from faster_whisper import WhisperModel
+def transcribe_audio_for_subs(audio_path: str, headers: Optional[dict] = None) -> list:
+    """Transcribe SaaS subtitles through OpenRouter without local Whisper."""
+    config = load_ai_config(headers)
+    if config.transcription_provider != "openrouter":
+        raise RuntimeError(
+            "Local Whisper transcription is disabled. Configure OpenRouter transcription and retry."
+        )
 
-    print(f"[SaaSShorts] 🎙️ Transcribing audio for subtitles...")
-    model = WhisperModel("large-v3", device="cpu", compute_type="int8")
-    segments, info = model.transcribe(audio_path, word_timestamps=True)
-
+    print("[SaaSShorts] 🎙️ Transcribing audio for subtitles through OpenRouter...")
+    transcript = transcribe_audio_openrouter(audio_path, config)
     words = []
-    for segment in segments:
-        if segment.words:
-            for w in segment.words:
+    for segment in transcript.get("segments", []):
+        segment_start = float(segment.get("start", 0.0))
+        segment_end = float(segment.get("end", segment_start))
+        segment_words = segment.get("words") or []
+        if not segment_words:
+            text_words = str(segment.get("text") or "").split()
+            duration = max(0.0, segment_end - segment_start)
+            segment_words = [
+                {
+                    "word": word,
+                    "start": segment_start + duration * index / len(text_words),
+                    "end": segment_start + duration * (index + 1) / len(text_words),
+                }
+                for index, word in enumerate(text_words)
+            ]
+        for word in segment_words:
+            value = str(word.get("word") or "").strip()
+            if value:
                 words.append({
-                    "word": w.word.strip(),
-                    "start": w.start,
-                    "end": w.end,
+                    "word": value,
+                    "start": float(word.get("start", segment_start)),
+                    "end": float(word.get("end", segment_end)),
                 })
 
     print(f"[SaaSShorts] ✅ Transcribed {len(words)} words")
     return words
 
 
-def generate_tiktok_subs(audio_path: str, output_path: str, max_words: int = 3) -> str:
+def generate_tiktok_subs(audio_path: str, output_path: str, max_words: int = 3, headers: Optional[dict] = None) -> str:
     """
     Generate TikTok-style ASS subtitles from audio using Whisper transcription.
 
     Style: Big bold centered text, 1-3 words at a time, white with black outline.
     Matches actual spoken words with precise timestamps.
     """
-    words = transcribe_audio_for_subs(audio_path)
+    words = transcribe_audio_for_subs(audio_path, headers=headers)
     if not words:
         # Fallback: empty subtitle file
         with open(output_path, "w") as f:
@@ -1439,7 +1453,7 @@ def generate_full_video(
 
     # ── Step 5: Generate subtitles (from actual audio, not script text) ──
     log("[5/6] Transcribing audio and generating TikTok-style subtitles...")
-    generate_tiktok_subs(audio_path, srt_path, max_words=2)
+    generate_tiktok_subs(audio_path, srt_path, max_words=2, headers=config.get("headers"))
 
     # ── Step 6: Composite final video ──
     log("[6/6] Compositing final video with FFmpeg...")
