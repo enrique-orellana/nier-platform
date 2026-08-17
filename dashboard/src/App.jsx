@@ -1014,6 +1014,28 @@ function App() {
     }
   };
 
+  const handleSaveClipRange = async (clipIndex, range) => {
+    if (!jobId) return false;
+    try {
+      const response = await fetch(getApiUrl(`/api/jobs/${jobId}/clips/${clipIndex}/source-range`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(range),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Could not save clip range');
+      setResults((current) => {
+        if (!current?.clips?.[clipIndex]) return current;
+        const clips = [...current.clips];
+        clips[clipIndex] = { ...clips[clipIndex], start: data.start, end: data.end };
+        return { ...current, clips };
+      });
+      return { start: data.start, end: data.end };
+    } catch (error) {
+      return false;
+    }
+  };
+
   // --- UI Components ---
 
   const Sidebar = () => (
@@ -1716,6 +1738,7 @@ function App() {
                           onPlay={(time) => handleClipPlay(time)}
                           onPause={handleClipPause}
                           onRenderClip={status === 'clips-ready' ? handleRenderClip : undefined}
+                          onSaveClipRange={status === 'clips-ready' || status === 'complete' ? handleSaveClipRange : undefined}
                           renderStatus={clip.render_status}
                           renderError={clip.render_error}
                           masterDuration={results.source_duration_seconds}

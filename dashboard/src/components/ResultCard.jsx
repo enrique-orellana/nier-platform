@@ -42,8 +42,9 @@ import Standard916Preview from './ResultCard/Standard916Preview';
 import CardContent from './ResultCard/CardContent';
 import CardActions from './ResultCard/CardActions';
 import PostModal from './ResultCard/PostModal';
+import ClipSourceRangeEditor from './ResultCard/ClipSourceRangeEditor';
 
-export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange, onRenderClip, renderStatus, renderError, onSaveWebcamRegion, webcamRegionSaving = false, webcamRegionError = '', onSaveGameplayRegion, gameplayRegionSaving = false, gameplayRegionError = '', onStreamerTrackingChange, trackingSaving = false, trackingError = '', onSaveGameplayZoom, gameplayZoomSaving = false, gameplayZoomError = '', masterDuration }) {
+export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange, onRenderClip, renderStatus, renderError, onSaveClipRange, onSaveWebcamRegion, webcamRegionSaving = false, webcamRegionError = '', onSaveGameplayRegion, gameplayRegionSaving = false, gameplayRegionError = '', onStreamerTrackingChange, trackingSaving = false, trackingError = '', onSaveGameplayZoom, gameplayZoomSaving = false, gameplayZoomError = '', masterDuration }) {
     const [showModal, setShowModal] = useState(false);
     const [showSubtitleModal, setShowSubtitleModal] = useState(false);
     const videoRef = React.useRef(null);
@@ -79,6 +80,7 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     const [showWebcamRegionSelector, setShowWebcamRegionSelector] = useState(false);
     const [showGameplayRegionSelector, setShowGameplayRegionSelector] = useState(false);
     const [showStandard916Preview, setShowStandard916Preview] = useState(false);
+    const [showClipRangeEditor, setShowClipRangeEditor] = useState(false);
     const [editError, setEditError] = useState(null);
     const editorSessionRef = React.useRef(null);
 
@@ -677,6 +679,15 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     />
                 )}
                 <CardContent clip={clip} masterDuration={masterDuration} />
+                {onSaveClipRange && (
+                    <button
+                        type="button"
+                        onClick={() => setShowClipRangeEditor(true)}
+                        className="mb-3 rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs font-semibold text-cyan-300 transition-colors hover:bg-cyan-400/10"
+                    >
+                        Adjust clip range
+                    </button>
+                )}
 
                 {hasVideo && <CardActions
                     handleAutoEdit={handleAutoEdit}
@@ -780,6 +791,15 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     isSavingZoom={gameplayZoomSaving}
                     saveError={gameplayZoomError}
                     onClose={() => setShowStandard916Preview(false)}
+                />
+            )}
+            {showClipRangeEditor && (
+                <ClipSourceRangeEditor
+                    isOpen
+                    clip={clip}
+                    masterDuration={masterDuration}
+                    onSave={(range) => onSaveClipRange(index, range)}
+                    onClose={() => setShowClipRangeEditor(false)}
                 />
             )}
             <FullScreenEditor

@@ -27,6 +27,11 @@ type webcamRegionInput struct {
 	Height *float64 `json:"height"`
 }
 
+type clipSourceRangeInput struct {
+	Start *float64 `json:"start"`
+	End   *float64 `json:"end"`
+}
+
 type webcamRegion struct {
 	X      float64 `json:"x"`
 	Y      float64 `json:"y"`
@@ -131,6 +136,35 @@ func parseStoredGameplayZoom(value any) (float64, error) {
 	return normalizeGameplayZoom(&zoom)
 }
 
+func normalizeClipSourceRange(input *clipSourceRangeInput, masterDuration float64) (float64, float64, error) {
+	if input == nil || input.Start == nil || input.End == nil {
+		return 0, 0, fmt.Errorf("clip range must contain start and end")
+	}
+	start, end := *input.Start, *input.End
+	if math.IsNaN(start) || math.IsInf(start, 0) || math.IsNaN(end) || math.IsInf(end, 0) {
+		return 0, 0, fmt.Errorf("clip range values must be finite")
+	}
+	if start < 0 || end <= start || end-start < 1 {
+		return 0, 0, fmt.Errorf("clip range must be at least one second and start at zero or later")
+	}
+	if masterDuration > 0 && end > masterDuration {
+		return 0, 0, fmt.Errorf("clip range must fit inside the master video")
+	}
+	return start, end, nil
+}
+
+func sourceDurationFromMetadata(metadata map[string]any) float64 {
+	if value, ok := metadata["source_duration_seconds"].(float64); ok && value > 0 {
+		return value
+	}
+	asset, _ := metadata["source_asset"].(map[string]any)
+	probe, _ := asset["probe"].(map[string]any)
+	if value, ok := probe["duration_seconds"].(float64); ok && value > 0 {
+		return value
+	}
+	return 0
+}
+
 func (region webcamRegion) asMap() map[string]any {
 	return map[string]any{
 		"x":      region.X,
@@ -163,7 +197,7 @@ func writeJSONFileAtomic(path string, contents []byte) error {
 
 func (s *Server) clipRenderRoute(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/jobs/"), "/"), "/")
-	if len(parts) != 4 || parts[1] != "clips" || (parts[3] != "render" && parts[3] != "webcam-region" && parts[3] != "gameplay-region" && parts[3] != "gameplay-zoom" && parts[3] != "streamer-tracking") || parts[0] == "" {
+	if len(parts) != 4 || parts[1] != "clips" || (parts[3] != "render" && parts[3] != "source-range" && parts[3] != "webcam-region" && parts[3] != "gameplay-region" && parts[3] != "gameplay-zoom" && parts[3] != "streamer-tracking") || parts[0] == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Clip render route not found"})
 		return
 	}
@@ -173,6 +207,14 @@ func (s *Server) clipRenderRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parentID := parts[0]
+	if parts[3] == "source-range" {
+		if r.Method != http.MethodPatch {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+			return
+		}
+		s.updateClipSourceRange(w, r, parentID, clipIndex)
+		return
+	}
 	if parts[3] == "webcam-region" {
 		if r.Method != http.MethodPatch {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
@@ -334,6 +376,100 @@ func (s *Server) clipRenderRoute(w http.ResponseWriter, r *http.Request) {
 		"parent_job_id": parent.ID,
 		"clip_index":    clipIndex,
 		"status":        string(child.Status),
+	})
+}
+
+func (s *Server) updateClipSourceRange(w http.ResponseWriter, r *http.Request, parentID string, clipIndex int) {
+	parent, ok := s.store.Get(r.Context(), parentID)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Parent job not found"})
+		return
+	}
+	if parent.Kind != "clip-generation" || !isDeferredClipJob(parent) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Parent job is not a deferred clip-generation job"})
+		return
+	}
+	if parent.Status != domain.JobStatusClipsReady && parent.Status != domain.JobStatusCompleted {
+		writeJSON(w, http.StatusConflict, map[string]string{"detail": "Clip candidates are not ready"})
+		return
+	}
+
+	var request clipSourceRangeInput
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+
+	outputDir := parent.OutputDir
+	if strings.TrimSpace(outputDir) == "" {
+		root := s.config.OutputDir
+		if root == "" {
+			root = "output"
+		}
+		outputDir = filepath.Join(root, parent.ID)
+	}
+	metadataPath, err := firstMetadataPath(outputDir)
+	if err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"detail": "Deferred job metadata is not available"})
+		return
+	}
+	metadataContents, err := os.ReadFile(metadataPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not read deferred job metadata"})
+		return
+	}
+	metadata := map[string]any{}
+	if err := json.Unmarshal(metadataContents, &metadata); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Deferred job metadata is invalid"})
+		return
+	}
+	start, end, err := normalizeClipSourceRange(&request, sourceDurationFromMetadata(metadata))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	shorts, ok := metadata["shorts"].([]any)
+	if !ok || clipIndex >= len(shorts) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Deferred job metadata has no matching clip"})
+		return
+	}
+	metadataClip, ok := shorts[clipIndex].(map[string]any)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Deferred job metadata clip is invalid"})
+		return
+	}
+	metadataClip["start"] = start
+	metadataClip["end"] = end
+	updatedMetadata, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not encode deferred job metadata"})
+		return
+	}
+	if err := writeJSONFileAtomic(metadataPath, updatedMetadata); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not persist clip range"})
+		return
+	}
+
+	var result deferredClipResult
+	if len(parent.Result) == 0 || json.Unmarshal(parent.Result, &result) != nil || clipIndex < 0 || clipIndex >= len(result.Clips) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Clip candidate not found"})
+		return
+	}
+	result.Clips[clipIndex]["start"] = start
+	result.Clips[clipIndex]["end"] = end
+	updatedResult, err := json.Marshal(result)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not encode clip result"})
+		return
+	}
+	if err := s.store.SetResult(r.Context(), parent.ID, updatedResult); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not persist clip result"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"clip_index": clipIndex,
+		"start":      start,
+		"end":        end,
 	})
 }
 

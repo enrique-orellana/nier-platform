@@ -2046,10 +2046,24 @@ func (s *Server) readProjectClips(jobID string) ([]map[string]any, time.Time, bo
 		return nil, time.Time{}, false
 	}
 	var data struct {
-		Shorts []map[string]any `json:"shorts"`
+		Shorts                []map[string]any `json:"shorts"`
+		SourceDurationSeconds float64          `json:"source_duration_seconds"`
+		VideoDuration         float64          `json:"video_duration"`
+		SourceAsset           struct {
+			Probe struct {
+				DurationSeconds float64 `json:"duration_seconds"`
+			} `json:"probe"`
+		} `json:"source_asset"`
 	}
 	if json.Unmarshal(contents, &data) != nil {
 		return nil, time.Time{}, false
+	}
+	masterDuration := data.SourceDurationSeconds
+	if masterDuration <= 0 {
+		masterDuration = data.VideoDuration
+	}
+	if masterDuration <= 0 {
+		masterDuration = data.SourceAsset.Probe.DurationSeconds
 	}
 	for _, clip := range data.Shorts {
 		if filename, ok := clip["video_filename"].(string); ok && filename != "" {
@@ -2058,6 +2072,9 @@ func (s *Server) readProjectClips(jobID string) ([]map[string]any, time.Time, bo
 			}
 		}
 		clip["job_id"] = jobID
+		if masterDuration > 0 {
+			clip["master_duration"] = masterDuration
+		}
 	}
 	info, err := os.Stat(metadataFiles[0])
 	if err != nil {

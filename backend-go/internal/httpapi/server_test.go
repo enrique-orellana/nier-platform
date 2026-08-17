@@ -835,6 +835,87 @@ func TestDeferredClipWebcamRegionPatchPersistsResultAndMetadata(t *testing.T) {
 	}
 }
 
+func TestDeferredClipSourceRangePatchPersistsResultAndMetadata(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	outputDir := t.TempDir()
+	parent, jobDir := createDeferredRegionTestJob(t, store, outputDir, `{"clips":[{"start":176,"end":204},{"start":20,"end":40}]}`)
+	if err := os.WriteFile(filepath.Join(jobDir, "source_metadata.json"), []byte(`{"source_asset":{"probe":{"duration_seconds":3577}},"shorts":[{"start":176,"end":204},{"start":20,"end":40}]}`), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		fmt.Sprintf("/api/jobs/%s/clips/0/source-range", parent.ID),
+		strings.NewReader(`{"start":150,"end":230}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected source range patch to succeed, got %d: %s", res.Code, res.Body.String())
+	}
+
+	updated, ok := store.Get(context.Background(), parent.ID)
+	if !ok {
+		t.Fatal("parent job disappeared")
+	}
+	var result struct {
+		Clips []map[string]any `json:"clips"`
+	}
+	if err := json.Unmarshal(updated.Result, &result); err != nil {
+		t.Fatalf("decode stored result: %v", err)
+	}
+	if result.Clips[0]["start"] != 150.0 || result.Clips[0]["end"] != 230.0 {
+		t.Fatalf("stored result missing source range: %#v", result.Clips)
+	}
+	if result.Clips[1]["start"] != 20.0 || result.Clips[1]["end"] != 40.0 {
+		t.Fatalf("source range patch changed neighboring clip: %#v", result.Clips)
+	}
+
+	metadata, err := os.ReadFile(filepath.Join(jobDir, "source_metadata.json"))
+	if err != nil {
+		t.Fatalf("read metadata: %v", err)
+	}
+	var document struct {
+		Shorts []map[string]any `json:"shorts"`
+	}
+	if err := json.Unmarshal(metadata, &document); err != nil {
+		t.Fatalf("decode metadata: %v", err)
+	}
+	if document.Shorts[0]["start"] != 150.0 || document.Shorts[0]["end"] != 230.0 {
+		t.Fatalf("metadata missing source range: %#v", document.Shorts)
+	}
+}
+
+func TestDeferredClipSourceRangePatchRejectsInvalidRanges(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	outputDir := t.TempDir()
+	parent, jobDir := createDeferredRegionTestJob(t, store, outputDir, `{"clips":[{"start":176,"end":204}]}`)
+	if err := os.WriteFile(filepath.Join(jobDir, "source_metadata.json"), []byte(`{"source_asset":{"probe":{"duration_seconds":220}},"shorts":[{"start":176,"end":204}]}`), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+
+	for _, body := range []string{
+		`{"start":-1,"end":20}`,
+		`{"start":100,"end":100}`,
+		`{"start":200,"end":221}`,
+	} {
+		req := httptest.NewRequest(
+			http.MethodPatch,
+			fmt.Sprintf("/api/jobs/%s/clips/0/source-range", parent.ID),
+			strings.NewReader(body),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		res := httptest.NewRecorder()
+		server.Handler().ServeHTTP(res, req)
+		if res.Code != http.StatusBadRequest {
+			t.Fatalf("expected invalid source range to return 400, got %d: %s", res.Code, res.Body.String())
+		}
+	}
+}
+
 func TestDeferredClipWebcamRegionPatchRejectsInvalidCoordinates(t *testing.T) {
 	store := jobs.NewMemoryStore()
 	outputDir := t.TempDir()

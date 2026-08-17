@@ -335,6 +335,28 @@ export default function ProjectLibrary({
     }
   };
 
+  const handleSaveClipRange = async (clipIndex, range) => {
+    const jobId = selectedProject?.job_id || selectedProject?.session_id || selectedProject?.id;
+    if (!jobId) return false;
+    try {
+      const response = await fetch(getApiUrl(`/api/jobs/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipIndex)}/source-range`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(range),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || 'Could not save clip range');
+      const savedRange = { start: Number(payload.start), end: Number(payload.end) };
+      setProjectClips((current) => current.map((clip, index) => {
+        const currentIndex = Number.isInteger(clip.index) ? clip.index : index;
+        return currentIndex === clipIndex ? { ...clip, ...savedRange } : clip;
+      }));
+      return savedRange;
+    } catch (error) {
+      return false;
+    }
+  };
+
   const handleSaveWebcamRegion = async (clipIndex, webcamRegion) => {
     const jobId = selectedProject?.job_id || selectedProject?.session_id || selectedProject?.id;
     if (!jobId) return false;
@@ -649,6 +671,7 @@ export default function ProjectLibrary({
                     onEditorClose={onCloseEditor}
                     onEditorVersionChange={onVersionChange}
                     onRenderClip={handleRenderClip}
+                    onSaveClipRange={handleSaveClipRange}
                     renderStatus={clip.render_status}
                     renderError={clip.render_error}
                     onSaveWebcamRegion={handleSaveWebcamRegion}
@@ -663,6 +686,7 @@ export default function ProjectLibrary({
                     onStreamerTrackingChange={handleStreamerTrackingChange}
                     trackingSaving={trackingSavingIndex === String(clip.index ?? index)}
                     trackingError={trackingErrors[String(clip.index ?? index)]}
+                    masterDuration={selectedProject?.source_duration_seconds || clip.master_duration || clip.source_duration_seconds}
                   />
                 ))}
               </div>
