@@ -88,6 +88,8 @@ export default function ProjectLibrary({
   const [webcamRegionErrors, setWebcamRegionErrors] = useState({});
   const [gameplayRegionSavingIndex, setGameplayRegionSavingIndex] = useState(null);
   const [gameplayRegionErrors, setGameplayRegionErrors] = useState({});
+  const [gameplayZoomSavingIndex, setGameplayZoomSavingIndex] = useState(null);
+  const [gameplayZoomErrors, setGameplayZoomErrors] = useState({});
   const [trackingSavingIndex, setTrackingSavingIndex] = useState(null);
   const [trackingErrors, setTrackingErrors] = useState({});
 
@@ -169,6 +171,8 @@ export default function ProjectLibrary({
       setWebcamRegionErrors({});
       setGameplayRegionSavingIndex(null);
       setGameplayRegionErrors({});
+      setGameplayZoomSavingIndex(null);
+      setGameplayZoomErrors({});
       setTrackingSavingIndex(null);
       setTrackingErrors({});
       return;
@@ -188,6 +192,8 @@ export default function ProjectLibrary({
     setWebcamRegionErrors({});
     setGameplayRegionSavingIndex(null);
     setGameplayRegionErrors({});
+    setGameplayZoomSavingIndex(null);
+    setGameplayZoomErrors({});
     setTrackingSavingIndex(null);
     setTrackingErrors({});
     if (!matchingProject.clips?.length) loadProjectClips(matchingProject);
@@ -213,6 +219,8 @@ export default function ProjectLibrary({
     setWebcamRegionErrors({});
     setGameplayRegionSavingIndex(null);
     setGameplayRegionErrors({});
+    setGameplayZoomSavingIndex(null);
+    setGameplayZoomErrors({});
     setTrackingSavingIndex(null);
     setTrackingErrors({});
     if (!project?.clips?.length) {
@@ -420,6 +428,34 @@ export default function ProjectLibrary({
     }
   };
 
+  const handleSaveGameplayZoom = async (clipIndex, gameplayZoom) => {
+    const jobId = selectedProject?.job_id || selectedProject?.session_id || selectedProject?.id;
+    if (!jobId) return false;
+    const key = String(clipIndex);
+    setGameplayZoomSavingIndex(key);
+    setGameplayZoomErrors((current) => ({ ...current, [key]: '' }));
+    try {
+      const response = await fetch(getApiUrl(`/api/jobs/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipIndex)}/gameplay-zoom`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameplay_zoom: gameplayZoom }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || 'Could not save gameplay zoom');
+      const savedZoom = Number.isFinite(Number(payload.gameplay_zoom)) ? Number(payload.gameplay_zoom) : gameplayZoom;
+      setProjectClips((current) => current.map((clip, index) => {
+        const currentIndex = Number.isInteger(clip.index) ? clip.index : index;
+        return currentIndex === clipIndex ? { ...clip, gameplay_zoom: savedZoom } : clip;
+      }));
+      return savedZoom;
+    } catch (error) {
+      setGameplayZoomErrors((current) => ({ ...current, [key]: error.message || 'Could not save gameplay zoom.' }));
+      return false;
+    } finally {
+      setGameplayZoomSavingIndex(null);
+    }
+  };
+
   useEffect(() => {
     const entries = Object.entries(clipRenderJobs);
     if (!selectedProject || entries.length === 0) return undefined;
@@ -621,6 +657,9 @@ export default function ProjectLibrary({
                     onSaveGameplayRegion={handleSaveGameplayRegion}
                     gameplayRegionSaving={gameplayRegionSavingIndex === String(clip.index ?? index)}
                     gameplayRegionError={gameplayRegionErrors[String(clip.index ?? index)]}
+                    onSaveGameplayZoom={handleSaveGameplayZoom}
+                    gameplayZoomSaving={gameplayZoomSavingIndex === String(clip.index ?? index)}
+                    gameplayZoomError={gameplayZoomErrors[String(clip.index ?? index)]}
                     onStreamerTrackingChange={handleStreamerTrackingChange}
                     trackingSaving={trackingSavingIndex === String(clip.index ?? index)}
                     trackingError={trackingErrors[String(clip.index ?? index)]}

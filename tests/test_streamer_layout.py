@@ -11,6 +11,7 @@ from streamer_layout import (
     filter_candidates_outside_webcam_region,
     normalize_clip_layout,
     normalize_gameplay_region,
+    normalize_gameplay_zoom,
     normalize_webcam_region,
     streamer_panel_heights,
     webcam_region_pixel_bounds,
@@ -50,6 +51,14 @@ def test_normalize_gameplay_region_rejects_out_of_bounds_values():
         normalize_gameplay_region({"x": 0.8, "y": 0.1, "width": 0.3, "height": 0.2})
 
 
+def test_normalize_gameplay_zoom_accepts_bounded_values():
+    assert normalize_gameplay_zoom(0.6) == 0.6
+    assert normalize_gameplay_zoom(1.25) == 1.25
+    assert normalize_gameplay_zoom(2.0) == 2.0
+    with pytest.raises(ValueError, match="gameplay_zoom"):
+        normalize_gameplay_zoom(0.5)
+
+
 def test_crop_gameplay_region_fills_panel_from_selected_rectangle():
     source = np.zeros((100, 200, 3), dtype=np.uint8)
     source[:, :, 0] = np.arange(200, dtype=np.uint8)
@@ -60,6 +69,19 @@ def test_crop_gameplay_region_fills_panel_from_selected_rectangle():
     assert result.shape == (80, 40, 3)
     assert int(result[:, :, 0].min()) >= 50
     assert int(result[:, :, 0].max()) <= 150
+
+
+def test_crop_gameplay_region_applies_saved_zoom():
+    source = np.zeros((100, 400, 3), dtype=np.uint8)
+    source[:, :, 0] = np.arange(400, dtype=np.uint8)
+    region = {"x": 0.0, "y": 0.0, "width": 1.0, "height": 1.0}
+
+    result = crop_gameplay_region(
+        source, region, target_width=40, target_height=80, gameplay_zoom=2.0
+    )
+
+    assert int(result[:, :, 0].min()) > 100
+    assert int(result[:, :, 0].max()) < 220
 
 
 def test_gameplay_focus_is_clamped_inside_selected_region():
@@ -100,6 +122,23 @@ def test_streamer_stack_manual_gameplay_region_composes_without_detection_focus(
     _, gameplay_height = streamer_panel_heights(40, 80, "medium")
     assert result.shape == (80, 40, 3)
     assert result[-gameplay_height:, :, 1].mean() > result[-gameplay_height:, :, 2].mean()
+
+
+def test_streamer_stack_passes_gameplay_zoom_to_final_composition():
+    source = np.zeros((100, 400, 3), dtype=np.uint8)
+    source[:, :, 0] = np.linspace(0, 255, 400, dtype=np.uint8)
+    result = compose_streamer_stack_frame(
+        source,
+        output_width=40,
+        output_height=80,
+        webcam_region={"x": 0.0, "y": 0.0, "width": 0.2, "height": 1.0},
+        gameplay_region={"x": 0.2, "y": 0.0, "width": 0.8, "height": 1.0},
+        gameplay_zoom=2.0,
+    )
+
+    _, gameplay_height = streamer_panel_heights(40, 80, "medium")
+    gameplay = result[-gameplay_height:]
+    assert int(gameplay[:, :, 0].min()) > 120
 
 
 @pytest.mark.parametrize(

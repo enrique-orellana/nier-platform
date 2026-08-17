@@ -43,7 +43,7 @@ import CardContent from './ResultCard/CardContent';
 import CardActions from './ResultCard/CardActions';
 import PostModal from './ResultCard/PostModal';
 
-export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange, onRenderClip, renderStatus, renderError, onSaveWebcamRegion, webcamRegionSaving = false, webcamRegionError = '', onSaveGameplayRegion, gameplayRegionSaving = false, gameplayRegionError = '', onStreamerTrackingChange, trackingSaving = false, trackingError = '' }) {
+export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, aiProvider = 'gemini', aiApiKey, getAiHeaders, geminiApiKey, elevenLabsKey, onPlay, onPause, workflowStatus = 'not_reviewed', workflowStatusSaving = false, onWorkflowStatusChange, editorOpen = false, editorVersionId = null, onEditorOpen, onEditorClose, onEditorVersionChange, onRenderClip, renderStatus, renderError, onSaveWebcamRegion, webcamRegionSaving = false, webcamRegionError = '', onSaveGameplayRegion, gameplayRegionSaving = false, gameplayRegionError = '', onStreamerTrackingChange, trackingSaving = false, trackingError = '', onSaveGameplayZoom, gameplayZoomSaving = false, gameplayZoomError = '' }) {
     const [showModal, setShowModal] = useState(false);
     const [showSubtitleModal, setShowSubtitleModal] = useState(false);
     const videoRef = React.useRef(null);
@@ -114,6 +114,15 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
     const handleTrackingChange = async (enabled) => {
         if (!onStreamerTrackingChange) return;
         await onStreamerTrackingChange(index, enabled);
+    };
+
+    const handleSaveGameplayZoom = async (zoom) => {
+        if (!onSaveGameplayZoom) {
+            return true;
+        }
+        const saved = await onSaveGameplayZoom(index, zoom);
+        if (saved !== false) setShowStandard916Preview(false);
+        return saved;
     };
 
     useEffect(() => {
@@ -746,6 +755,10 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     startTime={clip.start}
                     endTime={clip.end}
                     gameplayRegion={clip.gameplay_region}
+                    gameplayZoom={clip.gameplay_zoom}
+                    onSaveZoom={onSaveGameplayZoom ? handleSaveGameplayZoom : undefined}
+                    isSavingZoom={gameplayZoomSaving}
+                    saveError={gameplayZoomError}
                     onClose={() => setShowStandard916Preview(false)}
                 />
             )}

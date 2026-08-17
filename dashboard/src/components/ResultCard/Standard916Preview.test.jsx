@@ -45,4 +45,21 @@ describe('Standard916Preview', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('saves the adjusted zoom for final rendering', () => {
+    const onSaveZoom = vi.fn().mockResolvedValue(1.1);
+    render(
+      <Standard916Preview
+        videoUrl="/videos/source.mp4"
+        gameplayRegion={gameplayRegion}
+        onClose={vi.fn()}
+        onSaveZoom={onSaveZoom}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save zoom' }));
+
+    expect(onSaveZoom).toHaveBeenCalledWith(1.1);
+  });
 });

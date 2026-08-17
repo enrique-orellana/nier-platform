@@ -26,11 +26,15 @@ export default function Standard916Preview({
     startTime = 0,
     endTime = null,
     gameplayRegion,
+    gameplayZoom = 1,
     onClose,
+    onSaveZoom,
+    isSavingZoom = false,
+    saveError = '',
 }) {
     const frameRef = useRef(null);
     const videoRef = useRef(null);
-    const [zoom, setZoom] = useState(1);
+    const [zoom, setZoom] = useState(() => clampZoom(Number(gameplayZoom) || 1));
     const [frameSize, setFrameSize] = useState({ width: FALLBACK_FRAME_WIDTH, height: FALLBACK_FRAME_HEIGHT });
     const [videoSize, setVideoSize] = useState({ width: FALLBACK_VIDEO_WIDTH, height: FALLBACK_VIDEO_HEIGHT });
 
@@ -107,13 +111,18 @@ export default function Standard916Preview({
         setZoom((current) => clampZoom(current + delta));
     };
 
+    const handleSaveZoom = async () => {
+        if (!onSaveZoom || isSavingZoom) return;
+        await onSaveZoom(zoom);
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Standard 9:16 gameplay preview">
             <div className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#121214] shadow-2xl">
                 <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
                     <div>
                         <h2 className="text-sm font-bold text-white">Standard 9:16 Preview</h2>
-                        <p className="text-[11px] text-zinc-500">Preview only — zoom changes are not saved.</p>
+                        <p className="text-[11px] text-zinc-500">Adjust the gameplay framing, then save it for the final render.</p>
                     </div>
                     <button
                         type="button"
@@ -176,7 +185,19 @@ export default function Standard916Preview({
                         >
                             <RotateCcw size={15} />
                         </button>
+                        {onSaveZoom && (
+                            <button
+                                type="button"
+                                aria-label="Save zoom"
+                                onClick={handleSaveZoom}
+                                disabled={isSavingZoom}
+                                className="ml-1 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-200 transition-colors hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {isSavingZoom ? 'Saving…' : 'Save zoom'}
+                            </button>
+                        )}
                     </div>
+                    {saveError && <p className="text-xs text-red-300">{saveError}</p>}
                 </div>
             </div>
         </div>

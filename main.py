@@ -64,6 +64,7 @@ from streamer_layout import (
     filter_candidates_outside_webcam_region,
     normalize_clip_layout,
     normalize_gameplay_region,
+    normalize_gameplay_zoom,
     normalize_webcam_region,
 )
 from video_analysis import SourceAnalysis, load_or_build_source_analysis
@@ -1233,6 +1234,7 @@ def process_video_to_vertical(
     facecam_size: str = "medium",
     webcam_region: dict | None = None,
     gameplay_region: dict | None = None,
+    gameplay_zoom: float = 1.0,
     streamer_tracking_enabled: bool = False,
 ):
     """
@@ -1242,6 +1244,7 @@ def process_video_to_vertical(
     layout_options = normalize_clip_layout(layout_format, facecam_size)
     normalized_webcam_region = None
     normalized_gameplay_region = None
+    normalized_gameplay_zoom = 1.0
     if layout_options.layout_format == STREAMER_STACK_LAYOUT:
         if webcam_region is None:
             raise ValueError("webcam_region is required for streamer_stack rendering")
@@ -1249,6 +1252,7 @@ def process_video_to_vertical(
             raise ValueError("gameplay_region is required for streamer_stack rendering")
         normalized_webcam_region = normalize_webcam_region(webcam_region)
         normalized_gameplay_region = normalize_gameplay_region(gameplay_region)
+        normalized_gameplay_zoom = normalize_gameplay_zoom(gameplay_zoom)
     
     # Define temporary file paths based on the output name
     base_name = os.path.splitext(final_output_video)[0]
@@ -1423,6 +1427,7 @@ def process_video_to_vertical(
                         webcam_region=normalized_webcam_region,
                         gameplay_region=normalized_gameplay_region,
                         gameplay_focus=streamer_gameplay_focus,
+                        gameplay_zoom=normalized_gameplay_zoom,
                     )
                 elif current_strategy == 'GENERAL':
                     # "Plano General" -> Blur Background + Fit Width
@@ -1610,6 +1615,7 @@ def _write_clip_manifest(
     facecam_size: str = "medium",
     webcam_region: dict | None = None,
     gameplay_region: dict | None = None,
+    gameplay_zoom: float = 1.0,
     streamer_tracking_enabled: bool = False,
 ) -> str:
     width = source_media.display_width
@@ -1627,6 +1633,7 @@ def _write_clip_manifest(
     normalized_gameplay_region = (
         normalize_gameplay_region(gameplay_region) if gameplay_region is not None else None
     )
+    normalized_gameplay_zoom = normalize_gameplay_zoom(gameplay_zoom)
     layout_manifest = {
         "format": layout_options.layout_format,
         "facecam_size": layout_options.facecam_size,
@@ -1635,6 +1642,8 @@ def _write_clip_manifest(
         layout_manifest["webcam_region"] = normalized_webcam_region
     if normalized_gameplay_region is not None:
         layout_manifest["gameplay_region"] = normalized_gameplay_region
+    if layout_options.layout_format == STREAMER_STACK_LAYOUT:
+        layout_manifest["gameplay_zoom"] = normalized_gameplay_zoom
     if layout_options.layout_format == STREAMER_STACK_LAYOUT:
         layout_manifest["streamer_tracking_enabled"] = bool(streamer_tracking_enabled)
     manifest = {
@@ -1671,6 +1680,7 @@ def _write_clip_manifest(
     if normalized_gameplay_region is not None:
         manifest["export_policy"]["gameplay_region"] = normalized_gameplay_region
     if layout_options.layout_format == STREAMER_STACK_LAYOUT:
+        manifest["export_policy"]["gameplay_zoom"] = normalized_gameplay_zoom
         manifest["export_policy"]["streamer_tracking_enabled"] = bool(streamer_tracking_enabled)
     manifest_path = os.path.join(output_dir, "manifests", f"clip_{clip_index}.json")
     save_manifest_atomic(Path(manifest_path), manifest)
@@ -1720,6 +1730,7 @@ def persist_discovered_clip_plan(
         clip["facecam_size"] = layout_options.facecam_size
         if layout_options.layout_format == STREAMER_STACK_LAYOUT:
             clip["streamer_tracking_enabled"] = False
+            clip["gameplay_zoom"] = 1.0
 
     metadata_path = Path(output_dir) / f"{video_title}_metadata.json"
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1794,6 +1805,7 @@ def render_deferred_clip(
             facecam_size=clip.get("facecam_size", "medium"),
             webcam_region=clip.get("webcam_region"),
             gameplay_region=clip.get("gameplay_region"),
+            gameplay_zoom=clip.get("gameplay_zoom", 1.0),
             streamer_tracking_enabled=bool(clip.get("streamer_tracking_enabled", False)),
         )
         if not rendered:
@@ -1825,6 +1837,7 @@ def render_clip_plan(
     facecam_size: str = "medium",
     webcam_region: dict | None = None,
     gameplay_region: dict | None = None,
+    gameplay_zoom: float = 1.0,
     streamer_tracking_enabled: bool = False,
     clip_indices: list[int] | None = None,
 ) -> list[dict]:
@@ -1851,6 +1864,7 @@ def render_clip_plan(
         clip_gameplay_region = clip.get("gameplay_region", gameplay_region)
         if clip_gameplay_region is not None:
             clip_gameplay_region = normalize_gameplay_region(clip_gameplay_region)
+        clip_gameplay_zoom = normalize_gameplay_zoom(clip.get("gameplay_zoom", gameplay_zoom))
         clip_tracking_enabled = bool(
             clip.get("streamer_tracking_enabled", streamer_tracking_enabled)
         )
@@ -1864,6 +1878,7 @@ def render_clip_plan(
             clip["gameplay_region"] = clip_gameplay_region
         if layout_options.layout_format == STREAMER_STACK_LAYOUT:
             clip["streamer_tracking_enabled"] = clip_tracking_enabled
+            clip["gameplay_zoom"] = clip_gameplay_zoom
 
         manifest_path = _write_clip_manifest(
             output_dir,
@@ -1878,6 +1893,7 @@ def render_clip_plan(
             layout_options.facecam_size,
             webcam_region=clip_webcam_region,
             gameplay_region=clip_gameplay_region,
+            gameplay_zoom=clip_gameplay_zoom,
             streamer_tracking_enabled=clip_tracking_enabled,
         )
         clip["manifest_path"] = manifest_path
@@ -1907,6 +1923,7 @@ def render_clip_plan(
             facecam_size=layout_options.facecam_size,
             webcam_region=clip_webcam_region,
             gameplay_region=clip_gameplay_region,
+            gameplay_zoom=clip_gameplay_zoom,
             streamer_tracking_enabled=clip_tracking_enabled,
         )
         if success:

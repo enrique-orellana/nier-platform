@@ -15,6 +15,8 @@ FACECAM_HEIGHT_RATIOS = {
     "medium": 0.38,
     "large": 0.46,
 }
+GAMEPLAY_ZOOM_MIN = 0.6
+GAMEPLAY_ZOOM_MAX = 2.0
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,21 @@ def normalize_gameplay_region(region: Mapping[str, object] | None) -> dict[str, 
     if values["x"] + values["width"] > 1 or values["y"] + values["height"] > 1:
         raise ValueError("gameplay_region must fit inside the source frame")
     return values
+
+
+def normalize_gameplay_zoom(value: object | None) -> float:
+    """Validate the saved gameplay framing zoom used during final rendering."""
+
+    if value is None or isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("gameplay_zoom must be a finite number")
+    normalized = float(value)
+    if not math.isfinite(normalized):
+        raise ValueError("gameplay_zoom must be a finite number")
+    if normalized < GAMEPLAY_ZOOM_MIN or normalized > GAMEPLAY_ZOOM_MAX:
+        raise ValueError(
+            f"gameplay_zoom must be between {GAMEPLAY_ZOOM_MIN} and {GAMEPLAY_ZOOM_MAX}"
+        )
+    return normalized
 
 
 def webcam_region_pixel_bounds(
@@ -168,6 +185,7 @@ def crop_gameplay_region(
     target_width: int,
     target_height: int,
     focus: tuple[float, float] | None = None,
+    gameplay_zoom: float = 1.0,
 ) -> np.ndarray:
     """Crop a selected gameplay region to a panel aspect without letterboxing."""
 
@@ -190,7 +208,7 @@ def crop_gameplay_region(
         target_width,
         target_height,
         focus=relative_focus,
-        zoom=1.0,
+        zoom=normalize_gameplay_zoom(gameplay_zoom),
     )
     return cv2.resize(cropped, (target_width, target_height), interpolation=cv2.INTER_AREA)
 
@@ -295,7 +313,7 @@ def _crop_to_aspect(
         crop_width = source_width
         crop_height = int(round(crop_width / target_aspect))
 
-    zoom = max(1.0, float(zoom))
+    zoom = max(GAMEPLAY_ZOOM_MIN, min(GAMEPLAY_ZOOM_MAX, float(zoom)))
     crop_width = max(2, min(source_width, int(crop_width / zoom)))
     crop_height = max(2, min(source_height, int(crop_height / zoom)))
     focus_x, focus_y = _clamp_focus(focus)
@@ -318,6 +336,7 @@ def compose_streamer_stack_frame(
     webcam_region: Mapping[str, object] | None = None,
     gameplay_region: Mapping[str, object] | None = None,
     gameplay_focus: tuple[float, float] | None = None,
+    gameplay_zoom: float = 1.0,
 ) -> np.ndarray:
     """Create a facecam-over-gameplay frame from one source recording."""
 
@@ -346,6 +365,7 @@ def compose_streamer_stack_frame(
             target_width=output_width,
             target_height=gameplay_height,
             focus=gameplay_focus,
+            gameplay_zoom=gameplay_zoom,
         )
     else:
         gameplay = _crop_to_aspect(

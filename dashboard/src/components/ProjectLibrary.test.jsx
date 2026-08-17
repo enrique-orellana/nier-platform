@@ -149,6 +149,7 @@ describe('ProjectLibrary', () => {
                 source_video_url: '/videos/job-5/source.mp4',
                 layout_format: 'streamer_stack',
                 streamer_tracking_enabled: false,
+                gameplay_zoom: 1,
                 render_status: 'found',
               }],
               clip_count: 1,
@@ -178,6 +179,14 @@ describe('ProjectLibrary', () => {
         return Promise.resolve({
           ok: true,
           json: async () => ({ streamer_tracking_enabled: true }),
+        });
+      }
+      if (String(url).includes('/api/jobs/job-5/clips/0/gameplay-zoom')) {
+        expect(options.method).toBe('PATCH');
+        expect(JSON.parse(options.body)).toEqual({ gameplay_zoom: 1.1 });
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ gameplay_zoom: 1.1 }),
         });
       }
       if (String(url).includes('/api/jobs/job-5/clips/0/render')) {
@@ -249,6 +258,15 @@ describe('ProjectLibrary', () => {
       );
     });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze & Render' })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Preview 9:16' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save zoom' }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/jobs/job-5/clips/0/gameplay-zoom',
+        expect.objectContaining({ method: 'PATCH' }),
+      );
+    });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Use Face/Person Tracking' }));
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(

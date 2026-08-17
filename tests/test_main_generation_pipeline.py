@@ -356,6 +356,7 @@ class MainGenerationPipelineTests(unittest.TestCase):
                     "facecam_size": "medium",
                     "webcam_region": WEBCAM_REGION,
                     "gameplay_region": GAMEPLAY_REGION,
+                    "gameplay_zoom": 1.25,
                     "streamer_tracking_enabled": True,
                 }
             ]
@@ -400,6 +401,7 @@ class MainGenerationPipelineTests(unittest.TestCase):
 
         self.assertEqual(render.call_args.kwargs["webcam_region"], WEBCAM_REGION)
         self.assertEqual(render.call_args.kwargs["gameplay_region"], GAMEPLAY_REGION)
+        self.assertEqual(render.call_args.kwargs["gameplay_zoom"], 1.25)
         self.assertTrue(render.call_args.kwargs["streamer_tracking_enabled"])
 
     def test_render_clip_plan_requires_webcam_region_for_streamer_stack(self):
@@ -678,6 +680,7 @@ class MainGenerationPipelineTests(unittest.TestCase):
                 "end": 2.0,
                 "webcam_region": WEBCAM_REGION,
                 "gameplay_region": GAMEPLAY_REGION,
+                "gameplay_zoom": 1.25,
                 "streamer_tracking_enabled": True,
             }
         ]
@@ -705,6 +708,7 @@ class MainGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(render.call_args.kwargs["facecam_size"], "large")
         self.assertEqual(render.call_args.kwargs["webcam_region"], WEBCAM_REGION)
         self.assertEqual(render.call_args.kwargs["gameplay_region"], GAMEPLAY_REGION)
+        self.assertEqual(render.call_args.kwargs["gameplay_zoom"], 1.25)
         self.assertTrue(render.call_args.kwargs["streamer_tracking_enabled"])
         self.assertEqual(result[0]["layout_format"], "streamer_stack")
         self.assertEqual(result[0]["facecam_size"], "large")
@@ -739,6 +743,7 @@ class MainGenerationPipelineTests(unittest.TestCase):
                 "facecam_size": "large",
                 "webcam_region": WEBCAM_REGION,
                 "gameplay_region": GAMEPLAY_REGION,
+                "gameplay_zoom": 1.0,
                 "streamer_tracking_enabled": True,
             },
         )
@@ -746,6 +751,7 @@ class MainGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(manifest["export_policy"]["facecam_size"], "large")
         self.assertEqual(manifest["export_policy"]["webcam_region"], WEBCAM_REGION)
         self.assertEqual(manifest["export_policy"]["gameplay_region"], GAMEPLAY_REGION)
+        self.assertEqual(manifest["export_policy"]["gameplay_zoom"], 1.0)
         self.assertTrue(manifest["export_policy"]["streamer_tracking_enabled"])
 
     def test_streamer_render_validates_master_dimensions_fps_and_audio(self):
