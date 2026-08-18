@@ -152,14 +152,14 @@ STRICT EXCLUSIONS:
 - No generic intros/outros or purely sponsorship segments unless they contain the hook.
 - No clips < 15 s or > 60 s.
 
-OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by predicted performance (best to worst). In the descriptions, ALWAYS include a CTA like "Follow me and comment X and I'll send you the workflow" (especially if discussing an n8n workflow):
+OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by predicted performance (best to worst). In the descriptions, ALWAYS include a compelling, context-aware Call-To-Action (CTA) tailored specifically to the video type/content and in the same language as the transcript (e.g. for tutorials/tools: comment for the template/guide; for music/creative: use this audio, tag friends or drop a reaction; for podcast/discussions: share opinions in comments; for entertainment/gaming: follow for part 2, save or share):
 {{
   "shorts": [
     {{
       "start": <number in seconds, e.g., 12.340>,
       "end": <number in seconds, e.g., 37.900>,
-      "video_description_for_tiktok": "<description for TikTok oriented to get views>",
-      "video_description_for_instagram": "<description for Instagram oriented to get views>",
+      "video_description_for_tiktok": "<description for TikTok oriented to get views with contextual CTA>",
+      "video_description_for_instagram": "<description for Instagram oriented to get views with contextual CTA>",
       "video_title_for_youtube_short": "<title for YouTube Short oriented to get views 100 chars max>",
       "viral_hook_text": "<SHORT punchy text overlay (max 10 words). MUST BE IN THE SAME LANGUAGE AS THE VIDEO TRANSCRIPT. Examples: 'POV: You realized...', 'Did you know?', 'Stop doing this!'>"
     }}
