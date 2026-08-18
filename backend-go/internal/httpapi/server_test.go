@@ -1562,6 +1562,50 @@ func TestProjectClipsReturnsDirectS3ArtifactURLWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestProjectClipsUsesCompletedDeferredRenderArtifact(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	parent, err := store.Create(context.Background(), domain.CreateJobInput{
+		Kind:     "clip-generation",
+		Metadata: map[string]any{"defer_render": true},
+	})
+	if err != nil {
+		t.Fatalf("create parent job: %v", err)
+	}
+	if err := store.SetResult(context.Background(), parent.ID, []byte(`{"clips":[{"source_video_filename":"source.mp4","render_status":"found"}]}`)); err != nil {
+		t.Fatalf("set parent result: %v", err)
+	}
+	child, err := store.Create(context.Background(), domain.CreateJobInput{
+		Kind:        "clip-render",
+		ParentJobID: parent.ID,
+		ClipIndex:   0,
+	})
+	if err != nil {
+		t.Fatalf("create render job: %v", err)
+	}
+	if err := store.SetResult(context.Background(), child.ID, []byte(`{"clips":[{"video_filename":"source_clip_1.mp4"}]}`)); err != nil {
+		t.Fatalf("set render result: %v", err)
+	}
+	if _, err := store.Transition(context.Background(), child.ID, domain.JobStatusProcessing, ""); err != nil {
+		t.Fatalf("start render job: %v", err)
+	}
+	if _, err := store.Transition(context.Background(), child.ID, domain.JobStatusCompleted, ""); err != nil {
+		t.Fatalf("complete render job: %v", err)
+	}
+
+	server := NewServerWithStore(config.Config{OutputDir: t.TempDir()}, store)
+	server.artifactURLOverride = func(jobID, filename string) string {
+		return "https://storage.example/openshorts-media/" + jobID + "/" + filename + "?X-Amz-Signature=test"
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/projects/clips/"+parent.ID, nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	want := "https://storage.example/openshorts-media/" + parent.ID + "/source_clip_1.mp4?"
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), want) {
+		t.Fatalf("expected completed render artifact URL, got %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestCodexStatelessRoutesUseWorkerOperations(t *testing.T) {
 	server := NewServerWithDependencies(config.Config{}, jobs.NewMemoryStore(), nil, codexOperation{})
 	for _, test := range []struct {

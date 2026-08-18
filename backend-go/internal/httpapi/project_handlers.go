@@ -131,13 +131,14 @@ func (s *Server) projectClips(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) readPersistedProjectClips(job domain.Job) ([]map[string]any, time.Time, bool) {
-	if len(job.Result) == 0 {
+	resultBytes := s.decorateDeferredClipResult(context.Background(), job)
+	if len(resultBytes) == 0 {
 		return nil, time.Time{}, false
 	}
 	var result struct {
 		Clips []map[string]any `json:"clips"`
 	}
-	if json.Unmarshal(job.Result, &result) != nil || len(result.Clips) == 0 {
+	if json.Unmarshal(resultBytes, &result) != nil || len(result.Clips) == 0 {
 		return nil, time.Time{}, false
 	}
 	for _, clip := range result.Clips {
