@@ -14,7 +14,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getApiUrl } from "../config";
 import { toProxiedVideoUrl } from "../lib/videoUrls";
 import { CLIP_WORKFLOW_STATUSES } from "./clipWorkflowStatuses";
@@ -157,25 +157,45 @@ export default function ProjectLibrary({
   const [trackingSavingIndex, setTrackingSavingIndex] = useState(null);
   const [trackingErrors, setTrackingErrors] = useState({});
   const [statusFilter, setStatusFilter] = useState("all");
+  const projectsRequestRef = useRef(null);
 
-  const loadProjects = useCallback(async () => {
-    setIsLoading(true);
-    setError("");
-    try {
-      const res = await fetch(
-        getApiUrl("/api/projects/history?limit=48&refresh=true"),
-      );
-      if (!res.ok) {
-        throw new Error(await res.text());
+  const loadProjects = useCallback(() => {
+    if (projectsRequestRef.current) return projectsRequestRef.current;
+
+    const request = (async () => {
+      setIsLoading(true);
+      setError("");
+      try {
+        const res = await fetch(
+          getApiUrl("/api/projects/history?limit=48&refresh=true"),
+        );
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        const data = await res.json();
+        setProjects(Array.isArray(data.projects) ? data.projects : []);
+      } catch (e) {
+        setProjects([]);
+        setError(e.message || "Failed to load projects");
+      } finally {
+        setIsLoading(false);
       }
-      const data = await res.json();
-      setProjects(Array.isArray(data.projects) ? data.projects : []);
-    } catch (e) {
-      setProjects([]);
-      setError(e.message || "Failed to load projects");
-    } finally {
-      setIsLoading(false);
-    }
+    })();
+
+    projectsRequestRef.current = request;
+    request.then(
+      () => {
+        if (projectsRequestRef.current === request) {
+          projectsRequestRef.current = null;
+        }
+      },
+      () => {
+        if (projectsRequestRef.current === request) {
+          projectsRequestRef.current = null;
+        }
+      },
+    );
+    return request;
   }, []);
 
   useEffect(() => {

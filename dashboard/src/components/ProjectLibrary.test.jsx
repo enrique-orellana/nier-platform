@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ProjectLibrary from "./ProjectLibrary";
@@ -71,6 +72,27 @@ describe("ProjectLibrary", () => {
         "http://minio.example/job-2/clip.mp4?signature=old",
       );
     });
+  });
+
+  it("deduplicates the initial history request under StrictMode", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ projects: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <StrictMode>
+        <ProjectLibrary />
+      </StrictMode>,
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes("/api/projects/history"),
+      ),
+    ).toHaveLength(1);
   });
 
   it("uses the source video for a project card without a rendered clip", async () => {
