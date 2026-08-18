@@ -167,6 +167,75 @@ describe("ProjectLibrary", () => {
     });
   });
 
+  it("switches to the rendered video when status metadata reports completion", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url) => {
+        if (String(url).includes("/api/projects/history")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              projects: [
+                {
+                  job_id: "job-rendered",
+                  title: "Rendered project",
+                  clips: [
+                    {
+                      index: 0,
+                      source_video_url: "/videos/job-rendered/source.mp4",
+                      render_status: "found",
+                    },
+                  ],
+                },
+              ],
+            }),
+          });
+        }
+        if (String(url).includes("/api/projects/clips/job-rendered")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              clips: [
+                {
+                  index: 0,
+                  source_video_url: "/videos/job-rendered/source.mp4",
+                  render_status: "found",
+                },
+              ],
+            }),
+          });
+        }
+        if (String(url).includes("/api/status/job-rendered")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                clips: [
+                  {
+                    index: 0,
+                    render_status: "ready",
+                    render_job_id: "render-job-1",
+                    video_filename: "rendered_clip_1.mp4",
+                    manifest_path: "manifests/clip_1.json",
+                  },
+                ],
+              },
+            }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({ clips: {} }) });
+      }),
+    );
+
+    render(<ProjectLibrary projectId="job-rendered" />);
+
+    await waitFor(() => {
+      expect(document.querySelector("video")?.getAttribute("src")).toBe(
+        "/videos/job-rendered/rendered_clip_1.mp4",
+      );
+    });
+  });
+
   it("does not fetch a transcript while a project clip card is loading", async () => {
     const fetchMock = vi.fn((url) => {
       if (String(url).includes("/api/projects/history")) {

@@ -37,11 +37,27 @@ function mergeAuthoritativeRenderStatuses(clips, statusClips) {
     });
     if (!authoritative || !authoritative.render_status) return clip;
 
+    const renderedFields =
+      authoritative.render_status === "ready"
+        ? {
+            ...(authoritative.video_url
+              ? { video_url: authoritative.video_url }
+              : {}),
+            ...(authoritative.video_filename
+              ? { video_filename: authoritative.video_filename }
+              : {}),
+            ...(authoritative.manifest_path
+              ? { manifest_path: authoritative.manifest_path }
+              : {}),
+          }
+        : {};
+
     return {
       ...clip,
       render_status: authoritative.render_status,
       render_job_id: authoritative.render_job_id || null,
       render_error: authoritative.render_error || null,
+      ...renderedFields,
     };
   });
 }
@@ -84,7 +100,14 @@ function safeNumber(value, fallback = 0) {
 }
 
 function normalizeClipForResultCard(clip, index, fallbackJobId) {
-  const renderedVideoUrl = clip.video_url || clip.url || "";
+  const renderedVideoUrl =
+    clip.video_url ||
+    clip.url ||
+    (clip.render_status === "ready" && clip.video_filename && fallbackJobId
+      ? `/videos/${encodeURIComponent(fallbackJobId)}/${encodeURIComponent(
+          clip.video_filename,
+        )}`
+      : "");
   const videoUrl = renderedVideoUrl || clip.source_video_url || "";
   const title =
     clip.video_title_for_youtube_short || clip.title || `Clip ${index + 1}`;
