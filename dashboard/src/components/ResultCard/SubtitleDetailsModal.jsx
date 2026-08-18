@@ -180,6 +180,7 @@ export default function SubtitleDetailsModal({
             ) : cues.length > 0 ? (
               <RemotionPreview
                 videoUrl={videoUrl}
+                videoStartSeconds={clip.start || 0}
                 durationInSeconds={durationSec}
                 fps={clip.output_fps || 30}
                 width={clip.output_width || 1080}

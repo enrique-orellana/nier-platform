@@ -3,8 +3,11 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../RemotionPreview", () => ({
-  default: ({ subtitles }) => (
-    <div data-testid="subtitle-details-preview">
+  default: ({ subtitles, videoStartSeconds }) => (
+    <div
+      data-testid="subtitle-details-preview"
+      data-video-start-seconds={videoStartSeconds}
+    >
       {subtitles.captions.map((cue) => cue.text).join(" | ")}
     </div>
   ),
@@ -43,5 +46,8 @@ describe("SubtitleDetailsModal", () => {
     expect(screen.getByTestId("subtitle-details-preview")).toHaveTextContent(
       "Hello there",
     );
+    expect(
+      screen.getByTestId("subtitle-details-preview"),
+    ).toHaveAttribute("data-video-start-seconds", "120");
   });
 });

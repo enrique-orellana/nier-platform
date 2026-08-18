@@ -39,6 +39,7 @@ export default function SubtitleModal({
   onGenerate,
   isProcessing,
   videoUrl,
+  videoStartSeconds = 0,
   jobId,
   clipIndex,
   existingHook,
@@ -185,6 +186,7 @@ export default function SubtitleModal({
           ) : useRemotionPreview ? (
             <RemotionPreview
               videoUrl={toProxiedVideoUrl(videoUrl)}
+              videoStartSeconds={videoStartSeconds}
               durationInSeconds={durationSec}
               subtitles={subtitleConfig}
               hook={existingHook || null}

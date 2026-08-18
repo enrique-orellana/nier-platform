@@ -817,6 +817,7 @@ export default function ResultCard({
         onGenerate={handleSubtitle}
         isProcessing={isSubtitling}
         videoUrl={originalVideoUrl}
+        videoStartSeconds={clip.start || 0}
         jobId={jobId}
         clipIndex={index}
         existingHook={activeLayers.hook}
@@ -910,7 +911,7 @@ export default function ResultCard({
         onSessionReady={(session) => {
           editorSessionRef.current = session;
         }}
-        useLocalEditor={editorOpen}
+        useLocalEditor={false}
         editorActions={{
           onAutoEdit: handleAutoEdit,
           isEditing,
