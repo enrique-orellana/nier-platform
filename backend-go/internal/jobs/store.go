@@ -35,6 +35,7 @@ type Store interface {
 	RetryHighlightProject(context.Context, string) (domain.Job, error)
 	DeleteHighlightProject(context.Context, string) error
 	Get(context.Context, string) (domain.Job, bool)
+	DeleteJob(context.Context, string) error
 	Transition(context.Context, string, domain.JobStatus, string) (domain.Job, error)
 	AppendLog(context.Context, string, string) error
 	SetResult(context.Context, string, []byte) error
@@ -278,6 +279,32 @@ func (s *MemoryStore) Get(_ context.Context, id string) (domain.Job, bool) {
 		return domain.Job{}, false
 	}
 	return cloneJob(job), true
+}
+
+func (s *MemoryStore) DeleteJob(_ context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.jobs[id]; !ok {
+		return ErrJobNotFound
+	}
+	removed := map[string]bool{id: true}
+	for {
+		changed := false
+		for jobID, job := range s.jobs {
+			if removed[jobID] || !removed[job.ParentJobID] {
+				continue
+			}
+			removed[jobID] = true
+			changed = true
+		}
+		if !changed {
+			break
+		}
+	}
+	for jobID := range removed {
+		delete(s.jobs, jobID)
+	}
+	return nil
 }
 
 func (s *MemoryStore) Transition(_ context.Context, id string, next domain.JobStatus, message string) (domain.Job, error) {

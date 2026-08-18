@@ -337,5 +337,9 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request, jobID str
 		}
 		s3Deleted = deleted
 	}
+	if err := s.store.DeleteJob(r.Context(), jobID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "job_id": jobID, "s3_deleted_count": s3Deleted})
 }

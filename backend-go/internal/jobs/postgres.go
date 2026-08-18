@@ -480,6 +480,28 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (domain.Job, bool) {
 	return job, true
 }
 
+func (s *PostgresStore) DeleteJob(ctx context.Context, id string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM clip_statuses WHERE project_id = $1`, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM clip_versions WHERE project_id = $1`, id); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM jobs WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if count, _ := result.RowsAffected(); count == 0 {
+		return ErrJobNotFound
+	}
+	return tx.Commit()
+}
+
 func (s *PostgresStore) Claim(ctx context.Context, id string) (domain.Job, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
