@@ -36,6 +36,25 @@ const defaultSubtitleTrackId = (nextManifest) =>
   nextManifest?.subtitle_tracks?.[0]?.id ||
   (nextManifest?.timeline?.transcript?.segments?.length ? "original" : null);
 
+const manifestFromClip = (clip = {}) => {
+  const start = Number(clip.start);
+  const end = Number(clip.end);
+  const duration = Number(clip.duration);
+  const startSec = Number.isFinite(start) ? start : 0;
+  const endSec =
+    Number.isFinite(end) && end > startSec
+      ? end
+      : startSec + (Number.isFinite(duration) && duration > 0 ? duration : 30);
+  return {
+    timeline: {
+      source_video_url: clip.source_video_url || clip.video_url || "",
+      trim: { start_sec: startSec, end_sec: endSec },
+    },
+    layers: {},
+    subtitle_tracks: [],
+  };
+};
+
 const publishingMetadataFrom = (sourceManifest, clip) => {
   const savedHashtags = sourceManifest?.publishing_metadata?.hashtags;
   const clipHashtags = clip?.hashtags;
@@ -281,8 +300,13 @@ export default function FullScreenEditor({
         const manifestResponse = await fetch(
           getApiUrl(`/api/clip/${jobId}/${clipIndex}/manifest`),
         );
-        if (!manifestResponse.ok) return;
-        payload = await manifestResponse.json();
+        if (manifestResponse.ok) {
+          payload = await manifestResponse.json();
+        } else if (manifestResponse.status === 404) {
+          payload = { manifest: manifestFromClip(clip) };
+        } else {
+          return;
+        }
       }
       if (cancelled) return;
       const hydratedManifest = await hydrateManifest(payload.manifest);

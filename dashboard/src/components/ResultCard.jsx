@@ -128,6 +128,11 @@ export default function ResultCard({
   const [editError, setEditError] = useState(null);
   const editorSessionRef = React.useRef(null);
 
+  const handleEditorClose = () => {
+    setShowClipEditor(false);
+    onEditorClose?.();
+  };
+
   const clipDuration = clip.end && clip.start ? clip.end - clip.start : 30;
 
   // Accumulate Remotion layers across operations
@@ -902,7 +907,7 @@ export default function ResultCard({
       <FullScreenEditor
         isOpen={editorOpen || showClipEditor}
         initialVersionId={editorVersionId}
-        onClose={onEditorClose || (() => setShowClipEditor(false))}
+        onClose={handleEditorClose}
         onVersionChange={onEditorVersionChange}
         clip={clip}
         jobId={jobId}

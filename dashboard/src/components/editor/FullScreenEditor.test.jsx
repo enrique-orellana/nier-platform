@@ -8,8 +8,14 @@ const renderVersionMocks = vi.hoisted(() => ({
 }));
 vi.mock("../../editor/renderVersion", () => renderVersionMocks);
 vi.mock("../../components/RemotionPreview", () => ({
-  default: ({ currentFrame = 0 }) => (
-    <div data-testid="remotion-player-frame">{currentFrame}</div>
+  default: ({ currentFrame = 0, durationInSeconds, videoUrl }) => (
+    <div
+      data-testid="remotion-player-frame"
+      data-duration={durationInSeconds}
+      data-video-url={videoUrl}
+    >
+      {currentFrame}
+    </div>
   ),
 }));
 
@@ -915,5 +921,52 @@ describe("FullScreenEditor", () => {
     expect(
       screen.getByRole("button", { name: "Save as new version" }),
     ).toBeEnabled();
+  });
+
+  it("falls back to the clip range when a legacy clip has no manifest", async () => {
+    const onClose = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (String(url).endsWith("/versions")) {
+          return {
+            ok: true,
+            json: async () => ({ current_version_id: "", versions: [] }),
+          };
+        }
+        if (String(url).endsWith("/manifest")) {
+          return { ok: false, status: 404, json: async () => ({}) };
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(
+      <FullScreenEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          video_url: "/videos/clip.mp4",
+          start: 34.2,
+          end: 51.8,
+        }}
+        onClose={onClose}
+      />,
+    );
+
+    await waitFor(() => {
+      const duration = Number(
+        screen.getByTestId("remotion-player-frame").dataset.duration,
+      );
+      expect(duration).toBeCloseTo(17.6, 5);
+    });
+    expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
+      "data-video-url",
+      "/videos/clip.mp4",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "close editor" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
