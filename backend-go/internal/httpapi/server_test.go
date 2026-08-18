@@ -16,53 +16,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/mutonby/openshorts/backend-go/internal/config"
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
-	"github.com/mutonby/openshorts/backend-go/internal/integrations"
 	"github.com/mutonby/openshorts/backend-go/internal/jobs"
 	"github.com/mutonby/openshorts/backend-go/internal/manifests"
 )
 
-type staticVideoS3 struct{}
-
-func (staticVideoS3) ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
-	return &s3.ListObjectsV2Output{}, nil
-}
-
-func (staticVideoS3) DeleteObjects(context.Context, *s3.DeleteObjectsInput, ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error) {
-	return &s3.DeleteObjectsOutput{Deleted: []types.DeletedObject{}}, nil
-}
-
-func (staticVideoS3) GetObject(_ context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
-	if aws.ToString(input.Key) != "job-1/source.mp4" {
-		return nil, fmt.Errorf("unexpected object key %q", aws.ToString(input.Key))
-	}
-	return &s3.GetObjectOutput{
-		Body:          io.NopCloser(strings.NewReader("video")),
-		ContentLength: aws.Int64(5),
-		ContentType:   aws.String("video/mp4"),
-	}, nil
-}
-
-func TestStaticOutputFallsBackToMinioObject(t *testing.T) {
-	server := NewServer(config.Config{OutputDir: t.TempDir(), S3Bucket: "openshorts-media"})
-	server.s3Store = &integrations.S3Store{Client: staticVideoS3{}, Bucket: "openshorts-media"}
+func TestLegacyVideoRouteIsRemoved(t *testing.T) {
+	server := NewServer(config.Config{OutputDir: t.TempDir()})
 
 	request := httptest.NewRequest(http.MethodGet, "/videos/job-1/source.mp4", nil)
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, request)
 
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected MinIO fallback to return 200, got %d: %s", response.Code, response.Body.String())
-	}
-	if response.Body.String() != "video" {
-		t.Fatalf("unexpected object body %q", response.Body.String())
-	}
-	if got := response.Header().Get("Content-Type"); got != "video/mp4" {
-		t.Fatalf("expected video content type, got %q", got)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("expected legacy video route to be removed, got %d: %s", response.Code, response.Body.String())
 	}
 }
 

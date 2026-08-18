@@ -18,8 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/mutonby/openshorts/backend-go/internal/config"
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
 	"github.com/mutonby/openshorts/backend-go/internal/integrations"
@@ -82,7 +80,6 @@ func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, 
 	}
 	mux.HandleFunc("/health", server.health)
 	mux.HandleFunc("/ready", server.readiness)
-	mux.HandleFunc("/videos/", server.staticOutput)
 	mux.HandleFunc("/thumbnails/", server.staticThumbnail)
 	mux.HandleFunc("/gallery", server.galleryPage)
 	mux.HandleFunc("/video/", server.videoPage)
@@ -147,14 +144,6 @@ func (s *Server) readiness(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
-}
-
-func (s *Server) staticOutput(w http.ResponseWriter, r *http.Request) {
-	relative := strings.TrimPrefix(r.URL.Path, "/videos/")
-	if s.serveS3Output(w, r, relative) {
-		return
-	}
-	s.serveStatic(w, r, relative, s.config.OutputDir)
 }
 
 func (s *Server) staticThumbnail(w http.ResponseWriter, r *http.Request) {
@@ -322,63 +311,6 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request, relative, r
 		return
 	}
 	http.ServeFile(w, r, candidate)
-}
-
-func (s *Server) serveS3Output(w http.ResponseWriter, r *http.Request, relative string) bool {
-	if s.s3Store == nil || s.s3Store.Client == nil || s.s3Store.Bucket == "" {
-		return false
-	}
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		return false
-	}
-	parts := strings.Split(relative, "/")
-	if relative == "" || strings.Contains(relative, "\\") {
-		return false
-	}
-	for _, part := range parts {
-		if part == "" || part == "." || part == ".." {
-			return false
-		}
-	}
-
-	input := &s3.GetObjectInput{
-		Bucket: aws.String(s.s3Store.Bucket),
-		Key:    aws.String(relative),
-	}
-	if value := r.Header.Get("Range"); value != "" {
-		input.Range = aws.String(value)
-	}
-	object, err := s.s3Store.Client.GetObject(r.Context(), input)
-	if err != nil {
-		return false
-	}
-	defer object.Body.Close()
-
-	w.Header().Set("Accept-Ranges", "bytes")
-	if object.ContentType != nil && aws.ToString(object.ContentType) != "" {
-		w.Header().Set("Content-Type", aws.ToString(object.ContentType))
-	}
-	if object.ContentLength != nil {
-		w.Header().Set("Content-Length", strconv.FormatInt(aws.ToInt64(object.ContentLength), 10))
-	}
-	if object.ContentRange != nil && aws.ToString(object.ContentRange) != "" {
-		w.Header().Set("Content-Range", aws.ToString(object.ContentRange))
-	}
-	if object.ETag != nil && aws.ToString(object.ETag) != "" {
-		w.Header().Set("ETag", aws.ToString(object.ETag))
-	}
-	if object.LastModified != nil {
-		w.Header().Set("Last-Modified", object.LastModified.UTC().Format(http.TimeFormat))
-	}
-	if object.ContentRange != nil || input.Range != nil {
-		w.WriteHeader(http.StatusPartialContent)
-	} else {
-		w.WriteHeader(http.StatusOK)
-	}
-	if r.Method == http.MethodGet {
-		_, _ = io.Copy(w, object.Body)
-	}
-	return true
 }
 
 func (s *Server) renderProxy(w http.ResponseWriter, r *http.Request) {
