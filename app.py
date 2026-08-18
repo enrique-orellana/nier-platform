@@ -2284,7 +2284,7 @@ async def add_subtitles(req: SubtitleRequest):
 
 
 @app.post("/api/local-editor/transcribe")
-async def transcribe_local_editor_video(file: UploadFile = File(...)):
+async def transcribe_local_editor_video(request: Request, file: UploadFile = File(...)):
     if not file.content_type or not file.content_type.startswith("video/"):
         raise HTTPException(status_code=400, detail="Please upload a video file.")
 
@@ -2294,7 +2294,12 @@ async def transcribe_local_editor_video(file: UploadFile = File(...)):
         with open(temp_path, "wb") as output:
             shutil.copyfileobj(file.file, output)
         loop = asyncio.get_running_loop()
-        transcript = await loop.run_in_executor(None, transcribe_audio, temp_path)
+        transcript = await loop.run_in_executor(
+            None,
+            transcribe_audio,
+            temp_path,
+            request.headers,
+        )
         return {
             "language": transcript.get("language", "und"),
             "captions": word_captions_from_transcript(transcript),

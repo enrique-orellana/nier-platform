@@ -57,6 +57,7 @@ class AIConfig:
     # replacing the explicit guards in the transcription entry points.
     transcription_provider: str = "openrouter"
     transcription_model: str = OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL
+    transcription_openrouter_provider: str = ""
 
     def normalized_provider(self) -> str:
         provider = (self.provider or "gemini").strip().lower()
@@ -221,6 +222,12 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         "AI_TRANSCRIPTION_MODEL",
         default=OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL,
     )
+    transcription_openrouter_provider = _pick(
+        source,
+        "X-AI-Transcription-OpenRouter-Provider",
+        "AI_TRANSCRIPTION_OPENROUTER_PROVIDER",
+        default="",
+    )
 
     text_model = _normalize_model_for_provider(text_model, provider_normalized, "text")
     analyze_model = _normalize_model_for_provider(analyze_model, provider_normalized, "analysis")
@@ -240,6 +247,7 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         vision_reasoning_effort=vision_reasoning_effort,
         transcription_provider=transcription_provider,
         transcription_model=transcription_model,
+        transcription_openrouter_provider=transcription_openrouter_provider,
     )
 
 
@@ -256,6 +264,7 @@ def ai_config_to_env(config: AIConfig) -> dict[str, str]:
         "AI_VISION_REASONING_EFFORT": config.vision_reasoning_effort,
         "AI_TRANSCRIPTION_PROVIDER": config.transcription_provider,
         "AI_TRANSCRIPTION_MODEL": config.transcription_model,
+        "AI_TRANSCRIPTION_OPENROUTER_PROVIDER": config.transcription_openrouter_provider,
     }
     if config.api_key:
         env["AI_API_KEY"] = config.api_key
@@ -324,6 +333,9 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
         "response_format": "verbose_json",
         "timestamp_granularities": ["segment", "word"],
     }
+    provider = (config.transcription_openrouter_provider or "").strip()
+    if provider:
+        payload["provider"] = {"only": [provider]}
     transcription_base_url = config.resolved_transcription_base_url()
     endpoint = f"{transcription_base_url}/audio/transcriptions"
     response_format = "verbose_json"

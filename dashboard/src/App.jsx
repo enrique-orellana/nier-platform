@@ -332,6 +332,10 @@ function App() {
       localStorage.getItem("ai_transcription_model_v1") ||
       OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL,
   );
+  const [transcriptionOpenRouterProvider, setTranscriptionOpenRouterProvider] =
+    useState(
+      () => localStorage.getItem("ai_transcription_openrouter_provider_v1") || "",
+    );
   // Social API State - Load encrypted or plain
   const [uploadPostKey, setUploadPostKey] = useState(() => {
     const stored = localStorage.getItem("uploadPostKey_v3");
@@ -883,6 +887,13 @@ function App() {
   }, [transcriptionModel]);
 
   useEffect(() => {
+    localStorage.setItem(
+      "ai_transcription_openrouter_provider_v1",
+      transcriptionOpenRouterProvider,
+    );
+  }, [transcriptionOpenRouterProvider]);
+
+  useEffect(() => {
     const previousProvider = lastProviderRef.current;
     lastProviderRef.current = aiProvider;
 
@@ -1011,6 +1022,12 @@ function App() {
       "X-AI-Transcription-Provider": transcriptionProvider,
       "X-AI-Transcription-Model": transcriptionModel,
     };
+    const configuredTranscriptionProvider =
+      transcriptionOpenRouterProvider.trim();
+    if (configuredTranscriptionProvider) {
+      headers["X-AI-Transcription-OpenRouter-Provider"] =
+        configuredTranscriptionProvider;
+    }
 
     if (shouldSendAiBaseUrl()) {
       headers["X-AI-Base-Url"] = resolveAiBaseUrl(aiProvider, aiBaseUrl);
@@ -1618,6 +1635,10 @@ function App() {
                 setTranscriptionProvider={setTranscriptionProvider}
                 transcriptionModel={transcriptionModel}
                 setTranscriptionModel={setTranscriptionModel}
+                transcriptionOpenRouterProvider={transcriptionOpenRouterProvider}
+                setTranscriptionOpenRouterProvider={
+                  setTranscriptionOpenRouterProvider
+                }
                 lmStudioAvailable={lmStudioAvailable}
                 lmStudioModels={lmStudioModels}
                 codexStatus={codexStatus}

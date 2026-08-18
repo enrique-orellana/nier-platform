@@ -1388,6 +1388,16 @@ func TestLocalEditorTranscribeUsesPythonWorkerOperation(t *testing.T) {
 	}
 }
 
+func TestTranslationHeadersIncludesOpenRouterTranscriptionProvider(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/local-editor/transcribe", nil)
+	req.Header.Set("X-AI-Transcription-OpenRouter-Provider", "deepinfra")
+
+	headers := translationHeaders(req)
+	if headers["X-AI-Transcription-OpenRouter-Provider"] != "deepinfra" {
+		t.Fatalf("expected OpenRouter transcription provider header to be forwarded: %#v", headers)
+	}
+}
+
 func TestClipTranscriptRouteReadsWordTimingFromMetadata(t *testing.T) {
 	outputDir := t.TempDir()
 	metadataPath := filepath.Join(outputDir, "job-1", "source_metadata.json")

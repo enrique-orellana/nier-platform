@@ -5,7 +5,7 @@ import app as app_module
 
 def test_local_editor_transcription_returns_segments(tmp_path, monkeypatch):
     monkeypatch.setattr(app_module, "UPLOAD_DIR", str(tmp_path))
-    monkeypatch.setattr(app_module, "transcribe_audio", lambda path: {
+    monkeypatch.setattr(app_module, "transcribe_audio", lambda path, headers=None: {
         "language": "it",
         "segments": [
             {
@@ -59,6 +59,31 @@ def test_local_editor_transcription_returns_segments(tmp_path, monkeypatch):
         ],
     }
     assert list(tmp_path.iterdir()) == []
+
+
+def test_local_editor_transcription_forwards_ai_headers(tmp_path, monkeypatch):
+    monkeypatch.setattr(app_module, "UPLOAD_DIR", str(tmp_path))
+    captured = {}
+
+    def fake_transcribe_audio(path, headers=None):
+        captured["headers"] = headers
+        return {
+            "language": "en",
+            "segments": [{"start": 0.0, "end": 1.0, "text": "Hello", "words": []}],
+        }
+
+    monkeypatch.setattr(app_module, "transcribe_audio", fake_transcribe_audio)
+
+    response = TestClient(app_module.app).post(
+        "/api/local-editor/transcribe",
+        headers={
+            "X-AI-Transcription-OpenRouter-Provider": "deepinfra",
+        },
+        files={"file": ("demo.mp4", b"video-bytes", "video/mp4")},
+    )
+
+    assert response.status_code == 200
+    assert captured["headers"]["x-ai-transcription-openrouter-provider"] == "deepinfra"
 
 
 def test_local_editor_transcription_rejects_non_video_upload(tmp_path, monkeypatch):

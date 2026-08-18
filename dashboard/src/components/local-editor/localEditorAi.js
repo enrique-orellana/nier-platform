@@ -24,6 +24,13 @@ export const getLocalAiHeaders = () => {
       localStorage.getItem("ai_transcription_model_v1") ||
       "openai/whisper-large-v3",
   };
+  const transcriptionOpenRouterProvider = (
+    localStorage.getItem("ai_transcription_openrouter_provider_v1") || ""
+  ).trim();
+  if (transcriptionOpenRouterProvider) {
+    headers["X-AI-Transcription-OpenRouter-Provider"] =
+      transcriptionOpenRouterProvider;
+  }
   const baseUrl = resolveAiBaseUrl(
     provider,
     localStorage.getItem("ai_base_url_v1") || "",

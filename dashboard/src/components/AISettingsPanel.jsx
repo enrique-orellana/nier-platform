@@ -24,6 +24,8 @@ export default function AISettingsPanel({
   setTranscriptionProvider = () => {},
   transcriptionModel = "openai/whisper-large-v3",
   setTranscriptionModel = () => {},
+  transcriptionOpenRouterProvider = "",
+  setTranscriptionOpenRouterProvider = () => {},
   aiTextEffort = "auto",
   setAiTextEffort = () => {},
   aiAnalyzeEffort = "auto",
@@ -537,9 +539,24 @@ export default function AISettingsPanel({
             className="input-field"
             placeholder="openai/whisper-large-v3"
           />
+          <label className="block">
+            <span className="block text-sm text-zinc-300 mb-2">
+              OpenRouter transcription provider
+            </span>
+            <input
+              aria-label="OpenRouter transcription provider"
+              value={transcriptionOpenRouterProvider}
+              onChange={(event) =>
+                setTranscriptionOpenRouterProvider(event.target.value)
+              }
+              readOnly={transcriptionProvider !== "openrouter"}
+              className="input-field"
+              placeholder="deepinfra"
+            />
+          </label>
           <p className="text-xs text-zinc-500">
-            Uses OpenRouter with the configured API key. The default model is
-            openai/whisper-large-v3.
+            Uses OpenRouter with the configured API key. Leave the provider
+            blank to let OpenRouter choose the route.
           </p>
         </div>
       </div>
