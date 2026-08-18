@@ -912,7 +912,7 @@ export default function ResultCard({
         onSessionReady={(session) => {
           editorSessionRef.current = session;
         }}
-        useLocalEditor={false}
+        useLocalEditor={true}
         editorActions={{
           onAutoEdit: handleAutoEdit,
           isEditing,
