@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 const useRemotionEnvironmentMock = vi.hoisted(() => vi.fn());
@@ -69,5 +69,26 @@ describe("ShortVideo media source", () => {
     expect(remotionVideoPropsMock).toHaveBeenCalledWith(
       expect.objectContaining({ startFrom: 510 }),
     );
+  });
+
+  it("seeks the browser preview to the master offset when metadata loads", () => {
+    useRemotionEnvironmentMock.mockReturnValue({ isRendering: false });
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        videoStartSeconds={17}
+        fps={30}
+      />,
+    );
+    const video = screen.getByTestId("html5-video");
+    Object.defineProperty(video, "currentTime", {
+      configurable: true,
+      value: 0,
+      writable: true,
+    });
+
+    fireEvent.loadedMetadata(video);
+
+    expect(video.currentTime).toBe(17);
   });
 });

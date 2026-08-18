@@ -26,6 +26,12 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     0,
     Math.round(Number(videoStartSeconds) * Number(fps)),
   );
+  const seekBrowserVideoToMasterOffset = (
+    event: React.SyntheticEvent<HTMLVideoElement>,
+  ) => {
+    if (videoStartFrame <= 0) return;
+    event.currentTarget.currentTime = Math.max(0, Number(videoStartSeconds));
+  };
   const environment = useRemotionEnvironment();
   const activeTrack = subtitleTracks?.find(
     (track) => track.id === (activeSubtitleTrackId || subtitleTracks[0]?.id),
@@ -57,6 +63,8 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
           <Html5Video
             src={videoUrl}
             startFrom={videoStartFrame}
+            onLoadedMetadata={seekBrowserVideoToMasterOffset}
+            onCanPlay={seekBrowserVideoToMasterOffset}
             style={{
               width: "100%",
               height: "100%",
