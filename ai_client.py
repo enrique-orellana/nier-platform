@@ -32,6 +32,7 @@ CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.4")
 CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
 AUTO_MODEL_VALUES = {"", "auto", "default"}
 CODEX_DEFAULT_CLIENT_VERSION = "0.144.1"
+AUTO_TRANSCRIPTION_LANGUAGE_VALUES = {"", "auto", "detect", "default"}
 AUTO_REASONING_VALUES = {"", "auto", "default"}
 LMSTUDIO_PLACEHOLDER_MODELS = {"qwen3:latest", "qwen2.5vl:latest"}
 
@@ -58,6 +59,7 @@ class AIConfig:
     transcription_provider: str = "openrouter"
     transcription_model: str = OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL
     transcription_openrouter_provider: str = ""
+    transcription_language: str = "auto"
 
     def normalized_provider(self) -> str:
         provider = (self.provider or "gemini").strip().lower()
@@ -228,6 +230,14 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         "AI_TRANSCRIPTION_OPENROUTER_PROVIDER",
         default="",
     )
+    transcription_language = _pick(
+        source,
+        "X-AI-Transcription-Language",
+        "AI_TRANSCRIPTION_LANGUAGE",
+        default="auto",
+    ).strip().lower()
+    if transcription_language in AUTO_TRANSCRIPTION_LANGUAGE_VALUES:
+        transcription_language = "auto"
 
     text_model = _normalize_model_for_provider(text_model, provider_normalized, "text")
     analyze_model = _normalize_model_for_provider(analyze_model, provider_normalized, "analysis")
@@ -248,6 +258,7 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         transcription_provider=transcription_provider,
         transcription_model=transcription_model,
         transcription_openrouter_provider=transcription_openrouter_provider,
+        transcription_language=transcription_language,
     )
 
 
@@ -265,6 +276,7 @@ def ai_config_to_env(config: AIConfig) -> dict[str, str]:
         "AI_TRANSCRIPTION_PROVIDER": config.transcription_provider,
         "AI_TRANSCRIPTION_MODEL": config.transcription_model,
         "AI_TRANSCRIPTION_OPENROUTER_PROVIDER": config.transcription_openrouter_provider,
+        "AI_TRANSCRIPTION_LANGUAGE": config.transcription_language,
     }
     if config.api_key:
         env["AI_API_KEY"] = config.api_key
@@ -333,6 +345,9 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
         "response_format": "verbose_json",
         "timestamp_granularities": ["segment", "word"],
     }
+    transcription_language = (config.transcription_language or "auto").strip().lower()
+    if transcription_language not in AUTO_TRANSCRIPTION_LANGUAGE_VALUES:
+        payload["language"] = transcription_language
     provider = (config.transcription_openrouter_provider or "").strip()
     if provider:
         payload["provider"] = {"only": [provider]}

@@ -1,5 +1,3 @@
-import { getApiUrl } from "../config";
-
 export const getUrlFilename = (url) => {
   if (!url) return "";
   try {
@@ -17,7 +15,7 @@ export const toProxiedVideoUrl = (url) => {
   return url;
 };
 
-export const resolveClipVideoUrl = (clip, jobId) => {
+export const resolveClipVideoUrl = (clip) => {
   const explicitUrl = clip?.video_url || clip?.url;
   if (explicitUrl) return explicitUrl;
   return "";

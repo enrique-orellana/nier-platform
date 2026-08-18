@@ -40,4 +40,12 @@ describe("local editor AI helpers", () => {
       "X-AI-Transcription-OpenRouter-Provider": "deepinfra",
     });
   });
+
+  it("forwards the saved transcription source language", () => {
+    localStorage.setItem("ai_transcription_language_v1", "it");
+
+    expect(getLocalAiHeaders()).toMatchObject({
+      "X-AI-Transcription-Language": "it",
+    });
+  });
 });

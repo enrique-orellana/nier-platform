@@ -2,6 +2,7 @@ import React from "react";
 
 import { buildVisibleProviders } from "../lib/lmStudio";
 import { codexStatusLabel } from "../lib/openaiCodex";
+import { SUBTITLE_LANGUAGES } from "./subtitleLanguages";
 
 export default function AISettingsPanel({
   aiProvider,
@@ -24,6 +25,8 @@ export default function AISettingsPanel({
   setTranscriptionProvider = () => {},
   transcriptionModel = "openai/whisper-large-v3",
   setTranscriptionModel = () => {},
+  transcriptionLanguage = "auto",
+  setTranscriptionLanguage = () => {},
   transcriptionOpenRouterProvider = "",
   setTranscriptionOpenRouterProvider = () => {},
   aiTextEffort = "auto",
@@ -539,6 +542,28 @@ export default function AISettingsPanel({
             className="input-field"
             placeholder="openai/whisper-large-v3"
           />
+          <label className="block">
+            <span className="block text-sm text-zinc-300 mb-2">
+              Source language
+            </span>
+            <select
+              aria-label="Transcription source language"
+              value={transcriptionLanguage}
+              onChange={(event) => setTranscriptionLanguage(event.target.value)}
+              className="input-field"
+            >
+              <option value="auto">Auto-detect</option>
+              {Object.entries(SUBTITLE_LANGUAGES).map(([code, label]) => (
+                <option key={code} value={code}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-zinc-500">
+              Choose the spoken language to keep transcription in the original
+              language. Auto-detect is used when this is not known.
+            </p>
+          </label>
           <label className="block">
             <span className="block text-sm text-zinc-300 mb-2">
               OpenRouter transcription provider

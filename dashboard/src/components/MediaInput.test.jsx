@@ -47,6 +47,9 @@ describe("MediaInput", () => {
     fireEvent.change(screen.getByLabelText(/original source url/i), {
       target: { value: "https://www.twitch.tv/videos/2842570758" },
     });
+    fireEvent.change(screen.getByLabelText(/transcription source language/i), {
+      target: { value: "it" },
+    });
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: /generate clips/i }));
 
@@ -57,6 +60,7 @@ describe("MediaInput", () => {
       acknowledged: true,
       layoutFormat: "standard",
       facecamSize: "medium",
+      transcriptionLanguage: "it",
     });
   });
 

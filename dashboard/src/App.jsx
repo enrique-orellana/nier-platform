@@ -72,6 +72,7 @@ import {
   getPathForTab,
   parseRoute,
 } from "./routing";
+import { buildProcessRequest } from "./lib/processRequest";
 
 // Enhanced "Encryption" using XOR + Base64 with a Salt
 // This is better than plain Base64 but still client-side.
@@ -332,6 +333,14 @@ function App() {
       localStorage.getItem("ai_transcription_model_v1") ||
       OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL,
   );
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState(
+    () => localStorage.getItem("ai_transcription_language_v1") || "auto",
+  );
+  const handleTranscriptionLanguageChange = (nextLanguage) => {
+    const normalizedLanguage = nextLanguage || "auto";
+    setTranscriptionLanguage(normalizedLanguage);
+    localStorage.setItem("ai_transcription_language_v1", normalizedLanguage);
+  };
   const [transcriptionOpenRouterProvider, setTranscriptionOpenRouterProvider] =
     useState(
       () =>
@@ -1022,6 +1031,7 @@ function App() {
       "X-AI-Vision-Reasoning-Effort": aiVisionEffort,
       "X-AI-Transcription-Provider": transcriptionProvider,
       "X-AI-Transcription-Model": transcriptionModel,
+      "X-AI-Transcription-Language": transcriptionLanguage,
     };
     const configuredTranscriptionProvider =
       transcriptionOpenRouterProvider.trim();
@@ -1216,52 +1226,18 @@ function App() {
     setProcessingMedia(data);
 
     try {
-      let body;
-      const headers = getAiHeaders();
+      const { headers, body } = buildProcessRequest({
+        data,
+        headers: getAiHeaders(),
+      });
       const selectedClipCount = data.clipCount || clipCount;
       const processUrl = getApiUrl(
         `/api/process?clip_count=${encodeURIComponent(selectedClipCount)}`,
       );
 
-      if (data.type === "minio-object" || data.type === "url") {
-        headers["Content-Type"] = "application/json";
-        body = JSON.stringify(
-          data.type === "minio-object"
-            ? {
-                source_object: data.payload,
-                source_url: data.sourceUrl?.trim() || undefined,
-                acknowledged: !!data.acknowledged,
-                defer_render: true,
-                layout_format: data.layoutFormat || "standard",
-                facecam_size: data.facecamSize || "medium",
-              }
-            : {
-                url: data.payload,
-                source_url: data.sourceUrl?.trim() || undefined,
-                acknowledged: !!data.acknowledged,
-                defer_render: true,
-                layout_format: data.layoutFormat || "standard",
-                facecam_size: data.facecamSize || "medium",
-              },
-        );
-      } else {
-        const formData = new FormData();
-        formData.append("file", data.payload);
-        formData.append("acknowledged", data.acknowledged ? "true" : "false");
-        formData.append("defer_render", "true");
-        if (data.sourceUrl?.trim())
-          formData.append("source_url", data.sourceUrl.trim());
-        formData.append("layout_format", data.layoutFormat || "standard");
-        formData.append("facecam_size", data.facecamSize || "medium");
-        body = formData;
-      }
-
       const res = await fetch(processUrl, {
         method: "POST",
-        headers:
-          data.type === "minio-object" || data.type === "url"
-            ? headers
-            : getAiHeaders(),
+        headers,
         body,
       });
 
@@ -1636,6 +1612,8 @@ function App() {
                 setTranscriptionProvider={setTranscriptionProvider}
                 transcriptionModel={transcriptionModel}
                 setTranscriptionModel={setTranscriptionModel}
+                transcriptionLanguage={transcriptionLanguage}
+                setTranscriptionLanguage={handleTranscriptionLanguageChange}
                 transcriptionOpenRouterProvider={
                   transcriptionOpenRouterProvider
                 }

@@ -5,10 +5,13 @@ import {
   Film,
   FolderOpen,
   HardDrive,
+  Info,
+  Layers,
   Loader2,
   Play,
   RefreshCw,
   Search,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -153,6 +156,7 @@ export default function ProjectLibrary({
   const [gameplayZoomErrors, setGameplayZoomErrors] = useState({});
   const [trackingSavingIndex, setTrackingSavingIndex] = useState(null);
   const [trackingErrors, setTrackingErrors] = useState({});
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const loadProjects = useCallback(async () => {
     setIsLoading(true);
@@ -883,6 +887,11 @@ export default function ProjectLibrary({
     .filter(Boolean)
     .join(" · ");
 
+  const filteredProjectClips = normalizedProjectClips.filter((clip, index) => {
+    if (statusFilter === "all") return true;
+    return statusForClip(clip, index) === statusFilter;
+  });
+
   const filteredProjects = projects.filter((project) => {
     const haystack = [
       project.job_id,
@@ -900,7 +909,7 @@ export default function ProjectLibrary({
   if (selectedProject) {
     return (
       <div className="h-full min-h-0 overflow-y-auto custom-scrollbar">
-        <div className="max-w-7xl mx-auto p-6 pb-10 space-y-8">
+        <div className="max-w-[1680px] mx-auto p-6 pb-10 space-y-8">
           {/* Header Navigation */}
           <div className="flex items-center justify-between">
             <button
@@ -1054,15 +1063,40 @@ export default function ProjectLibrary({
 
           {/* Clips Gallery */}
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-white flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-cyan-400/10 flex items-center justify-center">
-                  <Play size={16} className="text-cyan-400" />
-                </div>
-                Generated Clips
-              </h3>
-              <span className="text-sm text-zinc-500 font-medium px-3 py-1 rounded-full bg-white/5 border border-white/5">
-                {projectClips.length} results
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white/[0.02] border border-white/5 p-3 rounded-2xl">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  onClick={() => setStatusFilter("all")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    statusFilter === "all"
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shadow-sm"
+                      : "bg-white/5 text-zinc-400 hover:text-white border border-transparent hover:border-white/10"
+                  }`}
+                >
+                  All ({normalizedProjectClips.length})
+                </button>
+                {CLIP_WORKFLOW_STATUSES.map(({ value, label }) => {
+                  const count = normalizedProjectClips.filter(
+                    (clip, idx) => statusForClip(clip, idx) === value,
+                  ).length;
+                  return (
+                    <button
+                      key={value}
+                      onClick={() => setStatusFilter(value)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        statusFilter === value
+                          ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shadow-sm"
+                          : "bg-white/5 text-zinc-400 hover:text-white border border-transparent hover:border-white/10"
+                      }`}
+                    >
+                      {label} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="text-xs text-zinc-500 font-medium">
+                {filteredProjectClips.length}{" "}
+                {filteredProjectClips.length === 1 ? "clip" : "clips"}
               </span>
             </div>
 
@@ -1074,16 +1108,16 @@ export default function ProjectLibrary({
                 />
                 <p className="text-lg font-medium">Loading project clips...</p>
               </div>
-            ) : projectClips.length === 0 ? (
-              <div className="glass-panel py-24 flex flex-col items-center justify-center border-2 border-dashed border-white/5 text-zinc-600">
-                <Play size={48} className="mb-4 opacity-20" />
-                <p className="text-lg font-medium">
-                  No clips found for this project
+            ) : filteredProjectClips.length === 0 ? (
+              <div className="glass-panel py-20 flex flex-col items-center justify-center border-2 border-dashed border-white/5 text-zinc-600 rounded-2xl">
+                <Play size={40} className="mb-3 opacity-20" />
+                <p className="text-sm font-medium">
+                  No clips found matching this filter
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
-                {normalizedProjectClips.map((clip, index) => (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredProjectClips.map((clip, index) => (
                   <ResultCard
                     key={
                       clip.video_id ||
@@ -1107,7 +1141,7 @@ export default function ProjectLibrary({
                       editorOpen && (clip.index ?? index) === editorClipIndex
                     }
                     editorVersionId={versionId}
-                    onEditorOpen={() =>
+                    onOpenEditor={() =>
                       onOpenEditor?.(
                         selectedProject.job_id ||
                           selectedProject.session_id ||

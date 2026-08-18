@@ -158,6 +158,15 @@ class OpenRouterTests(unittest.TestCase):
 
         self.assertEqual(config.transcription_openrouter_provider, "deepinfra")
 
+    def test_load_ai_config_reads_transcription_language(self):
+        config = ai_client.load_ai_config({
+            "X-AI-Provider": "openrouter",
+            "X-AI-Api-Key": "secret",
+            "X-AI-Transcription-Language": " it ",
+        })
+
+        self.assertEqual(config.transcription_language, "it")
+
     def test_openrouter_root_base_url_is_normalized_to_api_root(self):
         config = ai_client.AIConfig(
             provider="openrouter",
@@ -206,6 +215,21 @@ class OpenRouterTests(unittest.TestCase):
         ])
         self.assertEqual(DetailedTranscriptionClient.last_json["response_format"], "verbose_json")
         self.assertEqual(DetailedTranscriptionClient.last_json["timestamp_granularities"], ["segment", "word"])
+
+    @patch("ai_client.httpx.Client", DetailedTranscriptionClient)
+    def test_transcription_sends_configured_source_language(self):
+        config = ai_client.AIConfig(
+            provider="openrouter",
+            api_key="secret",
+            transcription_language="it",
+        )
+        with TemporaryDirectory() as directory:
+            audio_path = Path(directory) / "audio.wav"
+            audio_path.write_bytes(b"audio")
+
+            ai_client.transcribe_audio_openrouter(str(audio_path), config)
+
+        self.assertEqual(DetailedTranscriptionClient.last_json["language"], "it")
 
     @patch("ai_client.httpx.Client", DetailedTranscriptionClient)
     def test_transcription_restricts_openrouter_to_configured_provider(self):

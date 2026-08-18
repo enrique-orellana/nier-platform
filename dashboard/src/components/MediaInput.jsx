@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Database, Upload, FileVideo, X } from "lucide-react";
 import MinioObjectPicker from "./MinioObjectPicker";
+import { SUBTITLE_LANGUAGES } from "./subtitleLanguages";
 
 export default function MediaInput({
   onProcess,
@@ -15,6 +16,7 @@ export default function MediaInput({
   const [acknowledged, setAcknowledged] = useState(false);
   const [layoutFormat, setLayoutFormat] = useState("standard");
   const [facecamSize, setFacecamSize] = useState("medium");
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState("auto");
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -27,6 +29,7 @@ export default function MediaInput({
         acknowledged: true,
         layoutFormat,
         facecamSize,
+        transcriptionLanguage,
       });
     } else if (mode === "file" && file) {
       onProcess({
@@ -36,6 +39,7 @@ export default function MediaInput({
         acknowledged: true,
         layoutFormat,
         facecamSize,
+        transcriptionLanguage,
       });
     }
   };
@@ -147,6 +151,33 @@ export default function MediaInput({
             Add the original YouTube or Twitch page to improve creator, topic,
             event, and location accuracy. It is used for context only, not to
             download the processing video.
+          </p>
+        </div>
+
+        <div className="mt-5">
+          <label
+            htmlFor="transcription-source-language"
+            className="text-xs uppercase tracking-[0.2em] text-zinc-500"
+          >
+            Transcription source language
+          </label>
+          <select
+            id="transcription-source-language"
+            aria-label="Transcription source language"
+            value={transcriptionLanguage}
+            onChange={(e) => setTranscriptionLanguage(e.target.value)}
+            className="input-field mt-2"
+          >
+            <option value="auto">Auto-detect</option>
+            {Object.entries(SUBTITLE_LANGUAGES).map(([code, label]) => (
+              <option key={code} value={code}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-2 text-xs text-zinc-500">
+            Choose the spoken language to keep the transcript in its original
+            language for this generation only.
           </p>
         </div>
 

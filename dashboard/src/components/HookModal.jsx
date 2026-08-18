@@ -8,21 +8,6 @@ import {
   Zap,
 } from "lucide-react";
 import RemotionPreview from "./RemotionPreview";
-import { getApiUrl } from "../config";
-
-// Route MinIO URLs through the backend proxy to avoid CORS blocks
-const getUrlFilename = (url) => {
-  if (!url) return "";
-  try {
-    const parsed = new URL(url, window.location.origin);
-    const pathname = decodeURIComponent(parsed.pathname || "");
-    return pathname.split("/").filter(Boolean).pop() || "";
-  } catch {
-    return (
-      url.split("?")[0].split("#")[0].split("/").filter(Boolean).pop() || ""
-    );
-  }
-};
 
 const toProxiedVideoUrl = (url) => {
   return url;
