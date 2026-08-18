@@ -19,14 +19,6 @@ const getUrlFilename = (url) => {
 };
 
 const toProxiedVideoUrl = (url) => {
-  if (!url) return url;
-  // Only proxy external MinIO / presigned URLs (http/https, not relative paths)
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    const proxyFilename = getUrlFilename(url) || "video.mp4";
-    return getApiUrl(
-      `/api/video-proxy/${encodeURIComponent(proxyFilename)}?url=${encodeURIComponent(url)}`,
-    );
-  }
   return url;
 };
 

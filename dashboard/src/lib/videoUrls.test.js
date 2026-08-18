@@ -21,3 +21,12 @@ describe("resolveClipVideoUrl", () => {
     ).toBe("/videos/job-123/clip.mp4");
   });
 });
+
+describe("toProxiedVideoUrl", () => {
+  it("keeps presigned S3 URLs direct", async () => {
+    const { toProxiedVideoUrl } = await import("./videoUrls");
+    const url = "https://s3.example.test/media/clip.mp4?signature=abc";
+
+    expect(toProxiedVideoUrl(url)).toBe(url);
+  });
+});

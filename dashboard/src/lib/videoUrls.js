@@ -14,13 +14,7 @@ export const getUrlFilename = (url) => {
 };
 
 export const toProxiedVideoUrl = (url) => {
-  if (!url) return url;
-  if (url.startsWith("blob:") || !url.startsWith("http")) return url;
-  const encoded = encodeURIComponent(url);
-  const proxyFilename = getUrlFilename(url) || "video.mp4";
-  return getApiUrl(
-    `/api/video-proxy/${encodeURIComponent(proxyFilename)}?url=${encoded}`,
-  );
+  return url;
 };
 
 export const resolveClipVideoUrl = (clip, jobId) => {

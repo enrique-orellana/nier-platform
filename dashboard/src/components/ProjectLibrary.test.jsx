@@ -40,7 +40,7 @@ describe("ProjectLibrary", () => {
     expect(container.querySelectorAll("button button")).toHaveLength(0);
   });
 
-  it("routes external history videos through the same-origin video proxy", async () => {
+  it("keeps external history videos on their direct storage URL", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -67,9 +67,41 @@ describe("ProjectLibrary", () => {
 
     await waitFor(() => {
       const video = document.querySelector("video");
-      expect(video?.getAttribute("src")).toContain(
-        "/api/video-proxy/clip.mp4?url=",
+      expect(video?.getAttribute("src")).toBe(
+        "http://minio.example/job-2/clip.mp4?signature=old",
       );
+    });
+  });
+
+  it("uses the source video for a project card without a rendered clip", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          projects: [
+            {
+              job_id: "job-source-only",
+              title: "Source project",
+              clips: [
+                {
+                  source_video_url:
+                    "https://minio.example/job-source-only/source.mp4?signature=old",
+                },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+
+    render(<ProjectLibrary />);
+
+    await waitFor(() => {
+      expect(document.querySelector("video")?.getAttribute("src")).toBe(
+        "https://minio.example/job-source-only/source.mp4?signature=old",
+      );
+      expect(screen.getByText("1 CLIPS")).toBeInTheDocument();
     });
   });
 

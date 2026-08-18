@@ -1082,7 +1082,7 @@ export default function ProjectLibrary({
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
                 {normalizedProjectClips.map((clip, index) => (
                   <ResultCard
                     key={
@@ -1227,7 +1227,10 @@ export default function ProjectLibrary({
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredProjects.map((project) => {
               const previewVideoUrl = toProxiedVideoUrl(
-                project.clips?.[0]?.url || project.clips?.[0]?.video_url || "",
+                project.clips?.[0]?.url ||
+                  project.clips?.[0]?.video_url ||
+                  project.clips?.[0]?.source_video_url ||
+                  "",
               );
 
               return (
@@ -1277,7 +1280,7 @@ export default function ProjectLibrary({
                         {formatDate(project.created_at)}
                       </span>
                       <span className="text-[10px] text-zinc-400 font-medium px-2 py-0.5 rounded bg-white/5 border border-white/5 whitespace-nowrap">
-                        {project.clip_count || 0} CLIPS
+                        {project.clip_count || project.clips?.length || 0} CLIPS
                       </span>
                     </div>
                     <p className="text-[10px] text-zinc-600 mt-2 truncate">

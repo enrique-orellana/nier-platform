@@ -25,13 +25,6 @@ const getUrlFilename = (url) => {
 };
 
 const toProxiedVideoUrl = (url) => {
-  if (!url) return url;
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    const proxyFilename = getUrlFilename(url) || "video.mp4";
-    return getApiUrl(
-      `/api/video-proxy/${encodeURIComponent(proxyFilename)}?url=${encodeURIComponent(url)}`,
-    );
-  }
   return url;
 };
 

@@ -10,13 +10,7 @@ import VersionHistory from "./editor/VersionHistory";
 import { makeEditorDraft, msToFrame } from "../editor/timelineModel";
 
 const proxyUrl = (url) => {
-  if (!url || url.startsWith("blob:") || !url.startsWith("http")) return url;
-  const name = decodeURIComponent(
-    new URL(url).pathname.split("/").pop() || "video.mp4",
-  );
-  return getApiUrl(
-    `/api/video-proxy/${encodeURIComponent(name)}?url=${encodeURIComponent(url)}`,
-  );
+  return url;
 };
 
 const normalizeTracks = (manifest) => {

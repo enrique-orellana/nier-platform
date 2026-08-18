@@ -28,14 +28,7 @@ import { DEFAULT_SUBTITLE_STYLE } from "../local-editor/localEditorStyles";
 import { HOOK_FONT_FAMILY } from "../../remotion/lib/hookVisual";
 
 const proxyUrl = (url) => {
-  if (!url || url.startsWith("blob:") || !url.startsWith("http")) return url;
-  const parsed = new URL(url);
-  const name = decodeURIComponent(
-    parsed.pathname.split("/").pop() || "video.mp4",
-  );
-  return getApiUrl(
-    `/api/video-proxy/${encodeURIComponent(name)}?url=${encodeURIComponent(url)}`,
-  );
+  return url;
 };
 
 const defaultSubtitleTrackId = (nextManifest) =>
