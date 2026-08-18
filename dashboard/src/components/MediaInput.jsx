@@ -148,9 +148,10 @@ export default function MediaInput({
             className="input-field"
           />
           <p className="text-xs text-zinc-500">
-            Add the original YouTube or Twitch page to improve creator, topic,
-            event, and location accuracy. It is used for context only, not to
-            download the processing video.
+            Add the original YouTube or Twitch page so the AI can research the
+            creator or streamer and source video, then tailor titles,
+            descriptions, and other clip metadata. It is used for context only,
+            not to download the processing video.
           </p>
         </div>
 

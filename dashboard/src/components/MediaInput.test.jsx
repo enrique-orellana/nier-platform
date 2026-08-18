@@ -11,6 +11,24 @@ describe("MediaInput", () => {
     vi.unstubAllGlobals();
   });
 
+  it("explains how the original source URL improves generated metadata", () => {
+    render(
+      <MediaInput
+        onProcess={vi.fn()}
+        isProcessing={false}
+        targetClipCount={6}
+        onTargetClipCountChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(/research the creator or streamer/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/tailor titles, descriptions, and other clip metadata/i),
+    ).toBeInTheDocument();
+  });
+
   it("submits a selected MinIO object without YouTube-specific UI", async () => {
     fetch.mockResolvedValueOnce({
       ok: true,
