@@ -88,6 +88,7 @@ export interface EffectsConfig {
 export interface ShortVideoProps {
   videoUrl: string;
   videoStartSeconds?: number;
+  onAutoPlayError?: () => void;
   durationInFrames: number;
   fps: number;
   width: number;

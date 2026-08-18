@@ -91,4 +91,21 @@ describe("ShortVideo media source", () => {
 
     expect(video.currentTime).toBe(17);
   });
+
+  it("forwards browser autoplay failures to the preview controller", () => {
+    useRemotionEnvironmentMock.mockReturnValue({ isRendering: false });
+    const onAutoPlayError = vi.fn();
+    html5VideoPropsMock.mockClear();
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/clip.mp4"
+        onAutoPlayError={onAutoPlayError}
+      />,
+    );
+
+    expect(html5VideoPropsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ onAutoPlayError }),
+    );
+  });
 });

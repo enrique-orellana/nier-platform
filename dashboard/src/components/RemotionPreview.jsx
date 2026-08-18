@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Player } from "@remotion/player";
 import { ShortVideo } from "../remotion/compositions/ShortVideo";
 
@@ -36,6 +36,20 @@ export default function RemotionPreview({
   const durationInFrames = Math.max(1, Math.round(durationInSeconds * fps));
   const playerRef = useRef(null);
   const playerFrameRef = useRef(null);
+  const [audioPlaybackBlocked, setAudioPlaybackBlocked] = useState(false);
+
+  const handleAutoPlayError = useCallback(() => {
+    setAudioPlaybackBlocked(true);
+  }, []);
+
+  const handlePlayWithSound = useCallback((event) => {
+    const player = playerRef.current;
+    if (!player) return;
+    player.pause?.();
+    player.unmute?.();
+    player.play?.(event);
+    setAudioPlaybackBlocked(false);
+  }, []);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -103,6 +117,7 @@ export default function RemotionPreview({
       activeSubtitleTrackId,
       hook,
       effects,
+      onAutoPlayError: handleAutoPlayError,
     }),
     [
       videoUrl,
@@ -116,11 +131,12 @@ export default function RemotionPreview({
       activeSubtitleTrackId,
       hook,
       effects,
+      handleAutoPlayError,
     ],
   );
 
   return (
-    <div className={`w-full h-full ${className}`}>
+    <div className={`relative w-full h-full ${className}`}>
       <Player
         ref={playerRef}
         component={ShortVideo}
@@ -138,6 +154,15 @@ export default function RemotionPreview({
         loop
         acknowledgeRemotionLicense={true}
       />
+      {audioPlaybackBlocked && (
+        <button
+          type="button"
+          onClick={handlePlayWithSound}
+          className="absolute inset-x-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black shadow-lg hover:bg-zinc-200"
+        >
+          Play with sound
+        </button>
+      )}
     </div>
   );
 }

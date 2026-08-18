@@ -1,9 +1,11 @@
 import React, { forwardRef, useImperativeHandle, useRef } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import RemotionPreview from "./RemotionPreview";
 
 const playMock = vi.hoisted(() => vi.fn());
+const pauseMock = vi.hoisted(() => vi.fn());
+const unmuteMock = vi.hoisted(() => vi.fn());
 const playerPropsMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@remotion/player", () => ({
@@ -19,7 +21,8 @@ vi.mock("@remotion/player", () => ({
         removeEventListener: vi.fn(),
         seekTo: vi.fn(),
         play: playMock,
-        pause: vi.fn(),
+        pause: pauseMock,
+        unmute: unmuteMock,
         emit: (name, detail) => listeners[name]?.({ detail }),
       }),
       [listeners],
@@ -62,6 +65,28 @@ describe("RemotionPreview", () => {
       expect.objectContaining({
         inputProps: expect.objectContaining({ videoStartSeconds: 1042.5 }),
       }),
+    );
+  });
+
+  it("offers a user-gesture recovery when autoplay audio is blocked", () => {
+    playerPropsMock.mockClear();
+    playMock.mockClear();
+    pauseMock.mockClear();
+    unmuteMock.mockClear();
+    render(<RemotionPreview videoUrl="/video.mp4" />);
+
+    const playerProps = playerPropsMock.mock.lastCall[0];
+    act(() => playerProps.inputProps.onAutoPlayError());
+
+    const recoveryButton = screen.getByRole("button", {
+      name: /play with sound/i,
+    });
+    fireEvent.click(recoveryButton);
+
+    expect(pauseMock).toHaveBeenCalled();
+    expect(unmuteMock).toHaveBeenCalled();
+    expect(playMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "click" }),
     );
   });
 });

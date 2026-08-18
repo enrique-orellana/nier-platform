@@ -15,6 +15,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     videoUrl,
     videoFit,
     videoStartSeconds = 0,
+    onAutoPlayError,
     fps = 30,
     subtitles,
     subtitleTracks,
@@ -63,6 +64,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
           <Html5Video
             src={videoUrl}
             startFrom={videoStartFrame}
+            onAutoPlayError={onAutoPlayError}
             onLoadedMetadata={seekBrowserVideoToMasterOffset}
             onCanPlay={seekBrowserVideoToMasterOffset}
             style={{
