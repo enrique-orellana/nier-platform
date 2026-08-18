@@ -66,7 +66,19 @@ const localCuesFromTrack = (track) => {
 
 const manifestToLocalEditorState = (sourceManifest, trackId) => {
   const source = manifestWithTranscriptCaptions(sourceManifest || {}, null);
-  const tracks = Array.isArray(source.subtitle_tracks) ? source.subtitle_tracks : [];
+  const legacySubtitles = source.layers?.subtitles;
+  const tracks = Array.isArray(source.subtitle_tracks) && source.subtitle_tracks.length
+    ? source.subtitle_tracks
+    : legacySubtitles
+      ? [{
+        id: "original",
+        language: legacySubtitles.language || "en",
+        label: legacySubtitles.label || "Original",
+        origin: "original",
+        cues: Array.isArray(legacySubtitles.cues) ? legacySubtitles.cues : legacySubtitles.captions || [],
+        style: legacySubtitles.style,
+      }]
+      : [];
   const activeTrack = tracks.find((track) => track.id === trackId) || tracks[0];
   const hook = source.layers?.hook;
   return {

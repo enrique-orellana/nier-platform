@@ -117,6 +117,19 @@ describe('FullScreenEditor', () => {
         expect(screen.getByRole('button', { name: /save as new version/i })).toBeInTheDocument();
     });
 
+    it('loads legacy project subtitles into the local editor timeline', async () => {
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: vi.fn(() => 'blob:legacy-project-video') });
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(['video'], { type: 'video/mp4' }) }));
+        const legacyManifest = {
+            timeline: { source_video_url: 'https://example.test/video.mp4', trim: { start_sec: 0, end_sec: 4 } },
+            layers: { subtitles: { cues: [{ text: 'Hola', startMs: 500, endMs: 1500 }] } },
+        };
+
+        render(<FullScreenEditor useLocalEditor jobId="job" clipIndex={0} clip={{ output_fps: 30, video_url: legacyManifest.timeline.source_video_url }} initialManifest={legacyManifest} initialVersion={{ version_id: 'v1', status: 'done' }} onClose={vi.fn()} />);
+
+        await waitFor(() => expect(screen.getByTestId('local-editor-subtitles-track')).toHaveTextContent('Hola'));
+    });
+
     it('previews the master at the clip start while retaining the trimmed export source', async () => {
         const fetchMock = vi.fn().mockImplementation(async (url) => ({
             ok: true,
