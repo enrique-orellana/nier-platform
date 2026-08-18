@@ -715,7 +715,7 @@ export default function ResultCard({
 
   return (
     <div
-      className="bg-surface border border-white/5 rounded-2xl overflow-hidden flex flex-col group hover:border-white/10 transition-all animate-[fadeIn_0.5s_ease-out] h-full max-w-[340px] mx-auto w-full shadow-lg"
+      className="bg-surface border border-white/5 rounded-2xl overflow-hidden flex flex-col group hover:border-white/10 transition-all animate-[fadeIn_0.5s_ease-out] h-full w-full shadow-lg"
       style={{ animationDelay: `${index * 0.1}s` }}
     >
       {hasVideo ? (
@@ -731,7 +731,7 @@ export default function ResultCard({
           clip={clip}
         />
       ) : (
-        <div className="w-full bg-black relative shrink-0 aspect-[9/16] max-h-[380px] sm:max-h-[420px] flex items-center justify-center p-6 text-center">
+        <div className="w-full bg-black relative shrink-0 aspect-[9/16] flex items-center justify-center p-6 text-center">
           <div>
             <div className="text-white font-semibold">Clip {index + 1}</div>
             <p className="mt-2 text-xs text-zinc-500">

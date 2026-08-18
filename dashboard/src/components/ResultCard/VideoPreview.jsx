@@ -56,7 +56,7 @@ export default function VideoPreview({
   };
 
   return (
-    <div className="w-full bg-black relative shrink-0 aspect-[9/16] max-h-[380px] sm:max-h-[420px] mx-auto flex items-center justify-center overflow-hidden group/video">
+    <div className="w-full bg-black relative shrink-0 aspect-[9/16] flex items-center justify-center overflow-hidden group/video">
       <video
         ref={videoRef}
         src={displayUrl}

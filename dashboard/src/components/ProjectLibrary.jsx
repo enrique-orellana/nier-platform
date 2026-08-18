@@ -1063,6 +1063,18 @@ export default function ProjectLibrary({
 
           {/* Clips Gallery */}
           <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-cyan-400/10 flex items-center justify-center">
+                  <Play size={16} className="text-cyan-400" />
+                </div>
+                Generated Clips
+              </h3>
+              <span className="text-sm text-zinc-500 font-medium px-3 py-1 rounded-full bg-white/5 border border-white/5">
+                {projectClips.length} results
+              </span>
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-3 bg-white/[0.02] border border-white/5 p-3 rounded-2xl">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <button
