@@ -1,20 +1,29 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import ProjectLibrary from './ProjectLibrary';
+import ProjectLibrary from "./ProjectLibrary";
 
-describe('ProjectLibrary', () => {
-  it('does not nest the delete button inside the project card control', async () => {
+describe("ProjectLibrary", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  it("does not nest the delete button inside the project card control", async () => {
     vi.stubGlobal(
-      'fetch',
+      "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
           projects: [
             {
-              job_id: 'job-1',
-              title: 'Test project',
-              clips: [{ video_url: '/videos/job-1/clip.mp4' }],
+              job_id: "job-1",
+              title: "Test project",
+              clips: [{ video_url: "/videos/job-1/clip.mp4" }],
               clip_count: 1,
             },
           ],
@@ -28,20 +37,25 @@ describe('ProjectLibrary', () => {
       expect(container.querySelector('[title="Delete Project"]')).toBeTruthy();
     });
 
-    expect(container.querySelectorAll('button button')).toHaveLength(0);
+    expect(container.querySelectorAll("button button")).toHaveLength(0);
   });
 
-  it('routes external history videos through the same-origin video proxy', async () => {
+  it("routes external history videos through the same-origin video proxy", async () => {
     vi.stubGlobal(
-      'fetch',
+      "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
           projects: [
             {
-              job_id: 'job-2',
-              title: 'External project',
-              clips: [{ video_url: 'http://minio.example/job-2/clip.mp4?signature=old' }],
+              job_id: "job-2",
+              title: "External project",
+              clips: [
+                {
+                  video_url:
+                    "http://minio.example/job-2/clip.mp4?signature=old",
+                },
+              ],
               clip_count: 1,
             },
           ],
@@ -52,31 +66,37 @@ describe('ProjectLibrary', () => {
     render(<ProjectLibrary />);
 
     await waitFor(() => {
-      const video = document.querySelector('video');
-      expect(video?.getAttribute('src')).toContain('/api/video-proxy/clip.mp4?url=');
+      const video = document.querySelector("video");
+      expect(video?.getAttribute("src")).toContain(
+        "/api/video-proxy/clip.mp4?url=",
+      );
     });
   });
 
-  it('previews an unrendered candidate from the stored source video', async () => {
+  it("previews an unrendered candidate from the stored source video", async () => {
     vi.stubGlobal(
-      'fetch',
+      "fetch",
       vi.fn((url) => {
-        if (String(url).includes('/api/projects/history')) {
+        if (String(url).includes("/api/projects/history")) {
           return Promise.resolve({
             ok: true,
             json: async () => ({
-              projects: [{
-                job_id: 'job-3',
-                title: 'Candidate project',
-                clips: [{
-                  index: 0,
-                  start: 12,
-                  end: 20,
-                  source_video_url: '/videos/job-3/source.mp4',
-                  render_status: 'found',
-                }],
-                clip_count: 1,
-              }],
+              projects: [
+                {
+                  job_id: "job-3",
+                  title: "Candidate project",
+                  clips: [
+                    {
+                      index: 0,
+                      start: 12,
+                      end: 20,
+                      source_video_url: "/videos/job-3/source.mp4",
+                      render_status: "found",
+                    },
+                  ],
+                  clip_count: 1,
+                },
+              ],
             }),
           });
         }
@@ -87,335 +107,687 @@ describe('ProjectLibrary', () => {
     render(<ProjectLibrary projectId="job-3" />);
 
     await waitFor(() => {
-      expect(document.querySelector('video')?.getAttribute('src')).toBe('/videos/job-3/source.mp4');
-    });
-  });
-
-  it('queues rendering from a historical candidate card', async () => {
-    const fetchMock = vi.fn((url, options = {}) => {
-      if (String(url).includes('/api/projects/history')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            projects: [{
-              job_id: 'job-4',
-              title: 'Candidate project',
-              clips: [{
-                index: 0,
-                start: 12,
-                end: 20,
-                source_video_url: '/videos/job-4/source.mp4',
-                render_status: 'found',
-              }],
-              clip_count: 1,
-            }],
-          }),
-        });
-      }
-      if (String(url).includes('/api/jobs/job-4/clips/0/render')) {
-        expect(options.method).toBe('POST');
-        return Promise.resolve({ ok: true, json: async () => ({ job_id: 'render-4' }) });
-      }
-      return Promise.resolve({ ok: true, json: async () => ({ clips: {} }) });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(<ProjectLibrary projectId="job-4" />);
-
-    const button = await screen.findByRole('button', { name: 'Analyze & Render' });
-    fireEvent.click(button);
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/jobs/job-4/clips/0/render',
-        expect.objectContaining({ method: 'POST' }),
+      expect(document.querySelector("video")?.getAttribute("src")).toBe(
+        "/videos/job-3/source.mp4",
       );
     });
   });
 
-  it('reconciles stale rendering metadata so a failed render can be retried after returning to the project', async () => {
+  it("does not fetch a transcript while a project clip card is loading", async () => {
     const fetchMock = vi.fn((url) => {
-      if (String(url).includes('/api/projects/history')) {
+      if (String(url).includes("/api/projects/history")) {
         return Promise.resolve({
           ok: true,
           json: async () => ({
-            projects: [{
-              job_id: 'job-stale',
-              title: 'Interrupted project',
-              clips: [{ index: 0, start: 10, end: 20, source_video_url: '/videos/job-stale/source.mp4', render_status: 'rendering' }],
-              clip_count: 1,
-            }],
+            projects: [
+              {
+                job_id: "job-5",
+                title: "Transcript-on-demand project",
+                clips: [
+                  {
+                    index: 0,
+                    start: 12,
+                    end: 20,
+                    source_video_url: "/videos/job-5/source.mp4",
+                    render_status: "found",
+                  },
+                ],
+                clip_count: 1,
+              },
+            ],
           }),
         });
       }
-      if (String(url).includes('/api/projects/clips/job-stale')) {
+      return Promise.resolve({ ok: true, json: async () => ({ clips: [] }) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectLibrary projectId="job-5" />);
+
+    await waitFor(
+      () => expect(screen.getByText("Generated Clips")).toBeInTheDocument(),
+      { timeout: 5000 },
+    );
+    await waitFor(
+      () =>
+        expect(
+          screen.getByRole("button", { name: "Analyze & Render" }),
+        ).toBeInTheDocument(),
+      { timeout: 5000 },
+    );
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes("/transcript")),
+    ).toBe(false);
+  });
+
+  it("queues rendering from a historical candidate card", async () => {
+    const fetchMock = vi.fn((url, options = {}) => {
+      if (String(url).includes("/api/projects/history")) {
         return Promise.resolve({
           ok: true,
-          json: async () => ({ clips: [{ index: 0, start: 10, end: 20, source_video_url: '/videos/job-stale/source.mp4', render_status: 'rendering' }] }),
+          json: async () => ({
+            projects: [
+              {
+                job_id: "job-4",
+                title: "Candidate project",
+                clips: [
+                  {
+                    index: 0,
+                    start: 12,
+                    end: 20,
+                    source_video_url: "/videos/job-4/source.mp4",
+                    render_status: "found",
+                  },
+                ],
+                clip_count: 1,
+              },
+            ],
+          }),
         });
       }
-      if (String(url).includes('/api/status/job-stale')) {
+      if (String(url).includes("/api/jobs/job-4/clips/0/render")) {
+        expect(options.method).toBe("POST");
         return Promise.resolve({
           ok: true,
-          json: async () => ({ status: 'clips_ready', result: { clips: [{ render_status: 'failed', render_error: 'Database connection lost.' }] } }),
+          json: async () => ({ job_id: "render-4" }),
         });
       }
       return Promise.resolve({ ok: true, json: async () => ({ clips: {} }) });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal("fetch", fetchMock);
 
-    render(<ProjectLibrary projectId="job-stale" />);
+    render(<ProjectLibrary projectId="job-4" />);
 
-    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
-    expect(screen.getByText('Database connection lost.')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith('/api/status/job-stale');
+    const button = await screen.findByRole("button", {
+      name: "Analyze & Render",
+    });
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/jobs/job-4/clips/0/render",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
   });
 
-  it('saves a webcam region per Streamer Stack clip before enabling render', async () => {
+  it("marks a missing child render job as failed instead of polling forever", async () => {
     const fetchMock = vi.fn((url, options = {}) => {
-      if (String(url).includes('/api/projects/history')) {
+      if (String(url).includes("/api/projects/history")) {
         return Promise.resolve({
           ok: true,
           json: async () => ({
-            projects: [{
-              job_id: 'job-5',
-              title: 'Streamer project',
-              clips: [{
-                index: 0,
-                start: 12,
-                end: 20,
-                source_video_url: '/videos/job-5/source.mp4',
-                layout_format: 'streamer_stack',
-                streamer_tracking_enabled: false,
-                gameplay_zoom: 1,
-                render_status: 'found',
-              }],
-              clip_count: 1,
-            }],
+            projects: [
+              {
+                job_id: "job-missing-render",
+                title: "Missing render project",
+                clips: [
+                  {
+                    index: 0,
+                    start: 12,
+                    end: 20,
+                    source_video_url: "/videos/job-missing-render/source.mp4",
+                    render_status: "found",
+                  },
+                ],
+                clip_count: 1,
+              },
+            ],
           }),
         });
       }
-      if (String(url).includes('/api/jobs/job-5/clips/0/webcam-region')) {
-        expect(options.method).toBe('PATCH');
-        expect(JSON.parse(options.body).webcam_region).toEqual(expect.objectContaining({ width: expect.any(Number) }));
+      if (String(url).includes("/api/jobs/job-missing-render/clips/0/render")) {
+        expect(options.method).toBe("POST");
         return Promise.resolve({
           ok: true,
-          json: async () => ({ webcam_region: { x: 0.05, y: 0.1, width: 0.25, height: 0.4 } }),
+          json: async () => ({ job_id: "render-missing" }),
         });
       }
-      if (String(url).includes('/api/jobs/job-5/clips/0/gameplay-region')) {
-        expect(options.method).toBe('PATCH');
-        expect(JSON.parse(options.body).gameplay_region).toEqual(expect.objectContaining({ width: expect.any(Number) }));
+      if (String(url).includes("/api/status/render-missing")) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: async () => ({}),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ clips: [] }) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectLibrary projectId="job-missing-render" />);
+
+    const button = await screen.findByRole("button", {
+      name: "Analyze & Render",
+    });
+    fireEvent.click(button);
+
+    expect(
+      await screen.findByRole("button", { name: "Retry" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Render job no longer exists."),
+    ).toBeInTheDocument();
+  });
+
+  it("stops polling when the child status endpoint returns a server error", async () => {
+    const fetchMock = vi.fn((url, options = {}) => {
+      if (String(url).includes("/api/projects/history")) {
         return Promise.resolve({
           ok: true,
-          json: async () => ({ gameplay_region: { x: 0.3, y: 0.1, width: 0.6, height: 0.8 } }),
+          json: async () => ({
+            projects: [
+              {
+                job_id: "job-status-error",
+                title: "Status error project",
+                clips: [
+                  {
+                    index: 0,
+                    start: 12,
+                    end: 20,
+                    source_video_url: "/videos/job-status-error/source.mp4",
+                    render_status: "found",
+                  },
+                ],
+                clip_count: 1,
+              },
+            ],
+          }),
         });
       }
-      if (String(url).includes('/api/jobs/job-5/clips/0/streamer-tracking')) {
-        expect(options.method).toBe('PATCH');
-        expect(JSON.parse(options.body)).toEqual({ streamer_tracking_enabled: true });
+      if (String(url).includes("/api/jobs/job-status-error/clips/0/render")) {
+        expect(options.method).toBe("POST");
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ job_id: "render-status-error" }),
+        });
+      }
+      if (String(url).includes("/api/status/render-status-error")) {
+        return Promise.resolve({
+          ok: false,
+          status: 503,
+          json: async () => ({}),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ clips: [] }) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectLibrary projectId="job-status-error" />);
+
+    const button = await screen.findByRole("button", {
+      name: "Analyze & Render",
+    });
+    fireEvent.click(button);
+
+    expect(
+      await screen.findByRole("button", { name: "Retry" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Render status request failed (503)."),
+    ).toBeInTheDocument();
+  });
+
+  it("fails a render status check when the status request hangs", async () => {
+    try {
+      const fetchMock = vi.fn((url, options = {}) => {
+        if (String(url).includes("/api/projects/history")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              projects: [
+                {
+                  job_id: "job-status-timeout",
+                  title: "Status timeout project",
+                  clips: [
+                    {
+                      index: 0,
+                      start: 12,
+                      end: 20,
+                      source_video_url: "/videos/job-status-timeout/source.mp4",
+                      render_status: "found",
+                    },
+                  ],
+                  clip_count: 1,
+                },
+              ],
+            }),
+          });
+        }
+        if (
+          String(url).includes("/api/jobs/job-status-timeout/clips/0/render")
+        ) {
+          expect(options.method).toBe("POST");
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ job_id: "render-status-timeout" }),
+          });
+        }
+        if (String(url).includes("/api/status/render-status-timeout")) {
+          return new Promise(() => {});
+        }
+        return Promise.resolve({ ok: true, json: async () => ({ clips: [] }) });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(<ProjectLibrary projectId="job-status-timeout" />);
+
+      const button = await screen.findByRole("button", {
+        name: "Analyze & Render",
+      });
+      vi.useFakeTimers();
+      await act(async () => {
+        fireEvent.click(button);
+      });
+
+      await act(async () => {
+        for (let i = 0; i < 10; i++) {
+          await Promise.resolve();
+        }
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(16000);
+      });
+      vi.useRealTimers();
+
+      expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+      expect(
+        screen.getByText("Render status request timed out."),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reconciles stale rendering metadata so a failed render can be retried after returning to the project", async () => {
+    const fetchMock = vi.fn((url) => {
+      if (String(url).includes("/api/projects/history")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            projects: [
+              {
+                job_id: "job-stale",
+                title: "Interrupted project",
+                clips: [
+                  {
+                    index: 0,
+                    start: 10,
+                    end: 20,
+                    source_video_url: "/videos/job-stale/source.mp4",
+                    render_status: "rendering",
+                  },
+                ],
+                clip_count: 1,
+              },
+            ],
+          }),
+        });
+      }
+      if (String(url).includes("/api/projects/clips/job-stale")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            clips: [
+              {
+                index: 0,
+                start: 10,
+                end: 20,
+                source_video_url: "/videos/job-stale/source.mp4",
+                render_status: "rendering",
+              },
+            ],
+          }),
+        });
+      }
+      if (String(url).includes("/api/status/job-stale")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: "clips_ready",
+            result: {
+              clips: [
+                {
+                  render_status: "failed",
+                  render_error: "Database connection lost.",
+                },
+              ],
+            },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ clips: {} }) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectLibrary projectId="job-stale" />);
+
+    expect(
+      await screen.findByRole("button", { name: "Retry" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Database connection lost.")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/api/status/job-stale");
+  });
+
+  it("saves a webcam region per Streamer Stack clip before enabling render", async () => {
+    const fetchMock = vi.fn((url, options = {}) => {
+      if (String(url).includes("/api/projects/history")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            projects: [
+              {
+                job_id: "job-5",
+                title: "Streamer project",
+                clips: [
+                  {
+                    index: 0,
+                    start: 12,
+                    end: 20,
+                    source_video_url: "/videos/job-5/source.mp4",
+                    layout_format: "streamer_stack",
+                    streamer_tracking_enabled: false,
+                    gameplay_zoom: 1,
+                    render_status: "found",
+                  },
+                ],
+                clip_count: 1,
+              },
+            ],
+          }),
+        });
+      }
+      if (String(url).includes("/api/jobs/job-5/clips/0/webcam-region")) {
+        expect(options.method).toBe("PATCH");
+        expect(JSON.parse(options.body).webcam_region).toEqual(
+          expect.objectContaining({ width: expect.any(Number) }),
+        );
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            webcam_region: { x: 0.05, y: 0.1, width: 0.25, height: 0.4 },
+          }),
+        });
+      }
+      if (String(url).includes("/api/jobs/job-5/clips/0/gameplay-region")) {
+        expect(options.method).toBe("PATCH");
+        expect(JSON.parse(options.body).gameplay_region).toEqual(
+          expect.objectContaining({ width: expect.any(Number) }),
+        );
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            gameplay_region: { x: 0.3, y: 0.1, width: 0.6, height: 0.8 },
+          }),
+        });
+      }
+      if (String(url).includes("/api/jobs/job-5/clips/0/streamer-tracking")) {
+        expect(options.method).toBe("PATCH");
+        expect(JSON.parse(options.body)).toEqual({
+          streamer_tracking_enabled: true,
+        });
         return Promise.resolve({
           ok: true,
           json: async () => ({ streamer_tracking_enabled: true }),
         });
       }
-      if (String(url).includes('/api/jobs/job-5/clips/0/gameplay-zoom')) {
-        expect(options.method).toBe('PATCH');
+      if (String(url).includes("/api/jobs/job-5/clips/0/gameplay-zoom")) {
+        expect(options.method).toBe("PATCH");
         expect(JSON.parse(options.body)).toEqual({ gameplay_zoom: 1.1 });
         return Promise.resolve({
           ok: true,
           json: async () => ({ gameplay_zoom: 1.1 }),
         });
       }
-      if (String(url).includes('/api/jobs/job-5/clips/0/render')) {
-        expect(options.method).toBe('POST');
-        return Promise.resolve({ ok: true, json: async () => ({ job_id: 'render-5' }) });
+      if (String(url).includes("/api/jobs/job-5/clips/0/render")) {
+        expect(options.method).toBe("POST");
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ job_id: "render-5" }),
+        });
       }
       return Promise.resolve({ ok: true, json: async () => ({ clips: {} }) });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal("fetch", fetchMock);
 
     render(<ProjectLibrary projectId="job-5" />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Select Webcam Area' }));
-    expect(screen.getByRole('button', { name: 'Analyze & Render' })).toBeDisabled();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Select Webcam Area" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Analyze & Render" }),
+    ).toBeDisabled();
 
-    const stage = screen.getByTestId('webcam-region-stage');
-    const video = screen.getByTestId('webcam-region-video');
-    Object.defineProperty(stage, 'getBoundingClientRect', {
+    const stage = screen.getByTestId("webcam-region-stage");
+    const video = screen.getByTestId("webcam-region-video");
+    Object.defineProperty(stage, "getBoundingClientRect", {
       configurable: true,
-      value: () => ({ left: 0, top: 0, width: 400, height: 225, right: 400, bottom: 225 }),
+      value: () => ({
+        left: 0,
+        top: 0,
+        width: 400,
+        height: 225,
+        right: 400,
+        bottom: 225,
+      }),
     });
-    Object.defineProperty(video, 'videoWidth', { configurable: true, value: 1600 });
-    Object.defineProperty(video, 'videoHeight', { configurable: true, value: 900 });
+    Object.defineProperty(video, "videoWidth", {
+      configurable: true,
+      value: 1600,
+    });
+    Object.defineProperty(video, "videoHeight", {
+      configurable: true,
+      value: 900,
+    });
     fireEvent.loadedMetadata(video);
-    const down = new Event('pointerdown', { bubbles: true });
-    Object.defineProperty(down, 'clientX', { value: 40 });
-    Object.defineProperty(down, 'clientY', { value: 30 });
+    const down = new Event("pointerdown", { bubbles: true });
+    Object.defineProperty(down, "clientX", { value: 40 });
+    Object.defineProperty(down, "clientY", { value: 30 });
     fireEvent(stage, down);
-    const move = new Event('pointermove');
-    Object.defineProperty(move, 'clientX', { value: 180 });
-    Object.defineProperty(move, 'clientY', { value: 150 });
+    const move = new Event("pointermove");
+    Object.defineProperty(move, "clientX", { value: 180 });
+    Object.defineProperty(move, "clientY", { value: 150 });
     fireEvent(window, move);
-    fireEvent(window, new Event('pointerup'));
-    fireEvent.click(screen.getByRole('button', { name: 'Save webcam area' }));
+    fireEvent(window, new Event("pointerup"));
+    fireEvent.click(screen.getByRole("button", { name: "Save webcam area" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/jobs/job-5/clips/0/webcam-region',
-        expect.objectContaining({ method: 'PATCH' }),
+        "/api/jobs/job-5/clips/0/webcam-region",
+        expect.objectContaining({ method: "PATCH" }),
       );
     });
 
-    expect(screen.getByRole('button', { name: 'Analyze & Render' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Select Gameplay Area' }));
-    const gameplayStage = screen.getByTestId('gameplay-region-stage');
-    const gameplayVideo = screen.getByTestId('gameplay-region-video');
-    Object.defineProperty(gameplayStage, 'getBoundingClientRect', {
+    expect(
+      screen.getByRole("button", { name: "Analyze & Render" }),
+    ).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select Gameplay Area" }),
+    );
+    const gameplayStage = screen.getByTestId("gameplay-region-stage");
+    const gameplayVideo = screen.getByTestId("gameplay-region-video");
+    Object.defineProperty(gameplayStage, "getBoundingClientRect", {
       configurable: true,
-      value: () => ({ left: 0, top: 0, width: 400, height: 225, right: 400, bottom: 225 }),
+      value: () => ({
+        left: 0,
+        top: 0,
+        width: 400,
+        height: 225,
+        right: 400,
+        bottom: 225,
+      }),
     });
-    Object.defineProperty(gameplayVideo, 'videoWidth', { configurable: true, value: 1600 });
-    Object.defineProperty(gameplayVideo, 'videoHeight', { configurable: true, value: 900 });
+    Object.defineProperty(gameplayVideo, "videoWidth", {
+      configurable: true,
+      value: 1600,
+    });
+    Object.defineProperty(gameplayVideo, "videoHeight", {
+      configurable: true,
+      value: 900,
+    });
     fireEvent.loadedMetadata(gameplayVideo);
-    const gameplayDown = new Event('pointerdown', { bubbles: true });
-    Object.defineProperty(gameplayDown, 'clientX', { value: 140 });
-    Object.defineProperty(gameplayDown, 'clientY', { value: 25 });
+    const gameplayDown = new Event("pointerdown", { bubbles: true });
+    Object.defineProperty(gameplayDown, "clientX", { value: 140 });
+    Object.defineProperty(gameplayDown, "clientY", { value: 25 });
     fireEvent(gameplayStage, gameplayDown);
-    const gameplayMove = new Event('pointermove');
-    Object.defineProperty(gameplayMove, 'clientX', { value: 350 });
-    Object.defineProperty(gameplayMove, 'clientY', { value: 200 });
+    const gameplayMove = new Event("pointermove");
+    Object.defineProperty(gameplayMove, "clientX", { value: 350 });
+    Object.defineProperty(gameplayMove, "clientY", { value: 200 });
     fireEvent(window, gameplayMove);
-    fireEvent(window, new Event('pointerup'));
-    fireEvent.click(screen.getByRole('button', { name: 'Save gameplay area' }));
+    fireEvent(window, new Event("pointerup"));
+    fireEvent.click(screen.getByRole("button", { name: "Save gameplay area" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/jobs/job-5/clips/0/gameplay-region',
-        expect.objectContaining({ method: 'PATCH' }),
+        "/api/jobs/job-5/clips/0/gameplay-region",
+        expect.objectContaining({ method: "PATCH" }),
       );
     });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze & Render' })).not.toBeDisabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Preview 9:16' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save zoom' }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Analyze & Render" }),
+      ).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Preview 9:16" }));
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save zoom" }));
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/jobs/job-5/clips/0/gameplay-zoom',
-        expect.objectContaining({ method: 'PATCH' }),
+        "/api/jobs/job-5/clips/0/gameplay-zoom",
+        expect.objectContaining({ method: "PATCH" }),
       );
     });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Use Face/Person Tracking' }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Use Face/Person Tracking" }),
+    );
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/jobs/job-5/clips/0/streamer-tracking',
-        expect.objectContaining({ method: 'PATCH' }),
+        "/api/jobs/job-5/clips/0/streamer-tracking",
+        expect.objectContaining({ method: "PATCH" }),
       );
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze & Render' }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze & Render" }));
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/jobs/job-5/clips/0/render',
-        expect.objectContaining({ method: 'POST' }),
+        "/api/jobs/job-5/clips/0/render",
+        expect.objectContaining({ method: "POST" }),
       );
     });
   });
 
-  it('loads and updates a status independently for each clip', async () => {
+  it("loads and updates a status independently for each clip", async () => {
     const fetchMock = vi.fn((url, options = {}) => {
-      if (String(url).includes('/api/projects/history')) {
+      if (String(url).includes("/api/projects/history")) {
         return Promise.resolve({
           ok: true,
           json: async () => ({
-            projects: [{
-              job_id: 'job-1',
-              title: 'Test project',
-              clips: [
-                { video_url: '/videos/job-1/clip-1.mp4', index: 0 },
-                { video_url: '/videos/job-1/clip-2.mp4', index: 1 },
-              ],
-              clip_count: 2,
-            }],
+            projects: [
+              {
+                job_id: "job-1",
+                title: "Test project",
+                clips: [
+                  { video_url: "/videos/job-1/clip-1.mp4", index: 0 },
+                  { video_url: "/videos/job-1/clip-2.mp4", index: 1 },
+                ],
+                clip_count: 2,
+              },
+            ],
           }),
         });
       }
-      if (String(url).includes('/api/projects/job-1/statuses')) {
+      if (String(url).includes("/api/projects/job-1/statuses")) {
         return Promise.resolve({
           ok: true,
           json: async () => ({
             version: 1,
             clips: {
-              '0': { status: 'reviewing' },
-              '1': { status: 'discarded' },
+              0: { status: "reviewing" },
+              1: { status: "discarded" },
             },
           }),
         });
       }
-      if (String(url).includes('/api/projects/job-1/clips/0/status')) {
-        expect(options.method).toBe('PATCH');
-        expect(JSON.parse(options.body)).toEqual({ status: 'edited' });
+      if (String(url).includes("/api/projects/job-1/clips/0/status")) {
+        expect(options.method).toBe("PATCH");
+        expect(JSON.parse(options.body)).toEqual({ status: "edited" });
         return Promise.resolve({
           ok: true,
-          json: async () => ({ status: 'edited', updated_at: '2026-08-12T18:30:00Z' }),
+          json: async () => ({
+            status: "edited",
+            updated_at: "2026-08-12T18:30:00Z",
+          }),
         });
       }
       return Promise.resolve({ ok: true, json: async () => ({ clips: [] }) });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal("fetch", fetchMock);
 
     render(<ProjectLibrary projectId="job-1" />);
 
     await waitFor(() => {
-      const loadedSelects = screen.getAllByLabelText('Clip status');
+      const loadedSelects = screen.getAllByLabelText("Clip status");
       expect(loadedSelects).toHaveLength(2);
-      expect(loadedSelects[0]).toHaveValue('reviewing');
-      expect(loadedSelects[1]).toHaveValue('discarded');
+      expect(loadedSelects[0]).toHaveValue("reviewing");
+      expect(loadedSelects[1]).toHaveValue("discarded");
     });
-    const selects = screen.getAllByLabelText('Clip status');
-    expect(selects[0]).toHaveValue('reviewing');
-    expect(selects[1]).toHaveValue('discarded');
+    const selects = screen.getAllByLabelText("Clip status");
+    expect(selects[0]).toHaveValue("reviewing");
+    expect(selects[1]).toHaveValue("discarded");
 
-    fireEvent.change(selects[0], { target: { value: 'edited' } });
+    fireEvent.change(selects[0], { target: { value: "edited" } });
 
-    await waitFor(() => expect(screen.getAllByLabelText('Clip status')[0]).toHaveValue('edited'));
-    expect(screen.getAllByLabelText('Clip status')[1]).toHaveValue('discarded');
+    await waitFor(() =>
+      expect(screen.getAllByLabelText("Clip status")[0]).toHaveValue("edited"),
+    );
+    expect(screen.getAllByLabelText("Clip status")[1]).toHaveValue("discarded");
     expect(screen.getByText(/1 edited · 1 discarded/)).toBeInTheDocument();
   });
 
-  it('rolls back an optimistic status update when saving fails', async () => {
+  it("rolls back an optimistic status update when saving fails", async () => {
     const fetchMock = vi.fn((url) => {
-      if (String(url).includes('/api/projects/history')) {
+      if (String(url).includes("/api/projects/history")) {
         return Promise.resolve({
           ok: true,
           json: async () => ({
-            projects: [{
-              job_id: 'job-1',
-              title: 'Test project',
-              clips: [{ video_url: '/videos/job-1/clip-1.mp4', index: 0 }],
-              clip_count: 1,
-            }],
+            projects: [
+              {
+                job_id: "job-1",
+                title: "Test project",
+                clips: [{ video_url: "/videos/job-1/clip-1.mp4", index: 0 }],
+                clip_count: 1,
+              },
+            ],
           }),
         });
       }
-      if (String(url).includes('/api/projects/job-1/statuses')) {
+      if (String(url).includes("/api/projects/job-1/statuses")) {
         return Promise.resolve({
           ok: true,
-          json: async () => ({ version: 1, clips: { '0': { status: 'reviewing' } } }),
+          json: async () => ({
+            version: 1,
+            clips: { 0: { status: "reviewing" } },
+          }),
         });
       }
-      if (String(url).includes('/api/projects/job-1/clips/0/status')) {
-        return Promise.resolve({ ok: false, text: async () => 'save failed' });
+      if (String(url).includes("/api/projects/job-1/clips/0/status")) {
+        return Promise.resolve({ ok: false, text: async () => "save failed" });
       }
       return Promise.resolve({ ok: true, json: async () => ({ clips: [] }) });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal("fetch", fetchMock);
 
     render(<ProjectLibrary projectId="job-1" />);
 
-    await waitFor(() => expect(screen.getByLabelText('Clip status')).toHaveValue('reviewing'));
-    fireEvent.change(screen.getByLabelText('Clip status'), { target: { value: 'edited' } });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Clip status")).toHaveValue("reviewing"),
+    );
+    fireEvent.change(screen.getByLabelText("Clip status"), {
+      target: { value: "edited" },
+    });
 
-    await waitFor(() => expect(screen.getByLabelText('Clip status')).toHaveValue('reviewing'));
-    expect(screen.getByText('save failed')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Clip status")).toHaveValue("reviewing"),
+    );
+    expect(screen.getByText("save failed")).toBeInTheDocument();
   });
 });
