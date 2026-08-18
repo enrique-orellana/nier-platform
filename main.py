@@ -1294,16 +1294,9 @@ def process_video_to_vertical(
     print("\n   🧠 Step 2: Preparing Active Tracking...")
     original_width = int(source_analysis.width)
     original_height = int(source_analysis.height)
-    
-    if layout_options.layout_format == STREAMER_STACK_LAYOUT:
-        master_spec = choose_master_spec(source_media, strategy="crop")
-        OUTPUT_WIDTH = master_spec.width
-        OUTPUT_HEIGHT = master_spec.height
-    else:
-        OUTPUT_HEIGHT = original_height
-        OUTPUT_WIDTH = int(OUTPUT_HEIGHT * ASPECT_RATIO)
-        if OUTPUT_WIDTH % 2 != 0:
-            OUTPUT_WIDTH += 1
+    master_spec = choose_master_spec(source_media, strategy="crop")
+    OUTPUT_WIDTH = master_spec.width
+    OUTPUT_HEIGHT = master_spec.height
 
     # Initialize Cameraman
     cameraman = (

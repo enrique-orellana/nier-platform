@@ -859,6 +859,51 @@ class MainGenerationPipelineTests(unittest.TestCase):
             source_has_audio=True,
         )
 
+    def test_standard_render_uses_canonical_mobile_dimensions(self):
+        analysis = SourceAnalysis(
+            source_fingerprint={"size": 1},
+            source_fps=30.0,
+            total_frames=2,
+            width=810,
+            height=1440,
+            scene_boundaries=[(0, 2)],
+            scene_strategies=["TRACK"],
+        )
+        commands = []
+
+        def fake_run(command, **_kwargs):
+            commands.append(command)
+            Path(command[-1]).touch()
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "standard.mp4"
+            capture = FakeStrategyCapture(np.zeros((1440, 810, 3), dtype=np.uint8))
+            tracker = Mock(get_target=Mock(return_value=None))
+            with patch.object(main, "FFmpegVideoStream", return_value=capture), patch.object(
+                main, "detect_face_candidates", return_value=[]
+            ), patch.object(main, "detect_person_yolo", return_value=None), patch.object(
+                main, "SpeakerTracker", return_value=tracker
+            ), patch.object(main.subprocess, "Popen", return_value=FakeProcess()) as popen, patch.object(
+                main.subprocess, "run", side_effect=fake_run
+            ), patch.object(main, "validate_clip_output") as validate:
+                result = main.process_video_to_vertical(
+                    "source.mp4",
+                    str(output_path),
+                    source_analysis=analysis,
+                    source_media=source_media(),
+                )
+
+        self.assertTrue(result)
+        render_command = popen.call_args.args[0]
+        self.assertEqual(render_command[render_command.index("-s") + 1], "1080x1920")
+        validate.assert_called_once_with(
+            str(output_path),
+            expected_width=1080,
+            expected_height=1920,
+            expected_fps=30.0,
+            source_has_audio=True,
+        )
+
     def test_render_merge_does_not_shortest_trim_copied_video(self):
         analysis = SourceAnalysis(
             source_fingerprint={"size": 1},
