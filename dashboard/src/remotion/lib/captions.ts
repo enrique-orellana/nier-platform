@@ -14,7 +14,7 @@ export interface CaptionBlock {
 export function groupCaptionsIntoBlocks(
   captions: CaptionWord[],
   maxChars = 20,
-  maxDurationMs = 2000
+  maxDurationMs = 2000,
 ): CaptionBlock[] {
   const blocks: CaptionBlock[] = [];
   let currentWords: CaptionWord[] = [];
@@ -29,7 +29,7 @@ export function groupCaptionsIntoBlocks(
 
     const currentTextLen = currentWords.reduce(
       (sum, w) => sum + w.text.length + 1,
-      0
+      0,
     );
     const duration = word.endMs - blockStartMs;
 
@@ -72,7 +72,7 @@ export function groupCaptionsIntoBlocks(
  */
 export function getActiveWordIndex(
   words: CaptionWord[],
-  timeMs: number
+  timeMs: number,
 ): number {
   for (let i = 0; i < words.length; i++) {
     if (timeMs >= words[i].startMs && timeMs < words[i].endMs) {

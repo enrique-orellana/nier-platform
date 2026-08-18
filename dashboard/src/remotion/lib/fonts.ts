@@ -38,5 +38,8 @@ export const SUBTITLE_FONTS: Record<string, string> = {
 
 export function getFontStack(fontFamily: string): string {
   const stack = SUBTITLE_FONTS[fontFamily] ?? fontFamily;
-  return stack.replace(/,\s*(sans-serif|serif)\s*$/, `, '${COLOR_EMOJI_FONT_FAMILY}', $1`);
+  return stack.replace(
+    /,\s*(sans-serif|serif)\s*$/,
+    `, '${COLOR_EMOJI_FONT_FAMILY}', $1`,
+  );
 }

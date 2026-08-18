@@ -1,81 +1,109 @@
-import { HOOK_FONT_FAMILY } from '../../remotion/lib/hookVisual';
-import { DEFAULT_SUBTITLE_STYLE, normalizeSubtitleStyle } from './localEditorStyles';
+import { HOOK_FONT_FAMILY } from "../../remotion/lib/hookVisual";
+import {
+  DEFAULT_SUBTITLE_STYLE,
+  normalizeSubtitleStyle,
+} from "./localEditorStyles";
 
-export const EDITOR_PREFERENCES_STORAGE_KEY = 'openshorts_local_editor_preferences_v1';
+export const EDITOR_PREFERENCES_STORAGE_KEY =
+  "openshorts_local_editor_preferences_v1";
 export const EDITOR_PREFERENCES_VERSION = 1;
 
 export const DEFAULT_HOOK_DEFAULTS = {
-    position: 'top',
-    size: 'M',
-    entranceAnimation: 'spring',
-    durationMs: 2500,
-    color: '#ffffff',
-    fontSize: 48,
-    background: '#111111',
-    fontFamily: HOOK_FONT_FAMILY,
+  position: "top",
+  size: "M",
+  entranceAnimation: "spring",
+  durationMs: 2500,
+  color: "#ffffff",
+  fontSize: 48,
+  background: "#111111",
+  fontFamily: HOOK_FONT_FAMILY,
 };
 
 export const DEFAULT_EDITOR_PREFERENCES = {
-    version: EDITOR_PREFERENCES_VERSION,
-    subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE },
-    subtitleLanguage: 'en',
-    hookDefaults: { ...DEFAULT_HOOK_DEFAULTS },
+  version: EDITOR_PREFERENCES_VERSION,
+  subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE },
+  subtitleLanguage: "en",
+  hookDefaults: { ...DEFAULT_HOOK_DEFAULTS },
 };
 
 const HOOK_SETTING_KEYS = Object.keys(DEFAULT_HOOK_DEFAULTS);
 
-const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const isRecord = (value) =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
 const cloneDefaultPreferences = () => ({
-    version: EDITOR_PREFERENCES_VERSION,
-    subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE },
-    subtitleLanguage: 'en',
-    hookDefaults: { ...DEFAULT_HOOK_DEFAULTS },
+  version: EDITOR_PREFERENCES_VERSION,
+  subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE },
+  subtitleLanguage: "en",
+  hookDefaults: { ...DEFAULT_HOOK_DEFAULTS },
 });
 
 const normalizeHookDefaults = (defaults = {}) => {
-    const source = isRecord(defaults) ? defaults : {};
-    return HOOK_SETTING_KEYS.reduce((result, key) => {
-        if (source[key] !== undefined) result[key] = source[key];
-        return result;
-    }, { ...DEFAULT_HOOK_DEFAULTS });
+  const source = isRecord(defaults) ? defaults : {};
+  return HOOK_SETTING_KEYS.reduce(
+    (result, key) => {
+      if (source[key] !== undefined) result[key] = source[key];
+      return result;
+    },
+    { ...DEFAULT_HOOK_DEFAULTS },
+  );
 };
 
 export const normalizeEditorPreferences = (preferences) => {
-    if (!isRecord(preferences) || Number(preferences.version) !== EDITOR_PREFERENCES_VERSION) {
-        return cloneDefaultPreferences();
-    }
-    return {
-        version: EDITOR_PREFERENCES_VERSION,
-        subtitleStyle: normalizeSubtitleStyle(isRecord(preferences.subtitleStyle) ? preferences.subtitleStyle : {}),
-        subtitleLanguage: String(preferences.subtitleLanguage || 'en').toLowerCase(),
-        hookDefaults: normalizeHookDefaults(preferences.hookDefaults),
-    };
+  if (
+    !isRecord(preferences) ||
+    Number(preferences.version) !== EDITOR_PREFERENCES_VERSION
+  ) {
+    return cloneDefaultPreferences();
+  }
+  return {
+    version: EDITOR_PREFERENCES_VERSION,
+    subtitleStyle: normalizeSubtitleStyle(
+      isRecord(preferences.subtitleStyle) ? preferences.subtitleStyle : {},
+    ),
+    subtitleLanguage: String(
+      preferences.subtitleLanguage || "en",
+    ).toLowerCase(),
+    hookDefaults: normalizeHookDefaults(preferences.hookDefaults),
+  };
 };
 
 export const readEditorPreferences = () => {
-    try {
-        const stored = localStorage.getItem(EDITOR_PREFERENCES_STORAGE_KEY);
-        return stored ? normalizeEditorPreferences(JSON.parse(stored)) : cloneDefaultPreferences();
-    } catch {
-        return cloneDefaultPreferences();
-    }
+  try {
+    const stored = localStorage.getItem(EDITOR_PREFERENCES_STORAGE_KEY);
+    return stored
+      ? normalizeEditorPreferences(JSON.parse(stored))
+      : cloneDefaultPreferences();
+  } catch {
+    return cloneDefaultPreferences();
+  }
 };
 
 export const saveEditorPreferences = (preferences) => {
-    try {
-        localStorage.setItem(EDITOR_PREFERENCES_STORAGE_KEY, JSON.stringify(normalizeEditorPreferences(preferences)));
-    } catch {
-        // Browser storage can be unavailable or full; editing remains usable in memory.
-    }
+  try {
+    localStorage.setItem(
+      EDITOR_PREFERENCES_STORAGE_KEY,
+      JSON.stringify(normalizeEditorPreferences(preferences)),
+    );
+  } catch {
+    // Browser storage can be unavailable or full; editing remains usable in memory.
+  }
 };
 
 export const updateEditorPreferencesFromState = (preferences, state = {}) => {
-    const current = normalizeEditorPreferences(preferences);
-    return {
-        version: EDITOR_PREFERENCES_VERSION,
-        subtitleStyle: normalizeSubtitleStyle(isRecord(state.subtitleStyle) ? state.subtitleStyle : current.subtitleStyle),
-        subtitleLanguage: String(state.subtitleLanguage || current.subtitleLanguage || 'en').toLowerCase(),
-        hookDefaults: state.hook ? normalizeHookDefaults(state.hook) : { ...current.hookDefaults },
-    };
+  const current = normalizeEditorPreferences(preferences);
+  return {
+    version: EDITOR_PREFERENCES_VERSION,
+    subtitleStyle: normalizeSubtitleStyle(
+      isRecord(state.subtitleStyle)
+        ? state.subtitleStyle
+        : current.subtitleStyle,
+    ),
+    subtitleLanguage: String(
+      state.subtitleLanguage || current.subtitleLanguage || "en",
+    ).toLowerCase(),
+    hookDefaults: state.hook
+      ? normalizeHookDefaults(state.hook)
+      : { ...current.hookDefaults },
+  };
 };

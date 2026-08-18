@@ -69,7 +69,7 @@ function getInterpolatedValues(
   segments: EffectSegment[],
   timeSec: number,
   frame: number,
-  fps: number
+  fps: number,
 ): InterpolatedValues {
   // Default values (no effect)
   const defaults: InterpolatedValues = {
@@ -83,7 +83,7 @@ function getInterpolatedValues(
 
   // Find active segment
   const active = segments.find(
-    (s) => timeSec >= s.startSec && timeSec < s.endSec
+    (s) => timeSec >= s.startSec && timeSec < s.endSec,
   );
 
   if (!active) {
@@ -136,7 +136,7 @@ function getInterpolatedValues(
     frame,
     [startFrame, startFrame + transitionFrames],
     [0, 1],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
 
   // Exit ease
@@ -144,7 +144,7 @@ function getInterpolatedValues(
     frame,
     [endFrame - transitionFrames, endFrame],
     [1, 0],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
 
   const factor = Math.min(entranceFactor, exitFactor);
@@ -166,7 +166,7 @@ function lerp(a: number, b: number, t: number): number {
 function lerpSegments(
   a: EffectSegment,
   b: EffectSegment,
-  t: number
+  t: number,
 ): InterpolatedValues {
   return {
     zoom: lerp(a.zoom, b.zoom, t),
@@ -181,7 +181,7 @@ function lerpSegments(
 function lerpToDefaults(
   seg: EffectSegment,
   t: number,
-  defaults: InterpolatedValues
+  defaults: InterpolatedValues,
 ): InterpolatedValues {
   return {
     zoom: lerp(seg.zoom, defaults.zoom, t),
@@ -196,7 +196,7 @@ function lerpToDefaults(
 function lerpFromDefaults(
   seg: EffectSegment,
   t: number,
-  defaults: InterpolatedValues
+  defaults: InterpolatedValues,
 ): InterpolatedValues {
   return {
     zoom: lerp(defaults.zoom, seg.zoom, t),

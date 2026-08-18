@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { Player } from '@remotion/player';
-import { ShortVideo } from '../remotion/compositions/ShortVideo';
+import React, { useEffect, useMemo, useRef } from "react";
+import { Player } from "@remotion/player";
+import { ShortVideo } from "../remotion/compositions/ShortVideo";
 
 /**
  * Wraps Remotion's Player component for real-time preview in modals.
@@ -15,110 +15,129 @@ import { ShortVideo } from '../remotion/compositions/ShortVideo';
  * @param {string} [props.className] - Additional CSS classes
  */
 export default function RemotionPreview({
-    videoUrl,
-    videoStartSeconds = 0,
-    durationInSeconds = 30,
-    fps = 30,
-    width = 1080,
-    height = 1920,
-    subtitles = null,
-    subtitleTracks = [],
-    activeSubtitleTrackId = null,
-    hook = null,
-    effects = null,
-    currentFrame = 0,
-    playing = true,
-    onFrameChange,
-    onPlayingChange,
-    onPlayerReady,
-    className = '',
+  videoUrl,
+  videoStartSeconds = 0,
+  durationInSeconds = 30,
+  fps = 30,
+  width = 1080,
+  height = 1920,
+  subtitles = null,
+  subtitleTracks = [],
+  activeSubtitleTrackId = null,
+  hook = null,
+  effects = null,
+  currentFrame = 0,
+  playing = true,
+  onFrameChange,
+  onPlayingChange,
+  onPlayerReady,
+  className = "",
 }) {
-    const durationInFrames = Math.max(1, Math.round(durationInSeconds * fps));
-    const playerRef = useRef(null);
-    const playerFrameRef = useRef(null);
+  const durationInFrames = Math.max(1, Math.round(durationInSeconds * fps));
+  const playerRef = useRef(null);
+  const playerFrameRef = useRef(null);
 
-    useEffect(() => {
-        const player = playerRef.current;
-        if (!player) return;
-        const targetFrame = Math.max(0, Math.min(durationInFrames - 1, Math.round(currentFrame)));
-        if (playerFrameRef.current === targetFrame) {
-            playerFrameRef.current = null;
-            return;
-        }
-        player.seekTo?.(targetFrame);
-    }, [currentFrame, durationInFrames]);
-
-    useEffect(() => {
-        if (playing) playerRef.current?.play?.();
-        else playerRef.current?.pause?.();
-    }, [playing]);
-
-    useEffect(() => {
-        const onPlaybackRequest = (event) => {
-            if (event.detail === true) playerRef.current?.play?.();
-            if (event.detail === false) playerRef.current?.pause?.();
-        };
-        window.addEventListener('openshorts:playback-request', onPlaybackRequest);
-        return () => window.removeEventListener('openshorts:playback-request', onPlaybackRequest);
-    }, []);
-
-    useEffect(() => {
-        const player = playerRef.current;
-        if (!player) return undefined;
-        onPlayerReady?.(player);
-        const onFrameUpdate = (event) => {
-            playerFrameRef.current = event.detail.frame;
-            onFrameChange?.(event.detail.frame);
-        };
-        const onPlay = () => onPlayingChange?.(true);
-        const onPause = () => onPlayingChange?.(false);
-        player.addEventListener('frameupdate', onFrameUpdate);
-        player.addEventListener('play', onPlay);
-        player.addEventListener('pause', onPause);
-        return () => {
-            player.removeEventListener('frameupdate', onFrameUpdate);
-            player.removeEventListener('play', onPlay);
-            player.removeEventListener('pause', onPause);
-            onPlayerReady?.(null);
-        };
-    }, [onFrameChange, onPlayingChange, onPlayerReady]);
-
-    const inputProps = useMemo(
-        () => ({
-            videoUrl,
-            videoStartSeconds,
-            durationInFrames,
-            fps,
-            width,
-            height,
-            subtitles,
-            subtitleTracks,
-            activeSubtitleTrackId,
-            hook,
-            effects,
-        }),
-        [videoUrl, videoStartSeconds, durationInFrames, fps, width, height, subtitles, subtitleTracks, activeSubtitleTrackId, hook, effects]
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    const targetFrame = Math.max(
+      0,
+      Math.min(durationInFrames - 1, Math.round(currentFrame)),
     );
+    if (playerFrameRef.current === targetFrame) {
+      playerFrameRef.current = null;
+      return;
+    }
+    player.seekTo?.(targetFrame);
+  }, [currentFrame, durationInFrames]);
 
-    return (
-        <div className={`w-full h-full ${className}`}>
-            <Player
-                ref={playerRef}
-                component={ShortVideo}
-                inputProps={inputProps}
-                durationInFrames={durationInFrames}
-                fps={fps}
-                compositionWidth={width}
-                compositionHeight={height}
-                style={{
-                    width: '100%',
-                    height: '100%',
-                }}
-                controls
-                autoPlay={playing}
-                loop
-                acknowledgeRemotionLicense={true}
-            />
-        </div>
-    );
+  useEffect(() => {
+    if (playing) playerRef.current?.play?.();
+    else playerRef.current?.pause?.();
+  }, [playing]);
+
+  useEffect(() => {
+    const onPlaybackRequest = (event) => {
+      if (event.detail === true) playerRef.current?.play?.();
+      if (event.detail === false) playerRef.current?.pause?.();
+    };
+    window.addEventListener("openshorts:playback-request", onPlaybackRequest);
+    return () =>
+      window.removeEventListener(
+        "openshorts:playback-request",
+        onPlaybackRequest,
+      );
+  }, []);
+
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return undefined;
+    onPlayerReady?.(player);
+    const onFrameUpdate = (event) => {
+      playerFrameRef.current = event.detail.frame;
+      onFrameChange?.(event.detail.frame);
+    };
+    const onPlay = () => onPlayingChange?.(true);
+    const onPause = () => onPlayingChange?.(false);
+    player.addEventListener("frameupdate", onFrameUpdate);
+    player.addEventListener("play", onPlay);
+    player.addEventListener("pause", onPause);
+    return () => {
+      player.removeEventListener("frameupdate", onFrameUpdate);
+      player.removeEventListener("play", onPlay);
+      player.removeEventListener("pause", onPause);
+      onPlayerReady?.(null);
+    };
+  }, [onFrameChange, onPlayingChange, onPlayerReady]);
+
+  const inputProps = useMemo(
+    () => ({
+      videoUrl,
+      videoStartSeconds,
+      durationInFrames,
+      fps,
+      width,
+      height,
+      subtitles,
+      subtitleTracks,
+      activeSubtitleTrackId,
+      hook,
+      effects,
+    }),
+    [
+      videoUrl,
+      videoStartSeconds,
+      durationInFrames,
+      fps,
+      width,
+      height,
+      subtitles,
+      subtitleTracks,
+      activeSubtitleTrackId,
+      hook,
+      effects,
+    ],
+  );
+
+  return (
+    <div className={`w-full h-full ${className}`}>
+      <Player
+        ref={playerRef}
+        component={ShortVideo}
+        inputProps={inputProps}
+        durationInFrames={durationInFrames}
+        fps={fps}
+        compositionWidth={width}
+        compositionHeight={height}
+        style={{
+          width: "100%",
+          height: "100%",
+        }}
+        controls
+        autoPlay={playing}
+        loop
+        acknowledgeRemotionLicense={true}
+      />
+    </div>
+  );
 }

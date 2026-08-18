@@ -35,20 +35,25 @@ const DEFAULT_SUBTITLE_STYLE: SubtitleConfig["style"] = {
 
 export const getSubtitleFrameRange = (
   cue: { startMs: number; endMs: number },
-  fps: number
+  fps: number,
 ) => {
   const startFrame = Math.round((cue.startMs / 1000) * fps);
-  const endFrame = Math.max(startFrame + 1, Math.round((cue.endMs / 1000) * fps));
+  const endFrame = Math.max(
+    startFrame + 1,
+    Math.round((cue.endMs / 1000) * fps),
+  );
   return { startFrame, endFrame, durationFrames: endFrame - startFrame };
 };
 
 export const getSubtitleTimeMs = (
   blockStartFrame: number,
   relativeFrame: number,
-  fps: number
+  fps: number,
 ) => ((blockStartFrame + relativeFrame) / fps) * 1000;
 
-export function normalizeSubtitleConfig(config: Partial<SubtitleConfig> | null | undefined): SubtitleConfig {
+export function normalizeSubtitleConfig(
+  config: Partial<SubtitleConfig> | null | undefined,
+): SubtitleConfig {
   return {
     captions: Array.isArray(config?.captions) ? config.captions : [],
     blocks: Array.isArray(config?.blocks) ? config.blocks : undefined,
@@ -60,12 +65,17 @@ export function normalizeSubtitleConfig(config: Partial<SubtitleConfig> | null |
 export const Subtitles: React.FC<SubtitlesProps> = ({ config }) => {
   const { fps } = useVideoConfig();
   const normalizedConfig = normalizeSubtitleConfig(config);
-  const blocks = normalizedConfig.blocks?.length ? normalizedConfig.blocks : groupCaptionsIntoBlocks(normalizedConfig.captions);
+  const blocks = normalizedConfig.blocks?.length
+    ? normalizedConfig.blocks
+    : groupCaptionsIntoBlocks(normalizedConfig.captions);
 
   return (
     <AbsoluteFill>
       {blocks.map((block, i) => {
-        const { startFrame, durationFrames } = getSubtitleFrameRange(block, fps);
+        const { startFrame, durationFrames } = getSubtitleFrameRange(
+          block,
+          fps,
+        );
 
         return (
           <Sequence
@@ -183,7 +193,8 @@ const WordSpan: React.FC<WordSpanProps> = ({
   wordStartMs,
   blockStartFrame,
 }) => {
-  const wordStartFrame = Math.round((wordStartMs / 1000) * fps) - blockStartFrame;
+  const wordStartFrame =
+    Math.round((wordStartMs / 1000) * fps) - blockStartFrame;
 
   let transform = "";
   let color = style.fontColor;

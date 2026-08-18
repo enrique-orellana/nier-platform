@@ -1,28 +1,66 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Upload, Image, Loader2, Send, Check, Download, ArrowRight, ArrowLeft, Sparkles, Video, Type, X, Plus, MessageSquare, FileText, Youtube, AlertCircle, CheckCircle2, Settings, Save, FolderOpen, RefreshCw, ExternalLink, Pencil, Trash2 } from 'lucide-react';
-import { getApiUrl } from '../config';
+import React, { useState, useRef, useCallback, useEffect } from "react";
+import {
+  Upload,
+  Image,
+  Loader2,
+  Send,
+  Check,
+  Download,
+  ArrowRight,
+  ArrowLeft,
+  Sparkles,
+  Video,
+  Type,
+  X,
+  Plus,
+  MessageSquare,
+  FileText,
+  Youtube,
+  AlertCircle,
+  CheckCircle2,
+  Settings,
+  Save,
+  FolderOpen,
+  RefreshCw,
+  ExternalLink,
+  Pencil,
+  Trash2,
+} from "lucide-react";
+import { getApiUrl } from "../config";
 
-const STEPS = ['Input', 'Titles', 'Generate', 'Description', 'Publish'];
+const STEPS = ["Input", "Titles", "Generate", "Description", "Publish"];
 
 function StepIndicator({ currentStep }) {
   return (
     <div className="flex items-center gap-2 mb-8">
       {STEPS.map((label, i) => (
         <React.Fragment key={label}>
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${i < currentStep ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-            i === currentStep ? 'bg-primary/20 text-primary border border-primary/30' :
-              'bg-white/5 text-zinc-500 border border-white/5'
-            }`}>
-            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${i < currentStep ? 'bg-green-500 text-black' :
-              i === currentStep ? 'bg-primary text-black' :
-                'bg-white/10 text-zinc-500'
-              }`}>
+          <div
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              i < currentStep
+                ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                : i === currentStep
+                  ? "bg-primary/20 text-primary border border-primary/30"
+                  : "bg-white/5 text-zinc-500 border border-white/5"
+            }`}
+          >
+            <span
+              className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                i < currentStep
+                  ? "bg-green-500 text-black"
+                  : i === currentStep
+                    ? "bg-primary text-black"
+                    : "bg-white/10 text-zinc-500"
+              }`}
+            >
               {i < currentStep ? <Check size={10} /> : i + 1}
             </span>
             <span className="hidden sm:inline">{label}</span>
           </div>
           {i < STEPS.length - 1 && (
-            <div className={`w-8 h-px ${i < currentStep ? 'bg-green-500/50' : 'bg-white/10'}`} />
+            <div
+              className={`w-8 h-px ${i < currentStep ? "bg-green-500/50" : "bg-white/10"}`}
+            />
           )}
         </React.Fragment>
       ))}
@@ -34,12 +72,15 @@ function DragDropZone({ label, accept, onFile, file, onClear, icon: Icon }) {
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef(null);
 
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const f = e.dataTransfer.files[0];
-    if (f) onFile(f);
-  }, [onFile]);
+  const handleDrop = useCallback(
+    (e) => {
+      e.preventDefault();
+      setIsDragging(false);
+      const f = e.dataTransfer.files[0];
+      if (f) onFile(f);
+    },
+    [onFile],
+  );
 
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
@@ -50,8 +91,12 @@ function DragDropZone({ label, accept, onFile, file, onClear, icon: Icon }) {
     return (
       <div className="relative border border-white/10 rounded-xl p-3 bg-white/5">
         <div className="flex items-center gap-3">
-          {file.type?.startsWith('image/') ? (
-            <img src={URL.createObjectURL(file)} className="w-12 h-12 rounded-lg object-cover" alt="" />
+          {file.type?.startsWith("image/") ? (
+            <img
+              src={URL.createObjectURL(file)}
+              className="w-12 h-12 rounded-lg object-cover"
+              alt=""
+            />
           ) : (
             <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center">
               <Icon size={20} className="text-zinc-400" />
@@ -59,9 +104,14 @@ function DragDropZone({ label, accept, onFile, file, onClear, icon: Icon }) {
           )}
           <div className="flex-1 min-w-0">
             <p className="text-sm text-white truncate">{file.name}</p>
-            <p className="text-xs text-zinc-500">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
+            <p className="text-xs text-zinc-500">
+              {(file.size / 1024 / 1024).toFixed(1)} MB
+            </p>
           </div>
-          <button onClick={onClear} className="text-zinc-500 hover:text-white transition-colors">
+          <button
+            onClick={onClear}
+            className="text-zinc-500 hover:text-white transition-colors"
+          >
             <X size={16} />
           </button>
         </div>
@@ -75,8 +125,11 @@ function DragDropZone({ label, accept, onFile, file, onClear, icon: Icon }) {
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragLeave={() => setIsDragging(false)}
-      className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${isDragging ? 'border-primary/50 bg-primary/5' : 'border-white/10 hover:border-white/20 bg-white/[0.02]'
-        }`}
+      className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
+        isDragging
+          ? "border-primary/50 bg-primary/5"
+          : "border-white/10 hover:border-white/20 bg-white/[0.02]"
+      }`}
     >
       <Icon size={24} className="mx-auto text-zinc-500 mb-2" />
       <p className="text-sm text-zinc-400">{label}</p>
@@ -92,7 +145,13 @@ function DragDropZone({ label, accept, onFile, file, onClear, icon: Icon }) {
   );
 }
 
-export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, uploadPostKey, uploadUserId }) {
+export default function ThumbnailStudio({
+  aiProvider,
+  aiApiKey,
+  getAiHeaders,
+  uploadPostKey,
+  uploadUserId,
+}) {
   // Step management
   const [step, setStep] = useState(0);
   const [mode, setMode] = useState(null); // 'video' or 'manual'
@@ -104,9 +163,9 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
   // Step 2 state
   const [sessionId, setSessionId] = useState(null);
   const [titles, setTitles] = useState([]);
-  const [selectedTitle, setSelectedTitle] = useState('');
-  const [manualTitle, setManualTitle] = useState('');
-  const [chatInput, setChatInput] = useState('');
+  const [selectedTitle, setSelectedTitle] = useState("");
+  const [manualTitle, setManualTitle] = useState("");
+  const [chatInput, setChatInput] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
   const [isRefining, setIsRefining] = useState(false);
   const [recommended, setRecommended] = useState([]); // [{index, reason}]
@@ -114,13 +173,13 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
   // Step 3 state
   const [faceImage, setFaceImage] = useState(null);
   const [bgImage, setBgImage] = useState(null);
-  const [extraPrompt, setExtraPrompt] = useState('');
+  const [extraPrompt, setExtraPrompt] = useState("");
   const [thumbnailCount, setThumbnailCount] = useState(3);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedThumbnails, setGeneratedThumbnails] = useState([]);
 
   // Description state
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState("");
   const [isDescribing, setIsDescribing] = useState(false);
 
   // Step 4 (Publish) state
@@ -137,14 +196,13 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
   const chatEndRef = useRef(null);
 
   const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const loadProjects = useCallback(async () => {
-  }, []);
+  const loadProjects = useCallback(async () => {}, []);
 
   useEffect(() => {
-    loadProjects().catch(() => { });
+    loadProjects().catch(() => {});
   }, [loadProjects]);
 
   // --- Background Pre-upload (starts Whisper immediately) ---
@@ -153,11 +211,11 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
     setIsPreprocessing(true);
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append("file", file);
 
-      const res = await fetch(getApiUrl('/api/thumbnail/upload'), {
-        method: 'POST',
-        body: formData
+      const res = await fetch(getApiUrl("/api/thumbnail/upload"), {
+        method: "POST",
+        body: formData,
       });
 
       if (res.ok) {
@@ -166,7 +224,7 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
         console.log(`🎙️ Background Whisper started: ${data.session_id}`);
       }
     } catch (e) {
-      console.error('Pre-upload failed:', e);
+      console.error("Pre-upload failed:", e);
     } finally {
       setIsPreprocessing(false);
     }
@@ -174,7 +232,8 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
 
   // --- Step 1: Analyze Video ---
   const handleAnalyze = async () => {
-    if (aiProvider === 'gemini' && !aiApiKey) return alert('Please set your Gemini API key in Settings first.');
+    if (aiProvider === "gemini" && !aiApiKey)
+      return alert("Please set your Gemini API key in Settings first.");
     setIsAnalyzing(true);
 
     try {
@@ -182,17 +241,17 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
 
       if (preprocessSessionId) {
         // Use pre-uploaded session (Whisper already running/done in background)
-        formData.append('session_id', preprocessSessionId);
+        formData.append("session_id", preprocessSessionId);
       } else if (videoFile) {
-        formData.append('file', videoFile);
+        formData.append("file", videoFile);
       } else {
-        return alert('Please upload a video file.');
+        return alert("Please upload a video file.");
       }
 
-      const res = await fetch(getApiUrl('/api/thumbnail/analyze'), {
-        method: 'POST',
+      const res = await fetch(getApiUrl("/api/thumbnail/analyze"), {
+        method: "POST",
         headers: getAiHeaders(),
-        body: formData
+        body: formData,
       });
 
       if (!res.ok) {
@@ -204,10 +263,12 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
       setSessionId(data.session_id);
       setTitles(data.titles || []);
       setRecommended(data.recommended || []);
-      setChatHistory([{
-        role: 'assistant',
-        content: `Here are 10 viral title suggestions based on your video. Titles marked ⭐ are my top picks. Click one to select it, or tell me how to refine them.`
-      }]);
+      setChatHistory([
+        {
+          role: "assistant",
+          content: `Here are 10 viral title suggestions based on your video. Titles marked ⭐ are my top picks. Click one to select it, or tell me how to refine them.`,
+        },
+      ]);
       setStep(1);
     } catch (e) {
       alert(`Analysis failed: ${e.message}`);
@@ -217,7 +278,7 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
   };
 
   const handleManualMode = () => {
-    setMode('manual');
+    setMode("manual");
     setStep(1);
   };
 
@@ -227,18 +288,18 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
   };
 
   const handleConfirmTitle = () => {
-    if (mode === 'manual' && manualTitle) {
+    if (mode === "manual" && manualTitle) {
       setSelectedTitle(manualTitle);
       // Create session for manual mode
       const newSessionId = sessionId || crypto.randomUUID();
       setSessionId(newSessionId);
-      fetch(getApiUrl('/api/thumbnail/titles'), {
-        method: 'POST',
-        headers: getAiHeaders('json'),
-        body: JSON.stringify({ title: manualTitle, session_id: newSessionId })
-      }).catch(() => { });
+      fetch(getApiUrl("/api/thumbnail/titles"), {
+        method: "POST",
+        headers: getAiHeaders("json"),
+        body: JSON.stringify({ title: manualTitle, session_id: newSessionId }),
+      }).catch(() => {});
     }
-    if (selectedTitle || (mode === 'manual' && manualTitle)) {
+    if (selectedTitle || (mode === "manual" && manualTitle)) {
       setStep(2);
     }
   };
@@ -248,29 +309,35 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
     setIsRefining(true);
 
     const userMsg = chatInput.trim();
-    setChatInput('');
-    setChatHistory(prev => [...prev, { role: 'user', content: userMsg }]);
+    setChatInput("");
+    setChatHistory((prev) => [...prev, { role: "user", content: userMsg }]);
 
     try {
-      const res = await fetch(getApiUrl('/api/thumbnail/titles'), {
-        method: 'POST',
-        headers: getAiHeaders('json'),
-        body: JSON.stringify({ session_id: sessionId, message: userMsg })
+      const res = await fetch(getApiUrl("/api/thumbnail/titles"), {
+        method: "POST",
+        headers: getAiHeaders("json"),
+        body: JSON.stringify({ session_id: sessionId, message: userMsg }),
       });
 
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setTitles(data.titles || []);
-      setChatHistory(prev => [...prev, {
-        role: 'assistant',
-        content: `Here are refined titles based on your feedback. Click one to select it.`
-      }]);
+      setChatHistory((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `Here are refined titles based on your feedback. Click one to select it.`,
+        },
+      ]);
       setTimeout(scrollToBottom, 100);
     } catch (e) {
-      setChatHistory(prev => [...prev, {
-        role: 'assistant',
-        content: `Failed to refine: ${e.message}`
-      }]);
+      setChatHistory((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `Failed to refine: ${e.message}`,
+        },
+      ]);
     } finally {
       setIsRefining(false);
     }
@@ -278,26 +345,27 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
 
   // --- Step 3: Generate Thumbnails ---
   const handleGenerate = async () => {
-    if (aiProvider === 'gemini' && !aiApiKey) return alert('Please set your Gemini API key in Settings first.');
+    if (aiProvider === "gemini" && !aiApiKey)
+      return alert("Please set your Gemini API key in Settings first.");
     const finalTitle = selectedTitle || manualTitle;
-    if (!finalTitle) return alert('Please select or enter a title first.');
+    if (!finalTitle) return alert("Please select or enter a title first.");
 
     setIsGenerating(true);
     setGeneratedThumbnails([]);
 
     try {
       const formData = new FormData();
-      formData.append('session_id', sessionId || 'manual');
-      formData.append('title', finalTitle);
-      formData.append('extra_prompt', extraPrompt);
-      formData.append('count', thumbnailCount);
-      if (faceImage) formData.append('face', faceImage);
-      if (bgImage) formData.append('background', bgImage);
+      formData.append("session_id", sessionId || "manual");
+      formData.append("title", finalTitle);
+      formData.append("extra_prompt", extraPrompt);
+      formData.append("count", thumbnailCount);
+      if (faceImage) formData.append("face", faceImage);
+      if (bgImage) formData.append("background", bgImage);
 
-      const res = await fetch(getApiUrl('/api/thumbnail/generate'), {
-        method: 'POST',
+      const res = await fetch(getApiUrl("/api/thumbnail/generate"), {
+        method: "POST",
         headers: getAiHeaders(),
-        body: formData
+        body: formData,
       });
 
       if (!res.ok) {
@@ -307,7 +375,9 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
 
       const data = await res.json();
       if (!data.thumbnails || data.thumbnails.length === 0) {
-        throw new Error('No thumbnails were generated. Check your AI provider configuration.');
+        throw new Error(
+          "No thumbnails were generated. Check your AI provider configuration.",
+        );
       }
       setGeneratedThumbnails(data.thumbnails);
     } catch (e) {
@@ -322,32 +392,33 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
       const response = await fetch(getApiUrl(url));
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = blobUrl;
-      a.download = url.split('/').pop() || 'thumbnail.png';
+      a.download = url.split("/").pop() || "thumbnail.png";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
     } catch (e) {
       // Fallback: open in new tab if fetch fails
-      window.open(getApiUrl(url), '_blank');
+      window.open(getApiUrl(url), "_blank");
     }
   };
 
   // --- Description Generation ---
   const handleGenerateDescription = async () => {
-    if (aiProvider === 'gemini' && !aiApiKey) return alert('Please set your Gemini API key in Settings first.');
+    if (aiProvider === "gemini" && !aiApiKey)
+      return alert("Please set your Gemini API key in Settings first.");
     const finalTitle = selectedTitle || manualTitle;
-    if (!finalTitle) return alert('Please select a title first.');
-    if (!sessionId) return alert('No session available.');
+    if (!finalTitle) return alert("Please select a title first.");
+    if (!sessionId) return alert("No session available.");
 
     setIsDescribing(true);
     try {
-      const res = await fetch(getApiUrl('/api/thumbnail/describe'), {
-        method: 'POST',
-        headers: getAiHeaders('json'),
-        body: JSON.stringify({ session_id: sessionId, title: finalTitle })
+      const res = await fetch(getApiUrl("/api/thumbnail/describe"), {
+        method: "POST",
+        headers: getAiHeaders("json"),
+        body: JSON.stringify({ session_id: sessionId, title: finalTitle }),
       });
 
       if (!res.ok) {
@@ -356,7 +427,7 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
       }
 
       const data = await res.json();
-      setDescription(data.description || '');
+      setDescription(data.description || "");
     } catch (e) {
       alert(`Description generation failed: ${e.message}`);
     } finally {
@@ -366,15 +437,15 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
 
   const handleSaveProject = async () => {
     const finalTitle = selectedTitle || manualTitle;
-    if (!sessionId) return alert('No session available.');
+    if (!sessionId) return alert("No session available.");
 
     setIsSavingProject(true);
     setSaveProjectResult(null);
 
     try {
-      const res = await fetch(getApiUrl('/api/thumbnail/save'), {
-        method: 'POST',
-        headers: getAiHeaders('json'),
+      const res = await fetch(getApiUrl("/api/thumbnail/save"), {
+        method: "POST",
+        headers: getAiHeaders("json"),
         body: JSON.stringify({
           session_id: sessionId,
           title: finalTitle,
@@ -410,30 +481,32 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
     if (!uploadPostKey || !uploadUserId) {
       setPublishResult({
         success: false,
-        error: 'Publishing is optional. Configure Upload-Post only if you want to publish from this screen.',
+        error:
+          "Publishing is optional. Configure Upload-Post only if you want to publish from this screen.",
       });
       return;
     }
     const finalTitle = selectedTitle || manualTitle;
-    if (!finalTitle) return alert('No title selected.');
-    if (!selectedThumbnail) return alert('Please select a thumbnail first.');
-    if (!description) return alert('Please generate or write a description first.');
+    if (!finalTitle) return alert("No title selected.");
+    if (!selectedThumbnail) return alert("Please select a thumbnail first.");
+    if (!description)
+      return alert("Please generate or write a description first.");
 
     setIsPublishing(true);
     setPublishResult(null);
     try {
       const formData = new FormData();
-      formData.append('session_id', sessionId);
-      formData.append('title', finalTitle);
-      formData.append('description', description);
-      formData.append('thumbnail_url', selectedThumbnail);
-      formData.append('api_key', uploadPostKey);
-      formData.append('user_id', uploadUserId);
+      formData.append("session_id", sessionId);
+      formData.append("title", finalTitle);
+      formData.append("description", description);
+      formData.append("thumbnail_url", selectedThumbnail);
+      formData.append("api_key", uploadPostKey);
+      formData.append("user_id", uploadUserId);
 
       // Submit the publish job — returns immediately with a publish_id
-      const res = await fetch(getApiUrl('/api/thumbnail/publish'), {
-        method: 'POST',
-        body: formData
+      const res = await fetch(getApiUrl("/api/thumbnail/publish"), {
+        method: "POST",
+        body: formData,
       });
 
       if (!res.ok) {
@@ -447,17 +520,23 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
       await new Promise((resolve, reject) => {
         const interval = setInterval(async () => {
           try {
-            const statusRes = await fetch(getApiUrl(`/api/thumbnail/publish/status/${publish_id}`));
-            if (!statusRes.ok) { clearInterval(interval); reject(new Error('Status check failed')); return; }
+            const statusRes = await fetch(
+              getApiUrl(`/api/thumbnail/publish/status/${publish_id}`),
+            );
+            if (!statusRes.ok) {
+              clearInterval(interval);
+              reject(new Error("Status check failed"));
+              return;
+            }
             const statusData = await statusRes.json();
 
-            if (statusData.status === 'done') {
+            if (statusData.status === "done") {
               clearInterval(interval);
               setPublishResult({ success: true, data: statusData.result });
               resolve();
-            } else if (statusData.status === 'failed') {
+            } else if (statusData.status === "failed") {
               clearInterval(interval);
-              reject(new Error(statusData.error || 'Upload failed'));
+              reject(new Error(statusData.error || "Upload failed"));
             }
             // 'uploading' → keep polling
           } catch (e) {
@@ -466,7 +545,6 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
           }
         }, 2000);
       });
-
     } catch (e) {
       setPublishResult({ success: false, error: e.message });
     } finally {
@@ -480,15 +558,15 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
     setVideoFile(null);
     setSessionId(null);
     setTitles([]);
-    setSelectedTitle('');
-    setManualTitle('');
-    setChatInput('');
+    setSelectedTitle("");
+    setManualTitle("");
+    setChatInput("");
     setChatHistory([]);
     setFaceImage(null);
     setBgImage(null);
-    setExtraPrompt('');
+    setExtraPrompt("");
     setGeneratedThumbnails([]);
-    setDescription('');
+    setDescription("");
     setIsDescribing(false);
     setSelectedThumbnail(null);
     setIsPublishing(false);
@@ -512,28 +590,41 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
             YouTube Studio
           </h1>
           {step > 0 && (
-            <button onClick={handleReset} className="text-xs text-zinc-500 hover:text-white transition-colors flex items-center gap-1">
+            <button
+              onClick={handleReset}
+              className="text-xs text-zinc-500 hover:text-white transition-colors flex items-center gap-1"
+            >
               <Plus size={12} /> New Project
             </button>
           )}
         </div>
-        <p className="text-sm text-zinc-500 mb-6">Generate viral titles, AI thumbnails, descriptions and publish directly to YouTube</p>
+        <p className="text-sm text-zinc-500 mb-6">
+          Generate viral titles, AI thumbnails, descriptions and publish
+          directly to YouTube
+        </p>
         <StepIndicator currentStep={step} />
 
         {/* Gemini API Key Warning */}
-        {aiProvider === 'gemini' && !aiApiKey && (
+        {aiProvider === "gemini" && !aiApiKey && (
           <div className="mb-6 p-5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-3">
             <AlertCircle size={20} className="text-amber-400 shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-amber-300">Gemini API Key Required</p>
-              <p className="text-xs text-amber-400/70 mt-1">Switch to Ollama in Settings for a fully local setup, or keep Gemini mode and set a cloud key.</p>
+              <p className="text-sm font-semibold text-amber-300">
+                Gemini API Key Required
+              </p>
+              <p className="text-xs text-amber-400/70 mt-1">
+                Switch to Ollama in Settings for a fully local setup, or keep
+                Gemini mode and set a cloud key.
+              </p>
             </div>
           </div>
         )}
 
         {/* ===== STEP 0: Input Mode Selection ===== */}
         {step === 0 && (
-          <div className={`grid md:grid-cols-2 gap-6 ${aiProvider === 'gemini' && !aiApiKey ? 'opacity-50 pointer-events-none select-none' : ''}`}>
+          <div
+            className={`grid md:grid-cols-2 gap-6 ${aiProvider === "gemini" && !aiApiKey ? "opacity-50 pointer-events-none select-none" : ""}`}
+          >
             {/* Mode A: Video Analysis */}
             <div className="glass-panel p-6 space-y-4">
               <div className="flex items-center gap-3 mb-2">
@@ -541,17 +632,28 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                   <Video size={16} className="text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Analyze Video</h3>
-                  <p className="text-xs text-zinc-500">AI suggests viral titles from your content</p>
+                  <h3 className="text-sm font-semibold text-white">
+                    Analyze Video
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    AI suggests viral titles from your content
+                  </p>
                 </div>
               </div>
 
               <DragDropZone
                 label="Upload video file"
                 accept="video/*"
-                onFile={(f) => { setVideoFile(f); setMode('video'); handlePreUpload(f); }}
+                onFile={(f) => {
+                  setVideoFile(f);
+                  setMode("video");
+                  handlePreUpload(f);
+                }}
                 file={videoFile}
-                onClear={() => { setVideoFile(null); setPreprocessSessionId(null); }}
+                onClear={() => {
+                  setVideoFile(null);
+                  setPreprocessSessionId(null);
+                }}
                 icon={Video}
               />
 
@@ -594,8 +696,12 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                   <Type size={16} className="text-purple-400" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Write Your Own</h3>
-                  <p className="text-xs text-zinc-500">Skip analysis, enter your title directly</p>
+                  <h3 className="text-sm font-semibold text-white">
+                    Write Your Own
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    Skip analysis, enter your title directly
+                  </p>
                 </div>
               </div>
 
@@ -608,7 +714,9 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                   className="input-field text-sm mb-4"
                   maxLength={70}
                 />
-                <p className="text-xs text-zinc-600 mb-4">{manualTitle.length}/70 characters</p>
+                <p className="text-xs text-zinc-600 mb-4">
+                  {manualTitle.length}/70 characters
+                </p>
               </div>
 
               <button
@@ -628,9 +736,11 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
           <div className="grid md:grid-cols-5 gap-6">
             {/* Left: Chat / Controls */}
             <div className="md:col-span-2 flex flex-col gap-4">
-              {mode === 'manual' ? (
+              {mode === "manual" ? (
                 <div className="glass-panel p-6 space-y-4">
-                  <h3 className="text-sm font-semibold text-white">Your Title</h3>
+                  <h3 className="text-sm font-semibold text-white">
+                    Your Title
+                  </h3>
                   <input
                     type="text"
                     value={manualTitle}
@@ -638,7 +748,9 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                     className="input-field text-sm"
                     maxLength={70}
                   />
-                  <p className="text-xs text-zinc-600">{manualTitle.length}/70 characters</p>
+                  <p className="text-xs text-zinc-600">
+                    {manualTitle.length}/70 characters
+                  </p>
                   <button
                     onClick={handleConfirmTitle}
                     disabled={!manualTitle.trim()}
@@ -652,17 +764,25 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                 <div className="glass-panel p-4 flex flex-col h-[500px]">
                   <div className="flex items-center gap-2 mb-3 pb-3 border-b border-white/5">
                     <MessageSquare size={14} className="text-primary" />
-                    <span className="text-xs font-medium text-zinc-400">Title Refinement Chat</span>
+                    <span className="text-xs font-medium text-zinc-400">
+                      Title Refinement Chat
+                    </span>
                   </div>
 
                   {/* Chat messages */}
                   <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar mb-3">
                     {chatHistory.map((msg, i) => (
-                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[90%] px-3 py-2 rounded-xl text-xs ${msg.role === 'user'
-                          ? 'bg-primary/20 text-primary border border-primary/20'
-                          : 'bg-white/5 text-zinc-300 border border-white/5'
-                          }`}>
+                      <div
+                        key={i}
+                        className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                      >
+                        <div
+                          className={`max-w-[90%] px-3 py-2 rounded-xl text-xs ${
+                            msg.role === "user"
+                              ? "bg-primary/20 text-primary border border-primary/20"
+                              : "bg-white/5 text-zinc-300 border border-white/5"
+                          }`}
+                        >
                           {msg.content}
                         </div>
                       </div>
@@ -676,7 +796,9 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                       type="text"
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleRefine()}
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && !e.shiftKey && handleRefine()
+                      }
                       placeholder="Make them more clickbait..."
                       className="input-field text-xs flex-1"
                       disabled={isRefining}
@@ -686,13 +808,17 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                       disabled={isRefining || !chatInput.trim()}
                       className="btn-primary p-2 rounded-xl disabled:opacity-50"
                     >
-                      {isRefining ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                      {isRefining ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Send size={14} />
+                      )}
                     </button>
                   </div>
                 </div>
               )}
 
-              {mode !== 'manual' && selectedTitle && (
+              {mode !== "manual" && selectedTitle && (
                 <button
                   onClick={handleConfirmTitle}
                   className="w-full btn-primary py-3 text-sm font-semibold flex items-center justify-center gap-2"
@@ -708,44 +834,62 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
               {selectedTitle && (
                 <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-2 text-sm">
                   <Check size={14} className="text-green-400 shrink-0" />
-                  <span className="text-green-300 font-medium truncate">Selected: {selectedTitle}</span>
+                  <span className="text-green-300 font-medium truncate">
+                    Selected: {selectedTitle}
+                  </span>
                 </div>
               )}
 
               {titles.length > 0 && (
                 <div className="space-y-2">
                   {titles.map((title, i) => {
-                    const rec = recommended.find(r => r.index === i);
-                    const recRank = recommended.findIndex(r => r.index === i);
+                    const rec = recommended.find((r) => r.index === i);
+                    const recRank = recommended.findIndex((r) => r.index === i);
                     return (
                       <button
                         key={i}
                         onClick={() => handleSelectTitle(title)}
-                        className={`w-full text-left p-4 rounded-xl border transition-all text-sm ${selectedTitle === title
-                          ? 'bg-primary/10 border-primary/30 text-white'
-                          : rec
-                            ? 'bg-amber-500/5 border-amber-500/20 text-zinc-200 hover:bg-amber-500/10'
-                            : 'bg-white/[0.02] border-white/5 text-zinc-300 hover:bg-white/5 hover:border-white/10'
-                          }`}
+                        className={`w-full text-left p-4 rounded-xl border transition-all text-sm ${
+                          selectedTitle === title
+                            ? "bg-primary/10 border-primary/30 text-white"
+                            : rec
+                              ? "bg-amber-500/5 border-amber-500/20 text-zinc-200 hover:bg-amber-500/10"
+                              : "bg-white/[0.02] border-white/5 text-zinc-300 hover:bg-white/5 hover:border-white/10"
+                        }`}
                       >
                         <div className="flex items-start gap-3">
-                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${selectedTitle === title ? 'bg-primary text-black' :
-                            rec ? 'bg-amber-400 text-black' :
-                              'bg-white/10 text-zinc-500'
-                            }`}>
-                            {selectedTitle === title ? <Check size={10} /> : rec ? '★' : i + 1}
+                          <span
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
+                              selectedTitle === title
+                                ? "bg-primary text-black"
+                                : rec
+                                  ? "bg-amber-400 text-black"
+                                  : "bg-white/10 text-zinc-500"
+                            }`}
+                          >
+                            {selectedTitle === title ? (
+                              <Check size={10} />
+                            ) : rec ? (
+                              "★"
+                            ) : (
+                              i + 1
+                            )}
                           </span>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="leading-relaxed">{title}</span>
                               {rec && (
                                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-400 border border-amber-400/30 shrink-0">
-                                  {recRank === 0 ? '⭐ TOP PICK' : '⭐ 2nd PICK'}
+                                  {recRank === 0
+                                    ? "⭐ TOP PICK"
+                                    : "⭐ 2nd PICK"}
                                 </span>
                               )}
                             </div>
                             {rec && (
-                              <p className="text-[11px] text-amber-300/70 mt-1.5 leading-relaxed italic">{rec.reason}</p>
+                              <p className="text-[11px] text-amber-300/70 mt-1.5 leading-relaxed italic">
+                                {rec.reason}
+                              </p>
                             )}
                           </div>
                         </div>
@@ -771,7 +915,9 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
             {/* Left: Controls */}
             <div className="md:col-span-2 space-y-4">
               <div className="glass-panel p-6 space-y-4">
-                <h3 className="text-sm font-semibold text-white mb-1">Selected Title</h3>
+                <h3 className="text-sm font-semibold text-white mb-1">
+                  Selected Title
+                </h3>
                 <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg text-sm text-primary">
                   {selectedTitle || manualTitle}
                 </div>
@@ -785,7 +931,10 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
               </div>
 
               <div className="glass-panel p-6 space-y-4">
-                <h3 className="text-sm font-semibold text-white">Face Image <span className="text-zinc-600 font-normal">(optional)</span></h3>
+                <h3 className="text-sm font-semibold text-white">
+                  Face Image{" "}
+                  <span className="text-zinc-600 font-normal">(optional)</span>
+                </h3>
                 <DragDropZone
                   label="Upload face / person photo"
                   accept="image/*"
@@ -797,7 +946,10 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
               </div>
 
               <div className="glass-panel p-6 space-y-4">
-                <h3 className="text-sm font-semibold text-white">Background Image <span className="text-zinc-600 font-normal">(optional)</span></h3>
+                <h3 className="text-sm font-semibold text-white">
+                  Background Image{" "}
+                  <span className="text-zinc-600 font-normal">(optional)</span>
+                </h3>
                 <DragDropZone
                   label="Upload background image"
                   accept="image/*"
@@ -809,7 +961,10 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
               </div>
 
               <div className="glass-panel p-6 space-y-4">
-                <h3 className="text-sm font-semibold text-white">Extra Instructions <span className="text-zinc-600 font-normal">(optional)</span></h3>
+                <h3 className="text-sm font-semibold text-white">
+                  Extra Instructions{" "}
+                  <span className="text-zinc-600 font-normal">(optional)</span>
+                </h3>
                 <textarea
                   value={extraPrompt}
                   onChange={(e) => setExtraPrompt(e.target.value)}
@@ -819,16 +974,19 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
               </div>
 
               <div className="glass-panel p-6 space-y-4">
-                <h3 className="text-sm font-semibold text-white">Number of Thumbnails</h3>
+                <h3 className="text-sm font-semibold text-white">
+                  Number of Thumbnails
+                </h3>
                 <div className="flex gap-2">
-                  {[1, 2, 3, 4].map(n => (
+                  {[1, 2, 3, 4].map((n) => (
                     <button
                       key={n}
                       onClick={() => setThumbnailCount(n)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${thumbnailCount === n
-                        ? 'bg-primary/20 text-primary border border-primary/30'
-                        : 'bg-white/5 text-zinc-400 border border-white/5 hover:bg-white/10'
-                        }`}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                        thumbnailCount === n
+                          ? "bg-primary/20 text-primary border border-primary/30"
+                          : "bg-white/5 text-zinc-400 border border-white/5 hover:bg-white/10"
+                      }`}
                     >
                       {n}
                     </button>
@@ -853,21 +1011,25 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                   </>
                 )}
               </button>
-
             </div>
 
             {/* Right: Generated Thumbnails */}
             <div className="md:col-span-3">
               {generatedThumbnails.length > 0 ? (
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-zinc-400">Generated Thumbnails — click to select for publishing</h3>
+                  <h3 className="text-sm font-semibold text-zinc-400">
+                    Generated Thumbnails — click to select for publishing
+                  </h3>
                   <div className="grid gap-4">
                     {generatedThumbnails.map((url, i) => (
                       <div
                         key={i}
                         onClick={() => setSelectedThumbnail(url)}
-                        className={`glass-panel overflow-hidden group relative cursor-pointer transition-all ${selectedThumbnail === url ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
-                          }`}
+                        className={`glass-panel overflow-hidden group relative cursor-pointer transition-all ${
+                          selectedThumbnail === url
+                            ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                            : ""
+                        }`}
                       >
                         <img
                           src={getApiUrl(url)}
@@ -876,7 +1038,10 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                         />
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100">
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleDownload(url); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownload(url);
+                            }}
                             className="bg-white text-black px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-zinc-200 transition-colors"
                           >
                             <Download size={14} />
@@ -887,11 +1052,16 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                           <span className="text-xs text-zinc-500 flex items-center gap-2">
                             Thumbnail {i + 1}
                             {selectedThumbnail === url && (
-                              <span className="text-primary flex items-center gap-1"><Check size={10} /> Selected</span>
+                              <span className="text-primary flex items-center gap-1">
+                                <Check size={10} /> Selected
+                              </span>
                             )}
                           </span>
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleDownload(url); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownload(url);
+                            }}
                             className="text-xs text-zinc-400 hover:text-white transition-colors flex items-center gap-1"
                           >
                             <Download size={12} /> Save
@@ -935,8 +1105,12 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                 <div className="h-full flex flex-col items-center justify-center text-zinc-500 space-y-4 min-h-[400px]">
                   <div className="w-16 h-16 rounded-full border-2 border-zinc-800 border-t-primary animate-spin" />
                   <div className="text-center">
-                    <p className="text-sm font-medium text-zinc-400">Generating thumbnails...</p>
-                    <p className="text-xs text-zinc-600 mt-1">This may take a minute per thumbnail</p>
+                    <p className="text-sm font-medium text-zinc-400">
+                      Generating thumbnails...
+                    </p>
+                    <p className="text-xs text-zinc-600 mt-1">
+                      This may take a minute per thumbnail
+                    </p>
                   </div>
                 </div>
               ) : (
@@ -945,8 +1119,12 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                     <Image size={32} className="text-zinc-600" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm text-zinc-400">Your thumbnails will appear here</p>
-                    <p className="text-xs text-zinc-600 mt-1">Configure options and click Generate</p>
+                    <p className="text-sm text-zinc-400">
+                      Your thumbnails will appear here
+                    </p>
+                    <p className="text-xs text-zinc-600 mt-1">
+                      Configure options and click Generate
+                    </p>
                   </div>
                 </div>
               )}
@@ -975,31 +1153,38 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                     className="w-full aspect-video object-cover"
                   />
                   <div className="p-3">
-                    <span className="text-xs text-green-400 flex items-center gap-1"><Check size={10} /> Selected Thumbnail</span>
+                    <span className="text-xs text-green-400 flex items-center gap-1">
+                      <Check size={10} /> Selected Thumbnail
+                    </span>
                   </div>
                 </div>
               )}
 
               {/* Title */}
               <div className="glass-panel p-6 space-y-3">
-                <h3 className="text-sm font-semibold text-white">Video Title</h3>
+                <h3 className="text-sm font-semibold text-white">
+                  Video Title
+                </h3>
                 <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg text-sm text-primary">
                   {selectedTitle || manualTitle}
                 </div>
               </div>
 
               {/* Generate Description Button */}
-              {mode === 'video' && (
+              {mode === "video" && (
                 <div className="glass-panel p-6 space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                       <Sparkles size={14} className="text-yellow-400" />
                       AI Description
                     </h3>
-                    <span className="text-[10px] text-zinc-600">with chapters</span>
+                    <span className="text-[10px] text-zinc-600">
+                      with chapters
+                    </span>
                   </div>
                   <p className="text-xs text-zinc-500">
-                    Generate a YouTube description with chapter timestamps from your video transcript.
+                    Generate a YouTube description with chapter timestamps from
+                    your video transcript.
                   </p>
                   <button
                     onClick={handleGenerateDescription}
@@ -1014,7 +1199,9 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                     ) : (
                       <>
                         <FileText size={14} />
-                        {description ? 'Regenerate Description' : 'Generate Description'}
+                        {description
+                          ? "Regenerate Description"
+                          : "Generate Description"}
                       </>
                     )}
                   </button>
@@ -1041,15 +1228,18 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                     <FileText size={14} className="text-red-400" />
                     YouTube Description
                   </h3>
-                  <span className="text-[10px] text-zinc-600">{description.length}/5000</span>
+                  <span className="text-[10px] text-zinc-600">
+                    {description.length}/5000
+                  </span>
                 </div>
 
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder={mode === 'video'
-                    ? "Click 'Generate Description' to auto-generate with chapters, or write your own..."
-                    : "Write your YouTube video description here..."
+                  placeholder={
+                    mode === "video"
+                      ? "Click 'Generate Description' to auto-generate with chapters, or write your own..."
+                      : "Write your YouTube video description here..."
                   }
                   className="input-field text-sm resize-none flex-1 min-h-[500px] font-mono custom-scrollbar"
                   maxLength={5000}
@@ -1057,7 +1247,7 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
 
                 {!description && (
                   <p className="text-xs text-zinc-600">
-                    {mode === 'video'
+                    {mode === "video"
                       ? "AI will generate a compelling description with chapter timestamps from your video's Whisper transcript."
                       : "Write a description for your YouTube video. You can proceed to publish once you have a description."}
                   </p>
@@ -1088,18 +1278,26 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                     className="w-full aspect-video object-cover"
                   />
                   <div className="p-3">
-                    <span className="text-xs text-green-400 flex items-center gap-1"><Check size={10} /> Selected Thumbnail</span>
+                    <span className="text-xs text-green-400 flex items-center gap-1">
+                      <Check size={10} /> Selected Thumbnail
+                    </span>
                   </div>
                 </div>
               )}
 
               {/* Editable Title */}
               <div className="glass-panel p-6 space-y-3">
-                <h3 className="text-sm font-semibold text-white">Video Title</h3>
+                <h3 className="text-sm font-semibold text-white">
+                  Video Title
+                </h3>
                 <input
                   type="text"
                   value={selectedTitle || manualTitle}
-                  onChange={(e) => selectedTitle ? setSelectedTitle(e.target.value) : setManualTitle(e.target.value)}
+                  onChange={(e) =>
+                    selectedTitle
+                      ? setSelectedTitle(e.target.value)
+                      : setManualTitle(e.target.value)
+                  }
                   className="input-field text-sm"
                   maxLength={100}
                 />
@@ -1109,8 +1307,13 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
               <div className="glass-panel p-6 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-sm font-semibold text-white">Save Project</h3>
-                    <p className="text-xs text-zinc-500">Upload the title, transcript, description, and thumbnails to MinIO/S3.</p>
+                    <h3 className="text-sm font-semibold text-white">
+                      Save Project
+                    </h3>
+                    <p className="text-xs text-zinc-500">
+                      Upload the title, transcript, description, and thumbnails
+                      to MinIO/S3.
+                    </p>
                   </div>
                   <Save size={16} className="text-cyan-400 shrink-0" />
                 </div>
@@ -1133,23 +1336,29 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                 </button>
                 {generatedThumbnails.length === 0 && (
                   <p className="text-xs text-zinc-600">
-                    Generate thumbnails first so the project bundle includes the image files too.
+                    Generate thumbnails first so the project bundle includes the
+                    image files too.
                   </p>
                 )}
               </div>
 
               {/* Publish Button */}
-              {(!uploadPostKey || !uploadUserId) ? (
+              {!uploadPostKey || !uploadUserId ? (
                 <div className="glass-panel p-6 space-y-3">
                   <div className="flex items-center gap-2 text-amber-400">
                     <AlertCircle size={16} />
-                    <span className="text-sm font-medium">Publishing is disabled</span>
+                    <span className="text-sm font-medium">
+                      Publishing is disabled
+                    </span>
                   </div>
                   <p className="text-xs text-zinc-500">
-                    This is optional. You can keep working locally and only configure Upload-Post if you want to publish later.
+                    This is optional. You can keep working locally and only
+                    configure Upload-Post if you want to publish later.
                   </p>
                   <button
-                    onClick={() => { setPublishResult(null); }}
+                    onClick={() => {
+                      setPublishResult(null);
+                    }}
                     className="text-xs text-primary hover:underline flex items-center gap-1"
                   >
                     <Settings size={12} /> Dismiss
@@ -1177,14 +1386,19 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
 
               {/* Save Result */}
               {saveProjectResult && (
-                <div className={`glass-panel p-4 ${saveProjectResult.success ? 'border-cyan-500/30' : 'border-red-500/30'}`}>
+                <div
+                  className={`glass-panel p-4 ${saveProjectResult.success ? "border-cyan-500/30" : "border-red-500/30"}`}
+                >
                   {saveProjectResult.success ? (
                     <div className="flex items-start gap-2 text-cyan-300">
                       <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
                       <div className="min-w-0">
-                        <p className="text-sm font-medium">Project saved to MinIO/S3</p>
+                        <p className="text-sm font-medium">
+                          Project saved to MinIO/S3
+                        </p>
                         <p className="text-xs text-zinc-500 mt-1 break-all">
-                          {saveProjectResult.data?.url || saveProjectResult.data?.key}
+                          {saveProjectResult.data?.url ||
+                            saveProjectResult.data?.key}
                         </p>
                       </div>
                     </div>
@@ -1193,7 +1407,9 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
                       <AlertCircle size={16} className="mt-0.5 shrink-0" />
                       <div>
                         <p className="text-sm font-medium">Save failed</p>
-                        <p className="text-xs text-zinc-500 mt-1">{saveProjectResult.error}</p>
+                        <p className="text-xs text-zinc-500 mt-1">
+                          {saveProjectResult.error}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -1202,21 +1418,32 @@ export default function ThumbnailStudio({ aiProvider, aiApiKey, getAiHeaders, up
 
               {/* Publish Result */}
               {publishResult && (
-                <div className={`glass-panel p-4 ${publishResult.success ? 'border-green-500/30' : 'border-red-500/30'}`}>
+                <div
+                  className={`glass-panel p-4 ${publishResult.success ? "border-green-500/30" : "border-red-500/30"}`}
+                >
                   {publishResult.success ? (
                     <div className="flex items-center gap-2 text-green-400">
                       <CheckCircle2 size={16} />
                       <div>
-                        <p className="text-sm font-medium">Published successfully!</p>
-                        <p className="text-xs text-zinc-500 mt-1">Your video is being uploaded to YouTube asynchronously.</p>
+                        <p className="text-sm font-medium">
+                          Published successfully!
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-1">
+                          Your video is being uploaded to YouTube
+                          asynchronously.
+                        </p>
                       </div>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 text-red-400">
                       <AlertCircle size={16} />
                       <div>
-                        <p className="text-sm font-medium">Publish unavailable</p>
-                        <p className="text-xs text-zinc-500 mt-1">{publishResult.error}</p>
+                        <p className="text-sm font-medium">
+                          Publish unavailable
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-1">
+                          {publishResult.error}
+                        </p>
                       </div>
                     </div>
                   )}

@@ -1,6 +1,9 @@
-export const buildVisibleProviders = () => (
-  ['gemini', 'openrouter', 'lmstudio', 'openai-codex']
-);
+export const buildVisibleProviders = () => [
+  "gemini",
+  "openrouter",
+  "lmstudio",
+  "openai-codex",
+];
 
 export const pickProviderAfterDiscoveryFailure = ({ currentProvider }) => {
   return currentProvider;
@@ -8,15 +11,13 @@ export const pickProviderAfterDiscoveryFailure = ({ currentProvider }) => {
 
 export const pickLmStudioModel = ({ currentModel, models }) => {
   const available = Array.isArray(models)
-    ? models
-      .map((model) => (model?.id || '').trim())
-      .filter(Boolean)
+    ? models.map((model) => (model?.id || "").trim()).filter(Boolean)
     : [];
 
-  if (available.length === 0) return '';
+  if (available.length === 0) return "";
 
-  const cleaned = (currentModel || '').trim();
-  if (!cleaned || ['auto', 'default'].includes(cleaned.toLowerCase())) {
+  const cleaned = (currentModel || "").trim();
+  if (!cleaned || ["auto", "default"].includes(cleaned.toLowerCase())) {
     return available[0];
   }
 

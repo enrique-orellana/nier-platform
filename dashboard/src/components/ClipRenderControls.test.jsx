@@ -1,10 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
-import ClipRenderControls from './ClipRenderControls';
+import ClipRenderControls from "./ClipRenderControls";
 
-describe('ClipRenderControls', () => {
-  it('opens the Standard 9:16 preview when gameplay is selected', () => {
+describe("ClipRenderControls", () => {
+  it("opens the Standard 9:16 preview when gameplay is selected", () => {
     const onPreview = vi.fn();
     render(
       <ClipRenderControls
@@ -15,26 +15,32 @@ describe('ClipRenderControls', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Preview 9:16' }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview 9:16" }));
     expect(onPreview).toHaveBeenCalledTimes(1);
   });
 
-  it('disables the preview until a gameplay area exists', () => {
-    render(<ClipRenderControls status="found" onPreviewGameplayRegion={vi.fn()} onRender={vi.fn()} />);
+  it("disables the preview until a gameplay area exists", () => {
+    render(
+      <ClipRenderControls
+        status="found"
+        onPreviewGameplayRegion={vi.fn()}
+        onRender={vi.fn()}
+      />,
+    );
 
-    expect(screen.getByRole('button', { name: 'Preview 9:16' })).toBeDisabled();
-    expect(screen.getByText('Select Gameplay Area First')).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preview 9:16" })).toBeDisabled();
+    expect(screen.getByText("Select Gameplay Area First")).toBeInTheDocument();
   });
 
-  it('lets a found clip start analysis and rendering', () => {
+  it("lets a found clip start analysis and rendering", () => {
     const onRender = vi.fn();
     render(<ClipRenderControls status="found" onRender={onRender} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze & Render' }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze & Render" }));
     expect(onRender).toHaveBeenCalledTimes(1);
   });
 
-  it('requires a webcam area before Streamer Stack analysis', () => {
+  it("requires a webcam area before Streamer Stack analysis", () => {
     const onSelect = vi.fn();
     render(
       <ClipRenderControls
@@ -45,12 +51,14 @@ describe('ClipRenderControls', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Select Webcam Area' }));
+    fireEvent.click(screen.getByRole("button", { name: "Select Webcam Area" }));
     expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: 'Analyze & Render' })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Analyze & Render" }),
+    ).toBeDisabled();
   });
 
-  it('allows Streamer Stack rendering after a webcam area is saved', () => {
+  it("allows Streamer Stack rendering after a webcam area is saved", () => {
     const onRender = vi.fn();
     const onSelect = vi.fn();
     render(
@@ -64,13 +72,13 @@ describe('ClipRenderControls', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Webcam Area' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze & Render' }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Webcam Area" }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze & Render" }));
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onRender).toHaveBeenCalledTimes(1);
   });
 
-  it('requires both regions before Streamer Stack rendering', () => {
+  it("requires both regions before Streamer Stack rendering", () => {
     render(
       <ClipRenderControls
         status="found"
@@ -82,11 +90,15 @@ describe('ClipRenderControls', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Select Gameplay Area' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Analyze & Render' })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Select Gameplay Area" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Analyze & Render" }),
+    ).toBeDisabled();
   });
 
-  it('defaults tracking off and reports the explicit toggle value', () => {
+  it("defaults tracking off and reports the explicit toggle value", () => {
     const onTrackingChange = vi.fn();
     render(
       <ClipRenderControls
@@ -100,34 +112,44 @@ describe('ClipRenderControls', () => {
       />,
     );
 
-    const toggle = screen.getByRole('checkbox', { name: 'Use Face/Person Tracking' });
+    const toggle = screen.getByRole("checkbox", {
+      name: "Use Face/Person Tracking",
+    });
     expect(toggle).not.toBeChecked();
     fireEvent.click(toggle);
     expect(onTrackingChange).toHaveBeenCalledWith(true);
   });
 
-  it('shows independent progress without exposing another action', () => {
+  it("shows independent progress without exposing another action", () => {
     render(<ClipRenderControls status="rendering" onRender={vi.fn()} />);
 
-    expect(screen.getByText('Rendering…')).toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByText("Rendering…")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it('keeps rerender controls available after the artifact is ready', () => {
+  it("keeps rerender controls available after the artifact is ready", () => {
     const onRender = vi.fn();
     render(<ClipRenderControls status="ready" onRender={onRender} />);
 
-    expect(screen.getByRole('button', { name: 'Render from Master' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Render from Master' }));
+    expect(
+      screen.getByRole("button", { name: "Render from Master" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Render from Master" }));
     expect(onRender).toHaveBeenCalledTimes(1);
   });
 
-  it('lets a failed clip retry', () => {
+  it("lets a failed clip retry", () => {
     const onRender = vi.fn();
-    render(<ClipRenderControls status="failed" error="GPU error" onRender={onRender} />);
+    render(
+      <ClipRenderControls
+        status="failed"
+        error="GPU error"
+        onRender={onRender}
+      />,
+    );
 
-    expect(screen.getByText('GPU error')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(screen.getByText("GPU error")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onRender).toHaveBeenCalledTimes(1);
   });
 });

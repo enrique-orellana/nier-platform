@@ -1,4 +1,4 @@
-import SourceRegionSelector from './SourceRegionSelector';
+import SourceRegionSelector from "./SourceRegionSelector";
 
 export default function GameplayRegionSelector(props) {
   return (

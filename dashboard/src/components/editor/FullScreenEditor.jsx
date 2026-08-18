@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Download, X, Save } from "lucide-react";
 import { getApiUrl } from "../../config";
 import RemotionPreview from "../RemotionPreview";
@@ -42,11 +48,12 @@ const publishingMetadataFrom = (sourceManifest, clip) => {
   const clipHashtags = clip?.hashtags;
   return {
     ...(sourceManifest?.publishing_metadata || {}),
-    hashtags: Array.isArray(savedHashtags) && savedHashtags.length
-      ? savedHashtags
-      : Array.isArray(clipHashtags) && clipHashtags.length
-        ? clipHashtags
-        : ["#shorts", "#viral"],
+    hashtags:
+      Array.isArray(savedHashtags) && savedHashtags.length
+        ? savedHashtags
+        : Array.isArray(clipHashtags) && clipHashtags.length
+          ? clipHashtags
+          : ["#shorts", "#viral"],
   };
 };
 
@@ -67,37 +74,51 @@ const localCuesFromTrack = (track) => {
 const manifestToLocalEditorState = (sourceManifest, trackId) => {
   const source = manifestWithTranscriptCaptions(sourceManifest || {}, null);
   const legacySubtitles = source.layers?.subtitles;
-  const tracks = Array.isArray(source.subtitle_tracks) && source.subtitle_tracks.length
-    ? source.subtitle_tracks
-    : legacySubtitles
-      ? [{
-        id: "original",
-        language: legacySubtitles.language || "en",
-        label: legacySubtitles.label || "Original",
-        origin: "original",
-        cues: Array.isArray(legacySubtitles.cues) ? legacySubtitles.cues : legacySubtitles.captions || [],
-        style: legacySubtitles.style,
-      }]
-      : [];
+  const tracks =
+    Array.isArray(source.subtitle_tracks) && source.subtitle_tracks.length
+      ? source.subtitle_tracks
+      : legacySubtitles
+        ? [
+            {
+              id: "original",
+              language: legacySubtitles.language || "en",
+              label: legacySubtitles.label || "Original",
+              origin: "original",
+              cues: Array.isArray(legacySubtitles.cues)
+                ? legacySubtitles.cues
+                : legacySubtitles.captions || [],
+              style: legacySubtitles.style,
+            },
+          ]
+        : [];
   const activeTrack = tracks.find((track) => track.id === trackId) || tracks[0];
   const hook = source.layers?.hook;
   return {
     subtitleCues: localCuesFromTrack(activeTrack),
-    subtitleStyle: activeTrack?.style || source.layers?.subtitles?.style || DEFAULT_SUBTITLE_STYLE,
-    subtitleLanguage: activeTrack?.language || source.layers?.subtitles?.language || "en",
-    hook: hook ? {
-      id: "hook",
-      text: hook.text || "",
-      startMs: Number(hook.startMs || 0),
-      endMs: Number(hook.endMs || ((hook.startMs || 0) + (hook.displayDurationSec || 2) * 1000)),
-      position: hook.position || "top",
-      size: hook.size || "M",
-      entranceAnimation: hook.entranceAnimation || "spring",
-      color: hook.color || "#FFFFFF",
-      fontSize: Number(hook.fontSize || 48),
-      background: hook.background || "#111111",
-      fontFamily: hook.fontFamily || HOOK_FONT_FAMILY,
-    } : null,
+    subtitleStyle:
+      activeTrack?.style ||
+      source.layers?.subtitles?.style ||
+      DEFAULT_SUBTITLE_STYLE,
+    subtitleLanguage:
+      activeTrack?.language || source.layers?.subtitles?.language || "en",
+    hook: hook
+      ? {
+          id: "hook",
+          text: hook.text || "",
+          startMs: Number(hook.startMs || 0),
+          endMs: Number(
+            hook.endMs ||
+              (hook.startMs || 0) + (hook.displayDurationSec || 2) * 1000,
+          ),
+          position: hook.position || "top",
+          size: hook.size || "M",
+          entranceAnimation: hook.entranceAnimation || "spring",
+          color: hook.color || "#FFFFFF",
+          fontSize: Number(hook.fontSize || 48),
+          background: hook.background || "#111111",
+          fontFamily: hook.fontFamily || HOOK_FONT_FAMILY,
+        }
+      : null,
   };
 };
 
@@ -105,13 +126,18 @@ const localEditorStateToManifest = (sourceManifest, localState, trackId) => {
   const source = JSON.parse(JSON.stringify(sourceManifest || {}));
   const state = localState || manifestToLocalEditorState(source, trackId);
   const nextTrackId = trackId || "original";
-  const existingTracks = Array.isArray(source.subtitle_tracks) ? source.subtitle_tracks : [];
-  const existingTrack = existingTracks.find((track) => track.id === nextTrackId) || {};
+  const existingTracks = Array.isArray(source.subtitle_tracks)
+    ? source.subtitle_tracks
+    : [];
+  const existingTrack =
+    existingTracks.find((track) => track.id === nextTrackId) || {};
   const cues = (state.subtitleCues || []).map((cue) => ({
     text: cue.text || cue.label || "",
     startMs: Math.round(Number(cue.startMs || 0)),
     endMs: Math.round(Number(cue.endMs || cue.startMs || 0)),
-    ...(Array.isArray(cue.captions) && cue.captions.length ? { captions: cue.captions } : {}),
+    ...(Array.isArray(cue.captions) && cue.captions.length
+      ? { captions: cue.captions }
+      : {}),
   }));
   source.subtitle_tracks = [
     ...existingTracks.filter((track) => track.id !== nextTrackId),
@@ -122,8 +148,14 @@ const localEditorStateToManifest = (sourceManifest, localState, trackId) => {
       label: existingTrack.label || state.subtitleLanguage || "Original",
       origin: existingTrack.origin || "manual",
       cues,
-      captions: cues.flatMap((cue) => cue.captions || [{ text: cue.text, startMs: cue.startMs, endMs: cue.endMs }]),
-      style: state.subtitleStyle || existingTrack.style || DEFAULT_SUBTITLE_STYLE,
+      captions: cues.flatMap(
+        (cue) =>
+          cue.captions || [
+            { text: cue.text, startMs: cue.startMs, endMs: cue.endMs },
+          ],
+      ),
+      style:
+        state.subtitleStyle || existingTrack.style || DEFAULT_SUBTITLE_STYLE,
     },
   ];
   source.active_subtitle_track_id = nextTrackId;
@@ -131,18 +163,33 @@ const localEditorStateToManifest = (sourceManifest, localState, trackId) => {
     ...(source.layers || {}),
     subtitles: {
       ...(source.layers?.subtitles || {}),
-      captions: cues.flatMap((cue) => cue.captions || [{ text: cue.text, startMs: cue.startMs, endMs: cue.endMs }]),
+      captions: cues.flatMap(
+        (cue) =>
+          cue.captions || [
+            { text: cue.text, startMs: cue.startMs, endMs: cue.endMs },
+          ],
+      ),
       cues,
-      style: state.subtitleStyle || source.layers?.subtitles?.style || DEFAULT_SUBTITLE_STYLE,
-      language: state.subtitleLanguage || source.layers?.subtitles?.language || "en",
+      style:
+        state.subtitleStyle ||
+        source.layers?.subtitles?.style ||
+        DEFAULT_SUBTITLE_STYLE,
+      language:
+        state.subtitleLanguage || source.layers?.subtitles?.language || "en",
     },
-    hook: state.hook ? {
-      ...(source.layers?.hook || {}),
-      ...state.hook,
-      startMs: Math.round(Number(state.hook.startMs || 0)),
-      endMs: Math.round(Number(state.hook.endMs || 0)),
-      displayDurationSec: Math.max(0.001, (Number(state.hook.endMs || 0) - Number(state.hook.startMs || 0)) / 1000),
-    } : null,
+    hook: state.hook
+      ? {
+          ...(source.layers?.hook || {}),
+          ...state.hook,
+          startMs: Math.round(Number(state.hook.startMs || 0)),
+          endMs: Math.round(Number(state.hook.endMs || 0)),
+          displayDurationSec: Math.max(
+            0.001,
+            (Number(state.hook.endMs || 0) - Number(state.hook.startMs || 0)) /
+              1000,
+          ),
+        }
+      : null,
   };
   return source;
 };
@@ -164,7 +211,9 @@ export default function FullScreenEditor({
 }) {
   const [version, setVersion] = useState(initialVersion);
   const [manifest, setManifest] = useState(initialManifest);
-  const [publishingMetadata, setPublishingMetadata] = useState(() => publishingMetadataFrom(initialManifest, clip));
+  const [publishingMetadata, setPublishingMetadata] = useState(() =>
+    publishingMetadataFrom(initialManifest, clip),
+  );
   const [versions, setVersions] = useState(
     initialVersion ? [initialVersion] : [],
   );
@@ -187,17 +236,18 @@ export default function FullScreenEditor({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [localDraft, setLocalDraft] = useState(() => manifestToLocalEditorState(initialManifest, defaultSubtitleTrackId(initialManifest)));
+  const [localDraft, setLocalDraft] = useState(() =>
+    manifestToLocalEditorState(
+      initialManifest,
+      defaultSubtitleTrackId(initialManifest),
+    ),
+  );
   const durationSeconds = editorState.durationSec || 30;
   const fps = editorState.fps || clip.output_fps || 30;
 
   const hydrateManifest = useCallback(
     async (baseManifest) => {
-      if (
-        baseManifest?.subtitle_tracks?.length ||
-        !jobId
-      )
-        return baseManifest;
+      if (baseManifest?.subtitle_tracks?.length || !jobId) return baseManifest;
       try {
         const response = await fetch(
           getApiUrl(`/api/clip/${jobId}/${clipIndex}/transcript`),
@@ -223,14 +273,17 @@ export default function FullScreenEditor({
       );
       const history = await historyResponse.json();
       const currentId =
-        initialVersionId || history.current_version_id || history.versions?.at(-1)?.version_id;
+        initialVersionId ||
+        history.current_version_id ||
+        history.versions?.at(-1)?.version_id;
       let payload;
       if (currentId) {
         const versionResponse = await fetch(
           getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions/${currentId}`),
         );
         payload = await versionResponse.json();
-        if (!versionResponse.ok) throw new Error(payload.detail || "Unable to load version");
+        if (!versionResponse.ok)
+          throw new Error(payload.detail || "Unable to load version");
       } else {
         const manifestResponse = await fetch(
           getApiUrl(`/api/clip/${jobId}/${clipIndex}/manifest`),
@@ -272,67 +325,146 @@ export default function FullScreenEditor({
       editorState,
       manifest || initialManifest || {},
     );
-    return { ...manifestToRenderProps(nextManifest, { activeSubtitleTrackId: activeTrackId }), videoUrl: proxyUrl(nextManifest.timeline?.source_video_url || clip.video_url) };
+    return {
+      ...manifestToRenderProps(nextManifest, {
+        activeSubtitleTrackId: activeTrackId,
+      }),
+      videoUrl: proxyUrl(
+        nextManifest.timeline?.source_video_url || clip.video_url,
+      ),
+    };
   }, [activeTrackId, clip.video_url, editorState, initialManifest, manifest]);
 
   const currentManifest = useMemo(
-    () => ({ ...editorStateToManifest(editorState, manifest || initialManifest || {}), active_subtitle_track_id: activeTrackId || null, publishing_metadata: publishingMetadata }),
+    () => ({
+      ...editorStateToManifest(editorState, manifest || initialManifest || {}),
+      active_subtitle_track_id: activeTrackId || null,
+      publishing_metadata: publishingMetadata,
+    }),
     [activeTrackId, editorState, initialManifest, manifest, publishingMetadata],
   );
   const projectManifest = useMemo(
-    () => (useLocalEditor ? localEditorStateToManifest(currentManifest, localDraft, activeTrackId) : currentManifest),
+    () =>
+      useLocalEditor
+        ? localEditorStateToManifest(currentManifest, localDraft, activeTrackId)
+        : currentManifest,
     [activeTrackId, currentManifest, localDraft, useLocalEditor],
   );
   const projectInputProps = useMemo(
-    () => ({ ...manifestToRenderProps(projectManifest, { activeSubtitleTrackId: activeTrackId }), videoUrl: proxyUrl(projectManifest.timeline?.source_video_url || clip.video_url) }),
+    () => ({
+      ...manifestToRenderProps(projectManifest, {
+        activeSubtitleTrackId: activeTrackId,
+      }),
+      videoUrl: proxyUrl(
+        projectManifest.timeline?.source_video_url || clip.video_url,
+      ),
+    }),
     [activeTrackId, clip.video_url, projectManifest],
   );
   const localEditorPreviewUrl = useMemo(
-    () => proxyUrl(clip.source_video_url || clip.source_url || projectManifest.timeline?.source_video_url || clip.video_url),
-    [clip.source_url, clip.source_video_url, clip.video_url, projectManifest.timeline?.source_video_url],
+    () =>
+      proxyUrl(
+        clip.source_video_url ||
+          clip.source_url ||
+          projectManifest.timeline?.source_video_url ||
+          clip.video_url,
+      ),
+    [
+      clip.source_url,
+      clip.source_video_url,
+      clip.video_url,
+      projectManifest.timeline?.source_video_url,
+    ],
   );
   const currentManifestRef = useRef(currentManifest);
   useEffect(() => {
     currentManifestRef.current = currentManifest;
   }, [currentManifest]);
-  const subtitleTracks = useMemo(() => currentManifest.subtitle_tracks || [], [currentManifest]);
-  const applyLayer = useCallback((type, value) => {
-    const base = currentManifestRef.current;
-    const next = { ...base, layers: { ...(base.layers || {}), [type]: value } };
-    if (type === "subtitles" && value) {
-      const trackId = activeTrackId || subtitleTracks[0]?.id || "original";
-      const existingTracks = base.subtitle_tracks || [];
-      const existing = existingTracks.find((track) => track.id === trackId) || { id: trackId, language: "und", label: "Original", origin: "manual" };
-      const cues = (value.captions || []).map((caption) => ({ text: caption.text || "", startMs: Number(caption.startMs || 0), endMs: Number(caption.endMs || caption.startMs || 0), captions: [{ ...caption }] }));
-      next.subtitle_tracks = [...existingTracks.filter((track) => track.id !== trackId), { ...existing, cues, captions: cues.flatMap((cue) => cue.captions), style: value.style || existing.style }];
-      next.active_subtitle_track_id = trackId;
-    }
-    currentManifestRef.current = next;
-    setManifest(next);
-    setEditorState(manifestToEditorState(next, { fps }));
-    if (type === "subtitles") setActiveTrackId(next.active_subtitle_track_id);
-  }, [activeTrackId, fps, subtitleTracks]);
-  const setSourceVideo = useCallback((url) => {
-    if (!url) return;
-    const base = currentManifestRef.current;
-    const next = { ...base, timeline: { ...(base.timeline || {}), source_video_url: url } };
-    currentManifestRef.current = next;
-    setManifest(next);
-    setEditorState(manifestToEditorState(next, { fps }));
-  }, [fps]);
-  const deleteSubtitleTrack = useCallback((trackId) => {
-    const base = currentManifestRef.current;
-    const nextTracks = (base.subtitle_tracks || []).filter((track) => track.id !== trackId);
-    const nextActiveTrackId = activeTrackId === trackId
-      ? nextTracks.find((track) => track.origin !== "translation")?.id || nextTracks[0]?.id || null
-      : activeTrackId;
-    const next = { ...base, subtitle_tracks: nextTracks, active_subtitle_track_id: nextActiveTrackId };
-    currentManifestRef.current = next;
-    setManifest(next);
-    setEditorState(manifestToEditorState(next, { fps }));
-    setActiveTrackId(nextActiveTrackId);
-    setSelectedItem(null);
-  }, [activeTrackId, fps]);
+  const subtitleTracks = useMemo(
+    () => currentManifest.subtitle_tracks || [],
+    [currentManifest],
+  );
+  const applyLayer = useCallback(
+    (type, value) => {
+      const base = currentManifestRef.current;
+      const next = {
+        ...base,
+        layers: { ...(base.layers || {}), [type]: value },
+      };
+      if (type === "subtitles" && value) {
+        const trackId = activeTrackId || subtitleTracks[0]?.id || "original";
+        const existingTracks = base.subtitle_tracks || [];
+        const existing = existingTracks.find(
+          (track) => track.id === trackId,
+        ) || {
+          id: trackId,
+          language: "und",
+          label: "Original",
+          origin: "manual",
+        };
+        const cues = (value.captions || []).map((caption) => ({
+          text: caption.text || "",
+          startMs: Number(caption.startMs || 0),
+          endMs: Number(caption.endMs || caption.startMs || 0),
+          captions: [{ ...caption }],
+        }));
+        next.subtitle_tracks = [
+          ...existingTracks.filter((track) => track.id !== trackId),
+          {
+            ...existing,
+            cues,
+            captions: cues.flatMap((cue) => cue.captions),
+            style: value.style || existing.style,
+          },
+        ];
+        next.active_subtitle_track_id = trackId;
+      }
+      currentManifestRef.current = next;
+      setManifest(next);
+      setEditorState(manifestToEditorState(next, { fps }));
+      if (type === "subtitles") setActiveTrackId(next.active_subtitle_track_id);
+    },
+    [activeTrackId, fps, subtitleTracks],
+  );
+  const setSourceVideo = useCallback(
+    (url) => {
+      if (!url) return;
+      const base = currentManifestRef.current;
+      const next = {
+        ...base,
+        timeline: { ...(base.timeline || {}), source_video_url: url },
+      };
+      currentManifestRef.current = next;
+      setManifest(next);
+      setEditorState(manifestToEditorState(next, { fps }));
+    },
+    [fps],
+  );
+  const deleteSubtitleTrack = useCallback(
+    (trackId) => {
+      const base = currentManifestRef.current;
+      const nextTracks = (base.subtitle_tracks || []).filter(
+        (track) => track.id !== trackId,
+      );
+      const nextActiveTrackId =
+        activeTrackId === trackId
+          ? nextTracks.find((track) => track.origin !== "translation")?.id ||
+            nextTracks[0]?.id ||
+            null
+          : activeTrackId;
+      const next = {
+        ...base,
+        subtitle_tracks: nextTracks,
+        active_subtitle_track_id: nextActiveTrackId,
+      };
+      currentManifestRef.current = next;
+      setManifest(next);
+      setEditorState(manifestToEditorState(next, { fps }));
+      setActiveTrackId(nextActiveTrackId);
+      setSelectedItem(null);
+    },
+    [activeTrackId, fps],
+  );
   const updateSelectedItem = (nextItem) => {
     if (nextItem.__delete) {
       deleteSelectedItem(nextItem);
@@ -505,7 +637,23 @@ export default function FullScreenEditor({
         result.error || "Render failed. The previous version is still active.",
       );
     setBusy(false);
-  }, [activeTrackId, busy, clip.output_height, clip.output_width, clipIndex, editorState.durationFrames, fps, inputProps, jobId, onRendered, onVersionChange, projectInputProps, projectManifest, useLocalEditor, version]);
+  }, [
+    activeTrackId,
+    busy,
+    clip.output_height,
+    clip.output_width,
+    clipIndex,
+    editorState.durationFrames,
+    fps,
+    inputProps,
+    jobId,
+    onRendered,
+    onVersionChange,
+    projectInputProps,
+    projectManifest,
+    useLocalEditor,
+    version,
+  ]);
 
   const downloadVersion = async () => {
     if (!version?.output_url || version.status !== "done") return;
@@ -529,33 +677,63 @@ export default function FullScreenEditor({
 
   useEffect(() => {
     if (!isOpen || !onSessionReady) return undefined;
-    onSessionReady({ applyLayer, setSourceVideo, save: saveVersion, getManifest: () => currentManifestRef.current });
+    onSessionReady({
+      applyLayer,
+      setSourceVideo,
+      save: saveVersion,
+      getManifest: () => currentManifestRef.current,
+    });
     return () => onSessionReady(null);
-  }, [applyLayer, currentManifest, isOpen, onSessionReady, saveVersion, setSourceVideo]);
+  }, [
+    applyLayer,
+    currentManifest,
+    isOpen,
+    onSessionReady,
+    saveVersion,
+    setSourceVideo,
+  ]);
 
   if (!isOpen) return null;
   if (useLocalEditor) {
     return (
-      <div className="fixed inset-0 z-[60] bg-background text-white" data-testid="full-screen-editor">
+      <div
+        className="fixed inset-0 z-[60] bg-background text-white"
+        data-testid="full-screen-editor"
+      >
         <LocalEditorTab
           initialVideoUrl={localEditorPreviewUrl}
-          initialExportVideoUrl={proxyUrl(clip.video_url || projectInputProps.videoUrl)}
+          initialExportVideoUrl={proxyUrl(
+            clip.video_url || projectInputProps.videoUrl,
+          )}
           initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
-          initialPlaybackStartMs={Math.max(0, Number(projectInputProps.videoStartSeconds || 0) * 1000)}
-          initialPlaybackDurationMs={Math.max(1, Number(durationSeconds || 0) * 1000)}
+          initialPlaybackStartMs={Math.max(
+            0,
+            Number(projectInputProps.videoStartSeconds || 0) * 1000,
+          )}
+          initialPlaybackDurationMs={Math.max(
+            1,
+            Number(durationSeconds || 0) * 1000,
+          )}
           initialEditorState={localDraft}
           initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}`}
           clipMetadata={{ ...clip, hashtags: publishingMetadata.hashtags }}
-          onHashtagsChange={(hashtags) => setPublishingMetadata((current) => ({ ...current, hashtags }))}
+          onHashtagsChange={(hashtags) =>
+            setPublishingMetadata((current) => ({ ...current, hashtags }))
+          }
           onStateChange={setLocalDraft}
           persistHistory={false}
           onClose={onClose}
           headerActions={null}
-          sidePanel={(
+          sidePanel={
             <>
               {editorActions && <EditorActionToolbar {...editorActions} />}
-              <section className="rounded-xl border border-white/10 bg-white/[.02] p-4" aria-label="Version history">
-                <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-primary">Version History</h2>
+              <section
+                className="rounded-xl border border-white/10 bg-white/[.02] p-4"
+                aria-label="Version history"
+              >
+                <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-primary">
+                  Version History
+                </h2>
                 <VersionHistory
                   versions={versions}
                   currentVersionId={version?.version_id}
@@ -565,15 +743,39 @@ export default function FullScreenEditor({
                 />
               </section>
             </>
-          )}
-          footer={(
+          }
+          footer={
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <span className="mr-auto text-xs text-red-300" role="alert">{error}</span>
-              <button type="button" onClick={downloadVersion} disabled={!version?.output_url || version.status !== "done" || busy} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40">Download version</button>
-              <button type="button" onClick={onClose} className="rounded-lg px-3 py-2 text-xs font-semibold text-zinc-400 hover:bg-white/10 hover:text-white">Cancel</button>
-              <button type="button" onClick={saveVersion} disabled={busy} className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy ? "Rendering…" : "Save as new version"}</button>
+              <span className="mr-auto text-xs text-red-300" role="alert">
+                {error}
+              </span>
+              <button
+                type="button"
+                onClick={downloadVersion}
+                disabled={
+                  !version?.output_url || version.status !== "done" || busy
+                }
+                className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Download version
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg px-3 py-2 text-xs font-semibold text-zinc-400 hover:bg-white/10 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveVersion}
+                disabled={busy}
+                className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {busy ? "Rendering…" : "Save as new version"}
+              </button>
             </div>
-          )}
+          }
         />
       </div>
     );

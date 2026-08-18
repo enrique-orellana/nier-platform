@@ -1,5 +1,5 @@
-import { renderMediaOnWeb } from '@remotion/web-renderer';
-import { ShortVideo } from '../remotion/compositions/ShortVideo';
+import { renderMediaOnWeb } from "@remotion/web-renderer";
+import { ShortVideo } from "../remotion/compositions/ShortVideo";
 
 /**
  * Renders a Remotion composition directly in the browser using WebCodecs.
@@ -16,67 +16,65 @@ import { ShortVideo } from '../remotion/compositions/ShortVideo';
  * @returns {Promise<string>} Blob URL of the rendered MP4
  */
 export async function renderInBrowser({
-    videoUrl,
-    durationInSeconds = 30,
-    fps = 30,
-    width = 1080,
-    height = 1920,
-    videoFit = 'cover',
-    subtitles = null,
-    hook = null,
-    effects = null,
-    onProgress,
-    signal,
+  videoUrl,
+  durationInSeconds = 30,
+  fps = 30,
+  width = 1080,
+  height = 1920,
+  videoFit = "cover",
+  subtitles = null,
+  hook = null,
+  effects = null,
+  onProgress,
+  signal,
 }) {
-    const durationInFrames = Math.max(1, Math.round(durationInSeconds * fps));
+  const durationInFrames = Math.max(1, Math.round(durationInSeconds * fps));
 
-    const { getBlob } = await renderMediaOnWeb({
-        composition: {
-            component: ShortVideo,
-            durationInFrames,
-            fps,
-            width,
-            height,
-            id: 'ShortVideo',
-            calculateMetadata: null,
-        },
-        inputProps: {
-            videoUrl,
-            durationInFrames,
-            fps,
-            width,
-            height,
-            videoFit,
-            subtitles,
-            hook,
-            effects,
-        },
-        container: 'mp4',
-        videoCodec: 'h264',
-        videoBitrate: 12000000,
-        audioCodec: 'aac',
-        audioBitrate: 192000,
-        sampleRate: 48000,
-        keyframeIntervalInSeconds: 2,
-        muted: false,
-        onProgress: onProgress
-            ? ({ progress }) => onProgress(progress)
-            : undefined,
-        signal,
-    });
+  const { getBlob } = await renderMediaOnWeb({
+    composition: {
+      component: ShortVideo,
+      durationInFrames,
+      fps,
+      width,
+      height,
+      id: "ShortVideo",
+      calculateMetadata: null,
+    },
+    inputProps: {
+      videoUrl,
+      durationInFrames,
+      fps,
+      width,
+      height,
+      videoFit,
+      subtitles,
+      hook,
+      effects,
+    },
+    container: "mp4",
+    videoCodec: "h264",
+    videoBitrate: 12000000,
+    audioCodec: "aac",
+    audioBitrate: 192000,
+    sampleRate: 48000,
+    keyframeIntervalInSeconds: 2,
+    muted: false,
+    onProgress: onProgress ? ({ progress }) => onProgress(progress) : undefined,
+    signal,
+  });
 
-    const blob = await getBlob();
-    return URL.createObjectURL(blob);
+  const blob = await getBlob();
+  return URL.createObjectURL(blob);
 }
 
 /**
  * Triggers a download of a blob URL as an MP4 file.
  */
-export function downloadBlobUrl(blobUrl, filename = 'output.mp4') {
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+export function downloadBlobUrl(blobUrl, filename = "output.mp4") {
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }

@@ -1,6 +1,50 @@
-import React from 'react';
+import React from "react";
 
-export default function VersionHistory({ versions = [], currentVersionId, selectedVersionId, onSelect, onBranch }) {
-    return <div className="space-y-2">{versions.map((version) => <div key={version.version_id} className={`group flex items-center justify-between gap-3 rounded-xl border border-white/[0.05] px-4 py-3 text-sm transition-colors hover:border-primary/50 hover:bg-primary/10 hover:shadow-glow ${selectedVersionId === version.version_id ? 'bg-primary/20 border-primary/50 shadow-[0_0_15px_rgba(14,165,233,0.3)]' : 'bg-surfaceLight/50'}`}><button className="flex-1 text-left font-semibold drop-shadow-sm" onClick={() => onSelect?.(version)} disabled={version.status === 'failed'}><span className={selectedVersionId === version.version_id ? 'text-primary' : 'text-white'}>v{version.version_id.slice(0, 6)}</span> <span className="text-xs font-bold text-zinc-500">{version.status}</span>{currentVersionId === version.version_id && <span className="ml-2 rounded-full bg-primary/20 border border-primary/30 px-2 py-0.5 text-[10px] text-primary">current</span>}</button><button className="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-bold text-primary opacity-0 transition-opacity hover:bg-primary hover:text-white group-hover:opacity-100 shadow-sm" onClick={() => onBranch?.(version.version_id)}>Branch</button></div>)}</div>;
+export default function VersionHistory({
+  versions = [],
+  currentVersionId,
+  selectedVersionId,
+  onSelect,
+  onBranch,
+}) {
+  return (
+    <div className="space-y-2">
+      {versions.map((version) => (
+        <div
+          key={version.version_id}
+          className={`group flex items-center justify-between gap-3 rounded-xl border border-white/[0.05] px-4 py-3 text-sm transition-colors hover:border-primary/50 hover:bg-primary/10 hover:shadow-glow ${selectedVersionId === version.version_id ? "bg-primary/20 border-primary/50 shadow-[0_0_15px_rgba(14,165,233,0.3)]" : "bg-surfaceLight/50"}`}
+        >
+          <button
+            className="flex-1 text-left font-semibold drop-shadow-sm"
+            onClick={() => onSelect?.(version)}
+            disabled={version.status === "failed"}
+          >
+            <span
+              className={
+                selectedVersionId === version.version_id
+                  ? "text-primary"
+                  : "text-white"
+              }
+            >
+              v{version.version_id.slice(0, 6)}
+            </span>{" "}
+            <span className="text-xs font-bold text-zinc-500">
+              {version.status}
+            </span>
+            {currentVersionId === version.version_id && (
+              <span className="ml-2 rounded-full bg-primary/20 border border-primary/30 px-2 py-0.5 text-[10px] text-primary">
+                current
+              </span>
+            )}
+          </button>
+          <button
+            className="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-bold text-primary opacity-0 transition-opacity hover:bg-primary hover:text-white group-hover:opacity-100 shadow-sm"
+            onClick={() => onBranch?.(version.version_id)}
+          >
+            Branch
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 }
-

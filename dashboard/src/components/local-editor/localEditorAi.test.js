@@ -1,30 +1,43 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { getLocalAiHeaders, subtitleTextFromCues } from './localEditorAi';
+import { beforeEach, describe, expect, it } from "vitest";
+import { getLocalAiHeaders, subtitleTextFromCues } from "./localEditorAi";
 
-describe('local editor AI helpers', () => {
-    beforeEach(() => localStorage.clear());
+describe("local editor AI helpers", () => {
+  beforeEach(() => localStorage.clear());
 
-    it('serializes current subtitle cues', () => {
-        expect(subtitleTextFromCues([{ text: 'Hola' }, { text: 'mundo' }])).toBe('Hola mundo');
+  it("serializes current subtitle cues", () => {
+    expect(subtitleTextFromCues([{ text: "Hola" }, { text: "mundo" }])).toBe(
+      "Hola mundo",
+    );
+  });
+
+  it("reads local AI settings", () => {
+    localStorage.setItem("ai_provider_v1", "lmstudio");
+    localStorage.setItem("ai_base_url_v1", "http://localhost:1234");
+
+    expect(getLocalAiHeaders()).toMatchObject({
+      "X-AI-Provider": "lmstudio",
+      "X-AI-Base-Url": "http://localhost:1234",
     });
+  });
 
-    it('reads local AI settings', () => {
-        localStorage.setItem('ai_provider_v1', 'lmstudio');
-        localStorage.setItem('ai_base_url_v1', 'http://localhost:1234');
+  it("does not forward a saved local endpoint for OpenRouter", () => {
+    localStorage.setItem("ai_provider_v1", "openrouter");
+    localStorage.setItem("ai_base_url_v1", "http://host.docker.internal:1234");
 
-        expect(getLocalAiHeaders()).toMatchObject({
-            'X-AI-Provider': 'lmstudio',
-            'X-AI-Base-Url': 'http://localhost:1234',
-        });
+    expect(getLocalAiHeaders()).toMatchObject({
+      "X-AI-Provider": "openrouter",
+      "X-AI-Base-Url": "https://openrouter.ai/api/v1",
     });
+  });
 
-    it('does not forward a saved local endpoint for OpenRouter', () => {
-        localStorage.setItem('ai_provider_v1', 'openrouter');
-        localStorage.setItem('ai_base_url_v1', 'http://host.docker.internal:1234');
+  it("forwards the saved OpenRouter transcription provider", () => {
+    localStorage.setItem(
+      "ai_transcription_openrouter_provider_v1",
+      "deepinfra",
+    );
 
-        expect(getLocalAiHeaders()).toMatchObject({
-            'X-AI-Provider': 'openrouter',
-            'X-AI-Base-Url': 'https://openrouter.ai/api/v1',
-        });
+    expect(getLocalAiHeaders()).toMatchObject({
+      "X-AI-Transcription-OpenRouter-Provider": "deepinfra",
     });
+  });
 });
