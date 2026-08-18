@@ -3,6 +3,7 @@ import { getApiUrl } from "../config";
 import {
   resolveClipVideoUrl,
   resolveMasterVideoUrl,
+  resolvePreviewStartSeconds,
 } from "../lib/videoUrls";
 import HookModal from "./HookModal";
 import SubtitleModal from "./SubtitleModal";
@@ -100,6 +101,8 @@ export default function ResultCard({
   const masterVideoUrl = toProxiedVideoUrl(
     getApiUrl(resolveMasterVideoUrl(clip)),
   );
+  const previewVideoUrl = originalVideoUrl || masterVideoUrl;
+  const previewStartSeconds = resolvePreviewStartSeconds(clip);
   const [currentVideoUrl, setCurrentVideoUrl] = useState(originalVideoUrl);
   const [persistedVideoUrl, setPersistedVideoUrl] = useState(originalVideoUrl);
   const lastObjectUrlRef = React.useRef(null);
@@ -827,8 +830,8 @@ export default function ResultCard({
         onClose={() => setShowSubtitleModal(false)}
         onGenerate={handleSubtitle}
         isProcessing={isSubtitling}
-        videoUrl={masterVideoUrl}
-        videoStartSeconds={clip.start || 0}
+        videoUrl={previewVideoUrl}
+        videoStartSeconds={previewStartSeconds}
         jobId={jobId}
         clipIndex={index}
         existingHook={activeLayers.hook}
@@ -849,8 +852,8 @@ export default function ResultCard({
         onClose={() => setShowHookModal(false)}
         onGenerate={handleHook}
         isProcessing={isHooking}
-        videoUrl={masterVideoUrl}
-        videoStartSeconds={clip.start || 0}
+        videoUrl={previewVideoUrl}
+        videoStartSeconds={previewStartSeconds}
         initialText={clip.viral_hook_text}
         durationInSeconds={clip.end && clip.start ? clip.end - clip.start : 30}
         existingSubtitles={activeLayers.subtitles}

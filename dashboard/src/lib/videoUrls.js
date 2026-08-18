@@ -23,3 +23,6 @@ export const resolveClipVideoUrl = (clip) => {
 
 export const resolveMasterVideoUrl = (clip) =>
   clip?.source_video_url || clip?.original_video_url || clip?.video_url || "";
+
+export const resolvePreviewStartSeconds = (clip) =>
+  clip?.video_url ? 0 : Number(clip?.start || 0);
