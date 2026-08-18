@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ type S3API interface {
 	ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
 	DeleteObjects(context.Context, *s3.DeleteObjectsInput, ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
 	GetObject(context.Context, *s3.GetObjectInput, ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+	PutObject(context.Context, *s3.PutObjectInput, ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 }
 
 type S3Config struct {
@@ -116,6 +118,34 @@ func (s *S3Store) DirectObjectURL(ctx context.Context, key string, expiration ti
 		return strings.TrimRight(s.PublicURLBase, "/") + "/" + s.Bucket + "/" + strings.TrimLeft(key, "/"), nil
 	}
 	return "", fmt.Errorf("S3 public endpoint is not configured")
+}
+
+func (s *S3Store) ReadObject(ctx context.Context, key string) ([]byte, error) {
+	if s.Client == nil || s.Bucket == "" || key == "" {
+		return nil, fmt.Errorf("S3 object store is not configured")
+	}
+	object, err := s.Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.Bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer object.Body.Close()
+	return io.ReadAll(object.Body)
+}
+
+func (s *S3Store) WriteObject(ctx context.Context, key string, contents []byte, contentType string) error {
+	if s.Client == nil || s.Bucket == "" || key == "" {
+		return fmt.Errorf("S3 object store is not configured")
+	}
+	_, err := s.Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(s.Bucket),
+		Key:         aws.String(key),
+		Body:        bytes.NewReader(contents),
+		ContentType: aws.String(contentType),
+	})
+	return err
 }
 
 func (s *S3Store) ListSourceObjects(ctx context.Context, search string, limit int, continuation string) (SourceObjectPage, error) {

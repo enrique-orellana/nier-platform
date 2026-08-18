@@ -39,6 +39,10 @@ func (f *fakeS3) DeleteObjects(_ context.Context, input *s3.DeleteObjectsInput, 
 	return &s3.DeleteObjectsOutput{Deleted: make([]types.DeletedObject, len(input.Delete.Objects))}, nil
 }
 
+func (f *fakeS3) PutObject(_ context.Context, _ *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+	return &s3.PutObjectOutput{}, nil
+}
+
 func TestListSourceObjectsFiltersAndNormalizesMetadata(t *testing.T) {
 	when := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
 	store := &S3Store{Client: &fakeS3{objects: []types.Object{{Key: aws.String("clips/one.mp4"), Size: aws.Int64(12), LastModified: &when}, {Key: aws.String("other.txt")}}}, SourceBucket: "youtube-downloads"}

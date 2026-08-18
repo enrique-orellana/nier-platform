@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/mutonby/openshorts/backend-go/internal/config"
@@ -850,6 +851,33 @@ func TestDeferredClipWebcamRegionPatchPersistsResultAndMetadata(t *testing.T) {
 	}
 }
 
+func TestDeferredClipWebcamRegionPatchHydratesAndUpdatesS3Metadata(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	outputDir := t.TempDir()
+	parent, _ := createDeferredRegionTestJob(t, store, outputDir, `{"clips":[{"layout_format":"streamer_stack"}]}`)
+	client := &regionMetadataS3Client{body: `{"shorts":[{}]}`}
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+	server.s3Store = &integrations.S3Store{Client: client, Bucket: "openshorts-media"}
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		fmt.Sprintf("/api/jobs/%s/clips/0/webcam-region", parent.ID),
+		strings.NewReader(`{"webcam_region":{"x":0.02,"y":0.18,"width":0.23,"height":0.43}}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected S3-backed webcam region patch to succeed, got %d: %s", res.Code, res.Body.String())
+	}
+	if client.putKey != parent.ID+"/source_metadata.json" {
+		t.Fatalf("unexpected S3 metadata key: %q", client.putKey)
+	}
+	if !strings.Contains(client.putBody, `"webcam_region"`) {
+		t.Fatalf("updated webcam region was not uploaded to S3: %s", client.putBody)
+	}
+}
+
 func TestDeferredClipSourceRangePatchPersistsResultAndMetadata(t *testing.T) {
 	store := jobs.NewMemoryStore()
 	outputDir := t.TempDir()
@@ -1446,6 +1474,34 @@ func TestClipTranscriptRouteReadsSegmentTimingFromMetadata(t *testing.T) {
 	}
 }
 
+type regionMetadataS3Client struct {
+	body    string
+	putKey  string
+	putBody string
+}
+
+func (c *regionMetadataS3Client) GetObject(_ context.Context, _ *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	return &s3.GetObjectOutput{Body: io.NopCloser(strings.NewReader(c.body))}, nil
+}
+
+func (c *regionMetadataS3Client) PutObject(_ context.Context, input *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+	contents, err := io.ReadAll(input.Body)
+	if err != nil {
+		return nil, err
+	}
+	c.putKey = aws.ToString(input.Key)
+	c.putBody = string(contents)
+	return &s3.PutObjectOutput{}, nil
+}
+
+func (c *regionMetadataS3Client) ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
+	return &s3.ListObjectsV2Output{}, nil
+}
+
+func (c *regionMetadataS3Client) DeleteObjects(context.Context, *s3.DeleteObjectsInput, ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error) {
+	return &s3.DeleteObjectsOutput{}, nil
+}
+
 type transcriptMetadataS3Client struct {
 	body string
 }
@@ -1460,6 +1516,10 @@ func (transcriptMetadataS3Client) ListObjectsV2(context.Context, *s3.ListObjects
 
 func (transcriptMetadataS3Client) DeleteObjects(context.Context, *s3.DeleteObjectsInput, ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error) {
 	return &s3.DeleteObjectsOutput{Deleted: []types.DeletedObject{}}, nil
+}
+
+func (transcriptMetadataS3Client) PutObject(context.Context, *s3.PutObjectInput, ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+	return &s3.PutObjectOutput{}, nil
 }
 
 func TestClipTranscriptRouteReadsMetadataFromS3WhenLocalOutputMissing(t *testing.T) {

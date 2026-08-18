@@ -195,6 +195,35 @@ func writeJSONFileAtomic(path string, contents []byte) error {
 	return os.Rename(temporaryPath, path)
 }
 
+func (s *Server) deferredMetadataPath(ctx context.Context, outputDir, jobID string) (string, error) {
+	metadataPath, err := firstMetadataPath(outputDir)
+	if err == nil {
+		return metadataPath, nil
+	}
+	if s.s3Store == nil || s.s3Store.Client == nil || s.s3Store.Bucket == "" {
+		return "", err
+	}
+	contents, err := s.s3Store.ReadObject(ctx, jobID+"/source_metadata.json")
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return "", err
+	}
+	metadataPath = filepath.Join(outputDir, "source_metadata.json")
+	if err := os.WriteFile(metadataPath, contents, 0o644); err != nil {
+		return "", err
+	}
+	return metadataPath, nil
+}
+
+func (s *Server) persistDeferredMetadata(ctx context.Context, jobID string, contents []byte) error {
+	if s.s3Store == nil || s.s3Store.Client == nil || s.s3Store.Bucket == "" {
+		return nil
+	}
+	return s.s3Store.WriteObject(ctx, jobID+"/source_metadata.json", contents, "application/json")
+}
+
 func (s *Server) clipRenderRoute(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/jobs/"), "/"), "/")
 	if len(parts) != 4 || parts[1] != "clips" || (parts[3] != "render" && parts[3] != "source-range" && parts[3] != "webcam-region" && parts[3] != "gameplay-region" && parts[3] != "gameplay-zoom" && parts[3] != "streamer-tracking") || parts[0] == "" {
@@ -408,7 +437,7 @@ func (s *Server) updateClipSourceRange(w http.ResponseWriter, r *http.Request, p
 		}
 		outputDir = filepath.Join(root, parent.ID)
 	}
-	metadataPath, err := firstMetadataPath(outputDir)
+	metadataPath, err := s.deferredMetadataPath(r.Context(), outputDir, parentID)
 	if err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"detail": "Deferred job metadata is not available"})
 		return
@@ -447,6 +476,10 @@ func (s *Server) updateClipSourceRange(w http.ResponseWriter, r *http.Request, p
 	}
 	if err := writeJSONFileAtomic(metadataPath, updatedMetadata); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not persist clip range"})
+		return
+	}
+	if err := s.persistDeferredMetadata(r.Context(), parentID, updatedMetadata); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Could not persist clip range metadata"})
 		return
 	}
 
@@ -514,7 +547,7 @@ func (s *Server) updateWebcamRegion(w http.ResponseWriter, r *http.Request, pare
 		}
 		outputDir = filepath.Join(root, parent.ID)
 	}
-	metadataPath, err := firstMetadataPath(outputDir)
+	metadataPath, err := s.deferredMetadataPath(r.Context(), outputDir, parentID)
 	if err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"detail": "Deferred job metadata is not available"})
 		return
@@ -548,6 +581,10 @@ func (s *Server) updateWebcamRegion(w http.ResponseWriter, r *http.Request, pare
 	}
 	if err := writeJSONFileAtomic(metadataPath, updatedMetadata); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not persist webcam region"})
+		return
+	}
+	if err := s.persistDeferredMetadata(r.Context(), parentID, updatedMetadata); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Could not persist webcam region metadata"})
 		return
 	}
 	result.Clips[clipIndex]["webcam_region"] = regionMap
@@ -607,7 +644,7 @@ func (s *Server) updateGameplayRegion(w http.ResponseWriter, r *http.Request, pa
 		}
 		outputDir = filepath.Join(root, parent.ID)
 	}
-	metadataPath, err := firstMetadataPath(outputDir)
+	metadataPath, err := s.deferredMetadataPath(r.Context(), outputDir, parentID)
 	if err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"detail": "Deferred job metadata is not available"})
 		return
@@ -641,6 +678,10 @@ func (s *Server) updateGameplayRegion(w http.ResponseWriter, r *http.Request, pa
 	}
 	if err := writeJSONFileAtomic(metadataPath, updatedMetadata); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not persist gameplay region"})
+		return
+	}
+	if err := s.persistDeferredMetadata(r.Context(), parentID, updatedMetadata); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Could not persist gameplay region metadata"})
 		return
 	}
 	result.Clips[clipIndex]["gameplay_region"] = regionMap
@@ -700,7 +741,7 @@ func (s *Server) updateGameplayZoom(w http.ResponseWriter, r *http.Request, pare
 		}
 		outputDir = filepath.Join(root, parent.ID)
 	}
-	metadataPath, err := firstMetadataPath(outputDir)
+	metadataPath, err := s.deferredMetadataPath(r.Context(), outputDir, parentID)
 	if err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"detail": "Deferred job metadata is not available"})
 		return
@@ -733,6 +774,10 @@ func (s *Server) updateGameplayZoom(w http.ResponseWriter, r *http.Request, pare
 	}
 	if err := writeJSONFileAtomic(metadataPath, updatedMetadata); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not persist gameplay zoom"})
+		return
+	}
+	if err := s.persistDeferredMetadata(r.Context(), parentID, updatedMetadata); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Could not persist gameplay zoom metadata"})
 		return
 	}
 	result.Clips[clipIndex]["gameplay_zoom"] = gameplayZoom
@@ -787,7 +832,7 @@ func (s *Server) updateStreamerTracking(w http.ResponseWriter, r *http.Request, 
 		}
 		outputDir = filepath.Join(root, parent.ID)
 	}
-	metadataPath, err := firstMetadataPath(outputDir)
+	metadataPath, err := s.deferredMetadataPath(r.Context(), outputDir, parentID)
 	if err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"detail": "Deferred job metadata is not available"})
 		return
@@ -821,6 +866,10 @@ func (s *Server) updateStreamerTracking(w http.ResponseWriter, r *http.Request, 
 	}
 	if err := writeJSONFileAtomic(metadataPath, updatedMetadata); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not persist tracking setting"})
+		return
+	}
+	if err := s.persistDeferredMetadata(r.Context(), parentID, updatedMetadata); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Could not persist tracking metadata"})
 		return
 	}
 	result.Clips[clipIndex]["streamer_tracking_enabled"] = trackingEnabled
