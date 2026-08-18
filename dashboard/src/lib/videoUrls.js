@@ -20,8 +20,5 @@ export const toProxiedVideoUrl = (url) => {
 export const resolveClipVideoUrl = (clip, jobId) => {
   const explicitUrl = clip?.video_url || clip?.url;
   if (explicitUrl) return explicitUrl;
-
-  const filename = String(clip?.video_filename || "").trim();
-  const projectId = String(jobId || "").trim();
-  return filename && projectId ? `/videos/${projectId}/${filename}` : "";
+  return "";
 };
