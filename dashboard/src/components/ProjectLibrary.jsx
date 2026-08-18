@@ -99,6 +99,47 @@ function safeNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+const STATUS_FILTER_STORAGE_PREFIX =
+  "openshorts.project-library.status-filters:";
+
+function statusFilterStorageKey(projectId) {
+  return `${STATUS_FILTER_STORAGE_PREFIX}${projectId}`;
+}
+
+function readPersistedStatusFilters(projectId) {
+  if (!projectId || typeof window === "undefined") return [];
+
+  try {
+    const stored = window.localStorage.getItem(
+      statusFilterStorageKey(projectId),
+    );
+    if (!stored) return [];
+
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+
+    const validStatuses = new Set(
+      CLIP_WORKFLOW_STATUSES.map(({ value }) => value),
+    );
+    return [...new Set(parsed.filter((value) => validStatuses.has(value)))];
+  } catch {
+    return [];
+  }
+}
+
+function persistStatusFilters(projectId, filters) {
+  if (!projectId || typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      statusFilterStorageKey(projectId),
+      JSON.stringify(filters),
+    );
+  } catch {
+    // Ignore storage quota and privacy-mode errors; filtering still works in memory.
+  }
+}
+
 function normalizeClipForResultCard(clip, index, fallbackJobId) {
   const renderedVideoUrl =
     clip.video_url ||
@@ -179,7 +220,9 @@ export default function ProjectLibrary({
   const [gameplayZoomErrors, setGameplayZoomErrors] = useState({});
   const [trackingSavingIndex, setTrackingSavingIndex] = useState(null);
   const [trackingErrors, setTrackingErrors] = useState({});
-  const [statusFilters, setStatusFilters] = useState([]);
+  const [statusFilters, setStatusFilters] = useState(() =>
+    readPersistedStatusFilters(projectId),
+  );
   const projectsRequestRef = useRef(null);
 
   const loadProjects = useCallback(() => {
@@ -334,7 +377,7 @@ export default function ProjectLibrary({
       Array.isArray(matchingProject.clips) ? matchingProject.clips : [],
     );
     setClipStatuses({});
-    setStatusFilters([]);
+    setStatusFilters(readPersistedStatusFilters(projectId));
     setClipRenderJobs({});
     setStatusError("");
     setWebcamRegionSavingIndex(null);
@@ -347,6 +390,13 @@ export default function ProjectLibrary({
     setTrackingErrors({});
     loadProjectClips(matchingProject);
   }, [loadProjectClips, projectId, projects]);
+
+  const selectedProjectId =
+    selectedProject?.job_id || selectedProject?.session_id || selectedProject?.id;
+
+  useEffect(() => {
+    persistStatusFilters(selectedProjectId, statusFilters);
+  }, [selectedProjectId, statusFilters]);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -362,7 +412,7 @@ export default function ProjectLibrary({
     setSelectedProject(project);
     setProjectClips(Array.isArray(project?.clips) ? project.clips : []);
     setClipStatuses({});
-    setStatusFilters([]);
+    setStatusFilters(readPersistedStatusFilters(id));
     setClipRenderJobs({});
     setStatusError("");
     setWebcamRegionSavingIndex(null);

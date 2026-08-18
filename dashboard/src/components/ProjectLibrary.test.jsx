@@ -13,6 +13,9 @@ import ProjectLibrary from "./ProjectLibrary";
 describe("ProjectLibrary", () => {
   afterEach(() => {
     vi.useRealTimers();
+    window.localStorage.removeItem(
+      "openshorts.project-library.status-filters:job-filter",
+    );
   });
 
   it("allows multiple workflow status filters at once", async () => {
@@ -66,7 +69,7 @@ describe("ProjectLibrary", () => {
       }),
     );
 
-    render(<ProjectLibrary projectId="job-filter" />);
+    const { unmount } = render(<ProjectLibrary projectId="job-filter" />);
 
     const notReviewed = await screen.findByRole("button", {
       name: "Not reviewed (1)",
@@ -81,6 +84,24 @@ describe("ProjectLibrary", () => {
     expect(screen.getByText("2 clips", { exact: false })).toBeInTheDocument();
     expect(notReviewed).toHaveAttribute("aria-pressed", "true");
     expect(reviewing).toHaveAttribute("aria-pressed", "true");
+    expect(
+      window.localStorage.getItem(
+        "openshorts.project-library.status-filters:job-filter",
+      ),
+    ).toBe(JSON.stringify(["not_reviewed", "reviewing"]));
+
+    unmount();
+    render(<ProjectLibrary projectId="job-filter" />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Not reviewed (1)" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(
+        screen.getByRole("button", { name: "Reviewing (1)" }),
+      ).toHaveAttribute("aria-pressed", "true");
+    });
+    expect(screen.getByText("2 clips", { exact: false })).toBeInTheDocument();
   });
 
   it("does not nest the delete button inside the project card control", async () => {
