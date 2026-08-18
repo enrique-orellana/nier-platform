@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,css,json}\"",
+    "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx,css,json}\"",
     "preview": "vite preview",
     "test": "vitest run"
   },
@@ -39,6 +41,7 @@
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^26.1.0",
     "postcss": "^8.5.6",
+    "prettier": "^3.2.5",
     "tailwindcss": "^3.4.19",
     "vite": "^4.5.3",
     "vitest": "^2.1.9"
