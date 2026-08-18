@@ -16,8 +16,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/mutonby/openshorts/backend-go/internal/config"
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
+	"github.com/mutonby/openshorts/backend-go/internal/integrations"
 	"github.com/mutonby/openshorts/backend-go/internal/jobs"
 	"github.com/mutonby/openshorts/backend-go/internal/manifests"
 )
@@ -1398,6 +1401,16 @@ func TestTranslationHeadersIncludesOpenRouterTranscriptionProvider(t *testing.T)
 	}
 }
 
+func TestTranslationHeadersIncludesTranscriptionLanguage(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/local-editor/transcribe", nil)
+	req.Header.Set("X-AI-Transcription-Language", "it")
+
+	headers := translationHeaders(req)
+	if headers["X-AI-Transcription-Language"] != "it" {
+		t.Fatalf("expected transcription language header to be forwarded: %#v", headers)
+	}
+}
+
 func TestClipTranscriptRouteReadsWordTimingFromMetadata(t *testing.T) {
 	outputDir := t.TempDir()
 	metadataPath := filepath.Join(outputDir, "job-1", "source_metadata.json")
@@ -1429,6 +1442,35 @@ func TestClipTranscriptRouteReadsSegmentTimingFromMetadata(t *testing.T) {
 	res := httptest.NewRecorder()
 	server.Handler().ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/clip/job-segments/0/transcript", nil))
 	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"text":"Segment caption"`) || !strings.Contains(res.Body.String(), `"startMs":200`) {
+		t.Fatalf("unexpected transcript response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+type transcriptMetadataS3Client struct {
+	body string
+}
+
+func (c transcriptMetadataS3Client) GetObject(_ context.Context, _ *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	return &s3.GetObjectOutput{Body: io.NopCloser(strings.NewReader(c.body))}, nil
+}
+
+func (transcriptMetadataS3Client) ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
+	return &s3.ListObjectsV2Output{}, nil
+}
+
+func (transcriptMetadataS3Client) DeleteObjects(context.Context, *s3.DeleteObjectsInput, ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error) {
+	return &s3.DeleteObjectsOutput{Deleted: []types.DeletedObject{}}, nil
+}
+
+func TestClipTranscriptRouteReadsMetadataFromS3WhenLocalOutputMissing(t *testing.T) {
+	server := NewServer(config.Config{OutputDir: t.TempDir()})
+	server.s3Store = &integrations.S3Store{
+		Client: transcriptMetadataS3Client{body: `{"transcript":{"language":"es","segments":[{"start":10.2,"end":11.7,"text":"Hola"}]},"shorts":[{"start":10,"end":12}]}`},
+		Bucket: "openshorts-media",
+	}
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/clip/job-s3/0/transcript", nil))
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"language":"es"`) || !strings.Contains(res.Body.String(), `"startMs":200`) {
 		t.Fatalf("unexpected transcript response: %d %s", res.Code, res.Body.String())
 	}
 }

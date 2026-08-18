@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/mutonby/openshorts/backend-go/internal/manifests"
 	"github.com/mutonby/openshorts/backend-go/internal/media"
 	"github.com/mutonby/openshorts/backend-go/internal/versions"
@@ -58,7 +60,7 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPatch && len(segments) == 1 && segments[0] == "manifest":
 		s.patchManifest(w, r, jobID, clipIndex)
 	case r.Method == http.MethodGet && len(segments) == 1 && segments[0] == "transcript":
-		s.clipTranscript(w, jobID, clipIndex)
+		s.clipTranscript(w, r.Context(), jobID, clipIndex)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 	}
@@ -394,18 +396,28 @@ func (s *Server) patchManifest(w http.ResponseWriter, r *http.Request, jobID str
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "manifest": manifest, "revision": revision, "master_current": false})
 }
 
-func (s *Server) clipTranscript(w http.ResponseWriter, jobID string, clipIndex int) {
+func (s *Server) clipTranscript(w http.ResponseWriter, ctx context.Context, jobID string, clipIndex int) {
 	root := s.config.OutputDir
 	if root == "" {
 		root = "output"
 	}
 	metadataFiles, err := filepath.Glob(filepath.Join(root, jobID, "*_metadata.json"))
-	if err != nil || len(metadataFiles) == 0 {
-		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Metadata not found"})
-		return
+	var contents []byte
+	if err == nil && len(metadataFiles) > 0 {
+		contents, err = os.ReadFile(metadataFiles[0])
+	} else if s.s3Store != nil && s.s3Store.Client != nil && s.s3Store.Bucket != "" {
+		object, s3Err := s.s3Store.Client.GetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(s.s3Store.Bucket),
+			Key:    aws.String(jobID + "/source_metadata.json"),
+		})
+		if s3Err == nil {
+			contents, err = io.ReadAll(object.Body)
+			_ = object.Body.Close()
+		} else {
+			err = s3Err
+		}
 	}
-	contents, err := os.ReadFile(metadataFiles[0])
-	if err != nil {
+	if err != nil || len(contents) == 0 {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Metadata not found"})
 		return
 	}
