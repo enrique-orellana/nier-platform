@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   const isKubernetes = Boolean(env.KUBERNETES_SERVICE_HOST || env.KUBERNETES_PORT)
   const backendTarget =
     env.VITE_BACKEND_PROXY_TARGET ||
-    (isKubernetes ? 'http://openshorts-backend:8000' : 'http://localhost:8000')
+    (isKubernetes ? 'http://openshorts-backend:8000' : 'http://openshorts.127.0.0.1.nip.io')
   const rendererTarget =
     env.VITE_RENDERER_PROXY_TARGET ||
     (isKubernetes ? 'http://openshorts-renderer:3100' : 'http://localhost:3100')
