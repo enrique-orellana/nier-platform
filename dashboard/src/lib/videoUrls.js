@@ -20,3 +20,6 @@ export const resolveClipVideoUrl = (clip) => {
   if (explicitUrl) return explicitUrl;
   return "";
 };
+
+export const resolveMasterVideoUrl = (clip) =>
+  clip?.source_video_url || clip?.original_video_url || clip?.video_url || "";

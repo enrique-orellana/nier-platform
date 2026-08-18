@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveClipVideoUrl } from "./videoUrls";
+import { resolveClipVideoUrl, resolveMasterVideoUrl } from "./videoUrls";
 
 describe("resolveClipVideoUrl", () => {
   it("does not recreate the removed local video route", () => {
@@ -28,5 +28,16 @@ describe("toProxiedVideoUrl", () => {
     const url = "https://s3.example.test/media/clip.mp4?signature=abc";
 
     expect(toProxiedVideoUrl(url)).toBe(url);
+  });
+});
+
+describe("resolveMasterVideoUrl", () => {
+  it("prefers the master source over an already-trimmed clip", () => {
+    expect(
+      resolveMasterVideoUrl({
+        source_video_url: "https://s3.test/master.mp4",
+        video_url: "https://s3.test/source_clip_1.mp4",
+      }),
+    ).toBe("https://s3.test/master.mp4");
   });
 });

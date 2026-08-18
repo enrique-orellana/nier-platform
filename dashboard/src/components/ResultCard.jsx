@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { getApiUrl } from "../config";
-import { resolveClipVideoUrl } from "../lib/videoUrls";
+import {
+  resolveClipVideoUrl,
+  resolveMasterVideoUrl,
+} from "../lib/videoUrls";
 import HookModal from "./HookModal";
 import SubtitleModal from "./SubtitleModal";
 import TranslateModal from "./TranslateModal";
@@ -94,6 +97,9 @@ export default function ResultCard({
     getApiUrl(clip.original_video_url || clip.video_url),
   ); // The absolute, unedited original
   const originalVideoUrl = toProxiedVideoUrl(getApiUrl(clip.video_url)); // Never changes — used for Remotion previews
+  const masterVideoUrl = toProxiedVideoUrl(
+    getApiUrl(resolveMasterVideoUrl(clip)),
+  );
   const [currentVideoUrl, setCurrentVideoUrl] = useState(originalVideoUrl);
   const [persistedVideoUrl, setPersistedVideoUrl] = useState(originalVideoUrl);
   const lastObjectUrlRef = React.useRef(null);
@@ -821,7 +827,7 @@ export default function ResultCard({
         onClose={() => setShowSubtitleModal(false)}
         onGenerate={handleSubtitle}
         isProcessing={isSubtitling}
-        videoUrl={originalVideoUrl}
+        videoUrl={masterVideoUrl}
         videoStartSeconds={clip.start || 0}
         jobId={jobId}
         clipIndex={index}
@@ -843,7 +849,7 @@ export default function ResultCard({
         onClose={() => setShowHookModal(false)}
         onGenerate={handleHook}
         isProcessing={isHooking}
-        videoUrl={originalVideoUrl}
+        videoUrl={masterVideoUrl}
         videoStartSeconds={clip.start || 0}
         initialText={clip.viral_hook_text}
         durationInSeconds={clip.end && clip.start ? clip.end - clip.start : 30}
