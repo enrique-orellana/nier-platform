@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -114,6 +115,24 @@ def load_generation_result(output_dir: str) -> dict[str, Any]:
     return result
 
 
+def upload_generation_artifacts(output_dir: str, job_id: str) -> bool:
+    """Publish generated media to the configured MinIO/S3 output bucket."""
+    if not str(os.environ.get("AWS_S3_BUCKET") or "").strip():
+        return False
+    from s3_uploader import upload_job_artifacts
+
+    return bool(upload_job_artifacts(output_dir, job_id))
+
+
+def cleanup_generation_scratch(output_dir: str, job_id: str) -> None:
+    """Remove a completed job's local scratch directory after S3 persistence."""
+    job_id = str(job_id or "").strip()
+    output_path = Path(output_dir).resolve()
+    if not job_id or output_path.name != job_id:
+        raise ValueError("refusing to remove a non-job-scoped output directory")
+    shutil.rmtree(output_path)
+
+
 def build_clip_generation_environment(request: Mapping[str, Any]) -> dict[str, str]:
     """Translate per-job AI headers into the environment consumed by main.py."""
     from ai_client import ai_config_to_env, load_ai_config
@@ -134,6 +153,12 @@ def _emit(event: Mapping[str, Any]) -> None:
 
 
 def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any] | None]:
+    output_dir = str(request.get("output_dir") or "")
+    artifact_job_id = str(request.get("parent_job_id") or request["id"])
+    if str(request.get("operation") or "") == "clip_render":
+        from s3_uploader import hydrate_job_artifacts
+
+        hydrate_job_artifacts(output_dir, artifact_job_id)
     command = (
         build_clip_render_command(request)
         if str(request.get("operation") or "") == "clip_render"
@@ -155,7 +180,11 @@ def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any
     exit_code = process.wait()
     if exit_code != 0:
         return exit_code, None
-    return exit_code, load_generation_result(str(request.get("output_dir") or ""))
+    uploaded = upload_generation_artifacts(output_dir, artifact_job_id)
+    result = load_generation_result(output_dir)
+    if uploaded:
+        cleanup_generation_scratch(output_dir, artifact_job_id)
+    return exit_code, result
 
 
 def _output_root(request: Mapping[str, Any]) -> Path:

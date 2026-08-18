@@ -139,6 +139,29 @@ func TestPythonWorkerAdapterDownloadsSourceObjectsBeforeStartingPython(t *testin
 	}
 }
 
+func TestPythonWorkerAdapterRehydratesMissingPersistedSourcePath(t *testing.T) {
+	runner := &recordingProtocolRunner{}
+	downloader := &recordingSourceDownloader{}
+	adapter := PythonWorkerAdapter{Runner: runner, SourceDownloader: downloader}
+	job := domain.Job{
+		ID:   "render-job-1",
+		Kind: "clip-render",
+		Metadata: map[string]any{
+			"source_path":   "output/parent/source.mp4",
+			"source_object": map[string]any{"bucket": "youtube-downloads", "key": "source.mp4"},
+		},
+	}
+	if err := adapter.Run(context.Background(), job, "output/parent", nil); err != nil {
+		t.Fatal(err)
+	}
+	if downloader.bucket != "youtube-downloads" || downloader.key != "source.mp4" {
+		t.Fatalf("expected missing source path to be rehydrated, got %#v", downloader)
+	}
+	if runner.request["source_path"] != filepath.Join("output/parent", "source.mp4") || runner.request["source_object"] != nil {
+		t.Fatalf("unexpected worker request: %#v", runner.request)
+	}
+}
+
 func TestPythonWorkerAdapterSendsJSONLJobRequest(t *testing.T) {
 	runner := &recordingProtocolRunner{}
 	adapter := PythonWorkerAdapter{
@@ -240,6 +263,11 @@ func TestPythonWorkerAdapterReusesPersistedSourceForClipRender(t *testing.T) {
 	runner := &recordingProtocolRunner{}
 	downloader := &recordingSourceDownloader{}
 	adapter := PythonWorkerAdapter{Runner: runner, SourceDownloader: downloader}
+	outputDir := t.TempDir()
+	sourcePath := filepath.Join(outputDir, "source.mp4")
+	if err := os.WriteFile(sourcePath, []byte("source"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	job := domain.Job{
 		ID:          "render-job-2",
 		Kind:        "clip-render",
@@ -247,16 +275,16 @@ func TestPythonWorkerAdapterReusesPersistedSourceForClipRender(t *testing.T) {
 		ClipIndex:   1,
 		Metadata: map[string]any{
 			"source_object": map[string]any{"bucket": "videos", "key": "source.mp4"},
-			"source_path":   "output/parent/source.mp4",
+			"source_path":   sourcePath,
 		},
 	}
-	if err := adapter.Run(context.Background(), job, "output/parent", nil); err != nil {
+	if err := adapter.Run(context.Background(), job, outputDir, nil); err != nil {
 		t.Fatalf("run clip render worker: %v", err)
 	}
 	if downloader.bucket != "" || downloader.key != "" {
 		t.Fatalf("clip render re-downloaded persisted source: %#v", downloader)
 	}
-	if runner.request["source_path"] != "output/parent/source.mp4" || runner.request["source_object"] != nil {
+	if runner.request["source_path"] != sourcePath || runner.request["source_object"] != nil {
 		t.Fatalf("unexpected persisted source request: %#v", runner.request)
 	}
 }

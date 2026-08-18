@@ -16,11 +16,55 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/mutonby/openshorts/backend-go/internal/config"
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
+	"github.com/mutonby/openshorts/backend-go/internal/integrations"
 	"github.com/mutonby/openshorts/backend-go/internal/jobs"
 	"github.com/mutonby/openshorts/backend-go/internal/manifests"
 )
+
+type staticVideoS3 struct{}
+
+func (staticVideoS3) ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
+	return &s3.ListObjectsV2Output{}, nil
+}
+
+func (staticVideoS3) DeleteObjects(context.Context, *s3.DeleteObjectsInput, ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error) {
+	return &s3.DeleteObjectsOutput{Deleted: []types.DeletedObject{}}, nil
+}
+
+func (staticVideoS3) GetObject(_ context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	if aws.ToString(input.Key) != "job-1/source.mp4" {
+		return nil, fmt.Errorf("unexpected object key %q", aws.ToString(input.Key))
+	}
+	return &s3.GetObjectOutput{
+		Body:          io.NopCloser(strings.NewReader("video")),
+		ContentLength: aws.Int64(5),
+		ContentType:   aws.String("video/mp4"),
+	}, nil
+}
+
+func TestStaticOutputFallsBackToMinioObject(t *testing.T) {
+	server := NewServer(config.Config{OutputDir: t.TempDir(), S3Bucket: "openshorts-media"})
+	server.s3Store = &integrations.S3Store{Client: staticVideoS3{}, Bucket: "openshorts-media"}
+
+	request := httptest.NewRequest(http.MethodGet, "/videos/job-1/source.mp4", nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected MinIO fallback to return 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if response.Body.String() != "video" {
+		t.Fatalf("unexpected object body %q", response.Body.String())
+	}
+	if got := response.Header().Get("Content-Type"); got != "video/mp4" {
+		t.Fatalf("expected video content type, got %q", got)
+	}
+}
 
 type completingWorker struct{}
 
@@ -1454,6 +1498,25 @@ func TestProjectHistoryReadsLocalMetadataForGoJobs(t *testing.T) {
 	server.Handler().ServeHTTP(res, req)
 	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"job_id":"job-1"`) || !strings.Contains(res.Body.String(), `"video_url":"/videos/job-1/clip.mp4"`) {
 		t.Fatalf("unexpected project history response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestProjectHistoryReadsPersistedJobResultWithoutLocalFiles(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"clips":[{"title":"First clip","video_filename":"clip.mp4"}]}`)); err != nil {
+		t.Fatalf("set result: %v", err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: t.TempDir()}, store)
+	request := httptest.NewRequest(http.MethodGet, "/api/projects/history?limit=48", nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"job_id":"`+job.ID+`"`) || !strings.Contains(response.Body.String(), `"video_url":"/videos/`+job.ID+`/clip.mp4"`) {
+		t.Fatalf("unexpected project history response: %d %s", response.Code, response.Body.String())
 	}
 }
 

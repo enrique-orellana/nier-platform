@@ -64,7 +64,8 @@ class S3ClipUrlTests(unittest.TestCase):
             Path(directory, "metadata.json").write_text("{}", encoding="utf-8")
 
             with patch.object(s3_uploader, "upload_file_to_s3") as upload:
-                s3_uploader.upload_job_artifacts(directory, "job-1")
+                upload.return_value = True
+                assert s3_uploader.upload_job_artifacts(directory, "job-1") is True
 
         uploaded_names = [call.args[2] for call in upload.call_args_list]
         self.assertIn("job-1/clip.mp4", uploaded_names)
@@ -91,6 +92,53 @@ class S3ClipUrlTests(unittest.TestCase):
 
         uploaded_names = [call.args[2] for call in upload.call_args_list]
         self.assertNotIn("job-1/clip.mp4", uploaded_names)
+
+    def test_upload_job_artifacts_reports_failed_upload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "clip.mp4").write_bytes(b"final")
+
+            with patch.object(s3_uploader, "upload_file_to_s3", return_value=False):
+                self.assertFalse(s3_uploader.upload_job_artifacts(directory, "job-1"))
+
+    def test_upload_job_artifacts_includes_nested_manifests(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory, "manifests", "clip_0.json")
+            manifest.parent.mkdir()
+            manifest.write_text("{}", encoding="utf-8")
+
+            with patch.object(s3_uploader, "upload_file_to_s3", return_value=True) as upload:
+                self.assertTrue(s3_uploader.upload_job_artifacts(directory, "job-1"))
+
+            self.assertIn("job-1/manifests/clip_0.json", [call.args[2] for call in upload.call_args_list])
+
+    def test_hydrate_job_artifacts_downloads_only_job_files(self):
+        class FakePaginator:
+            def paginate(self, **kwargs):
+                assert kwargs == {"Bucket": "openshorts-media", "Prefix": "job-1/"}
+                return [{"Contents": [
+                    {"Key": "job-1/source.mp4"},
+                    {"Key": "job-1/source_metadata.json"},
+                    {"Key": "job-1/manifests/clip_0.json"},
+                    {"Key": "other-job/secret.mp4"},
+                ]}]
+
+        class FakeS3Client:
+            def get_paginator(self, name):
+                assert name == "list_objects_v2"
+                return FakePaginator()
+
+            def download_file(self, bucket, key, destination):
+                assert bucket == "openshorts-media"
+                Path(destination).write_bytes(key.encode("utf-8"))
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(s3_uploader, "get_s3_client", return_value=FakeS3Client()):
+                hydrated = s3_uploader.hydrate_job_artifacts(directory, "job-1")
+
+            self.assertEqual(hydrated, 3)
+            self.assertEqual(Path(directory, "source.mp4").read_bytes(), b"job-1/source.mp4")
+            self.assertEqual(Path(directory, "source_metadata.json").read_bytes(), b"job-1/source_metadata.json")
+            self.assertEqual(Path(directory, "manifests", "clip_0.json").read_bytes(), b"job-1/manifests/clip_0.json")
 
 
 if __name__ == "__main__":

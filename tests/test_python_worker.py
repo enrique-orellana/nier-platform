@@ -12,6 +12,8 @@ from python_worker import (
     build_clip_generation_environment,
     handle_request,
     load_generation_result,
+    cleanup_generation_scratch,
+    upload_generation_artifacts,
     parse_request,
 )
 
@@ -189,6 +191,41 @@ def test_load_generation_result_reads_metadata_for_go_status_api():
         }
     finally:
         shutil.rmtree(output_dir, ignore_errors=True)
+
+
+def test_upload_generation_artifacts_publishes_job_output_to_s3(monkeypatch, tmp_path):
+    uploaded = []
+
+    def fake_upload(directory, job_id):
+        uploaded.append((directory, job_id))
+        return True
+
+    monkeypatch.setenv("AWS_S3_BUCKET", "openshorts-media")
+    monkeypatch.setattr("s3_uploader.upload_job_artifacts", fake_upload)
+
+    assert upload_generation_artifacts(str(tmp_path), "job-1") is True
+
+    assert uploaded == [(str(tmp_path), "job-1")]
+
+
+def test_upload_generation_artifacts_is_disabled_without_s3_bucket(monkeypatch, tmp_path):
+    uploaded = []
+    monkeypatch.delenv("AWS_S3_BUCKET", raising=False)
+    monkeypatch.setattr("s3_uploader.upload_job_artifacts", lambda *_args: uploaded.append(True))
+
+    assert upload_generation_artifacts(str(tmp_path), "job-1") is False
+
+    assert uploaded == []
+
+
+def test_cleanup_generation_scratch_removes_only_job_scoped_directory(tmp_path):
+    job_root = tmp_path / "job-1"
+    job_root.mkdir()
+    (job_root / "source.mp4").write_bytes(b"video")
+
+    cleanup_generation_scratch(str(job_root), "job-1")
+
+    assert not job_root.exists()
 
 
 def test_thumbnail_publish_status_returns_persisted_result():

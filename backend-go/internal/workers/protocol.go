@@ -213,6 +213,24 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 			}
 			request["source_path"] = destination
 		}
+	} else if sourceObject, ok := job.Metadata["source_object"].(map[string]any); ok && hasSourcePath {
+		if _, err := os.Stat(sourcePath); err != nil {
+			bucket, _ := sourceObject["bucket"].(string)
+			key, _ := sourceObject["key"].(string)
+			destination := filepath.Join(outputDir, "source"+filepath.Ext(filepath.Base(key)))
+			maxBytes := a.SourceMaxBytes
+			if maxBytes <= 0 {
+				maxBytes = 16 * 1024 * 1024 * 1024
+			}
+			if a.SourceDownloader == nil {
+				delete(request, "source_path")
+				request["source_object"] = sourceObject
+			} else if err := a.SourceDownloader.DownloadSourceObject(ctx, bucket, key, destination, maxBytes); err != nil {
+				return nil, err
+			} else {
+				request["source_path"] = destination
+			}
+		}
 	}
 	if sourceContext, ok := job.Metadata["source_url"].(string); ok {
 		request["source_context_url"] = sourceContext

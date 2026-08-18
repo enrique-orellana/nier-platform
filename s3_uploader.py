@@ -630,18 +630,23 @@ def upload_job_artifacts(directory, job_id):
     bucket_name = os.environ.get('AWS_S3_BUCKET', 'my-clips-bucket')
     
     if not os.path.exists(directory):
-        return
+        return False
 
     output_policies = _load_clip_output_policies(directory)
-    for filename in os.listdir(directory):
-        # Upload .mp4 clips and the metadata JSON
-        if (
-            (filename.endswith(".mp4") or filename.endswith(".json"))
-            and not filename.startswith("temp_")
-            and "_temp_video" not in filename
-            and filename != "_source_analysis.json"
-        ):
-            file_path = os.path.join(directory, filename)
+    eligible_count = 0
+    all_uploaded = True
+    for current_root, _, filenames in os.walk(directory):
+        for filename in filenames:
+            relative_name = os.path.relpath(os.path.join(current_root, filename), directory).replace(os.sep, "/")
+            # Upload media, metadata, manifests, and sidecars while skipping scratch files.
+            if (
+                not (filename.endswith((".mp4", ".json", ".srt")))
+                or filename.startswith("temp_")
+                or "_temp_video" in filename
+                or filename == "_source_analysis.json"
+            ):
+                continue
+            file_path = os.path.join(current_root, filename)
             policy = output_policies.get(filename)
             if filename.endswith(".mp4") and policy:
                 try:
@@ -653,10 +658,42 @@ def upload_job_artifacts(directory, job_id):
                         source_has_audio=policy["source_has_audio"],
                     )
                 except (OSError, TypeError, ValueError) as error:
-                    logger.warning("Skipping invalid clip artifact %s: %s", filename, error)
+                    logger.warning("Skipping invalid clip artifact %s: %s", relative_name, error)
                     continue
-            s3_key = f"{job_id}/{filename}"
-            upload_file_to_s3(file_path, bucket_name, s3_key)
+            s3_key = f"{job_id}/{relative_name}"
+            eligible_count += 1
+            if not upload_file_to_s3(file_path, bucket_name, s3_key):
+                all_uploaded = False
+
+    return eligible_count > 0 and all_uploaded
+
+
+def hydrate_job_artifacts(directory, job_id):
+    """Restore a job's media/metadata into its temporary worker directory."""
+    bucket_name = os.environ.get("AWS_S3_BUCKET", "").strip()
+    job_id = str(job_id or "").strip()
+    client = get_s3_client()
+    if not bucket_name or not job_id or not client:
+        return 0
+
+    output_path = os.path.abspath(directory)
+    os.makedirs(output_path, exist_ok=True)
+    prefix = f"{job_id}/"
+    hydrated = 0
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+        for item in page.get("Contents", []):
+            key = str(item.get("Key") or "")
+            filename = key[len(prefix):] if key.startswith(prefix) else ""
+            if not filename or not filename.endswith((".mp4", ".json", ".srt")):
+                continue
+            destination = os.path.join(output_path, filename)
+            if not os.path.abspath(destination).startswith(output_path + os.sep):
+                continue
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            client.download_file(bucket_name, key, destination)
+            hydrated += 1
+    return hydrated
 
 
 def delete_job_artifacts(job_id):

@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/mutonby/openshorts/backend-go/internal/config"
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
 	"github.com/mutonby/openshorts/backend-go/internal/integrations"
@@ -147,7 +149,11 @@ func (s *Server) readiness(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) staticOutput(w http.ResponseWriter, r *http.Request) {
-	s.serveStatic(w, r, strings.TrimPrefix(r.URL.Path, "/videos/"), s.config.OutputDir)
+	relative := strings.TrimPrefix(r.URL.Path, "/videos/")
+	if s.serveS3Output(w, r, relative) {
+		return
+	}
+	s.serveStatic(w, r, relative, s.config.OutputDir)
 }
 
 func (s *Server) staticThumbnail(w http.ResponseWriter, r *http.Request) {
@@ -315,6 +321,63 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request, relative, r
 		return
 	}
 	http.ServeFile(w, r, candidate)
+}
+
+func (s *Server) serveS3Output(w http.ResponseWriter, r *http.Request, relative string) bool {
+	if s.s3Store == nil || s.s3Store.Client == nil || s.s3Store.Bucket == "" {
+		return false
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	parts := strings.Split(relative, "/")
+	if relative == "" || strings.Contains(relative, "\\") {
+		return false
+	}
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+	}
+
+	input := &s3.GetObjectInput{
+		Bucket: aws.String(s.s3Store.Bucket),
+		Key:    aws.String(relative),
+	}
+	if value := r.Header.Get("Range"); value != "" {
+		input.Range = aws.String(value)
+	}
+	object, err := s.s3Store.Client.GetObject(r.Context(), input)
+	if err != nil {
+		return false
+	}
+	defer object.Body.Close()
+
+	w.Header().Set("Accept-Ranges", "bytes")
+	if object.ContentType != nil && aws.ToString(object.ContentType) != "" {
+		w.Header().Set("Content-Type", aws.ToString(object.ContentType))
+	}
+	if object.ContentLength != nil {
+		w.Header().Set("Content-Length", strconv.FormatInt(aws.ToInt64(object.ContentLength), 10))
+	}
+	if object.ContentRange != nil && aws.ToString(object.ContentRange) != "" {
+		w.Header().Set("Content-Range", aws.ToString(object.ContentRange))
+	}
+	if object.ETag != nil && aws.ToString(object.ETag) != "" {
+		w.Header().Set("ETag", aws.ToString(object.ETag))
+	}
+	if object.LastModified != nil {
+		w.Header().Set("Last-Modified", object.LastModified.UTC().Format(http.TimeFormat))
+	}
+	if object.ContentRange != nil || input.Range != nil {
+		w.WriteHeader(http.StatusPartialContent)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+	if r.Method == http.MethodGet {
+		_, _ = io.Copy(w, object.Body)
+	}
+	return true
 }
 
 func (s *Server) renderProxy(w http.ResponseWriter, r *http.Request) {
@@ -2010,8 +2073,26 @@ func (s *Server) projectHistory(w http.ResponseWriter, r *http.Request) {
 		ModTime time.Time
 	}
 	projects := make([]projectEntry, 0)
+	seenProjects := make(map[string]bool)
+	if jobs, listErr := s.store.ListByKind(r.Context(), "clip-generation"); listErr == nil {
+		for _, job := range jobs {
+			clips, createdAt, ok := readPersistedProjectClips(job)
+			if !ok {
+				continue
+			}
+			seenProjects[job.ID] = true
+			title := ""
+			if len(clips) > 0 {
+				title = firstString(clips[0], "title", "video_title_for_youtube_short")
+			}
+			projects = append(projects, projectEntry{Project: map[string]any{"job_id": job.ID, "title": title, "description": "", "created_at": createdAt.Format(time.RFC3339Nano), "clips": clips}, ModTime: createdAt})
+		}
+	}
 	for _, entry := range entries {
 		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		if seenProjects[entry.Name()] {
 			continue
 		}
 		clips, createdAt, ok := s.readProjectClips(entry.Name())
@@ -2041,12 +2122,46 @@ func (s *Server) projectClips(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jobID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/projects/clips/"), "/")
+	if job, exists := s.store.Get(r.Context(), jobID); exists {
+		if clips, _, ok := readPersistedProjectClips(job); ok {
+			writeJSON(w, http.StatusOK, map[string]any{"clips": clips})
+			return
+		}
+	}
 	clips, _, ok := s.readProjectClips(jobID)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project not found"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"clips": clips})
+}
+
+func readPersistedProjectClips(job domain.Job) ([]map[string]any, time.Time, bool) {
+	if len(job.Result) == 0 {
+		return nil, time.Time{}, false
+	}
+	var result struct {
+		Clips []map[string]any `json:"clips"`
+	}
+	if json.Unmarshal(job.Result, &result) != nil || len(result.Clips) == 0 {
+		return nil, time.Time{}, false
+	}
+	for _, clip := range result.Clips {
+		if filename, ok := clip["video_filename"].(string); ok && filename != "" {
+			if _, exists := clip["video_url"]; !exists {
+				clip["video_url"] = "/videos/" + job.ID + "/" + filename
+			}
+		}
+		clip["job_id"] = job.ID
+	}
+	createdAt := job.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = job.UpdatedAt
+	}
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	return result.Clips, createdAt, true
 }
 
 func (s *Server) readProjectClips(jobID string) ([]map[string]any, time.Time, bool) {
