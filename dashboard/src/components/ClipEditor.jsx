@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { X, Save, GitBranch, Loader2 } from "lucide-react";
 import { getApiUrl } from "../config";
 import RemotionPreview from "./RemotionPreview";
@@ -114,11 +114,15 @@ export default function ClipEditor({
     );
     setSelectedCue(null);
   };
-  // Loading is intentionally scoped to the modal open transition.
-  useEffect(() => {
-    if (isOpen) loadHistory().catch((e) => setError(e.message));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  const loadedKeyRef = useRef("");
+  const currentKey = isOpen ? `${jobId}-${clipIndex}` : "";
+
+  if (isOpen && loadedKeyRef.current !== currentKey) {
+    loadedKeyRef.current = currentKey;
+    loadHistory().catch((e) => setError(e.message));
+  } else if (!isOpen && loadedKeyRef.current !== "") {
+    loadedKeyRef.current = "";
+  }
 
   const updateDraft = (next) =>
     setDraft((current) => ({ ...current, ...next }));

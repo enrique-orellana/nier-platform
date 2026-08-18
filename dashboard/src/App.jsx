@@ -334,7 +334,8 @@ function App() {
   );
   const [transcriptionOpenRouterProvider, setTranscriptionOpenRouterProvider] =
     useState(
-      () => localStorage.getItem("ai_transcription_openrouter_provider_v1") || "",
+      () =>
+        localStorage.getItem("ai_transcription_openrouter_provider_v1") || "",
     );
   // Social API State - Load encrypted or plain
   const [uploadPostKey, setUploadPostKey] = useState(() => {
@@ -1635,7 +1636,9 @@ function App() {
                 setTranscriptionProvider={setTranscriptionProvider}
                 transcriptionModel={transcriptionModel}
                 setTranscriptionModel={setTranscriptionModel}
-                transcriptionOpenRouterProvider={transcriptionOpenRouterProvider}
+                transcriptionOpenRouterProvider={
+                  transcriptionOpenRouterProvider
+                }
                 setTranscriptionOpenRouterProvider={
                   setTranscriptionOpenRouterProvider
                 }
