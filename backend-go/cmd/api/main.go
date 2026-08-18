@@ -41,7 +41,7 @@ func main() {
 	defer closeStore()
 	var sourceDownloader workers.SourceDownloader
 	if cfg.S3Bucket != "" || cfg.S3Endpoint != "" {
-		sourceStore, storeErr := integrations.NewS3Store(context.Background(), integrations.S3Config{Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, ForcePathStyle: cfg.S3ForcePathStyle, Bucket: cfg.S3Bucket, SourceBucket: cfg.S3SourceBucket})
+		sourceStore, storeErr := integrations.NewS3Store(context.Background(), integrations.S3Config{Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, ForcePathStyle: cfg.S3ForcePathStyle, Bucket: cfg.S3Bucket, SourceBucket: cfg.S3SourceBucket, PublicEndpoint: cfg.S3PublicEndpoint, PublicURLBase: cfg.S3PublicURLBase})
 		if storeErr != nil {
 			log.Printf("S3 source store unavailable: %v", storeErr)
 		} else {

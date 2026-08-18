@@ -30,6 +30,8 @@ type Config struct {
 	S3SecretKey       string
 	S3Bucket          string
 	S3SourceBucket    string
+	S3PublicEndpoint  string
+	S3PublicURLBase   string
 	S3ForcePathStyle  bool
 	ElevenLabsURL     string
 	DatabaseURL       string
@@ -90,6 +92,8 @@ func Load() (Config, error) {
 	cfg.S3SecretKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
 	cfg.S3Bucket = os.Getenv("AWS_S3_BUCKET")
 	cfg.S3SourceBucket = os.Getenv("AWS_S3_SOURCE_BUCKET")
+	cfg.S3PublicEndpoint = os.Getenv("AWS_S3_PUBLIC_ENDPOINT_URL")
+	cfg.S3PublicURLBase = os.Getenv("AWS_S3_PUBLIC_URL_BASE")
 	if cfg.S3SourceBucket == "" {
 		cfg.S3SourceBucket = "youtube-downloads"
 	}

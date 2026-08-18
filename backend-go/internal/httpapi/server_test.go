@@ -1520,6 +1520,28 @@ func TestProjectHistoryReadsPersistedJobResultWithoutLocalFiles(t *testing.T) {
 	}
 }
 
+func TestProjectClipsReturnsDirectS3ArtifactURLWhenConfigured(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"clips":[{"title":"First clip","video_filename":"source_clip_1.mp4"}]}`)); err != nil {
+		t.Fatalf("set result: %v", err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: t.TempDir()}, store)
+	server.artifactURLOverride = func(jobID, filename string) string {
+		return "https://storage.example/openshorts-media/" + jobID + "/" + filename + "?X-Amz-Signature=test"
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/projects/clips/"+job.ID, nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "https://storage.example/openshorts-media/"+job.ID+"/source_clip_1.mp4?") {
+		t.Fatalf("expected direct S3 URL, got %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestCodexStatelessRoutesUseWorkerOperations(t *testing.T) {
 	server := NewServerWithDependencies(config.Config{}, jobs.NewMemoryStore(), nil, codexOperation{})
 	for _, test := range []struct {

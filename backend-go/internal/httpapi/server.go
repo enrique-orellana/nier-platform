@@ -34,19 +34,20 @@ type OperationClient interface {
 }
 
 type Server struct {
-	config            config.Config
-	mux               *http.ServeMux
-	store             jobs.Store
-	runner            *jobs.Runner
-	scheduler         *jobs.Scheduler
-	translationRunner OperationClient
-	codexAuth         *integrations.CodexAuth
-	mediaRunner       media.CommandRunner
-	s3Store           *integrations.S3Store
-	versionMu         sync.Mutex
-	versionStores     map[string]*versions.Store
-	highlightMu       sync.Mutex
-	highlightRuntime  map[string]map[string]any
+	config              config.Config
+	mux                 *http.ServeMux
+	store               jobs.Store
+	runner              *jobs.Runner
+	scheduler           *jobs.Scheduler
+	translationRunner   OperationClient
+	codexAuth           *integrations.CodexAuth
+	mediaRunner         media.CommandRunner
+	s3Store             *integrations.S3Store
+	artifactURLOverride func(string, string) string
+	versionMu           sync.Mutex
+	versionStores       map[string]*versions.Store
+	highlightMu         sync.Mutex
+	highlightRuntime    map[string]map[string]any
 }
 
 func NewServer(cfg config.Config) *Server {
@@ -74,7 +75,7 @@ func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, 
 	}
 	server.mediaRunner = media.ExecCommandRunner{}
 	if cfg.S3Bucket != "" || cfg.S3Endpoint != "" {
-		server.s3Store, _ = integrations.NewS3Store(context.Background(), integrations.S3Config{Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, ForcePathStyle: cfg.S3ForcePathStyle, Bucket: cfg.S3Bucket, SourceBucket: cfg.S3SourceBucket})
+		server.s3Store, _ = integrations.NewS3Store(context.Background(), integrations.S3Config{Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, ForcePathStyle: cfg.S3ForcePathStyle, Bucket: cfg.S3Bucket, SourceBucket: cfg.S3SourceBucket, PublicEndpoint: cfg.S3PublicEndpoint, PublicURLBase: cfg.S3PublicURLBase})
 	}
 	if cfg.CodexAuthFile != "" {
 		server.codexAuth = integrations.NewCodexAuth(integrations.CodexConfig{StorePath: cfg.CodexAuthFile}, nil)
@@ -2076,7 +2077,7 @@ func (s *Server) projectHistory(w http.ResponseWriter, r *http.Request) {
 	seenProjects := make(map[string]bool)
 	if jobs, listErr := s.store.ListByKind(r.Context(), "clip-generation"); listErr == nil {
 		for _, job := range jobs {
-			clips, createdAt, ok := readPersistedProjectClips(job)
+			clips, createdAt, ok := s.readPersistedProjectClips(job)
 			if !ok {
 				continue
 			}
@@ -2123,7 +2124,7 @@ func (s *Server) projectClips(w http.ResponseWriter, r *http.Request) {
 	}
 	jobID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/projects/clips/"), "/")
 	if job, exists := s.store.Get(r.Context(), jobID); exists {
-		if clips, _, ok := readPersistedProjectClips(job); ok {
+		if clips, _, ok := s.readPersistedProjectClips(job); ok {
 			writeJSON(w, http.StatusOK, map[string]any{"clips": clips})
 			return
 		}
@@ -2136,7 +2137,7 @@ func (s *Server) projectClips(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"clips": clips})
 }
 
-func readPersistedProjectClips(job domain.Job) ([]map[string]any, time.Time, bool) {
+func (s *Server) readPersistedProjectClips(job domain.Job) ([]map[string]any, time.Time, bool) {
 	if len(job.Result) == 0 {
 		return nil, time.Time{}, false
 	}
@@ -2148,9 +2149,10 @@ func readPersistedProjectClips(job domain.Job) ([]map[string]any, time.Time, boo
 	}
 	for _, clip := range result.Clips {
 		if filename, ok := clip["video_filename"].(string); ok && filename != "" {
-			if _, exists := clip["video_url"]; !exists {
-				clip["video_url"] = "/videos/" + job.ID + "/" + filename
-			}
+			clip["video_url"] = s.directArtifactURL(job.ID, filename)
+		}
+		if sourceFilename, ok := clip["source_video_filename"].(string); ok && sourceFilename != "" {
+			clip["source_video_url"] = s.directArtifactURL(job.ID, sourceFilename)
 		}
 		clip["job_id"] = job.ID
 	}
@@ -2162,6 +2164,18 @@ func readPersistedProjectClips(job domain.Job) ([]map[string]any, time.Time, boo
 		createdAt = time.Now().UTC()
 	}
 	return result.Clips, createdAt, true
+}
+
+func (s *Server) directArtifactURL(jobID, filename string) string {
+	if s.artifactURLOverride != nil {
+		return s.artifactURLOverride(jobID, filename)
+	}
+	if s.s3Store != nil {
+		if directURL, err := s.s3Store.DirectObjectURL(context.Background(), jobID+"/"+filename, 2*time.Hour); err == nil {
+			return directURL
+		}
+	}
+	return "/videos/" + jobID + "/" + filename
 }
 
 func (s *Server) readProjectClips(jobID string) ([]map[string]any, time.Time, bool) {
@@ -2199,9 +2213,10 @@ func (s *Server) readProjectClips(jobID string) ([]map[string]any, time.Time, bo
 	}
 	for _, clip := range data.Shorts {
 		if filename, ok := clip["video_filename"].(string); ok && filename != "" {
-			if _, exists := clip["video_url"]; !exists {
-				clip["video_url"] = "/videos/" + jobID + "/" + filename
-			}
+			clip["video_url"] = s.directArtifactURL(jobID, filename)
+		}
+		if sourceFilename, ok := clip["source_video_filename"].(string); ok && sourceFilename != "" {
+			clip["source_video_url"] = s.directArtifactURL(jobID, sourceFilename)
 		}
 		clip["job_id"] = jobID
 		if masterDuration > 0 {

@@ -62,3 +62,14 @@ func TestDeletePrefixDeletesAllMatchingKeys(t *testing.T) {
 		t.Fatalf("unexpected delete result: %d %#v", count, client.deleted)
 	}
 }
+
+func TestDirectObjectURLUsesConfiguredPublicBaseWithoutClient(t *testing.T) {
+	store := &S3Store{Bucket: "openshorts-media", PublicURLBase: "https://storage.example"}
+	url, err := store.DirectObjectURL(context.Background(), "job-1/source.mp4", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if url != "https://storage.example/openshorts-media/job-1/source.mp4" {
+		t.Fatalf("unexpected direct object URL: %s", url)
+	}
+}

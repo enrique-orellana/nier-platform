@@ -31,6 +31,8 @@ type S3Config struct {
 	ForcePathStyle bool
 	Bucket         string
 	SourceBucket   string
+	PublicEndpoint string
+	PublicURLBase  string
 }
 
 type SourceObject struct {
@@ -47,9 +49,11 @@ type SourceObjectPage struct {
 }
 
 type S3Store struct {
-	Client       S3API
-	Bucket       string
-	SourceBucket string
+	Client        S3API
+	Bucket        string
+	SourceBucket  string
+	Presigner     *s3.PresignClient
+	PublicURLBase string
 }
 
 func NewS3Store(ctx context.Context, config S3Config) (*S3Store, error) {
@@ -70,7 +74,48 @@ func NewS3Store(ctx context.Context, config S3Config) (*S3Store, error) {
 			options.BaseEndpoint = aws.String(config.Endpoint)
 		}
 	})
-	return &S3Store{Client: client, Bucket: config.Bucket, SourceBucket: config.SourceBucket}, nil
+	publicEndpoint := config.PublicEndpoint
+	if publicEndpoint == "" {
+		publicEndpoint = config.Endpoint
+	}
+	publicClient := s3.NewFromConfig(loaded, func(options *s3.Options) {
+		options.UsePathStyle = config.ForcePathStyle
+		if publicEndpoint != "" {
+			options.BaseEndpoint = aws.String(publicEndpoint)
+		}
+	})
+	return &S3Store{
+		Client:        client,
+		Bucket:        config.Bucket,
+		SourceBucket:  config.SourceBucket,
+		Presigner:     s3.NewPresignClient(publicClient),
+		PublicURLBase: config.PublicURLBase,
+	}, nil
+}
+
+func (s *S3Store) DirectObjectURL(ctx context.Context, key string, expiration time.Duration) (string, error) {
+	if s.Bucket == "" || key == "" {
+		return "", fmt.Errorf("S3 object identity is required")
+	}
+	if s.Presigner != nil {
+		if expiration <= 0 {
+			expiration = 2 * time.Hour
+		}
+		request, err := s.Presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(s.Bucket),
+			Key:    aws.String(key),
+		}, func(options *s3.PresignOptions) {
+			options.Expires = expiration
+		})
+		if err != nil {
+			return "", err
+		}
+		return request.URL, nil
+	}
+	if s.PublicURLBase != "" {
+		return strings.TrimRight(s.PublicURLBase, "/") + "/" + s.Bucket + "/" + strings.TrimLeft(key, "/"), nil
+	}
+	return "", fmt.Errorf("S3 public endpoint is not configured")
 }
 
 func (s *S3Store) ListSourceObjects(ctx context.Context, search string, limit int, continuation string) (SourceObjectPage, error) {

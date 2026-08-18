@@ -21,12 +21,14 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	t.Setenv("MAX_CONCURRENT_JOBS", "7")
 	t.Setenv("RENDER_SERVICE_URL", "http://renderer:3100")
 	t.Setenv("DATABASE_URL", "postgres://openshorts:secret@db:5432/openshorts")
+	t.Setenv("AWS_S3_PUBLIC_ENDPOINT_URL", "https://storage.example")
+	t.Setenv("AWS_S3_PUBLIC_URL_BASE", "https://storage.example")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("load environment: %v", err)
 	}
-	if cfg.Port != 8123 || cfg.MaxConcurrentJobs != 7 || cfg.RenderServiceURL != "http://renderer:3100" || cfg.DatabaseURL == "" {
+	if cfg.Port != 8123 || cfg.MaxConcurrentJobs != 7 || cfg.RenderServiceURL != "http://renderer:3100" || cfg.DatabaseURL == "" || cfg.S3PublicEndpoint != "https://storage.example" || cfg.S3PublicURLBase != "https://storage.example" {
 		t.Fatalf("unexpected environment config: %#v", cfg)
 	}
 }
