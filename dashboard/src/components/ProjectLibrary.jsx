@@ -179,7 +179,7 @@ export default function ProjectLibrary({
   const [gameplayZoomErrors, setGameplayZoomErrors] = useState({});
   const [trackingSavingIndex, setTrackingSavingIndex] = useState(null);
   const [trackingErrors, setTrackingErrors] = useState({});
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilters, setStatusFilters] = useState([]);
   const projectsRequestRef = useRef(null);
 
   const loadProjects = useCallback(() => {
@@ -309,6 +309,7 @@ export default function ProjectLibrary({
       setSelectedProject(null);
       setProjectClips([]);
       setClipStatuses({});
+      setStatusFilters([]);
       setClipRenderJobs({});
       setStatusError("");
       setWebcamRegionSavingIndex(null);
@@ -333,6 +334,7 @@ export default function ProjectLibrary({
       Array.isArray(matchingProject.clips) ? matchingProject.clips : [],
     );
     setClipStatuses({});
+    setStatusFilters([]);
     setClipRenderJobs({});
     setStatusError("");
     setWebcamRegionSavingIndex(null);
@@ -360,6 +362,7 @@ export default function ProjectLibrary({
     setSelectedProject(project);
     setProjectClips(Array.isArray(project?.clips) ? project.clips : []);
     setClipStatuses({});
+    setStatusFilters([]);
     setClipRenderJobs({});
     setStatusError("");
     setWebcamRegionSavingIndex(null);
@@ -931,8 +934,8 @@ export default function ProjectLibrary({
     .join(" · ");
 
   const filteredProjectClips = normalizedProjectClips.filter((clip, index) => {
-    if (statusFilter === "all") return true;
-    return statusForClip(clip, index) === statusFilter;
+    if (statusFilters.length === 0) return true;
+    return statusFilters.includes(statusForClip(clip, index));
   });
 
   const filteredProjects = projects.filter((project) => {
@@ -1121,9 +1124,10 @@ export default function ProjectLibrary({
             <div className="flex flex-wrap items-center justify-between gap-3 bg-white/[0.02] border border-white/5 p-3 rounded-2xl">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <button
-                  onClick={() => setStatusFilter("all")}
+                  onClick={() => setStatusFilters([])}
+                  aria-pressed={statusFilters.length === 0}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    statusFilter === "all"
+                    statusFilters.length === 0
                       ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shadow-sm"
                       : "bg-white/5 text-zinc-400 hover:text-white border border-transparent hover:border-white/10"
                   }`}
@@ -1137,9 +1141,16 @@ export default function ProjectLibrary({
                   return (
                     <button
                       key={value}
-                      onClick={() => setStatusFilter(value)}
+                      onClick={() =>
+                        setStatusFilters((current) =>
+                          current.includes(value)
+                            ? current.filter((selected) => selected !== value)
+                            : [...current, value],
+                        )
+                      }
+                      aria-pressed={statusFilters.includes(value)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                        statusFilter === value
+                        statusFilters.includes(value)
                           ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shadow-sm"
                           : "bg-white/5 text-zinc-400 hover:text-white border border-transparent hover:border-white/10"
                       }`}

@@ -14,6 +14,75 @@ describe("ProjectLibrary", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
+
+  it("allows multiple workflow status filters at once", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url) => {
+        if (String(url).includes("/api/projects/history")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              projects: [
+                {
+                  job_id: "job-filter",
+                  title: "Filter project",
+                  clips: [
+                    { index: 0, title: "Not reviewed clip" },
+                    { index: 1, title: "Reviewing clip" },
+                    { index: 2, title: "Edited clip" },
+                  ],
+                  clip_count: 3,
+                },
+              ],
+            }),
+          });
+        }
+        if (String(url).includes("/api/projects/job-filter/statuses")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              clips: {
+                "0": { status: "not_reviewed" },
+                "1": { status: "reviewing" },
+                "2": { status: "edited" },
+              },
+            }),
+          });
+        }
+        if (String(url).includes("/api/projects/clips/job-filter")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              clips: [
+                { index: 0, title: "Not reviewed clip" },
+                { index: 1, title: "Reviewing clip" },
+                { index: 2, title: "Edited clip" },
+              ],
+            }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }),
+    );
+
+    render(<ProjectLibrary projectId="job-filter" />);
+
+    const notReviewed = await screen.findByRole("button", {
+      name: "Not reviewed (1)",
+    });
+    const reviewing = screen.getByRole("button", { name: "Reviewing (1)" });
+
+    fireEvent.click(notReviewed);
+    expect(screen.getByText("1 clip", { exact: false })).toBeInTheDocument();
+
+    fireEvent.click(reviewing);
+
+    expect(screen.getByText("2 clips", { exact: false })).toBeInTheDocument();
+    expect(notReviewed).toHaveAttribute("aria-pressed", "true");
+    expect(reviewing).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("does not nest the delete button inside the project card control", async () => {
     vi.stubGlobal(
       "fetch",
