@@ -1116,6 +1116,7 @@ export default function LocalEditorTab({
         projectId = null,
         restoredDurationMs = null,
         previewFile = file,
+        previewUrl = "",
       } = {},
     ) => {
       if (!file?.type?.startsWith("video/")) {
@@ -1140,8 +1141,9 @@ export default function LocalEditorTab({
         URL.revokeObjectURL(previewObjectUrlRef.current);
       objectUrlRef.current = nextUrl;
       const nextPreviewUrl =
-        previewFile === file ? nextUrl : URL.createObjectURL(previewFile);
-      previewObjectUrlRef.current = nextPreviewUrl;
+        previewUrl ||
+        (previewFile === file ? nextUrl : URL.createObjectURL(previewFile));
+      previewObjectUrlRef.current = previewUrl ? "" : nextPreviewUrl;
       setVideoFile(file);
       setVideoUrl(nextUrl);
       setPreviewVideoUrl(nextPreviewUrl);
@@ -1223,15 +1225,10 @@ export default function LocalEditorTab({
           return new File([blob], name, { type });
         });
     const exportUrl = initialExportVideoUrl || initialVideoUrl;
-    const previewPromise = fetchVideoFile(initialVideoUrl);
-    const exportPromise =
-      exportUrl === initialVideoUrl
-        ? previewPromise
-        : fetchVideoFile(exportUrl);
-    Promise.all([previewPromise, exportPromise])
-      .then(([previewFile, exportFile]) => {
+    fetchVideoFile(exportUrl)
+      .then((exportFile) => {
         if (!active) return;
-        loadVideo(exportFile, { persist: false, previewFile });
+        loadVideo(exportFile, { persist: false, previewUrl: initialVideoUrl });
       })
       .catch((loadError) => {
         if (active)

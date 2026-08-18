@@ -472,11 +472,10 @@ describe("FullScreenEditor", () => {
         screen.getByRole("button", { name: /toggle subtitles settings/i }),
       ).toBeInTheDocument(),
     );
-    expect(fetchMock).toHaveBeenCalledWith("/videos/job/source.mp4");
     expect(fetchMock).toHaveBeenCalledWith("/videos/job/source_clip_1.mp4");
     expect(document.querySelector("video")).toHaveAttribute(
       "src",
-      "blob:master-preview",
+      "/videos/job/source.mp4",
     );
     expect(screen.getAllByText("00:00 / 00:26")).toHaveLength(2);
   });

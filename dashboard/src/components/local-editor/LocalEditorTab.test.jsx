@@ -117,6 +117,38 @@ describe("LocalEditorTab", () => {
     expect(screen.getByText(/project\.mp4/)).toBeInTheDocument();
   });
 
+  it("does not wait for the full source video before loading a rendered export", async () => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:rendered-clip");
+    const sourceUrl = "/videos/job/source.mp4";
+    const exportUrl = "/videos/job/rendered.mp4";
+    const fetchMock = vi.fn(async (url) => {
+      if (url === sourceUrl) return new Promise(() => {});
+      return {
+        ok: true,
+        blob: async () => new Blob(["rendered"], { type: "video/mp4" }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <LocalEditorTab
+        initialVideoUrl={sourceUrl}
+        initialExportVideoUrl={exportUrl}
+        initialVideoName="rendered.mp4"
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /toggle subtitles settings/i }),
+      ).toBeInTheDocument(),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(exportUrl);
+    expect(screen.getByRole("region", { name: /video preview/i })
+      .querySelector("video")).toHaveAttribute("src", sourceUrl);
+  });
+
   it("shows generated clip metadata beside the project video", async () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:project-clip");
     vi.stubGlobal(
