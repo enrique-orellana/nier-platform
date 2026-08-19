@@ -160,6 +160,55 @@ export function manifestWithTranscriptCaptions(manifest, transcript) {
   };
 }
 
+const isOriginalSubtitleTrack = (track) =>
+  track?.id === "original" ||
+  track?.origin === "original" ||
+  track?.origin === "generated";
+
+export function manifestWithRefreshedSourceRange(
+  manifest,
+  { startSec, endSec },
+  transcript,
+) {
+  const source = clone(manifest);
+  source.timeline = {
+    ...(source.timeline || {}),
+    trim: {
+      ...(source.timeline?.trim || {}),
+      start_sec: Number(startSec),
+      end_sec: Number(endSec),
+    },
+  };
+  const refreshedTrack = transcriptTrack(source, transcript);
+  if (!refreshedTrack) return source;
+
+  const existingTracks = Array.isArray(source.subtitle_tracks)
+    ? source.subtitle_tracks
+    : [];
+  const originalIndex = existingTracks.findIndex(isOriginalSubtitleTrack);
+  const originalTrack =
+    originalIndex >= 0 ? existingTracks[originalIndex] : null;
+  const nextTrack = { ...originalTrack, ...refreshedTrack };
+  source.subtitle_tracks =
+    originalIndex >= 0
+      ? existingTracks.map((track, index) =>
+          index === originalIndex ? nextTrack : track,
+        )
+      : [nextTrack, ...existingTracks];
+  source.active_subtitle_track_id =
+    source.active_subtitle_track_id || nextTrack.id;
+  source.layers = {
+    ...(source.layers || {}),
+    subtitles: {
+      ...(source.layers?.subtitles || {}),
+      language: nextTrack.language,
+      cues: nextTrack.cues,
+      captions: nextTrack.captions,
+    },
+  };
+  return source;
+}
+
 const durationFromManifest = (manifest) => {
   const trim = manifest?.timeline?.trim || {};
   const end = Number(trim.end_sec ?? manifest?.duration_sec ?? 0);

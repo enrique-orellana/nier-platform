@@ -12,6 +12,7 @@ import {
   manifestToEditorState,
   editorStateToManifest,
   manifestWithTranscriptCaptions,
+  manifestWithRefreshedSourceRange,
   manifestToRenderProps,
 } from "../../editor/designcomboAdapter";
 import { createSubtitleCue } from "../../editor/timelineModel";
@@ -259,21 +260,39 @@ export default function FullScreenEditor({
 
   const hydrateManifest = useCallback(
     async (baseManifest) => {
-      if (baseManifest?.subtitle_tracks?.length || !jobId) return baseManifest;
+      if (!jobId) return baseManifest;
+      const clipStart = Number(clip?.start);
+      const clipEnd = Number(clip?.end);
+      const trimStart = Number(baseManifest?.timeline?.trim?.start_sec);
+      const trimEnd = Number(baseManifest?.timeline?.trim?.end_sec);
+      const hasClipRange =
+        Number.isFinite(clipStart) && Number.isFinite(clipEnd);
+      const rangeChanged =
+        hasClipRange &&
+        (!Number.isFinite(trimStart) ||
+          !Number.isFinite(trimEnd) ||
+          Math.abs(trimStart - clipStart) > 0.001 ||
+          Math.abs(trimEnd - clipEnd) > 0.001);
+      if (!rangeChanged && baseManifest?.subtitle_tracks?.length)
+        return baseManifest;
       try {
         const response = await fetch(
           getApiUrl(`/api/clip/${jobId}/${clipIndex}/transcript`),
         );
         if (!response.ok) return baseManifest;
-        return manifestWithTranscriptCaptions(
-          baseManifest,
-          await response.json(),
-        );
+        const transcript = await response.json();
+        return rangeChanged
+          ? manifestWithRefreshedSourceRange(
+              baseManifest,
+              { startSec: clipStart, endSec: clipEnd },
+              transcript,
+            )
+          : manifestWithTranscriptCaptions(baseManifest, transcript);
       } catch {
         return baseManifest;
       }
     },
-    [clipIndex, jobId],
+    [clip?.end, clip?.start, clipIndex, jobId],
   );
 
   useEffect(() => {
@@ -724,6 +743,8 @@ export default function FullScreenEditor({
             clip.video_url || projectInputProps.videoUrl,
           )}
           initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
+          initialProjectId={jobId}
+          initialClipIndex={clipIndex}
           initialPlaybackStartMs={
             clip.video_url
               ? 0

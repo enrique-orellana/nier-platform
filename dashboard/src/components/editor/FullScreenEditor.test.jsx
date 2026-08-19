@@ -853,6 +853,82 @@ describe("FullScreenEditor", () => {
     ).toBeInTheDocument();
   });
 
+  it("refreshes stale version subtitles when the clip source range was extended", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (String(url).endsWith("/versions")) {
+          return {
+            ok: true,
+            json: async () => ({
+              current_version_id: "v3",
+              versions: [{ version_id: "v3", status: "done" }],
+            }),
+          };
+        }
+        if (String(url).endsWith("/versions/v3")) {
+          return {
+            ok: true,
+            json: async () => ({
+              version: { version_id: "v3", status: "done" },
+              manifest: {
+                timeline: {
+                  source_video_url: "/videos/clip.mp4",
+                  trim: { start_sec: 10, end_sec: 14 },
+                },
+                subtitle_tracks: [
+                  {
+                    id: "original",
+                    language: "en",
+                    label: "Original",
+                    origin: "original",
+                    cues: [{ text: "Old", startMs: 500, endMs: 1500 }],
+                  },
+                ],
+                layers: {},
+              },
+            }),
+          };
+        }
+        if (String(url).endsWith("/transcript")) {
+          return {
+            ok: true,
+            json: async () => ({
+              language: "en",
+              captions: [
+                { text: "Old", startMs: 500, endMs: 1500 },
+                { text: "Between", startMs: 4500, endMs: 5500 },
+              ],
+            }),
+          };
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(
+      <FullScreenEditor
+        jobId="job"
+        clipIndex={1}
+        clip={{
+          start: 10,
+          end: 16,
+          output_fps: 30,
+          video_url: "/videos/clip.mp4",
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Between clip" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
+      "data-duration",
+      "6",
+    );
+  });
+
   it("bootstraps the editor from a persisted manifest when no saved version exists", async () => {
     vi.stubGlobal(
       "fetch",

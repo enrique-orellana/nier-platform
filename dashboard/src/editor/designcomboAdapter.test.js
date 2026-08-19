@@ -3,6 +3,7 @@ import {
   editorStateToManifest,
   manifestToEditorState,
   manifestToRenderProps,
+  manifestWithRefreshedSourceRange,
   manifestWithTranscriptCaptions,
 } from "./designcomboAdapter";
 import { createSubtitleCue } from "./timelineModel";
@@ -213,6 +214,69 @@ describe("designcomboAdapter", () => {
       endMs: 680,
     });
     expect(next.active_subtitle_track_id).toBe("original");
+  });
+
+  it("refreshes the original track for an extended source range without replacing translations", () => {
+    const source = {
+      timeline: {
+        trim: { start_sec: 10, end_sec: 14 },
+        transcript: {
+          language: "en",
+          segments: [{ start: 10.5, end: 11.5, text: "Old" }],
+        },
+      },
+      layers: {
+        subtitles: {
+          style: { fontFamily: "Arial" },
+          captions: [{ text: "Old", startMs: 500, endMs: 1500 }],
+        },
+      },
+      subtitle_tracks: [
+        {
+          id: "original",
+          language: "en",
+          label: "Original",
+          origin: "original",
+          style: { fontFamily: "Arial" },
+          cues: [{ text: "Old", startMs: 500, endMs: 1500 }],
+        },
+        {
+          id: "es",
+          language: "es",
+          label: "ES",
+          origin: "translation",
+          cues: [{ text: "Viejo", startMs: 500, endMs: 1500 }],
+        },
+      ],
+      active_subtitle_track_id: "es",
+    };
+    const transcript = {
+      language: "en",
+      captions: [
+        { text: "Old", startMs: 500, endMs: 1500 },
+        { text: "Between", startMs: 4500, endMs: 5500 },
+      ],
+    };
+
+    const next = manifestWithRefreshedSourceRange(
+      source,
+      { startSec: 10, endSec: 16 },
+      transcript,
+    );
+
+    expect(next.timeline.trim).toEqual({ start_sec: 10, end_sec: 16 });
+    expect(next.subtitle_tracks[0].cues).toEqual([
+      expect.objectContaining({ text: "Old", startMs: 500, endMs: 1500 }),
+      expect.objectContaining({
+        text: "Between",
+        startMs: 4500,
+        endMs: 5500,
+      }),
+    ]);
+    expect(next.subtitle_tracks[0].style).toEqual({ fontFamily: "Arial" });
+    expect(next.subtitle_tracks[1]).toEqual(source.subtitle_tracks[1]);
+    expect(next.active_subtitle_track_id).toBe("es");
+    expect(source.subtitle_tracks[0].cues).toHaveLength(1);
   });
 
   it("serializes a newly created cue into cues and captions", () => {
