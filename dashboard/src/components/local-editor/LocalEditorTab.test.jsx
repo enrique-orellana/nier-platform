@@ -692,6 +692,58 @@ describe("LocalEditorTab", () => {
     expect(screen.queryByText("Generated caption")).not.toBeInTheDocument();
   });
 
+  it("generates subtitles for a streamed project clip from the cached master", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        language: "es",
+        segments: [
+          { start: 0.25, end: 1.4, text: "Generated project caption" },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/job-1/source.mp4"
+        initialVideoName="clip-1.mp4"
+        initialProjectId="job-1"
+        initialClipIndex={2}
+        initialPlaybackDurationMs={4000}
+        allowLocalUpload={false}
+      />,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /toggle subtitles settings/i }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /toggle subtitles settings/i }),
+    );
+    const generateButton = screen.getByRole("button", {
+      name: /generate subtitles/i,
+    });
+    expect(generateButton).not.toBeDisabled();
+    fireEvent.click(generateButton);
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByText("Generated project caption").length,
+      ).toBeGreaterThan(0),
+    );
+    const request = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes("/api/projects/job-1/clips/2/transcribe"),
+    );
+    expect(request?.[1]).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    );
+  });
+
   it("translates the current subtitle track and records one undoable action", async () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:demo");
     const fetchMock = vi

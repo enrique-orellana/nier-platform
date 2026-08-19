@@ -30,6 +30,8 @@ func (s *Server) projectRoutes(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && len(parts) == 2 && parts[1] == "statuses":
 		s.getProjectStatuses(w, r, jobID)
+	case r.Method == http.MethodPost && len(parts) == 4 && parts[1] == "clips" && parts[3] == "transcribe":
+		s.transcribeProjectClip(w, r, job, parts[2])
 	case r.Method == http.MethodPatch && len(parts) == 4 && parts[1] == "clips" && parts[3] == "status":
 		s.updateProjectStatus(w, r, job, parts[2])
 	case r.Method == http.MethodDelete && len(parts) == 1:

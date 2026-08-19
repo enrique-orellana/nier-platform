@@ -132,6 +132,8 @@ def transcribe_video_with_config(
     emit_log: Callable[[str], None] | None = None,
     *,
     headers: Mapping[str, Any] | None = None,
+    start_seconds: float = 0.0,
+    end_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Transcribe through the configured remote provider; local Whisper is disabled."""
     config = load_ai_config(headers)
@@ -140,8 +142,15 @@ def transcribe_video_with_config(
             "Local Whisper transcription is disabled. Configure OpenRouter transcription and retry."
         )
 
+    source_duration = max(0.0, float(duration_seconds))
+    range_start = max(0.0, min(source_duration, float(start_seconds or 0.0)))
+    range_end = source_duration if end_seconds is None else max(
+        range_start,
+        min(source_duration, float(end_seconds)),
+    )
+    range_duration = range_end - range_start
     chunks = plan_transcription_chunks(
-        duration_seconds,
+        range_duration,
         chunk_seconds=OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS,
         overlap_seconds=OPENROUTER_TRANSCRIPTION_OVERLAP_SECONDS,
     )
@@ -155,7 +164,12 @@ def transcribe_video_with_config(
             if emit_log:
                 emit_log(f"Transcribing chunk {index}/{len(chunks)} with OpenRouter")
             chunk_path = directory_path / f"chunk-{index:04d}.mp3"
-            _extract_openrouter_audio_chunk(Path(video_path), start, end, chunk_path)
+            _extract_openrouter_audio_chunk(
+                Path(video_path),
+                range_start + start,
+                range_start + end,
+                chunk_path,
+            )
             try:
                 transcript = transcribe_audio_openrouter(str(chunk_path), config)
             except RuntimeError as exc:
@@ -183,12 +197,12 @@ def transcribe_video_with_config(
                         words.append({
                             "word": word_text,
                             "start": round(start + word_start, 3),
-                            "end": round(min(duration_seconds, start + word_end), 3),
+                            "end": round(min(range_duration, start + word_end), 3),
                         })
                 segments.append({
                     "text": str(segment.get("text") or "").strip(),
                     "start": round(start + segment_start, 3),
-                    "end": round(min(duration_seconds, start + segment_end), 3),
+                    "end": round(min(range_duration, start + segment_end), 3),
                     "words": words,
                 })
             chunk_path.unlink(missing_ok=True)

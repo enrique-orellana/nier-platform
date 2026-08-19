@@ -82,6 +82,50 @@ def test_openrouter_transcription_uses_single_chunk_for_short_source(monkeypatch
     assert extracted == [(0.0, 240.0)]
 
 
+def test_openrouter_transcription_uses_selected_clip_range(monkeypatch, tmp_path):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    config = Mock(transcription_provider="openrouter")
+    monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
+    extracted = []
+
+    def extract_chunk(_source, start, end, destination):
+        extracted.append((start, end))
+        destination.write_bytes(b"audio")
+
+    monkeypatch.setattr(highlight_generation, "_extract_openrouter_audio_chunk", extract_chunk)
+    monkeypatch.setattr(
+        highlight_generation,
+        "transcribe_audio_openrouter",
+        lambda *_args: {
+            "text": "Clip text",
+            "language": "en",
+            "segments": [{
+                "start": 0.5,
+                "end": 1.5,
+                "text": "Clip text",
+                "words": [{"word": "Clip", "start": 0.5, "end": 1.0}],
+            }],
+        },
+    )
+
+    result = highlight_generation.transcribe_video_with_config(
+        source,
+        100.0,
+        start_seconds=12.5,
+        end_seconds=20.75,
+        headers={"X-AI-Provider": "openrouter"},
+    )
+
+    assert extracted == [(12.5, 20.75)]
+    assert result["segments"] == [{
+        "text": "Clip text",
+        "start": 0.5,
+        "end": 1.5,
+        "words": [{"word": "Clip", "start": 0.5, "end": 1.0}],
+    }]
+
+
 def test_openrouter_transcription_reports_failed_chunk(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")

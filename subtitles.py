@@ -8,7 +8,12 @@ from master_policy import master_video_encode_args, master_video_filter
 SENTENCE_END_RE = re.compile(r"[.!?…]+(?:[\"'’”»)\]]+)?$")
 
 
-def transcribe_audio(video_path, headers: Mapping[str, object] | None = None):
+def transcribe_audio(
+    video_path,
+    headers: Mapping[str, object] | None = None,
+    start_seconds: float = 0.0,
+    end_seconds: float | None = None,
+):
     """Transcribe audio through OpenRouter; local Whisper is not available at runtime."""
     from ai_client import load_ai_config
     from highlight_generation import transcribe_video_with_config
@@ -20,7 +25,15 @@ def transcribe_audio(video_path, headers: Mapping[str, object] | None = None):
             "Local Whisper transcription is disabled. Configure OpenRouter transcription and retry."
         )
     duration_seconds = probe_media(video_path).duration_seconds
-    return transcribe_video_with_config(video_path, duration_seconds, headers=headers)
+    if start_seconds == 0.0 and end_seconds is None:
+        return transcribe_video_with_config(video_path, duration_seconds, headers=headers)
+    return transcribe_video_with_config(
+        video_path,
+        duration_seconds,
+        headers=headers,
+        start_seconds=start_seconds,
+        end_seconds=end_seconds,
+    )
 
 
 def generate_srt_from_video(video_path, output_path, max_chars=20, max_duration=2.0, headers=None):

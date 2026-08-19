@@ -832,6 +832,8 @@ export default function LocalEditorTab({
   initialVideoUrl = "",
   initialExportVideoUrl = "",
   initialVideoName = "",
+  initialProjectId = "",
+  initialClipIndex = null,
   initialPlaybackStartMs = 0,
   initialPlaybackDurationMs = null,
   initialEditorState = null,
@@ -846,6 +848,14 @@ export default function LocalEditorTab({
   clipMetadata = null,
   onHashtagsChange = null,
 }) {
+  const projectClipIndex = Number(initialClipIndex);
+  const hasProjectClipSource = Boolean(
+    initialProjectId &&
+    initialVideoUrl &&
+    initialClipIndex !== null &&
+    Number.isInteger(projectClipIndex) &&
+    projectClipIndex >= 0,
+  );
   const videoRef = useRef(null);
   const playerRef = useRef(null);
   const objectUrlRef = useRef("");
@@ -1358,12 +1368,31 @@ export default function LocalEditorTab({
     setGeneratingSubtitles(true);
     setError("");
     try {
-      const formData = new FormData();
-      formData.append("file", videoFile, videoFile.name);
-      const response = await fetch(getApiUrl("/api/local-editor/transcribe"), {
-        method: "POST",
-        body: formData,
-      });
+      let response;
+      if (videoFile) {
+        const formData = new FormData();
+        formData.append("file", videoFile, videoFile.name);
+        response = await fetch(getApiUrl("/api/local-editor/transcribe"), {
+          method: "POST",
+          body: formData,
+        });
+      } else if (hasProjectClipSource) {
+        response = await fetch(
+          getApiUrl(
+            `/api/projects/${encodeURIComponent(initialProjectId)}/clips/${projectClipIndex}/transcribe`,
+          ),
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...getLocalAiHeaders(),
+            },
+            body: JSON.stringify({}),
+          },
+        );
+      } else {
+        throw new Error("Choose a video before generating subtitles.");
+      }
       const payload = await response.json().catch(() => ({}));
       if (!response.ok)
         throw new Error(payload.detail || "Could not generate subtitles.");
@@ -2465,7 +2494,10 @@ export default function LocalEditorTab({
                   <button
                     type="button"
                     onClick={generateSubtitles}
-                    disabled={generatingSubtitles || !videoFile}
+                    disabled={
+                      generatingSubtitles ||
+                      (!videoFile && !hasProjectClipSource)
+                    }
                     className="flex w-full items-center justify-center gap-2 rounded-lg border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-2 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {generatingSubtitles ? (

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -72,6 +73,78 @@ func (s *Server) transcribeLocalEditor(w http.ResponseWriter, r *http.Request) {
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(result, &payload); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Invalid transcription worker result"})
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (s *Server) transcribeProjectClip(w http.ResponseWriter, r *http.Request, job domain.Job, rawIndex string) {
+	if s.translationRunner == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"detail": "Python worker is not configured"})
+		return
+	}
+	clipIndex, err := strconv.Atoi(rawIndex)
+	if err != nil || clipIndex < 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Clip not found"})
+		return
+	}
+	var result struct {
+		Clips []struct {
+			Start               float64 `json:"start"`
+			End                 float64 `json:"end"`
+			SourceVideoFilename string  `json:"source_video_filename"`
+		} `json:"clips"`
+	}
+	if json.Unmarshal(job.Result, &result) != nil || clipIndex >= len(result.Clips) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Clip not found"})
+		return
+	}
+	clip := result.Clips[clipIndex]
+	if clip.Start < 0 || clip.End <= clip.Start {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"detail": "Clip has no valid source range"})
+		return
+	}
+	root := job.OutputDir
+	if strings.TrimSpace(root) == "" {
+		root = filepath.Join(s.config.OutputDir, job.ID)
+	}
+	jobRoot, err := filepath.Abs(root)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not resolve project cache"})
+		return
+	}
+	sourceFilename := clip.SourceVideoFilename
+	if strings.TrimSpace(sourceFilename) == "" {
+		sourceFilename = "source.mp4"
+	}
+	if filepath.Base(sourceFilename) != sourceFilename || !hasVideoExtension(sourceFilename) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid cached master filename"})
+		return
+	}
+	sourcePath, err := filepath.Abs(filepath.Join(jobRoot, sourceFilename))
+	if err != nil || !safePath(jobRoot, sourcePath) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid cached master path"})
+		return
+	}
+	if _, err := os.Stat(sourcePath); errors.Is(err, os.ErrNotExist) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project master is not cached"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not access project master"})
+		return
+	}
+	workerResult, err := s.translationRunner.Run(r.Context(), fmt.Sprintf("project-%s-clip-%d-transcription", job.ID, clipIndex), "transcribe", map[string]any{
+		"source_path":   sourcePath,
+		"start_seconds": clip.Start,
+		"end_seconds":   clip.End,
+	}, translationHeaders(r))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": fmt.Sprintf("Subtitle generation failed: %s", err)})
+		return
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(workerResult, &payload); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Invalid transcription worker result"})
 		return
 	}

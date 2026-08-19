@@ -647,9 +647,15 @@ def handle_request(request: Mapping[str, Any]) -> None:
             source_path = str((request.get("payload") or {}).get("source_path") or "").strip()
             if not source_path:
                 raise ValueError("transcription source path is required")
+            transcription_payload = request.get("payload") or {}
+            start_seconds = float(transcription_payload.get("start_seconds") or 0.0)
+            end_value = transcription_payload.get("end_seconds")
+            end_seconds = float(end_value) if end_value is not None else None
             transcript = transcribe_audio(
                 source_path,
                 headers=request.get("headers") if isinstance(request.get("headers"), Mapping) else None,
+                start_seconds=start_seconds,
+                end_seconds=end_seconds,
             )
             _emit({
                 "id": request_id,
