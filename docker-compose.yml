@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: openshorts
       POSTGRES_PASSWORD: openshorts-local
     volumes:
-      - openshorts-db-data:/var/lib/postgresql/data
+      - ${OPENSHORTS_DATA_ROOT:-D:/openshorts-docker-data}/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U openshorts -d openshorts"]
       interval: 5s
@@ -17,21 +17,36 @@ services:
     build: .
     container_name: openshorts-backend
     ports:
-      - "8000:8000"
+      - "18000:8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - .:/app
       - /app/__pycache__
-      - ./output:/app/output
+      - ${OPENSHORTS_DATA_ROOT:-D:/openshorts-docker-data}/workdir:/app/output
     environment:
-      - DATABASE_URL=postgres://openshorts:openshorts-local@db:5432/openshorts
-      - AI_PROVIDER=openrouter
-      - AI_BASE_URL=https://openrouter.ai/api/v1
-      - AI_MODEL=openai/gpt-4o-mini
-      - AI_ANALYZE_MODEL=openai/gpt-4o-mini
-      - AI_TRANSCRIPTION_PROVIDER=openrouter
-      - AI_TRANSCRIPTION_MODEL=openai/whisper-large-v3
+      DATABASE_URL: postgres://openshorts:openshorts-local@db:5432/openshorts
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID must be set in .env}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY must be set in .env}
+      AWS_REGION: ${AWS_REGION:-eu-west-3}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-openshorts-media}
+      AWS_S3_PUBLIC_BUCKET: ${AWS_S3_PUBLIC_BUCKET:-openshorts-media}
+      AWS_S3_SOURCE_BUCKET: ${AWS_S3_SOURCE_BUCKET:-youtube-downloads}
+      AWS_S3_ENDPOINT_URL: ${OPENSHORTS_S3_ENDPOINT_URL:-http://minio.192.168.1.189.nip.io:32280}
+      AWS_S3_PUBLIC_URL_BASE: ${OPENSHORTS_S3_PUBLIC_URL_BASE:-http://minio.192.168.1.189.nip.io:32280}
+      AWS_S3_PUBLIC_ENDPOINT_URL: ${OPENSHORTS_S3_PUBLIC_ENDPOINT_URL:-http://minio.192.168.1.189.nip.io:32280}
+      AWS_S3_FORCE_PATH_STYLE: ${AWS_S3_FORCE_PATH_STYLE:-true}
+      MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-5}
+      MAX_MINIO_SOURCE_SIZE_MB: ${MAX_MINIO_SOURCE_SIZE_MB:-16384}
+      AI_PROVIDER: ${AI_PROVIDER:-openrouter}
+      AI_BASE_URL: ${AI_BASE_URL:-https://openrouter.ai/api/v1}
+      AI_MODEL: ${AI_MODEL:-openai/gpt-4o-mini}
+      AI_ANALYZE_MODEL: ${AI_ANALYZE_MODEL:-openai/gpt-4o-mini}
+      AI_TRANSCRIPTION_PROVIDER: ${AI_TRANSCRIPTION_PROVIDER:-openrouter}
+      AI_TRANSCRIPTION_MODEL: ${AI_TRANSCRIPTION_MODEL:-openai/whisper-large-v3}
+      RENDER_SERVICE_URL: http://renderer:3100
+      OPENSHORTS_CODEX_AUTH_FILE: /app/output/.openshorts/codex-auth.json
+      NO_PROXY: minio.192.168.1.189.nip.io,192.168.1.189,db,renderer,localhost,127.0.0.1
     restart: unless-stopped
     depends_on:
       db:
@@ -41,7 +56,7 @@ services:
     build: ./dashboard
     container_name: openshorts-frontend
     ports:
-      - "5175:5173"
+      - "18575:5173"
     volumes:
       - ./dashboard:/app
       - /app/node_modules
@@ -57,16 +72,15 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-
   renderer:
     build:
       context: .
       dockerfile: render-service/Dockerfile
     container_name: openshorts-renderer
     ports:
-      - "3100:3100"
+      - "13100:3100"
     volumes:
-      - ./output:/output
+      - ${OPENSHORTS_DATA_ROOT:-D:/openshorts-docker-data}/workdir:/output
     environment:
       - REMOTION_BUNDLE_PATH=/app/remotion
       - OUTPUT_DIR=/output
@@ -74,6 +88,3 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-
-volumes:
-  openshorts-db-data:

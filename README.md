@@ -202,7 +202,7 @@ docker compose up --build
 ```
 
 ### 4. Open Dashboard
-Navigate to **`http://localhost:5175`**
+Navigate to **`http://localhost:18575`**
 
 1. Go to **Settings** and choose Gemini, LM Studio, or **OpenAI Codex (ChatGPT)**. Codex connects through ChatGPT device authorization and does not use an OpenAI API key.
 2. **Clip Generator**: Upload a long-form video to generate viral shorts
@@ -210,10 +210,12 @@ Navigate to **`http://localhost:5175`**
 4. **YouTube Studio**: Generate thumbnails, titles, and descriptions for YouTube
 5. **UGC Gallery**: Browse all generated videos and avatars
 
-### Kubernetes / MinIO
-If you want to run the app on Kubernetes against the recovered MinIO data,
-see [`k8s/README.md`](./k8s/README.md). It includes the ingress setup, image
-build commands, the `openshorts.yaml` bundle, and a remote-deploy update flow.
+### MinIO storage
+The Docker Compose deployment uses the migrated standalone MinIO endpoint
+`http://minio.192.168.1.189.nip.io:32280` and the `openshorts-media` bucket for
+generated media and source-object browsing. The old Kubernetes OpenShorts
+runtime has been removed; the files under `k8s/` remain only as legacy
+deployment references.
 
 ---
 
