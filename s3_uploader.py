@@ -9,6 +9,7 @@ load_dotenv()
 import boto3
 from botocore.exceptions import ClientError
 from botocore.config import Config
+from boto3.s3.transfer import TransferConfig
 import logging
 from video_output_validation import validate_clip_output
 
@@ -130,6 +131,29 @@ def get_s3_client():
         return None
 
     return _make_s3_client(access_key, secret_key, region, endpoint_url)
+
+
+def _positive_env_int(name, default):
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(1, value)
+
+
+def get_s3_download_config():
+    """Return bounded multipart settings for large MinIO/S3 downloads."""
+    megabyte = 1024 * 1024
+    return TransferConfig(
+        multipart_threshold=(
+            _positive_env_int("MINIO_DOWNLOAD_MULTIPART_THRESHOLD_MB", 32) * megabyte
+        ),
+        multipart_chunksize=(
+            _positive_env_int("MINIO_DOWNLOAD_MULTIPART_CHUNKSIZE_MB", 64) * megabyte
+        ),
+        max_concurrency=_positive_env_int("MINIO_DOWNLOAD_MAX_CONCURRENCY", 16),
+        use_threads=True,
+    )
 
 
 CLIP_STATUS_VERSION = 1
@@ -699,7 +723,12 @@ def hydrate_job_artifacts(directory, job_id):
             if os.path.isfile(destination) and os.path.getsize(destination) > 0:
                 continue
             os.makedirs(os.path.dirname(destination), exist_ok=True)
-            client.download_file(bucket_name, key, destination)
+            client.download_file(
+                bucket_name,
+                key,
+                destination,
+                Config=get_s3_download_config(),
+            )
             hydrated += 1
     return hydrated
 

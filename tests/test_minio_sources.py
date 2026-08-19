@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
+import minio_sources
 from minio_sources import download_source_object, list_source_objects, validate_source_object
 
 
@@ -42,10 +43,23 @@ class FakeBody:
 class DownloadS3:
     def __init__(self, response):
         self.response = response
+        self.downloads = []
 
-    def get_object(self, **kwargs):
+    def head_object(self, **kwargs):
         assert kwargs == {"Bucket": "youtube-downloads", "Key": "videos/source.bin"}
-        return self.response
+        return {"ContentLength": self.response["ContentLength"]}
+
+    def download_file(self, bucket, key, destination, *, Callback=None, Config=None):
+        self.downloads.append((bucket, key, destination, Callback, Config))
+        body = self.response["Body"]
+        with open(destination, "wb") as handle:
+            while True:
+                chunk = body.read(1024 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                if Callback:
+                    Callback(len(chunk))
 
 
 def test_list_source_objects_returns_safe_object_metadata():
@@ -96,3 +110,15 @@ def test_download_source_object_removes_partial_file_when_limit_is_exceeded(tmp_
 
     assert not destination.exists()
     assert not Path(f"{destination}.part").exists()
+
+
+def test_download_source_object_forwards_multipart_transfer_config(tmp_path):
+    destination = tmp_path / "source.bin"
+    client = DownloadS3({"ContentLength": 5, "Body": FakeBody([b"hello"])})
+    transfer_config = object()
+
+    with patch("minio_sources.get_s3_client", return_value=client):
+        with patch.object(minio_sources, "get_s3_download_config", return_value=transfer_config):
+            download_source_object("youtube-downloads", "videos/source.bin", str(destination), 10)
+
+    assert client.downloads[0][4] is transfer_config

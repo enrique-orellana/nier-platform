@@ -270,6 +270,9 @@ deployment references.
 | `AWS_S3_PUBLIC_URL_BASE` | Browser-facing base URL for public media links |
 | `AWS_S3_PUBLIC_ENDPOINT_URL` | Endpoint used to generate presigned URLs for public access |
 | `AWS_S3_FORCE_PATH_STYLE` | Force path-style URLs, recommended for MinIO |
+| `MINIO_DOWNLOAD_MAX_CONCURRENCY` | Parallel multipart download workers (default: 16) |
+| `MINIO_DOWNLOAD_MULTIPART_THRESHOLD_MB` | File size at which multipart downloading starts (default: 32 MB) |
+| `MINIO_DOWNLOAD_MULTIPART_CHUNKSIZE_MB` | Size of each multipart download chunk (default: 64 MB) |
 | `MAX_CONCURRENT_JOBS` | Concurrent processing limit (default: 5) |
 | `OPENSHORTS_CODEX_AUTH_FILE` | Optional path for the installation-scoped Codex credential file |
 | `CODEX_MODEL` | Optional Codex model override (default: `gpt-5.4`) |

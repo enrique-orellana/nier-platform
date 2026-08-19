@@ -1,5 +1,6 @@
 import unittest
 import tempfile
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -7,6 +8,22 @@ import s3_uploader
 
 
 class S3ClipUrlTests(unittest.TestCase):
+    def test_download_transfer_config_is_environment_configurable(self):
+        with patch.dict(
+            os.environ,
+            {
+                "MINIO_DOWNLOAD_MAX_CONCURRENCY": "24",
+                "MINIO_DOWNLOAD_MULTIPART_THRESHOLD_MB": "32",
+                "MINIO_DOWNLOAD_MULTIPART_CHUNKSIZE_MB": "64",
+            },
+            clear=False,
+        ):
+            config = s3_uploader.get_s3_download_config()
+
+        self.assertEqual(config.max_concurrency, 24)
+        self.assertEqual(config.multipart_threshold, 32 * 1024 * 1024)
+        self.assertEqual(config.multipart_chunksize, 64 * 1024 * 1024)
+
     def test_history_clip_url_is_refreshed_from_its_object_key(self):
         stored_url = (
             "http://minio.example/media/job-1/clip-1.mp4?"
@@ -127,7 +144,7 @@ class S3ClipUrlTests(unittest.TestCase):
                 assert name == "list_objects_v2"
                 return FakePaginator()
 
-            def download_file(self, bucket, key, destination):
+            def download_file(self, bucket, key, destination, **kwargs):
                 assert bucket == "openshorts-media"
                 Path(destination).write_bytes(key.encode("utf-8"))
 
@@ -139,6 +156,32 @@ class S3ClipUrlTests(unittest.TestCase):
             self.assertEqual(Path(directory, "source.mp4").read_bytes(), b"job-1/source.mp4")
             self.assertEqual(Path(directory, "source_metadata.json").read_bytes(), b"job-1/source_metadata.json")
             self.assertEqual(Path(directory, "manifests", "clip_0.json").read_bytes(), b"job-1/manifests/clip_0.json")
+
+    def test_hydrate_job_artifacts_forwards_multipart_transfer_config(self):
+        class FakePaginator:
+            def paginate(self, **kwargs):
+                return [{"Contents": [{"Key": "job-1/clip.mp4"}]}]
+
+        class FakeS3Client:
+            def __init__(self):
+                self.config = None
+
+            def get_paginator(self, name):
+                assert name == "list_objects_v2"
+                return FakePaginator()
+
+            def download_file(self, bucket, key, destination, **kwargs):
+                self.config = kwargs["Config"]
+                Path(destination).write_bytes(b"clip")
+
+        client = FakeS3Client()
+        transfer_config = object()
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(s3_uploader, "get_s3_client", return_value=client):
+                with patch.object(s3_uploader, "get_s3_download_config", return_value=transfer_config):
+                    self.assertEqual(s3_uploader.hydrate_job_artifacts(directory, "job-1"), 1)
+
+        self.assertIs(client.config, transfer_config)
 
     def test_hydrate_job_artifacts_reuses_existing_non_empty_files(self):
         class FakePaginator:
@@ -157,7 +200,7 @@ class S3ClipUrlTests(unittest.TestCase):
                 assert name == "list_objects_v2"
                 return FakePaginator()
 
-            def download_file(self, bucket, key, destination):
+            def download_file(self, bucket, key, destination, **kwargs):
                 self.downloads.append((bucket, key, destination))
                 Path(destination).write_bytes(key.encode("utf-8"))
 

@@ -6,10 +6,11 @@ import os
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 
 from botocore.exceptions import ClientError
 
-from s3_uploader import get_s3_client
+from s3_uploader import get_s3_client, get_s3_download_config
 
 
 SOURCE_BUCKET = "youtube-downloads"
@@ -110,7 +111,7 @@ def download_source_object(
     max_bytes: int,
     progress_callback: Callable[[int, int | None], None] | None = None,
 ) -> None:
-    """Stream one MinIO object into a local file with an atomic final rename."""
+    """Download one MinIO object with multipart concurrency and atomic rename."""
     validated_bucket, validated_key = validate_source_object({"bucket": bucket, "key": key})
     client = get_s3_client()
     if client is None:
@@ -120,29 +121,33 @@ def download_source_object(
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     partial_path = destination_path.with_name(f"{destination_path.name}.part")
     try:
-        response = client.get_object(Bucket=validated_bucket, Key=validated_key)
+        response = client.head_object(Bucket=validated_bucket, Key=validated_key)
         content_length = response.get("ContentLength")
         if content_length is not None and int(content_length) > max_bytes:
             raise ValueError("Source object exceeds the configured file size limit")
 
         written = 0
-        body = response["Body"]
-        try:
-            with partial_path.open("wb") as handle:
-                while True:
-                    chunk = body.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    written += len(chunk)
-                    if written > max_bytes:
-                        raise ValueError("Source object exceeds the configured file size limit")
-                    handle.write(chunk)
-                    if progress_callback:
-                        progress_callback(written, int(content_length) if content_length is not None else None)
-        finally:
-            close = getattr(body, "close", None)
-            if close:
-                close()
+        progress_lock = Lock()
+
+        def on_progress(bytes_amount):
+            nonlocal written
+            with progress_lock:
+                written += int(bytes_amount or 0)
+                if written > max_bytes:
+                    raise ValueError("Source object exceeds the configured file size limit")
+                if progress_callback:
+                    progress_callback(
+                        written,
+                        int(content_length) if content_length is not None else None,
+                    )
+
+        client.download_file(
+            validated_bucket,
+            validated_key,
+            str(partial_path),
+            Callback=on_progress,
+            Config=get_s3_download_config(),
+        )
 
         os.replace(partial_path, destination_path)
     except ClientError as error:
