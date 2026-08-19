@@ -28,6 +28,30 @@ describe("ClipSourceRangeEditor", () => {
     expect(onSave).toHaveBeenCalledWith({ start: 150, end: 230 });
   });
 
+  it("accepts direct MM:SS values for the start and end", () => {
+    const onSave = vi.fn();
+
+    render(
+      <ClipSourceRangeEditor
+        isOpen
+        clip={{ start: 176, end: 204 }}
+        masterDuration={3577}
+        onSave={onSave}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Start time"), {
+      target: { value: "06:20" },
+    });
+    fireEvent.change(screen.getByLabelText("End time"), {
+      target: { value: "08:07" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save clip range" }));
+
+    expect(onSave).toHaveBeenCalledWith({ start: 380, end: 487 });
+  });
+
   it("keeps the range inside the master and preserves a one-second minimum", () => {
     render(
       <ClipSourceRangeEditor

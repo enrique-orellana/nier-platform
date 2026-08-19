@@ -14,6 +14,25 @@ function formatTime(value) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function parseTime(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const parts = text.split(":");
+  if (parts.length > 3) return null;
+  const numbers = parts.map((part) => Number(part));
+  if (
+    numbers.some((part) => !Number.isFinite(part) || part < 0) ||
+    numbers.slice(1).some((part) => part >= 60)
+  ) {
+    return null;
+  }
+  if (parts.length === 3) {
+    return numbers[0] * 3600 + numbers[1] * 60 + numbers[2];
+  }
+  if (parts.length === 2) return numbers[0] * 60 + numbers[1];
+  return numbers[0];
+}
+
 export default function ClipSourceRangeEditor({
   isOpen,
   clip,
@@ -38,6 +57,8 @@ export default function ClipSourceRangeEditor({
       Math.max(initialEnd, initialStart + MINIMUM_RANGE_SECONDS),
     ),
   );
+  const [startInput, setStartInput] = useState(formatTime(initialStart));
+  const [endInput, setEndInput] = useState(formatTime(initialEnd));
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -48,6 +69,15 @@ export default function ClipSourceRangeEditor({
       Math.min(
         maximum,
         Math.max(initialEnd, initialStart + MINIMUM_RANGE_SECONDS),
+      ),
+    );
+    setStartInput(formatTime(initialStart));
+    setEndInput(
+      formatTime(
+        Math.min(
+          maximum,
+          Math.max(initialEnd, initialStart + MINIMUM_RANGE_SECONDS),
+        ),
       ),
     );
     setError("");
@@ -66,6 +96,8 @@ export default function ClipSourceRangeEditor({
       Math.min(Number(value), end - MINIMUM_RANGE_SECONDS),
     );
     setStart(next);
+    setStartInput(formatTime(next));
+    setError("");
   };
 
   const handleEndChange = (value) => {
@@ -74,13 +106,71 @@ export default function ClipSourceRangeEditor({
       Math.max(Number(value), start + MINIMUM_RANGE_SECONDS),
     );
     setEnd(next);
+    setEndInput(formatTime(next));
+    setError("");
+  };
+
+  const handleTimeInput = (kind, value) => {
+    if (kind === "start") setStartInput(value);
+    else setEndInput(value);
+
+    const parsed = parseTime(value);
+    if (parsed === null) return;
+    if (kind === "start") {
+      setStart(Math.max(0, Math.min(parsed, end - MINIMUM_RANGE_SECONDS)));
+    } else {
+      setEnd(
+        Math.min(maximum, Math.max(parsed, start + MINIMUM_RANGE_SECONDS)),
+      );
+    }
+    setError("");
+  };
+
+  const handleTimeBlur = (kind) => {
+    const input = kind === "start" ? startInput : endInput;
+    const parsed = parseTime(input);
+    if (parsed === null) {
+      setError("Enter a valid time as MM:SS.");
+      return;
+    }
+    if (kind === "start") {
+      const next = Math.max(0, Math.min(parsed, end - MINIMUM_RANGE_SECONDS));
+      setStart(next);
+      setStartInput(formatTime(next));
+    } else {
+      const next = Math.min(
+        maximum,
+        Math.max(parsed, start + MINIMUM_RANGE_SECONDS),
+      );
+      setEnd(next);
+      setEndInput(formatTime(next));
+    }
+    setError("");
   };
 
   const handleSave = async () => {
     setIsSaving(true);
     setError("");
     try {
-      const saved = await onSave({ start, end });
+      const parsedStart = parseTime(startInput);
+      const parsedEnd = parseTime(endInput);
+      if (parsedStart === null || parsedEnd === null) {
+        throw new Error("Enter a valid time as MM:SS.");
+      }
+      const boundedEnd = Math.min(
+        maximum,
+        Math.max(MINIMUM_RANGE_SECONDS, parsedEnd),
+      );
+      const nextStart = Math.max(
+        0,
+        Math.min(parsedStart, boundedEnd - MINIMUM_RANGE_SECONDS),
+      );
+      const nextEnd = Math.max(nextStart + MINIMUM_RANGE_SECONDS, boundedEnd);
+      setStart(nextStart);
+      setEnd(nextEnd);
+      setStartInput(formatTime(nextStart));
+      setEndInput(formatTime(nextEnd));
+      const saved = await onSave({ start: nextStart, end: nextEnd });
       if (saved === false) throw new Error("Could not save clip range.");
       onClose();
     } catch (saveError) {
@@ -119,11 +209,20 @@ export default function ClipSourceRangeEditor({
 
         <div className="mt-6 space-y-5">
           <label className="block text-xs text-zinc-300">
-            <span className="flex justify-between">
+            <span className="flex items-center justify-between gap-3">
               <span>Start</span>
-              <span className="font-mono text-primary">
-                {formatTime(start)}
-              </span>
+              <input
+                type="text"
+                value={startInput}
+                onChange={(event) =>
+                  handleTimeInput("start", event.target.value)
+                }
+                onBlur={() => handleTimeBlur("start")}
+                aria-label="Start time"
+                placeholder="MM:SS"
+                inputMode="numeric"
+                className="w-20 rounded-md border border-cyan-400/40 bg-black/30 px-2 py-1 text-right font-mono text-primary outline-none focus:border-cyan-300"
+              />
             </span>
             <input
               type="range"
@@ -140,9 +239,20 @@ export default function ClipSourceRangeEditor({
           </label>
 
           <label className="block text-xs text-zinc-300">
-            <span className="flex justify-between">
+            <span className="flex items-center justify-between gap-3">
               <span>End</span>
-              <span className="font-mono text-primary">{formatTime(end)}</span>
+              <input
+                type="text"
+                value={endInput}
+                onChange={(event) =>
+                  handleTimeInput("end", event.target.value)
+                }
+                onBlur={() => handleTimeBlur("end")}
+                aria-label="End time"
+                placeholder="MM:SS"
+                inputMode="numeric"
+                className="w-20 rounded-md border border-cyan-400/40 bg-black/30 px-2 py-1 text-right font-mono text-primary outline-none focus:border-cyan-300"
+              />
             </span>
             <input
               type="range"
