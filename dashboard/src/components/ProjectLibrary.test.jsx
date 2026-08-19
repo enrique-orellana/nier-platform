@@ -125,9 +125,9 @@ describe("ProjectLibrary", () => {
             ok: true,
             json: async () => ({
               clips: {
-                "0": { status: "not_reviewed" },
-                "1": { status: "reviewing" },
-                "2": { status: "edited" },
+                0: { status: "not_reviewed" },
+                1: { status: "reviewing" },
+                2: { status: "edited" },
               },
             }),
           });
@@ -687,7 +687,9 @@ describe("ProjectLibrary", () => {
     fireEvent.click(button);
 
     expect(await screen.findByText(/Queued/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Retry" }),
+    ).not.toBeInTheDocument();
   });
 
   it("retries when the render status request hangs", async () => {

@@ -44,8 +44,9 @@ describe("SubtitleModal", () => {
       />,
     );
 
-    expect(
-      await screen.findByTestId("subtitle-preview"),
-    ).toHaveAttribute("data-video-start-seconds", "34");
+    expect(await screen.findByTestId("subtitle-preview")).toHaveAttribute(
+      "data-video-start-seconds",
+      "34",
+    );
   });
 });

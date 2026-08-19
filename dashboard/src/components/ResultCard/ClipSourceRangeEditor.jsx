@@ -244,9 +244,7 @@ export default function ClipSourceRangeEditor({
               <input
                 type="text"
                 value={endInput}
-                onChange={(event) =>
-                  handleTimeInput("end", event.target.value)
-                }
+                onChange={(event) => handleTimeInput("end", event.target.value)}
                 onBlur={() => handleTimeBlur("end")}
                 aria-label="End time"
                 placeholder="MM:SS"

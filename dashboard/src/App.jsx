@@ -1112,7 +1112,8 @@ function App() {
             setStatus("clips-ready");
             const activeRenders = activeClipRenderJobs(data.clip_renders);
             setClipRenderJobs(activeRenders);
-            if (Object.keys(activeRenders).length === 0) clearInterval(interval);
+            if (Object.keys(activeRenders).length === 0)
+              clearInterval(interval);
           } else if (data.status === "completed") {
             setStatus("complete");
             clearInterval(interval);

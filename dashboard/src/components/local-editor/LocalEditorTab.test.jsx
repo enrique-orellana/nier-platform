@@ -111,8 +111,9 @@ describe("LocalEditorTab", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByLabelText(/upload video/i)).not.toBeInTheDocument();
     expect(screen.getByText(/project\.mp4/)).toBeInTheDocument();
-    expect(screen.getByTestId("local-editor-player").querySelector("video"))
-      .toHaveAttribute("src", "/api/video-proxy/project.mp4");
+    expect(
+      screen.getByTestId("local-editor-player").querySelector("video"),
+    ).toHaveAttribute("src", "/api/video-proxy/project.mp4");
   });
 
   it("uses the rendered export URL when both export and source URLs exist", async () => {
@@ -135,15 +136,20 @@ describe("LocalEditorTab", () => {
       ).toBeInTheDocument(),
     );
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("region", { name: /video preview/i })
-      .querySelector("video")).toHaveAttribute("src", exportUrl);
+    expect(
+      screen
+        .getByRole("region", { name: /video preview/i })
+        .querySelector("video"),
+    ).toHaveAttribute("src", exportUrl);
   });
 
   it("does not offer local upload when a project editor has no remote video", () => {
     render(<LocalEditorTab allowLocalUpload={false} />);
 
     expect(screen.queryByLabelText(/upload video/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/project video is unavailable/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/project video is unavailable/i),
+    ).toBeInTheDocument();
   });
 
   it("shows generated clip metadata beside the project video", async () => {

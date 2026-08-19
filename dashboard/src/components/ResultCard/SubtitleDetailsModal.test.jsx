@@ -46,8 +46,9 @@ describe("SubtitleDetailsModal", () => {
     expect(screen.getByTestId("subtitle-details-preview")).toHaveTextContent(
       "Hello there",
     );
-    expect(
-      screen.getByTestId("subtitle-details-preview"),
-    ).toHaveAttribute("data-video-start-seconds", "120");
+    expect(screen.getByTestId("subtitle-details-preview")).toHaveAttribute(
+      "data-video-start-seconds",
+      "120",
+    );
   });
 });

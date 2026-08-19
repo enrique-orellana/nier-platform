@@ -394,7 +394,9 @@ export default function ProjectLibrary({
   }, [loadProjectClips, projectId, projects]);
 
   const selectedProjectId =
-    selectedProject?.job_id || selectedProject?.session_id || selectedProject?.id;
+    selectedProject?.job_id ||
+    selectedProject?.session_id ||
+    selectedProject?.id;
 
   useEffect(() => {
     persistStatusFilters(selectedProjectId, statusFilters);

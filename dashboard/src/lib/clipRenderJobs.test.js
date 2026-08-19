@@ -11,9 +11,9 @@ describe("activeClipRenderJobs", () => {
         { clip_index: 2, job_id: "rendering-job", status: "rendering" },
       ]),
     ).toEqual({
-      "0": "queued-job",
-      "1": "processing-job",
-      "2": "rendering-job",
+      0: "queued-job",
+      1: "processing-job",
+      2: "rendering-job",
     });
   });
 
