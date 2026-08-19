@@ -42,3 +42,7 @@ This project is indexed by GitNexus as **openshorts** (5751 symbols, 20174 relat
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+## Frontend verification
+
+- Whenever files under `dashboard/src/` are modified, run `npm run format`, `npm run format:check`, and `npm run lint` from `dashboard` before committing.
