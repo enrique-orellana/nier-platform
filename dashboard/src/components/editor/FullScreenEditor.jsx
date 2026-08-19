@@ -381,7 +381,8 @@ export default function FullScreenEditor({
   const localEditorPreviewUrl = useMemo(
     () =>
       proxyUrl(
-        clip.source_video_url ||
+        clip.video_url ||
+          clip.source_video_url ||
           clip.source_url ||
           projectManifest.timeline?.source_video_url ||
           clip.video_url,
@@ -723,10 +724,14 @@ export default function FullScreenEditor({
             clip.video_url || projectInputProps.videoUrl,
           )}
           initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
-          initialPlaybackStartMs={Math.max(
-            0,
-            Number(projectInputProps.videoStartSeconds || 0) * 1000,
-          )}
+          initialPlaybackStartMs={
+            clip.video_url
+              ? 0
+              : Math.max(
+                  0,
+                  Number(projectInputProps.videoStartSeconds || 0) * 1000,
+                )
+          }
           initialPlaybackDurationMs={Math.max(
             1,
             Number(durationSeconds || 0) * 1000,
@@ -739,6 +744,7 @@ export default function FullScreenEditor({
           }
           onStateChange={setLocalDraft}
           persistHistory={false}
+          allowLocalUpload={false}
           onClose={onClose}
           headerActions={null}
           sidePanel={

@@ -428,20 +428,9 @@ describe("FullScreenEditor", () => {
     );
   });
 
-  it("previews the master at the clip start while retaining the trimmed export source", async () => {
-    const fetchMock = vi.fn().mockImplementation(async (url) => ({
-      ok: true,
-      blob: async () => new Blob([String(url)], { type: "video/mp4" }),
-    }));
+  it("streams the rendered clip instead of downloading the source video", async () => {
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    Object.defineProperty(URL, "createObjectURL", {
-      configurable: true,
-      writable: true,
-      value: vi
-        .fn()
-        .mockReturnValueOnce("blob:trimmed-export")
-        .mockReturnValueOnce("blob:master-preview"),
-    });
     const localManifest = {
       timeline: {
         source_video_url: "",
@@ -472,10 +461,10 @@ describe("FullScreenEditor", () => {
         screen.getByRole("button", { name: /toggle subtitles settings/i }),
       ).toBeInTheDocument(),
     );
-    expect(fetchMock).toHaveBeenCalledWith("/videos/job/source_clip_1.mp4");
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(document.querySelector("video")).toHaveAttribute(
       "src",
-      "/videos/job/source.mp4",
+      "/videos/job/source_clip_1.mp4",
     );
     expect(screen.getAllByText("00:00 / 00:26")).toHaveLength(2);
   });

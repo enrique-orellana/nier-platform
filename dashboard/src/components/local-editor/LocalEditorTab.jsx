@@ -842,6 +842,7 @@ export default function LocalEditorTab({
   sidePanel = null,
   footer = null,
   persistHistory = true,
+  allowLocalUpload = true,
   clipMetadata = null,
   onHashtagsChange = null,
 }) {
@@ -892,9 +893,6 @@ export default function LocalEditorTab({
   const [hookOpen, setHookOpen] = useState(false);
   const [subtitleView, setSubtitleView] = useState("timeline");
   const [subtitleTableLoop, setSubtitleTableLoop] = useState(false);
-  const [remoteVideoLoading, setRemoteVideoLoading] = useState(
-    Boolean(initialVideoUrl),
-  );
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectIdState] = useState(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -1147,6 +1145,7 @@ export default function LocalEditorTab({
       setVideoFile(file);
       setVideoUrl(nextUrl);
       setPreviewVideoUrl(nextPreviewUrl);
+      setError("");
       setDurationMs(
         requestedPlaybackDurationMs ||
           restoredDurationMs ||
@@ -1160,7 +1159,6 @@ export default function LocalEditorTab({
       setAutoCrop(false);
       if (videoRef.current) videoRef.current.loop = false;
       if (videoRef.current) videoRef.current.muted = false;
-      setError("");
     },
     [requestedPlaybackDurationMs],
   );
@@ -1201,46 +1199,24 @@ export default function LocalEditorTab({
 
   useEffect(() => {
     if (!initialVideoUrl) return undefined;
-    let active = true;
     videoLoadStartedRef.current = true;
-    setRemoteVideoLoading(true);
-    const fetchVideoFile = (url) =>
-      fetch(url)
-        .then((response) => {
-          if (!response.ok)
-            throw new Error(
-              `Could not load project video (${response.status}).`,
-            );
-          return response.blob();
-        })
-        .then((blob) => {
-          const type =
-            blob.type && blob.type.startsWith("video/")
-              ? blob.type
-              : "video/mp4";
-          const name =
-            initialVideoName ||
-            url.split("?")[0].split("/").pop() ||
-            "project-video.mp4";
-          return new File([blob], name, { type });
-        });
-    const exportUrl = initialExportVideoUrl || initialVideoUrl;
-    fetchVideoFile(exportUrl)
-      .then((exportFile) => {
-        if (!active) return;
-        loadVideo(exportFile, { persist: false, previewUrl: initialVideoUrl });
-      })
-      .catch((loadError) => {
-        if (active)
-          setError(loadError.message || "Could not load the project video.");
-      })
-      .finally(() => {
-        if (active) setRemoteVideoLoading(false);
-      });
+    const streamUrl = initialExportVideoUrl || initialVideoUrl;
+    setVideoFile(null);
+    setVideoUrl(streamUrl);
+    setPreviewVideoUrl(streamUrl);
+    setDurationMs(requestedPlaybackDurationMs || DEFAULT_DURATION_MS);
+    setPlayheadMs(0);
+    setIsPlaying(false);
+    setError("");
+    const videoElement = videoRef.current;
     return () => {
-      active = false;
+      if (videoElement) videoElement.pause();
     };
-  }, [initialExportVideoUrl, initialVideoName, initialVideoUrl, loadVideo]);
+  }, [initialExportVideoUrl, initialVideoUrl, requestedPlaybackDurationMs]);
+
+  const handleVideoError = () => {
+    if (!videoFile) setError("Could not stream the project video from MinIO.");
+  };
 
   const handleMetadata = () => {
     const sourceDurationMs = Math.max(
@@ -1898,7 +1874,7 @@ export default function LocalEditorTab({
     />
   );
 
-  if (!videoFile) {
+  if (!videoFile && !videoUrl) {
     return (
       <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
@@ -1934,10 +1910,9 @@ export default function LocalEditorTab({
             {projectStorageWarning}
           </div>
         )}
-        {remoteVideoLoading ? (
+        {!allowLocalUpload ? (
           <div className="flex h-64 items-center justify-center gap-2 text-sm text-zinc-400">
-            <Loader2 size={18} className="animate-spin" />
-            Loading project video…
+            {error || "Project video is unavailable."}
           </div>
         ) : (
           <UploadState onFile={loadVideo} error={error} />
@@ -1980,7 +1955,8 @@ export default function LocalEditorTab({
         <div>
           <h1 className="text-lg font-bold">Local Editor</h1>
           <p className="mt-0.5 text-xs text-zinc-500">
-            {videoFile.name} · local-only editing
+            {videoFile?.name || initialVideoName || "Project video"} ·{" "}
+            {videoFile ? "local-only editing" : "streamed project video"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1988,7 +1964,7 @@ export default function LocalEditorTab({
           <button
             type="button"
             onClick={openSaveProjectDialog}
-            disabled={busy}
+            disabled={busy || !videoFile}
             className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Save size={13} />
@@ -2027,7 +2003,7 @@ export default function LocalEditorTab({
           <button
             type="button"
             onClick={exportVideo}
-            disabled={busy}
+            disabled={busy || !videoFile}
             className="flex items-center gap-1.5 rounded-lg bg-fuchsia-500 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Film size={13} />
@@ -2177,6 +2153,7 @@ export default function LocalEditorTab({
                   className={`h-full w-full ${shouldCropVideo ? "object-cover" : "object-contain"}`}
                   onLoadedMetadata={handleMetadata}
                   onLoadedData={detectVideoFraming}
+                  onError={handleVideoError}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                   onEnded={() => {
@@ -2488,7 +2465,7 @@ export default function LocalEditorTab({
                   <button
                     type="button"
                     onClick={generateSubtitles}
-                    disabled={generatingSubtitles}
+                    disabled={generatingSubtitles || !videoFile}
                     className="flex w-full items-center justify-center gap-2 rounded-lg border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-2 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {generatingSubtitles ? (

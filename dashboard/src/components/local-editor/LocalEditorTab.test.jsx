@@ -92,12 +92,8 @@ describe("LocalEditorTab", () => {
     );
   });
 
-  it("loads a project clip into the same editor without showing the upload state", async () => {
-    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:project-clip");
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      blob: async () => new Blob(["video"], { type: "video/mp4" }),
-    });
+  it("streams a project clip without downloading it into a browser blob", async () => {
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
     render(
@@ -112,22 +108,17 @@ describe("LocalEditorTab", () => {
         screen.getByRole("button", { name: /toggle subtitles settings/i }),
       ).toBeInTheDocument(),
     );
-    expect(fetchMock).toHaveBeenCalledWith("/api/video-proxy/project.mp4");
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByLabelText(/upload video/i)).not.toBeInTheDocument();
     expect(screen.getByText(/project\.mp4/)).toBeInTheDocument();
+    expect(screen.getByTestId("local-editor-player").querySelector("video"))
+      .toHaveAttribute("src", "/api/video-proxy/project.mp4");
   });
 
-  it("does not wait for the full source video before loading a rendered export", async () => {
-    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:rendered-clip");
+  it("uses the rendered export URL when both export and source URLs exist", async () => {
     const sourceUrl = "/videos/job/source.mp4";
     const exportUrl = "/videos/job/rendered.mp4";
-    const fetchMock = vi.fn(async (url) => {
-      if (url === sourceUrl) return new Promise(() => {});
-      return {
-        ok: true,
-        blob: async () => new Blob(["rendered"], { type: "video/mp4" }),
-      };
-    });
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
     render(
@@ -143,10 +134,16 @@ describe("LocalEditorTab", () => {
         screen.getByRole("button", { name: /toggle subtitles settings/i }),
       ).toBeInTheDocument(),
     );
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(exportUrl);
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByRole("region", { name: /video preview/i })
-      .querySelector("video")).toHaveAttribute("src", sourceUrl);
+      .querySelector("video")).toHaveAttribute("src", exportUrl);
+  });
+
+  it("does not offer local upload when a project editor has no remote video", () => {
+    render(<LocalEditorTab allowLocalUpload={false} />);
+
+    expect(screen.queryByLabelText(/upload video/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/project video is unavailable/i)).toBeInTheDocument();
   });
 
   it("shows generated clip metadata beside the project video", async () => {
@@ -191,16 +188,10 @@ describe("LocalEditorTab", () => {
   });
 
   it("uses current edited subtitle cues when generating hashtags", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        blob: async () => new Blob(["video"], { type: "video/mp4" }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ hashtags: ["#editedclip"] }),
-      });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ hashtags: ["#editedclip"] }),
+    });
     vi.stubGlobal("fetch", fetchMock);
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:project-clip");
 
@@ -235,7 +226,7 @@ describe("LocalEditorTab", () => {
         "#editedclip",
       ),
     );
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body).subtitle_text).toBe(
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).subtitle_text).toBe(
       "Primera frase Segunda frase",
     );
   });
