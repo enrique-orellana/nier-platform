@@ -177,9 +177,9 @@ def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any
     operation = str(request.get("operation") or "")
     source_path = str(request.get("source_path") or "").strip()
     excluded_paths = set()
-    preserve_paths = []
+    output_root = Path(output_dir).resolve()
+    preserve_paths = [str(output_root / "source.mp4")]
     if operation == "clip_render" and source_path:
-        output_root = Path(output_dir).resolve()
         candidate = Path(source_path).resolve()
         try:
             excluded_paths.add(candidate.relative_to(output_root).as_posix())

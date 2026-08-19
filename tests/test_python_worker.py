@@ -13,6 +13,7 @@ from python_worker import (
     handle_request,
     load_generation_result,
     cleanup_generation_scratch,
+    _run_clip_generation,
     upload_generation_artifacts,
     parse_request,
 )
@@ -245,6 +246,37 @@ def test_cleanup_generation_scratch_preserves_selected_source(tmp_path):
     assert not (job_root / "source_metadata.json").exists()
     assert not (job_root / "rendered_clip.mp4").exists()
     assert not scratch.exists()
+
+
+def test_clip_generation_cleanup_retains_master_source(tmp_path, monkeypatch):
+    output_dir = tmp_path / "job-1"
+    output_dir.mkdir()
+    source = output_dir / "source.mp4"
+    source.write_bytes(b"master")
+    metadata = output_dir / "source_metadata.json"
+    metadata.write_text("{}", encoding="utf-8")
+
+    class FakeProcess:
+        stdout = iter(())
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr("python_worker.subprocess.Popen", lambda *args, **kwargs: FakeProcess())
+    monkeypatch.setattr("python_worker.load_generation_result", lambda _directory: {"clips": []})
+    monkeypatch.setattr("python_worker.upload_generation_artifacts", lambda *args, **kwargs: True)
+
+    _run_clip_generation(
+        {
+            "id": "job-1",
+            "operation": "clip_generation",
+            "output_dir": str(output_dir),
+            "source_url": "https://example.com/source.mp4",
+        }
+    )
+
+    assert source.read_bytes() == b"master"
+    assert not metadata.exists()
 
 
 def test_upload_generation_artifacts_forwards_exclusions(monkeypatch, tmp_path):
