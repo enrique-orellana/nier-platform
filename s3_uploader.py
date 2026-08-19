@@ -623,7 +623,7 @@ def _load_clip_output_policies(directory):
     return policies
 
 
-def upload_job_artifacts(directory, job_id):
+def upload_job_artifacts(directory, job_id, excluded_paths=None):
     """
     Upload all generated clips and metadata for a job to S3.
     """
@@ -632,12 +632,18 @@ def upload_job_artifacts(directory, job_id):
     if not os.path.exists(directory):
         return False
 
+    excluded_paths = {
+        str(path).replace("\\", "/").lstrip("/")
+        for path in (excluded_paths or ())
+    }
     output_policies = _load_clip_output_policies(directory)
     eligible_count = 0
     all_uploaded = True
     for current_root, _, filenames in os.walk(directory):
         for filename in filenames:
             relative_name = os.path.relpath(os.path.join(current_root, filename), directory).replace(os.sep, "/")
+            if relative_name in excluded_paths:
+                continue
             # Upload media, metadata, manifests, and sidecars while skipping scratch files.
             if (
                 not (filename.endswith((".mp4", ".json", ".srt")))
@@ -689,6 +695,8 @@ def hydrate_job_artifacts(directory, job_id):
                 continue
             destination = os.path.join(output_path, filename)
             if not os.path.abspath(destination).startswith(output_path + os.sep):
+                continue
+            if os.path.isfile(destination) and os.path.getsize(destination) > 0:
                 continue
             os.makedirs(os.path.dirname(destination), exist_ok=True)
             client.download_file(bucket_name, key, destination)

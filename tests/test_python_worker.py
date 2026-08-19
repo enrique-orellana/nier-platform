@@ -228,6 +228,39 @@ def test_cleanup_generation_scratch_removes_only_job_scoped_directory(tmp_path):
     assert not job_root.exists()
 
 
+def test_cleanup_generation_scratch_preserves_selected_source(tmp_path):
+    job_root = tmp_path / "job-1"
+    job_root.mkdir()
+    source = job_root / "source.mp4"
+    source.write_bytes(b"source")
+    (job_root / "source_metadata.json").write_text("{}", encoding="utf-8")
+    (job_root / "rendered_clip.mp4").write_bytes(b"clip")
+    scratch = job_root / "manifests"
+    scratch.mkdir()
+    (scratch / "clip.json").write_text("{}", encoding="utf-8")
+
+    cleanup_generation_scratch(str(job_root), "job-1", preserve_paths=[str(source)])
+
+    assert source.read_bytes() == b"source"
+    assert not (job_root / "source_metadata.json").exists()
+    assert not (job_root / "rendered_clip.mp4").exists()
+    assert not scratch.exists()
+
+
+def test_upload_generation_artifacts_forwards_exclusions(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_upload(directory, job_id, excluded_paths=None):
+        calls.append((directory, job_id, excluded_paths))
+        return True
+
+    monkeypatch.setenv("AWS_S3_BUCKET", "openshorts-media")
+    monkeypatch.setattr("s3_uploader.upload_job_artifacts", fake_upload)
+
+    assert upload_generation_artifacts(str(tmp_path), "job-1", {"source.mp4"}) is True
+    assert calls == [(str(tmp_path), "job-1", {"source.mp4"})]
+
+
 def test_thumbnail_publish_status_returns_persisted_result():
     tmp_path = Path(".cache") / "python-worker-publish-test"
     tmp_path.mkdir(parents=True, exist_ok=True)

@@ -115,22 +115,34 @@ def load_generation_result(output_dir: str) -> dict[str, Any]:
     return result
 
 
-def upload_generation_artifacts(output_dir: str, job_id: str) -> bool:
+def upload_generation_artifacts(output_dir: str, job_id: str, excluded_paths=None) -> bool:
     """Publish generated media to the configured MinIO/S3 output bucket."""
     if not str(os.environ.get("AWS_S3_BUCKET") or "").strip():
         return False
     from s3_uploader import upload_job_artifacts
 
+    if excluded_paths:
+        return bool(upload_job_artifacts(output_dir, job_id, excluded_paths=excluded_paths))
     return bool(upload_job_artifacts(output_dir, job_id))
 
 
-def cleanup_generation_scratch(output_dir: str, job_id: str) -> None:
-    """Remove a completed job's local scratch directory after S3 persistence."""
+def cleanup_generation_scratch(output_dir: str, job_id: str, preserve_paths=None) -> None:
+    """Remove completed job scratch while retaining explicitly preserved files."""
     job_id = str(job_id or "").strip()
     output_path = Path(output_dir).resolve()
     if not job_id or output_path.name != job_id:
         raise ValueError("refusing to remove a non-job-scoped output directory")
-    shutil.rmtree(output_path)
+    preserved = {Path(path).resolve() for path in (preserve_paths or [])}
+    if not preserved:
+        shutil.rmtree(output_path)
+        return
+    for child in output_path.iterdir():
+        if child.resolve() in preserved:
+            continue
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
 
 
 def build_clip_generation_environment(request: Mapping[str, Any]) -> dict[str, str]:
@@ -155,13 +167,25 @@ def _emit(event: Mapping[str, Any]) -> None:
 def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any] | None]:
     output_dir = str(request.get("output_dir") or "")
     artifact_job_id = str(request.get("parent_job_id") or request["id"])
-    if str(request.get("operation") or "") == "clip_render":
+    operation = str(request.get("operation") or "")
+    source_path = str(request.get("source_path") or "").strip()
+    excluded_paths = set()
+    preserve_paths = []
+    if operation == "clip_render" and source_path:
+        output_root = Path(output_dir).resolve()
+        candidate = Path(source_path).resolve()
+        try:
+            excluded_paths.add(candidate.relative_to(output_root).as_posix())
+            preserve_paths.append(str(candidate))
+        except ValueError:
+            pass
+    if operation == "clip_render":
         from s3_uploader import hydrate_job_artifacts
 
         hydrate_job_artifacts(output_dir, artifact_job_id)
     command = (
         build_clip_render_command(request)
-        if str(request.get("operation") or "") == "clip_render"
+        if operation == "clip_render"
         else build_clip_generation_command(request)
     )
     environment = build_clip_generation_environment(request)
@@ -180,10 +204,18 @@ def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any
     exit_code = process.wait()
     if exit_code != 0:
         return exit_code, None
-    uploaded = upload_generation_artifacts(output_dir, artifact_job_id)
+    uploaded = upload_generation_artifacts(
+        output_dir,
+        artifact_job_id,
+        excluded_paths=excluded_paths or None,
+    )
     result = load_generation_result(output_dir)
     if uploaded:
-        cleanup_generation_scratch(output_dir, artifact_job_id)
+        cleanup_generation_scratch(
+            output_dir,
+            artifact_job_id,
+            preserve_paths=preserve_paths or None,
+        )
     return exit_code, result
 
 

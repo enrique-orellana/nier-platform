@@ -140,6 +140,56 @@ class S3ClipUrlTests(unittest.TestCase):
             self.assertEqual(Path(directory, "source_metadata.json").read_bytes(), b"job-1/source_metadata.json")
             self.assertEqual(Path(directory, "manifests", "clip_0.json").read_bytes(), b"job-1/manifests/clip_0.json")
 
+    def test_hydrate_job_artifacts_reuses_existing_non_empty_files(self):
+        class FakePaginator:
+            def paginate(self, **kwargs):
+                assert kwargs == {"Bucket": "openshorts-media", "Prefix": "job-1/"}
+                return [{"Contents": [
+                    {"Key": "job-1/source.mp4"},
+                    {"Key": "job-1/source_metadata.json"},
+                ]}]
+
+        class FakeS3Client:
+            def __init__(self):
+                self.downloads = []
+
+            def get_paginator(self, name):
+                assert name == "list_objects_v2"
+                return FakePaginator()
+
+            def download_file(self, bucket, key, destination):
+                self.downloads.append((bucket, key, destination))
+                Path(destination).write_bytes(key.encode("utf-8"))
+
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory, "source.mp4")
+            source.write_bytes(b"existing-source")
+            client = FakeS3Client()
+            with patch.object(s3_uploader, "get_s3_client", return_value=client):
+                hydrated = s3_uploader.hydrate_job_artifacts(directory, "job-1")
+
+            self.assertEqual(hydrated, 1)
+            self.assertEqual(source.read_bytes(), b"existing-source")
+            self.assertEqual(client.downloads[0][1], "job-1/source_metadata.json")
+
+    def test_upload_job_artifacts_can_exclude_worker_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "source.mp4").write_bytes(b"source")
+            Path(directory, "source_metadata.json").write_text("{}", encoding="utf-8")
+
+            with patch.object(s3_uploader, "upload_file_to_s3", return_value=True) as upload:
+                self.assertTrue(
+                    s3_uploader.upload_job_artifacts(
+                        directory,
+                        "job-1",
+                        excluded_paths={"source.mp4"},
+                    )
+                )
+
+            uploaded = [call.args[2] for call in upload.call_args_list]
+            self.assertNotIn("job-1/source.mp4", uploaded)
+            self.assertIn("job-1/source_metadata.json", uploaded)
+
 
 if __name__ == "__main__":
     unittest.main()
