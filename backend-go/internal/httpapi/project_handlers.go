@@ -135,12 +135,17 @@ func (s *Server) readPersistedProjectClips(job domain.Job) ([]map[string]any, ti
 	if len(resultBytes) == 0 {
 		return nil, time.Time{}, false
 	}
+	var payload map[string]any
+	if json.Unmarshal(resultBytes, &payload) != nil {
+		return nil, time.Time{}, false
+	}
 	var result struct {
 		Clips []map[string]any `json:"clips"`
 	}
 	if json.Unmarshal(resultBytes, &result) != nil || len(result.Clips) == 0 {
 		return nil, time.Time{}, false
 	}
+	masterDuration := sourceDurationFromMetadata(payload)
 	for _, clip := range result.Clips {
 		if filename, ok := clip["video_filename"].(string); ok && filename != "" {
 			clip["video_url"] = s.directArtifactURL(job.ID, filename)
@@ -149,6 +154,9 @@ func (s *Server) readPersistedProjectClips(job domain.Job) ([]map[string]any, ti
 			clip["source_video_url"] = s.directArtifactURL(job.ID, sourceFilename)
 		}
 		clip["job_id"] = job.ID
+		if masterDuration > 0 {
+			clip["master_duration"] = masterDuration
+		}
 	}
 	createdAt := job.CreatedAt
 	if createdAt.IsZero() {

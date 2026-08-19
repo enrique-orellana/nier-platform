@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
+	"github.com/mutonby/openshorts/backend-go/internal/media"
 )
 
 type deferredClipResult struct {
@@ -163,6 +164,45 @@ func sourceDurationFromMetadata(metadata map[string]any) float64 {
 		return value
 	}
 	return 0
+}
+
+func isGeneratedSubtitleTrack(track map[string]any) bool {
+	id, _ := track["id"].(string)
+	origin, _ := track["origin"].(string)
+	return strings.EqualFold(strings.TrimSpace(id), "original") || strings.EqualFold(strings.TrimSpace(origin), "generated")
+}
+
+func refreshGeneratedClipSubtitles(clip map[string]any, transcript map[string]any, start, end float64) bool {
+	if len(transcript) == 0 {
+		return false
+	}
+	captions := media.BuildSubtitleCues(transcript, start, end)
+	updated := false
+	if tracks, ok := clip["subtitle_tracks"].([]any); ok {
+		for _, rawTrack := range tracks {
+			track, ok := rawTrack.(map[string]any)
+			if !ok || !isGeneratedSubtitleTrack(track) {
+				continue
+			}
+			track["cues"] = captions
+			track["captions"] = captions
+			updated = true
+		}
+	}
+	if track, ok := clip["subtitles"].(map[string]any); ok && isGeneratedSubtitleTrack(track) {
+		track["cues"] = captions
+		track["captions"] = captions
+		updated = true
+	}
+	if updated {
+		if layers, ok := clip["layers"].(map[string]any); ok {
+			if subtitleLayer, ok := layers["subtitles"].(map[string]any); ok {
+				subtitleLayer["cues"] = captions
+				subtitleLayer["captions"] = captions
+			}
+		}
+	}
+	return updated
 }
 
 func (region webcamRegion) asMap() map[string]any {
@@ -469,6 +509,8 @@ func (s *Server) updateClipSourceRange(w http.ResponseWriter, r *http.Request, p
 	}
 	metadataClip["start"] = start
 	metadataClip["end"] = end
+	transcript, _ := metadata["transcript"].(map[string]any)
+	refreshGeneratedClipSubtitles(metadataClip, transcript, start, end)
 	updatedMetadata, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not encode deferred job metadata"})
@@ -490,6 +532,7 @@ func (s *Server) updateClipSourceRange(w http.ResponseWriter, r *http.Request, p
 	}
 	result.Clips[clipIndex]["start"] = start
 	result.Clips[clipIndex]["end"] = end
+	refreshGeneratedClipSubtitles(result.Clips[clipIndex], transcript, start, end)
 	updatedResult, err := json.Marshal(result)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not encode clip result"})
@@ -500,9 +543,11 @@ func (s *Server) updateClipSourceRange(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"clip_index": clipIndex,
-		"start":      start,
-		"end":        end,
+		"clip_index":      clipIndex,
+		"start":           start,
+		"end":             end,
+		"subtitles":       result.Clips[clipIndex]["subtitles"],
+		"subtitle_tracks": result.Clips[clipIndex]["subtitle_tracks"],
 	})
 }
 

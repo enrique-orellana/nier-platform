@@ -931,6 +931,71 @@ func TestDeferredClipSourceRangePatchPersistsResultAndMetadata(t *testing.T) {
 	}
 }
 
+func TestDeferredClipSourceRangePatchRegeneratesExistingSubtitlesWithoutAI(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	outputDir := t.TempDir()
+	parent, jobDir := createDeferredRegionTestJob(t, store, outputDir, `{"clips":[{"start":176,"end":204,"subtitle_tracks":[{"id":"original","origin":"generated","cues":[{"text":"old","startMs":0,"endMs":1000}],"captions":[{"text":"old","startMs":0,"endMs":1000}]}],"subtitles":{"id":"original","origin":"generated","cues":[{"text":"old","startMs":0,"endMs":1000}],"captions":[{"text":"old","startMs":0,"endMs":1000}]},"layers":{"subtitles":{"captions":[{"text":"old","startMs":0,"endMs":1000}]}}}]}`)
+	if err := os.WriteFile(filepath.Join(jobDir, "source_metadata.json"), []byte(`{"source_asset":{"probe":{"duration_seconds":3577}},"transcript":{"language":"en","segments":[{"words":[{"word":"Earlier","start":155,"end":156},{"word":"Inside","start":180,"end":181},{"word":"Later","start":220,"end":221}]}]},"shorts":[{"start":176,"end":204,"subtitle_tracks":[{"id":"original","origin":"generated","cues":[{"text":"old","startMs":0,"endMs":1000}],"captions":[{"text":"old","startMs":0,"endMs":1000}]}],"subtitles":{"id":"original","origin":"generated","cues":[{"text":"old","startMs":0,"endMs":1000}],"captions":[{"text":"old","startMs":0,"endMs":1000}]},"layers":{"subtitles":{"captions":[{"text":"old","startMs":0,"endMs":1000}]}}}]}`), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+
+	request := httptest.NewRequest(
+		http.MethodPatch,
+		fmt.Sprintf("/api/jobs/%s/clips/0/source-range", parent.ID),
+		strings.NewReader(`{"start":150,"end":230}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected source range patch to succeed, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var payload struct {
+		SubtitleTracks []map[string]any `json:"subtitle_tracks"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode source range response: %v", err)
+	}
+	if len(payload.SubtitleTracks) != 1 {
+		t.Fatalf("expected regenerated subtitle track in response: %#v", payload)
+	}
+	if cues := payload.SubtitleTracks[0]["cues"].([]any); len(cues) != 3 || cues[0].(map[string]any)["text"] != "Earlier" || cues[0].(map[string]any)["startMs"] != 5000.0 || cues[2].(map[string]any)["startMs"] != 70000.0 {
+		t.Fatalf("unexpected regenerated cues: %#v", payload.SubtitleTracks[0]["cues"])
+	}
+
+	updated, ok := store.Get(context.Background(), parent.ID)
+	if !ok {
+		t.Fatal("parent job disappeared")
+	}
+	var result struct {
+		Clips []map[string]any `json:"clips"`
+	}
+	if err := json.Unmarshal(updated.Result, &result); err != nil {
+		t.Fatalf("decode stored result: %v", err)
+	}
+	resultCues := result.Clips[0]["subtitle_tracks"].([]any)[0].(map[string]any)["cues"].([]any)
+	if resultCues[0].(map[string]any)["text"] != "Earlier" {
+		t.Fatalf("stored result subtitles were not regenerated: %#v", resultCues)
+	}
+
+	metadata, err := os.ReadFile(filepath.Join(jobDir, "source_metadata.json"))
+	if err != nil {
+		t.Fatalf("read metadata: %v", err)
+	}
+	var document struct {
+		Shorts []map[string]any `json:"shorts"`
+	}
+	if err := json.Unmarshal(metadata, &document); err != nil {
+		t.Fatalf("decode metadata: %v", err)
+	}
+	metadataCues := document.Shorts[0]["subtitle_tracks"].([]any)[0].(map[string]any)["cues"].([]any)
+	if metadataCues[2].(map[string]any)["text"] != "Later" {
+		t.Fatalf("stored metadata subtitles were not regenerated: %#v", metadataCues)
+	}
+}
+
 func TestDeferredClipSourceRangePatchRejectsInvalidRanges(t *testing.T) {
 	store := jobs.NewMemoryStore()
 	outputDir := t.TempDir()
@@ -1587,7 +1652,7 @@ func TestProjectHistoryReadsPersistedJobResultWithoutLocalFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create job: %v", err)
 	}
-	if err := store.SetResult(context.Background(), job.ID, []byte(`{"clips":[{"title":"First clip","video_filename":"clip.mp4"}]}`)); err != nil {
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"source_asset":{"probe":{"duration_seconds":3577}},"clips":[{"title":"First clip","video_filename":"clip.mp4"}]}`)); err != nil {
 		t.Fatalf("set result: %v", err)
 	}
 	server := NewServerWithStore(config.Config{OutputDir: t.TempDir()}, store)
@@ -1595,7 +1660,7 @@ func TestProjectHistoryReadsPersistedJobResultWithoutLocalFiles(t *testing.T) {
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, request)
 
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"job_id":"`+job.ID+`"`) || !strings.Contains(response.Body.String(), `"video_url":"/videos/`+job.ID+`/clip.mp4"`) {
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"job_id":"`+job.ID+`"`) || !strings.Contains(response.Body.String(), `"video_url":"/videos/`+job.ID+`/clip.mp4"`) || !strings.Contains(response.Body.String(), `"master_duration":3577`) {
 		t.Fatalf("unexpected project history response: %d %s", response.Code, response.Body.String())
 	}
 }

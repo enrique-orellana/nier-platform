@@ -104,6 +104,81 @@ describe("ProjectLibrary", () => {
     expect(screen.getByText("2 clips", { exact: false })).toBeInTheDocument();
   });
 
+  it("applies regenerated subtitles returned with an updated clip range", async () => {
+    const fetchMock = vi.fn((url) => {
+      if (String(url).includes("/api/projects/history")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            projects: [
+              {
+                job_id: "job-range",
+                title: "Range project",
+                source_duration_seconds: 3577,
+                clips: [
+                  {
+                    index: 0,
+                    start: 176,
+                    end: 204,
+                    video_url: "/videos/job-range/clip.mp4",
+                    subtitle_tracks: [
+                      {
+                        id: "original",
+                        origin: "generated",
+                        captions: [{ text: "Old", startMs: 0, endMs: 1000 }],
+                      },
+                    ],
+                    active_subtitle_track_id: "original",
+                  },
+                ],
+                clip_count: 1,
+              },
+            ],
+          }),
+        });
+      }
+      if (String(url).includes("/api/jobs/job-range/clips/0/source-range")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            start: 150,
+            end: 230,
+            subtitle_tracks: [
+              {
+                id: "original",
+                origin: "generated",
+                captions: [{ text: "Updated", startMs: 5000, endMs: 6000 }],
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectLibrary projectId="job-range" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Trim Range" }));
+    fireEvent.change(screen.getByTestId("clip-range-start"), {
+      target: { value: "150" },
+    });
+    fireEvent.change(screen.getByTestId("clip-range-end"), {
+      target: { value: "230" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save clip range" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/jobs/job-range/clips/0/source-range",
+        expect.objectContaining({ method: "PATCH" }),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Subtitle details" }));
+    expect(await screen.findByText("Updated")).toBeInTheDocument();
+    expect(screen.queryByText("Old")).not.toBeInTheDocument();
+  });
+
   it("does not nest the delete button inside the project card control", async () => {
     vi.stubGlobal(
       "fetch",

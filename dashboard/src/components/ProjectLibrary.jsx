@@ -602,12 +602,24 @@ export default function ProjectLibrary({
         start: Number(payload.start),
         end: Number(payload.end),
       };
+      const savedSubtitleFields = {};
+      if (Array.isArray(payload.subtitle_tracks)) {
+        savedSubtitleFields.subtitle_tracks = payload.subtitle_tracks;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, "subtitles")) {
+        savedSubtitleFields.subtitles = payload.subtitles;
+      }
+      if (payload.layers && typeof payload.layers === "object") {
+        savedSubtitleFields.layers = payload.layers;
+      }
       setProjectClips((current) =>
         current.map((clip, index) => {
           const currentIndex = Number.isInteger(clip.index)
             ? clip.index
             : index;
-          return currentIndex === clipIndex ? { ...clip, ...savedRange } : clip;
+          return currentIndex === clipIndex
+            ? { ...clip, ...savedRange, ...savedSubtitleFields }
+            : clip;
         }),
       );
       return savedRange;
