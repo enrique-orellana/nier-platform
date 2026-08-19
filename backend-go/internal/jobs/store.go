@@ -40,20 +40,32 @@ type Store interface {
 	AppendLog(context.Context, string, string) error
 	SetResult(context.Context, string, []byte) error
 	SetOutputDir(context.Context, string, string) error
+	GetClipStatuses(context.Context, string) (map[int]ClipStatus, error)
+	SetClipStatus(context.Context, string, int, string) (ClipStatus, error)
 	Claim(context.Context, string) (domain.Job, error)
 	ListByStatus(context.Context, domain.JobStatus) ([]domain.Job, error)
 	ListByKind(context.Context, string) ([]domain.Job, error)
 	RequeueProcessing(context.Context) error
 }
 
+type ClipStatus struct {
+	Status    string
+	UpdatedAt time.Time
+}
+
 type MemoryStore struct {
-	mu       sync.RWMutex
-	jobs     map[string]domain.Job
-	projects map[string]domain.HighlightProject
+	mu           sync.RWMutex
+	jobs         map[string]domain.Job
+	projects     map[string]domain.HighlightProject
+	clipStatuses map[string]map[int]ClipStatus
 }
 
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{jobs: make(map[string]domain.Job), projects: make(map[string]domain.HighlightProject)}
+	return &MemoryStore{
+		jobs:         make(map[string]domain.Job),
+		projects:     make(map[string]domain.HighlightProject),
+		clipStatuses: make(map[string]map[int]ClipStatus),
+	}
 }
 
 func (s *MemoryStore) Create(_ context.Context, input domain.CreateJobInput) (domain.Job, error) {
@@ -303,6 +315,7 @@ func (s *MemoryStore) DeleteJob(_ context.Context, id string) error {
 	}
 	for jobID := range removed {
 		delete(s.jobs, jobID)
+		delete(s.clipStatuses, jobID)
 	}
 	return nil
 }
@@ -440,6 +453,30 @@ func (s *MemoryStore) SetOutputDir(_ context.Context, id, outputDir string) erro
 	job.UpdatedAt = time.Now().UTC()
 	s.jobs[id] = job
 	return nil
+}
+
+func (s *MemoryStore) GetClipStatuses(_ context.Context, projectID string) (map[int]ClipStatus, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	statuses := make(map[int]ClipStatus)
+	for index, status := range s.clipStatuses[projectID] {
+		statuses[index] = status
+	}
+	return statuses, nil
+}
+
+func (s *MemoryStore) SetClipStatus(_ context.Context, projectID string, clipIndex int, status string) (ClipStatus, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.jobs[projectID]; !ok {
+		return ClipStatus{}, ErrJobNotFound
+	}
+	if s.clipStatuses[projectID] == nil {
+		s.clipStatuses[projectID] = make(map[int]ClipStatus)
+	}
+	value := ClipStatus{Status: status, UpdatedAt: time.Now().UTC()}
+	s.clipStatuses[projectID][clipIndex] = value
+	return value, nil
 }
 
 func allowedTransition(current, next domain.JobStatus) bool {

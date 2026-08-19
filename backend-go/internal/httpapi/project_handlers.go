@@ -29,7 +29,7 @@ func (s *Server) projectRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.Method == http.MethodGet && len(parts) == 2 && parts[1] == "statuses":
-		s.getProjectStatuses(w, jobID)
+		s.getProjectStatuses(w, r, jobID)
 	case r.Method == http.MethodPatch && len(parts) == 4 && parts[1] == "clips" && parts[3] == "status":
 		s.updateProjectStatus(w, r, job, parts[2])
 	case r.Method == http.MethodDelete && len(parts) == 1:
@@ -232,31 +232,20 @@ func (s *Server) readProjectClips(jobID string) ([]map[string]any, time.Time, bo
 	return data.Shorts, info.ModTime().UTC(), true
 }
 
-func (s *Server) projectStatusPath(jobID string) string {
-	root := s.config.OutputDir
-	if root == "" {
-		root = "output"
-	}
-	return filepath.Join(root, jobID, "clip_statuses.json")
-}
-
-func (s *Server) getProjectStatuses(w http.ResponseWriter, jobID string) {
-	path := s.projectStatusPath(jobID)
-	contents, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		writeJSON(w, http.StatusOK, map[string]any{"clips": map[string]any{}})
-		return
-	}
+func (s *Server) getProjectStatuses(w http.ResponseWriter, r *http.Request, jobID string) {
+	statuses, err := s.store.GetClipStatuses(r.Context(), jobID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
 		return
 	}
-	var document map[string]any
-	if err := json.Unmarshal(contents, &document); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Invalid project status document"})
-		return
+	clips := make(map[string]any, len(statuses))
+	for index, status := range statuses {
+		clips[strconv.Itoa(index)] = map[string]any{
+			"status":     status.Status,
+			"updated_at": status.UpdatedAt.Format(time.RFC3339Nano),
+		}
 	}
-	writeJSON(w, http.StatusOK, document)
+	writeJSON(w, http.StatusOK, map[string]any{"clips": clips})
 }
 
 func (s *Server) updateProjectStatus(w http.ResponseWriter, r *http.Request, job domain.Job, rawIndex string) {
@@ -284,48 +273,12 @@ func (s *Server) updateProjectStatus(w http.ResponseWriter, r *http.Request, job
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"detail": "Invalid clip status"})
 		return
 	}
-	updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
-	document := map[string]any{"clips": map[string]any{}}
-	if contents, err := os.ReadFile(s.projectStatusPath(job.ID)); err == nil {
-		_ = json.Unmarshal(contents, &document)
-	}
-	clips, _ := document["clips"].(map[string]any)
-	if clips == nil {
-		clips = make(map[string]any)
-	}
-	clips[strconv.Itoa(clipIndex)] = map[string]any{"status": request.Status, "updated_at": updatedAt}
-	document["clips"] = clips
-	if err := s.writeProjectStatus(job.ID, document); err != nil {
+	status, err := s.store.SetClipStatus(r.Context(), job.ID, clipIndex, request.Status)
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"job_id": job.ID, "clip_index": clipIndex, "status": request.Status, "updated_at": updatedAt})
-}
-
-func (s *Server) writeProjectStatus(jobID string, document map[string]any) error {
-	path := s.projectStatusPath(jobID)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".clip-status-*.tmp")
-	if err != nil {
-		return err
-	}
-	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
-	encoded, err := json.MarshalIndent(document, "", "  ")
-	if err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(encoded); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	return os.Rename(temporaryName, path)
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": job.ID, "clip_index": clipIndex, "status": status.Status, "updated_at": status.UpdatedAt.Format(time.RFC3339Nano)})
 }
 
 func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request, jobID string) {

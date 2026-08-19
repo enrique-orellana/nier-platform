@@ -617,6 +617,47 @@ func (s *PostgresStore) SetOutputDir(ctx context.Context, id, outputDir string) 
 	return nil
 }
 
+func (s *PostgresStore) GetClipStatuses(ctx context.Context, projectID string) (map[int]ClipStatus, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT clip_index, status, updated_at
+		FROM clip_statuses
+		WHERE project_id = $1
+		ORDER BY clip_index
+	`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get clip statuses: %w", err)
+	}
+	defer rows.Close()
+	statuses := make(map[int]ClipStatus)
+	for rows.Next() {
+		var index int
+		var status ClipStatus
+		if err := rows.Scan(&index, &status.Status, &status.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan clip status: %w", err)
+		}
+		statuses[index] = status
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate clip statuses: %w", err)
+	}
+	return statuses, nil
+}
+
+func (s *PostgresStore) SetClipStatus(ctx context.Context, projectID string, clipIndex int, status string) (ClipStatus, error) {
+	var updatedAt time.Time
+	err := s.db.QueryRowContext(ctx, `
+		INSERT INTO clip_statuses (project_id, clip_index, status, updated_at)
+		VALUES ($1, $2, $3, now())
+		ON CONFLICT (project_id, clip_index)
+		DO UPDATE SET status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
+		RETURNING updated_at
+	`, projectID, clipIndex, status).Scan(&updatedAt)
+	if err != nil {
+		return ClipStatus{}, fmt.Errorf("set clip status: %w", err)
+	}
+	return ClipStatus{Status: status, UpdatedAt: updatedAt}, nil
+}
+
 func (s *PostgresStore) ListByKind(ctx context.Context, kind string) ([]domain.Job, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, COALESCE(project_id::text, ''), status, COALESCE(source_url, ''), clip_count, output_dir, COALESCE(parent_job_id::text, ''), clip_index, metadata, result, COALESCE(error, ''), created_at, updated_at FROM jobs WHERE kind = $1 ORDER BY created_at, id`, kind)
 	if err != nil {

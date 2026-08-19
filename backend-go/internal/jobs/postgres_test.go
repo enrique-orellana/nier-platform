@@ -67,6 +67,46 @@ func TestPostgresStorePersistsJobAcrossReopen(t *testing.T) {
 	}
 }
 
+func TestPostgresStorePersistsClipStatusAcrossReopen(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not configured")
+	}
+	ctx := context.Background()
+	first, err := OpenPostgresStore(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open first store: %v", err)
+	}
+	job, err := first.Create(ctx, domain.CreateJobInput{Kind: "postgres-clip-status-test"})
+	if err != nil {
+		_ = first.Close()
+		t.Fatalf("create job: %v", err)
+	}
+	if _, err := first.SetClipStatus(ctx, job.ID, 2, "discarded"); err != nil {
+		_ = first.Close()
+		t.Fatalf("set clip status: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first store: %v", err)
+	}
+
+	second, err := OpenPostgresStore(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open second store: %v", err)
+	}
+	defer second.Close()
+	defer second.db.ExecContext(ctx, `DELETE FROM clip_statuses WHERE project_id = $1`, job.ID)
+	defer second.db.ExecContext(ctx, `DELETE FROM jobs WHERE id = $1`, job.ID)
+	statuses, err := second.GetClipStatuses(ctx, job.ID)
+	if err != nil {
+		t.Fatalf("get clip statuses: %v", err)
+	}
+	status, ok := statuses[2]
+	if !ok || status.Status != "discarded" || status.UpdatedAt.IsZero() {
+		t.Fatalf("clip status did not persist across reopen: %#v", statuses)
+	}
+}
+
 func TestPostgresStorePersistsClipRenderIdentityAndDeduplicates(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {

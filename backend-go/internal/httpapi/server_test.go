@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -1600,7 +1601,7 @@ func TestClipTranscriptRouteReadsMetadataFromS3WhenLocalOutputMissing(t *testing
 	}
 }
 
-func TestProjectClipStatusesUseGoSidecarContract(t *testing.T) {
+func TestProjectClipStatusesPersistInStoreInsteadOfSidecar(t *testing.T) {
 	outputDir := t.TempDir()
 	store := jobs.NewMemoryStore()
 	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
@@ -1619,7 +1620,13 @@ func TestProjectClipStatusesUseGoSidecarContract(t *testing.T) {
 	if patchRes.Code != http.StatusOK || !strings.Contains(patchRes.Body.String(), `"status":"discarded"`) {
 		t.Fatalf("unexpected status update: %d %s", patchRes.Code, patchRes.Body.String())
 	}
+	if _, err := os.Stat(filepath.Join(outputDir, job.ID, "clip_statuses.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("clip status was written to sidecar: %v", err)
+	}
 
+	// A fresh server with a different output directory simulates a restart or
+	// redeploy where local/object storage is unavailable to the API process.
+	server = NewServerWithStore(config.Config{OutputDir: t.TempDir()}, store)
 	getReq := httptest.NewRequest(http.MethodGet, "/api/projects/"+job.ID+"/statuses", nil)
 	getRes := httptest.NewRecorder()
 	server.Handler().ServeHTTP(getRes, getReq)
