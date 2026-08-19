@@ -5,7 +5,7 @@
   "profile": "high",
   "h264_level": "4.2",
   "crf": 14,
-  "preset": "veryslow",
+  "preset": "fast",
   "pixel_format": "yuv420p",
   "output_width": 1080,
   "output_height": 1920,

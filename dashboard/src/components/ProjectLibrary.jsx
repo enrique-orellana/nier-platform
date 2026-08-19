@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getApiUrl } from "../config";
+import { activeClipRenderJobs } from "../lib/clipRenderJobs";
 import { toProxiedVideoUrl } from "../lib/videoUrls";
 import { CLIP_WORKFLOW_STATUSES } from "./clipWorkflowStatuses";
 import ResultCard from "./ResultCard";
@@ -303,6 +304,7 @@ export default function ProjectLibrary({
               : [];
         if (statusRes?.ok) {
           const statusPayload = await statusRes.json();
+          setClipRenderJobs(activeClipRenderJobs(statusPayload?.clip_renders));
           clips = mergeAuthoritativeRenderStatuses(
             clips,
             statusPayload?.result?.clips,
@@ -938,29 +940,24 @@ export default function ProjectLibrary({
               }),
             ]);
             if (!response.ok) {
-              finished.push({
-                clipIndex,
-                payload: {
-                  status: "failed",
-                  error:
-                    response.status === 404
-                      ? "Render job no longer exists."
-                      : `Render status request failed (${response.status}).`,
-                },
-              });
+              if (response.status === 404) {
+                finished.push({
+                  clipIndex,
+                  payload: {
+                    status: "failed",
+                    error: "Render job no longer exists.",
+                  },
+                });
+              }
               return;
             }
             if (payload.status === "completed" || payload.status === "failed") {
               finished.push({ clipIndex, payload });
             }
           } catch (error) {
-            finished.push({
-              clipIndex,
-              payload: {
-                status: "failed",
-                error: error?.message || "Render status request failed.",
-              },
-            });
+            if (error?.name !== "AbortError") {
+              console.error("Render status request failed; retrying:", error);
+            }
           } finally {
             clearTimeout(timeoutId);
           }

@@ -18,6 +18,85 @@ describe("ProjectLibrary", () => {
     );
   });
 
+  it("rehydrates an active clip render after mounting the project", async () => {
+    const fetchMock = vi.fn((url) => {
+      const value = String(url);
+      if (value.includes("/api/projects/history")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            projects: [
+              {
+                job_id: "job-recovery",
+                title: "Recovery project",
+                clips: [{ index: 0, title: "Clip 1", start: 0, end: 10 }],
+                clip_count: 1,
+              },
+            ],
+          }),
+        });
+      }
+      if (value.includes("/api/projects/clips/job-recovery")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            clips: [{ index: 0, title: "Clip 1", start: 0, end: 10 }],
+          }),
+        });
+      }
+      if (value.includes("/api/projects/job-recovery/statuses")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ clips: {} }),
+        });
+      }
+      if (value.includes("/api/status/clip-render-recovered")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: "processing" }),
+        });
+      }
+      if (value.includes("/api/status/job-recovery")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: "clips_ready",
+            result: {
+              clips: [
+                {
+                  index: 0,
+                  title: "Clip 1",
+                  start: 0,
+                  end: 10,
+                  render_status: "rendering",
+                },
+              ],
+            },
+            clip_renders: [
+              {
+                clip_index: 0,
+                job_id: "clip-render-recovered",
+                status: "processing",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectLibrary projectId="job-recovery" />);
+
+    expect(await screen.findByText(/Rendering/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/status/clip-render-recovered"),
+        expect.anything(),
+      ),
+    );
+  });
+
   it("allows multiple workflow status filters at once", async () => {
     vi.stubGlobal(
       "fetch",
@@ -557,7 +636,7 @@ describe("ProjectLibrary", () => {
     ).toBeInTheDocument();
   });
 
-  it("stops polling when the child status endpoint returns a server error", async () => {
+  it("keeps polling when the child status endpoint returns a server error", async () => {
     const fetchMock = vi.fn((url, options = {}) => {
       if (String(url).includes("/api/projects/history")) {
         return Promise.resolve({
@@ -607,15 +686,11 @@ describe("ProjectLibrary", () => {
     });
     fireEvent.click(button);
 
-    expect(
-      await screen.findByRole("button", { name: "Retry" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Render status request failed (503)."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Queued/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
 
-  it("fails a render status check when the status request hangs", async () => {
+  it("retries when the render status request hangs", async () => {
     try {
       const fetchMock = vi.fn((url, options = {}) => {
         if (String(url).includes("/api/projects/history")) {
@@ -677,10 +752,10 @@ describe("ProjectLibrary", () => {
       });
       vi.useRealTimers();
 
-      expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+      expect(screen.getByText(/Queued/)).toBeInTheDocument();
       expect(
-        screen.getByText("Render status request timed out."),
-      ).toBeInTheDocument();
+        screen.queryByRole("button", { name: "Retry" }),
+      ).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

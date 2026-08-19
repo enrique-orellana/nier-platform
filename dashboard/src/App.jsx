@@ -73,6 +73,7 @@ import {
   parseRoute,
 } from "./routing";
 import { buildProcessRequest } from "./lib/processRequest";
+import { activeClipRenderJobs } from "./lib/clipRenderJobs";
 
 // Enhanced "Encryption" using XOR + Base64 with a Salt
 // This is better than plain Base64 but still client-side.
@@ -1091,11 +1092,10 @@ function App() {
 
   useEffect(() => {
     let interval;
-    const hasActiveClipRenders = Object.keys(clipRenderJobs).length > 0;
     if (
       (status === "processing" ||
         status === "completed" ||
-        (status === "clips-ready" && hasActiveClipRenders)) &&
+        status === "clips-ready") &&
       jobId
     ) {
       interval = setInterval(async () => {
@@ -1110,20 +1110,9 @@ function App() {
 
           if (data.status === "clips_ready") {
             setStatus("clips-ready");
-            if (data.clip_renders) {
-              setClipRenderJobs((current) => {
-                const next = { ...current };
-                data.clip_renders.forEach((renderJob) => {
-                  if (
-                    renderJob.status === "queued" ||
-                    renderJob.status === "rendering"
-                  ) {
-                    next[renderJob.clip_index] = renderJob.job_id;
-                  }
-                });
-                return next;
-              });
-            }
+            const activeRenders = activeClipRenderJobs(data.clip_renders);
+            setClipRenderJobs(activeRenders);
+            if (Object.keys(activeRenders).length === 0) clearInterval(interval);
           } else if (data.status === "completed") {
             setStatus("complete");
             clearInterval(interval);

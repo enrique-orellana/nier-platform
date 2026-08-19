@@ -36,7 +36,7 @@ func TestSubtitleBurnArgsDoNotUseShellInterpolation(t *testing.T) {
 			t.Fatalf("filter %q does not contain %q", filter, expected)
 		}
 	}
-	for _, pair := range [][]string{{"-c:v", "libx264"}, {"-profile:v", "high"}, {"-level:v", "4.2"}, {"-preset", "veryslow"}, {"-crf", "14"}, {"-pix_fmt", "yuv420p"}, {"-c:a", "aac"}, {"-ar", "48000"}, {"-ac", "2"}, {"-b:a", "192k"}, {"-movflags", "+faststart"}} {
+	for _, pair := range [][]string{{"-c:v", "libx264"}, {"-profile:v", "high"}, {"-level:v", "4.2"}, {"-preset", "fast"}, {"-crf", "14"}, {"-pix_fmt", "yuv420p"}, {"-c:a", "aac"}, {"-ar", "48000"}, {"-ac", "2"}, {"-b:a", "192k"}, {"-movflags", "+faststart"}} {
 		if !containsArgPair(args, pair[0], pair[1]) {
 			t.Fatalf("args %#v does not contain %s %s", args, pair[0], pair[1])
 		}

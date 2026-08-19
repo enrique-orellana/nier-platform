@@ -90,6 +90,20 @@ DEFAULT_SCENE_STRATEGY_WORKERS = max(1, min(8, os.cpu_count() or 1))
 MAX_SCENE_STRATEGY_WORKERS = 32
 
 
+def should_run_person_detection(
+    frame_number,
+    scene_start_frame,
+    last_detection_frame,
+    source_fps,
+    interval_seconds=1.5,
+):
+    """Return whether the periodic YOLO fallback should run for this frame."""
+    if frame_number == scene_start_frame or last_detection_frame < 0:
+        return True
+    interval_frames = max(1, round(source_fps * max(1.0, interval_seconds)))
+    return frame_number - last_detection_frame >= interval_frames
+
+
 def scene_detection_frame_skip() -> int:
     raw_value = os.environ.get("SCENE_DETECTION_FRAME_SKIP", str(DEFAULT_SCENE_FRAME_SKIP))
     try:
@@ -1328,6 +1342,14 @@ def process_video_to_vertical(
     if metrics is not None:
         metrics.increment("clips_started")
     processed_frames = 0
+    try:
+        person_detection_interval_seconds = max(
+            1.0,
+            float(os.environ.get("OPENSHORTS_YOLO_INTERVAL_SECONDS", "1.5")),
+        )
+    except (TypeError, ValueError):
+        person_detection_interval_seconds = 1.5
+    last_yolo_frame = -1
     current_scene_index = 0
 
     while (
@@ -1376,10 +1398,14 @@ def process_video_to_vertical(
                 
                 # Determine Strategy for current frame based on scene
                 current_strategy = scene_strategies[current_scene_index] if current_scene_index < len(scene_strategies) else 'TRACK'
+                is_scene_start = (
+                    frame_number == trim.start_frame
+                    or frame_number == scene_boundaries[current_scene_index][0]
+                )
                 
                 # Apply Strategy
                 if layout_options.layout_format == STREAMER_STACK_LAYOUT:
-                    if streamer_tracking_enabled and frame_number % 2 == 0:
+                    if streamer_tracking_enabled and (frame_number % 2 == 0 or is_scene_start):
                         candidates = filter_candidates_outside_webcam_region(
                             filter_candidates_inside_gameplay_region(
                                 detect_face_candidates(frame),
@@ -1392,8 +1418,15 @@ def process_video_to_vertical(
                             original_height,
                         )
                         target_box = speaker_tracker.get_target(candidates, frame_number, original_width)
-                        if target_box is None:
+                        if target_box is None and should_run_person_detection(
+                            frame_number,
+                            scene_boundaries[current_scene_index][0],
+                            last_yolo_frame,
+                            source_fps,
+                            person_detection_interval_seconds,
+                        ):
                             fallback_box = detect_person_yolo(frame)
+                            last_yolo_frame = frame_number
                             fallback_candidates = filter_candidates_inside_gameplay_region(
                                 [{"box": fallback_box}] if fallback_box else [],
                                 normalized_gameplay_region,
@@ -1434,23 +1467,25 @@ def process_video_to_vertical(
                 else:
                     # "Single Speaker" -> Track & Crop
 
-                    # Detect every 2nd frame for performance
-                    if frame_number % 2 == 0:
+                    # Face tracking remains frequent; gate the expensive YOLO fallback.
+                    if frame_number % 2 == 0 or is_scene_start:
                         candidates = detect_face_candidates(frame)
                         target_box = speaker_tracker.get_target(candidates, frame_number, original_width)
                         if target_box:
                             cameraman.update_target(target_box)
-                        else:
+                        elif should_run_person_detection(
+                            frame_number,
+                            scene_boundaries[current_scene_index][0],
+                            last_yolo_frame,
+                            source_fps,
+                            person_detection_interval_seconds,
+                        ):
                             person_box = detect_person_yolo(frame)
+                            last_yolo_frame = frame_number
                             if person_box:
                                 cameraman.update_target(person_box)
 
                     # Snap camera on scene change to avoid panning from previous scene position
-                    is_scene_start = (
-                        frame_number == trim.start_frame
-                        or frame_number == scene_boundaries[current_scene_index][0]
-                    )
-
                     x1, y1, x2, y2 = cameraman.get_crop_box(force_snap=is_scene_start)
 
                     # Crop

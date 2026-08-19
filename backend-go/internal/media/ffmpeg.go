@@ -35,7 +35,7 @@ type SubtitleStyle struct {
 func SubtitleBurnArgs(inputPath, subtitlePath, outputPath string, style SubtitleStyle) []string {
 	return []string{
 		"-y", "-i", inputPath, "-vf", subtitleFilter(subtitlePath, style),
-		"-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2", "-preset", "veryslow", "-crf", "14",
+		"-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2", "-preset", "fast", "-crf", "14",
 		"-pix_fmt", "yuv420p", "-color_range", "tv", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709",
 		"-video_track_timescale", "90000", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "192k", "-movflags", "+faststart", outputPath,
 	}

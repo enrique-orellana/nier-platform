@@ -3,6 +3,7 @@ import unittest
 import cv2
 
 from clip_timeline import ClipFrameRange, build_audio_seek_filter
+from main import should_run_person_detection
 from video_rendering import build_audio_extract_command, seek_capture_to_frame
 
 
@@ -70,6 +71,13 @@ class VideoRenderingTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "could not decode"):
             seek_capture_to_frame(capture, 120)
+
+    def test_person_detection_runs_at_scene_start(self):
+        self.assertTrue(should_run_person_detection(900, 900, -1, 60.0, 1.5))
+
+    def test_person_detection_waits_for_interval(self):
+        self.assertFalse(should_run_person_detection(930, 900, 900, 60.0, 1.5))
+        self.assertTrue(should_run_person_detection(991, 900, 900, 60.0, 1.5))
 
 
 if __name__ == "__main__":

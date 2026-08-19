@@ -17,6 +17,18 @@ type blockingSchedulerWorker struct {
 	release   chan struct{}
 }
 
+type cancellableSchedulerWorker struct {
+	started  chan struct{}
+	finished chan struct{}
+}
+
+func (w *cancellableSchedulerWorker) Run(ctx context.Context, _ domain.Job, _ string, _ func(string)) error {
+	close(w.started)
+	<-ctx.Done()
+	close(w.finished)
+	return ctx.Err()
+}
+
 func (w *blockingSchedulerWorker) Run(_ context.Context, job domain.Job, _ string, _ func(string)) error {
 	w.mu.Lock()
 	w.active++
@@ -115,5 +127,43 @@ func TestSchedulerRecoversQueuedAndProcessingJobs(t *testing.T) {
 	}
 	if !seen[queued.ID] || !seen[processing.ID] {
 		t.Fatalf("scheduler did not recover both jobs: %#v", seen)
+	}
+}
+
+func TestSchedulerCancelWaitsForWorkerAndReturnsTerminalJob(t *testing.T) {
+	store := NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-render"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	worker := &cancellableSchedulerWorker{
+		started:  make(chan struct{}),
+		finished: make(chan struct{}),
+	}
+	scheduler := NewScheduler(store, &Runner{Store: store, Worker: worker}, 1)
+	if err := scheduler.Start(context.Background()); err != nil {
+		t.Fatalf("start scheduler: %v", err)
+	}
+	defer func() { _ = scheduler.Stop(context.Background()) }()
+	if err := scheduler.Submit(context.Background(), job.ID); err != nil {
+		t.Fatalf("submit job: %v", err)
+	}
+	select {
+	case <-worker.started:
+	case <-time.After(time.Second):
+		t.Fatal("worker did not start")
+	}
+
+	cancelled, err := scheduler.Cancel(context.Background(), job.ID)
+	if err != nil {
+		t.Fatalf("cancel job: %v", err)
+	}
+	if cancelled.Status != domain.JobStatusCancelled {
+		t.Fatalf("expected cancelled job, got %q", cancelled.Status)
+	}
+	select {
+	case <-worker.finished:
+	default:
+		t.Fatal("scheduler returned before worker stopped")
 	}
 }

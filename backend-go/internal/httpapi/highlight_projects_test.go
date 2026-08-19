@@ -176,7 +176,7 @@ func TestHighlightProjectCanRetryAfterFailure(t *testing.T) {
 	t.Fatalf("expected retry job, got %#v", jobsByKind)
 }
 
-func TestHighlightProjectDeleteWaitsForProcessingCancellation(t *testing.T) {
+func TestHighlightProjectDeleteCompletesAfterProcessingCancellation(t *testing.T) {
 	worker := blockingHighlightWorker{started: make(chan struct{})}
 	server, _, _ := newHighlightProjectServerWithWorker(t, worker)
 	projectID := createTestHighlightProject(t, server)
@@ -189,7 +189,7 @@ func TestHighlightProjectDeleteWaitsForProcessingCancellation(t *testing.T) {
 	request := httptest.NewRequest(http.MethodDelete, "/api/highlights/projects/"+projectID, nil)
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, request)
-	if response.Code != http.StatusConflict {
-		t.Fatalf("expected delete to wait for cancellation, got %d: %s", response.Code, response.Body.String())
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("expected delete after cancellation, got %d: %s", response.Code, response.Body.String())
 	}
 }

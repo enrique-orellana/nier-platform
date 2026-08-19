@@ -11,6 +11,11 @@ import (
 
 var ErrSchedulerNotStarted = errors.New("job scheduler is not started")
 
+type runningJob struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
 type Scheduler struct {
 	store  Store
 	runner *Runner
@@ -21,14 +26,14 @@ type Scheduler struct {
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
 	started bool
-	running map[string]context.CancelFunc
+	running map[string]runningJob
 }
 
 func NewScheduler(store Store, runner *Runner, maxConcurrent int) *Scheduler {
 	if maxConcurrent < 1 {
 		maxConcurrent = 1
 	}
-	return &Scheduler{store: store, runner: runner, limit: maxConcurrent, running: make(map[string]context.CancelFunc)}
+	return &Scheduler{store: store, runner: runner, limit: maxConcurrent, running: make(map[string]runningJob)}
 }
 
 func (s *Scheduler) Start(parent context.Context) error {
@@ -58,7 +63,7 @@ func (s *Scheduler) Start(parent context.Context) error {
 	s.mu.Lock()
 	s.queue = make(chan string, s.limit*2)
 	s.cancel = cancel
-	s.running = make(map[string]context.CancelFunc)
+	s.running = make(map[string]runningJob)
 	s.started = true
 	s.mu.Unlock()
 
@@ -115,11 +120,19 @@ func (s *Scheduler) Cancel(ctx context.Context, jobID string) (domain.Job, error
 		return job, nil
 	}
 	s.mu.Lock()
-	cancel := s.running[jobID]
+	run, running := s.running[jobID]
 	s.mu.Unlock()
-	if cancel != nil {
-		cancel()
+	if running {
+		run.cancel()
 		_ = s.store.AppendLog(context.Background(), jobID, "Cancellation requested by user.")
+		select {
+		case <-run.done:
+		case <-ctx.Done():
+			return job, ctx.Err()
+		}
+		if updated, ok := s.store.Get(context.Background(), jobID); ok {
+			return updated, nil
+		}
 	}
 	return job, nil
 }
@@ -132,10 +145,12 @@ func (s *Scheduler) worker(ctx context.Context) {
 			return
 		case jobID := <-s.queue:
 			jobCtx, cancel := context.WithCancel(ctx)
+			done := make(chan struct{})
 			s.mu.Lock()
-			s.running[jobID] = cancel
+			s.running[jobID] = runningJob{cancel: cancel, done: done}
 			s.mu.Unlock()
 			_ = s.runner.RunOnce(jobCtx, jobID)
+			close(done)
 			s.mu.Lock()
 			delete(s.running, jobID)
 			s.mu.Unlock()
