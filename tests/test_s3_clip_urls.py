@@ -97,6 +97,18 @@ class S3ClipUrlTests(unittest.TestCase):
         self.assertIn("job-1/clips/job-1/metadata.json", uploaded_names)
         self.assertNotIn("job-1/clips/job-1/clip_temp_video.mp4", uploaded_names)
 
+    def test_upload_job_artifacts_does_not_publish_clip_status_sidecar(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "clip_statuses.json").write_text(
+                '{"clips": {"0": {"status": "reviewing"}}}',
+                encoding="utf-8",
+            )
+
+            with patch.object(s3_uploader, "upload_file_to_s3", return_value=True) as upload:
+                self.assertFalse(s3_uploader.upload_job_artifacts(directory, "job-1"))
+
+        upload.assert_not_called()
+
     def test_upload_job_artifacts_skips_clip_that_fails_output_validation(self):
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, "clip.mp4").write_bytes(b"broken")
