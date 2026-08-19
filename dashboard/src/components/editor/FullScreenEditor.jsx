@@ -27,6 +27,7 @@ import EditorActionToolbar from "./EditorActionToolbar";
 import LocalEditorTab from "../local-editor/LocalEditorTab";
 import { DEFAULT_SUBTITLE_STYLE } from "../local-editor/localEditorStyles";
 import { HOOK_FONT_FAMILY } from "../../remotion/lib/hookVisual";
+import { resolvePreviewStartSeconds } from "../../lib/videoUrls";
 
 const proxyUrl = (url) => {
   return url;
@@ -255,6 +256,7 @@ export default function FullScreenEditor({
       defaultSubtitleTrackId(initialManifest),
     ),
   );
+  const [localDraftRevision, setLocalDraftRevision] = useState(0);
   const durationSeconds = editorState.durationSec || 30;
   const fps = editorState.fps || clip.output_fps || 30;
 
@@ -340,6 +342,7 @@ export default function FullScreenEditor({
       const nextTrackId = defaultSubtitleTrackId(hydratedManifest);
       setActiveTrackId(nextTrackId);
       setLocalDraft(manifestToLocalEditorState(hydratedManifest, nextTrackId));
+      setLocalDraftRevision((current) => current + 1);
     };
     load().catch(() => {});
     return () => {
@@ -588,6 +591,7 @@ export default function FullScreenEditor({
       const nextTrackId = defaultSubtitleTrackId(hydratedManifest);
       setActiveTrackId(nextTrackId);
       setLocalDraft(manifestToLocalEditorState(hydratedManifest, nextTrackId));
+      setLocalDraftRevision((current) => current + 1);
       setSelectedItem(null);
     } catch {
       /* keep the current draft active when a historical version cannot be loaded */
@@ -636,6 +640,7 @@ export default function FullScreenEditor({
       const nextTrackId = defaultSubtitleTrackId(hydratedManifest);
       setActiveTrackId(nextTrackId);
       setLocalDraft(manifestToLocalEditorState(hydratedManifest, nextTrackId));
+      setLocalDraftRevision((current) => current + 1);
       setSelectedItem(null);
     } catch (branchError) {
       setError(branchError.message);
@@ -745,20 +750,16 @@ export default function FullScreenEditor({
           initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
           initialProjectId={jobId}
           initialClipIndex={clipIndex}
-          initialPlaybackStartMs={
-            clip.video_url
-              ? 0
-              : Math.max(
-                  0,
-                  Number(projectInputProps.videoStartSeconds || 0) * 1000,
-                )
-          }
+          initialPlaybackStartMs={Math.max(
+            0,
+            resolvePreviewStartSeconds(clip) * 1000,
+          )}
           initialPlaybackDurationMs={Math.max(
             1,
             Number(durationSeconds || 0) * 1000,
           )}
           initialEditorState={localDraft}
-          initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}`}
+          initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}:${localDraftRevision}`}
           clipMetadata={{ ...clip, hashtags: publishingMetadata.hashtags }}
           onHashtagsChange={(hashtags) =>
             setPublishingMetadata((current) => ({ ...current, hashtags }))

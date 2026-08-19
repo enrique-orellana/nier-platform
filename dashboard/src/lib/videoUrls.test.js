@@ -64,4 +64,15 @@ describe("resolvePreviewStartSeconds", () => {
       }),
     ).toBe(34.2);
   });
+
+  it("keeps the master offset when the master is exposed as a source preview", () => {
+    expect(
+      resolvePreviewStartSeconds({
+        video_url: "https://s3.test/master.mp4",
+        source_video_url: "https://s3.test/master.mp4",
+        source_preview: true,
+        start: 34.2,
+      }),
+    ).toBe(34.2);
+  });
 });

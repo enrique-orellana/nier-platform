@@ -25,4 +25,8 @@ export const resolveMasterVideoUrl = (clip) =>
   clip?.source_video_url || clip?.original_video_url || clip?.video_url || "";
 
 export const resolvePreviewStartSeconds = (clip) =>
-  clip?.video_url ? 0 : Number(clip?.start || 0);
+  clip?.source_preview
+    ? Number(clip?.start || 0)
+    : clip?.video_url
+      ? 0
+      : Number(clip?.start || 0);

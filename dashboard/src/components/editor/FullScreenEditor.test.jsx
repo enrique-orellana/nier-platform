@@ -859,6 +859,60 @@ describe("FullScreenEditor", () => {
     ).toBeInTheDocument();
   });
 
+  it("applies asynchronously hydrated subtitles when a source preview URL stays unchanged", async () => {
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (String(url).endsWith("/versions")) {
+          return {
+            ok: true,
+            json: async () => ({ current_version_id: "", versions: [] }),
+          };
+        }
+        if (String(url).endsWith("/manifest")) {
+          return {
+            ok: false,
+            status: 404,
+            json: async () => ({ detail: "Clip has no render manifest" }),
+          };
+        }
+        if (String(url).endsWith("/transcript")) {
+          return {
+            ok: true,
+            json: async () => ({
+              language: "es",
+              durationSec: 4,
+              captions: [{ text: "Cargado", startMs: 500, endMs: 1500 }],
+            }),
+          };
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          start: 10,
+          end: 14,
+          output_fps: 30,
+          video_url: "/videos/job/master.mp4",
+          source_video_url: "/videos/job/master.mp4",
+          source_preview: true,
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Cargado" }),
+    ).toBeInTheDocument();
+  });
+
   it("refreshes stale version subtitles when the clip source range was extended", async () => {
     vi.stubGlobal(
       "fetch",
