@@ -147,11 +147,12 @@ func (s *Server) readPersistedProjectClips(job domain.Job) ([]map[string]any, ti
 	}
 	masterDuration := sourceDurationFromMetadata(payload)
 	for _, clip := range result.Clips {
+		clipID := clipArtifactID(job.ID, clip)
 		if filename, ok := clip["video_filename"].(string); ok && filename != "" {
-			clip["video_url"] = s.directArtifactURL(job.ID, filename)
+			clip["video_url"] = s.directClipArtifactURL(job.ID, clipID, filename)
 		}
 		if sourceFilename, ok := clip["source_video_filename"].(string); ok && sourceFilename != "" {
-			clip["source_video_url"] = s.directArtifactURL(job.ID, sourceFilename)
+			clip["source_video_url"] = s.directMasterArtifactURL(job.ID, sourceFilename)
 		}
 		clip["job_id"] = job.ID
 		if masterDuration > 0 {
@@ -169,11 +170,36 @@ func (s *Server) readPersistedProjectClips(job domain.Job) ([]map[string]any, ti
 }
 
 func (s *Server) directArtifactURL(jobID, filename string) string {
+	return s.directClipArtifactURL(jobID, jobID, filename)
+}
+
+func clipArtifactID(jobID string, clip map[string]any) string {
+	if renderJobID, ok := clip["render_job_id"].(string); ok && strings.TrimSpace(renderJobID) != "" {
+		return strings.TrimSpace(renderJobID)
+	}
+	return jobID
+}
+
+func (s *Server) directClipArtifactURL(jobID, clipID, filename string) string {
 	if s.artifactURLOverride != nil {
 		return s.artifactURLOverride(jobID, filename)
 	}
 	if s.s3Store != nil {
-		if directURL, err := s.s3Store.DirectObjectURL(context.Background(), jobID+"/"+filename, 2*time.Hour); err == nil {
+		key := jobID + "/clips/" + clipID + "/" + filename
+		if directURL, err := s.s3Store.DirectObjectURL(context.Background(), key, 2*time.Hour); err == nil {
+			return directURL
+		}
+	}
+	return "/videos/" + jobID + "/" + filename
+}
+
+func (s *Server) directMasterArtifactURL(jobID, filename string) string {
+	if s.artifactURLOverride != nil {
+		return s.artifactURLOverride(jobID, filename)
+	}
+	if s.s3Store != nil {
+		key := jobID + "/master/" + filename
+		if directURL, err := s.s3Store.DirectObjectURL(context.Background(), key, 2*time.Hour); err == nil {
 			return directURL
 		}
 	}
@@ -218,7 +244,7 @@ func (s *Server) readProjectClips(jobID string) ([]map[string]any, time.Time, bo
 			clip["video_url"] = s.directArtifactURL(jobID, filename)
 		}
 		if sourceFilename, ok := clip["source_video_filename"].(string); ok && sourceFilename != "" {
-			clip["source_video_url"] = s.directArtifactURL(jobID, sourceFilename)
+			clip["source_video_url"] = s.directMasterArtifactURL(jobID, sourceFilename)
 		}
 		clip["job_id"] = jobID
 		if masterDuration > 0 {

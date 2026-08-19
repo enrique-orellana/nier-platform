@@ -238,13 +238,8 @@ def resolve_clip_video_url(bucket_name, job_id, base_name, clip, clip_index):
     if not clip_filename:
         clip_filename = f"{base_name}_clip_{clip_index + 1}.mp4"
 
-    clip_key = f"{job_id}/{clip_filename}"
-    s3_client = get_s3_client()
-    if s3_client and not _s3_object_exists(s3_client, bucket_name, clip_key):
-        stem, extension = os.path.splitext(clip_filename)
-        temp_clip_key = f"{job_id}/{stem}_temp_video{extension}"
-        if _s3_object_exists(s3_client, bucket_name, temp_clip_key):
-            clip_key = temp_clip_key
+    clip_id = str(clip.get("render_job_id") or job_id)
+    clip_key = artifact_object_key(job_id, clip_filename, clip_id=clip_id)
     return generate_presigned_url(bucket_name, clip_key, expiration=7200) or stored_url
 
 def list_all_clips(bucket_name=None, limit=50, force_refresh=False):
@@ -647,7 +642,17 @@ def _load_clip_output_policies(directory):
     return policies
 
 
-def upload_job_artifacts(directory, job_id, excluded_paths=None):
+def artifact_object_key(job_id, relative_name, clip_id=None):
+    """Return the canonical object key for a job artifact."""
+    relative_name = str(relative_name).replace("\\", "/").lstrip("/")
+    job_id = str(job_id).strip()
+    if relative_name == "source.mp4" or relative_name.startswith("source.") or relative_name.endswith("_metadata.json"):
+        return f"{job_id}/master/{relative_name}"
+    clip_id = str(clip_id or job_id).strip()
+    return f"{job_id}/clips/{clip_id}/{relative_name}"
+
+
+def upload_job_artifacts(directory, job_id, excluded_paths=None, include_paths=None, clip_id=None):
     """
     Upload all generated clips and metadata for a job to S3.
     """
@@ -660,6 +665,10 @@ def upload_job_artifacts(directory, job_id, excluded_paths=None):
         str(path).replace("\\", "/").lstrip("/")
         for path in (excluded_paths or ())
     }
+    include_paths = {
+        str(path).replace("\\", "/").lstrip("/")
+        for path in (include_paths or ())
+    }
     output_policies = _load_clip_output_policies(directory)
     eligible_count = 0
     all_uploaded = True
@@ -667,6 +676,8 @@ def upload_job_artifacts(directory, job_id, excluded_paths=None):
         for filename in filenames:
             relative_name = os.path.relpath(os.path.join(current_root, filename), directory).replace(os.sep, "/")
             if relative_name in excluded_paths:
+                continue
+            if include_paths and relative_name not in include_paths:
                 continue
             # Upload media, metadata, manifests, and sidecars while skipping scratch files.
             if (
@@ -690,7 +701,7 @@ def upload_job_artifacts(directory, job_id, excluded_paths=None):
                 except (OSError, TypeError, ValueError) as error:
                     logger.warning("Skipping invalid clip artifact %s: %s", relative_name, error)
                     continue
-            s3_key = f"{job_id}/{relative_name}"
+            s3_key = artifact_object_key(job_id, relative_name, clip_id=clip_id)
             eligible_count += 1
             if not upload_file_to_s3(file_path, bucket_name, s3_key):
                 all_uploaded = False
@@ -708,28 +719,32 @@ def hydrate_job_artifacts(directory, job_id):
 
     output_path = os.path.abspath(directory)
     os.makedirs(output_path, exist_ok=True)
-    prefix = f"{job_id}/"
     hydrated = 0
     paginator = client.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
-        for item in page.get("Contents", []):
-            key = str(item.get("Key") or "")
-            filename = key[len(prefix):] if key.startswith(prefix) else ""
-            if not filename or not filename.endswith((".mp4", ".json", ".srt")):
-                continue
-            destination = os.path.join(output_path, filename)
-            if not os.path.abspath(destination).startswith(output_path + os.sep):
-                continue
-            if os.path.isfile(destination) and os.path.getsize(destination) > 0:
-                continue
-            os.makedirs(os.path.dirname(destination), exist_ok=True)
-            client.download_file(
-                bucket_name,
-                key,
-                destination,
-                Config=get_s3_download_config(),
-            )
-            hydrated += 1
+    seen_keys = set()
+    for prefix in (f"{job_id}/master/",):
+        for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+            for item in page.get("Contents", []):
+                key = str(item.get("Key") or "")
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                filename = key[len(prefix):] if key.startswith(prefix) else ""
+                if not filename or not filename.endswith((".mp4", ".json", ".srt")):
+                    continue
+                destination = os.path.join(output_path, filename)
+                if not os.path.abspath(destination).startswith(output_path + os.sep):
+                    continue
+                if os.path.isfile(destination) and os.path.getsize(destination) > 0:
+                    continue
+                os.makedirs(os.path.dirname(destination), exist_ok=True)
+                client.download_file(
+                    bucket_name,
+                    key,
+                    destination,
+                    Config=get_s3_download_config(),
+                )
+                hydrated += 1
     return hydrated
 
 

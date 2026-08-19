@@ -243,7 +243,7 @@ func (s *Server) deferredMetadataPath(ctx context.Context, outputDir, jobID stri
 	if s.s3Store == nil || s.s3Store.Client == nil || s.s3Store.Bucket == "" {
 		return "", err
 	}
-	contents, err := s.s3Store.ReadObject(ctx, jobID+"/source_metadata.json")
+	contents, err := s.s3Store.ReadObject(ctx, jobID+"/master/source_metadata.json")
 	if err != nil {
 		return "", err
 	}
@@ -261,7 +261,7 @@ func (s *Server) persistDeferredMetadata(ctx context.Context, jobID string, cont
 	if s.s3Store == nil || s.s3Store.Client == nil || s.s3Store.Bucket == "" {
 		return nil
 	}
-	return s.s3Store.WriteObject(ctx, jobID+"/source_metadata.json", contents, "application/json")
+	return s.s3Store.WriteObject(ctx, jobID+"/master/source_metadata.json", contents, "application/json")
 }
 
 func (s *Server) clipRenderRoute(w http.ResponseWriter, r *http.Request) {

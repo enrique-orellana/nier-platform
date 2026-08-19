@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/mutonby/openshorts/backend-go/internal/manifests"
 	"github.com/mutonby/openshorts/backend-go/internal/media"
 	"github.com/mutonby/openshorts/backend-go/internal/versions"
@@ -406,16 +404,7 @@ func (s *Server) clipTranscript(w http.ResponseWriter, ctx context.Context, jobI
 	if err == nil && len(metadataFiles) > 0 {
 		contents, err = os.ReadFile(metadataFiles[0])
 	} else if s.s3Store != nil && s.s3Store.Client != nil && s.s3Store.Bucket != "" {
-		object, s3Err := s.s3Store.Client.GetObject(ctx, &s3.GetObjectInput{
-			Bucket: aws.String(s.s3Store.Bucket),
-			Key:    aws.String(jobID + "/source_metadata.json"),
-		})
-		if s3Err == nil {
-			contents, err = io.ReadAll(object.Body)
-			_ = object.Body.Close()
-		} else {
-			err = s3Err
-		}
+		contents, err = s.s3Store.ReadObject(ctx, jobID+"/master/source_metadata.json")
 	}
 	if err != nil || len(contents) == 0 {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Metadata not found"})

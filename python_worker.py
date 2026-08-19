@@ -115,14 +115,21 @@ def load_generation_result(output_dir: str) -> dict[str, Any]:
     return result
 
 
-def upload_generation_artifacts(output_dir: str, job_id: str, excluded_paths=None) -> bool:
+def upload_generation_artifacts(output_dir: str, job_id: str, excluded_paths=None, include_paths=None, clip_id=None) -> bool:
     """Publish generated media to the configured MinIO/S3 output bucket."""
     if not str(os.environ.get("AWS_S3_BUCKET") or "").strip():
         return False
     from s3_uploader import upload_job_artifacts
 
-    if excluded_paths:
-        return bool(upload_job_artifacts(output_dir, job_id, excluded_paths=excluded_paths))
+    if excluded_paths or include_paths or clip_id:
+        upload_options = {}
+        if excluded_paths is not None:
+            upload_options["excluded_paths"] = excluded_paths
+        if include_paths is not None:
+            upload_options["include_paths"] = include_paths
+        if clip_id is not None:
+            upload_options["clip_id"] = clip_id
+        return bool(upload_job_artifacts(output_dir, job_id, **upload_options))
     return bool(upload_job_artifacts(output_dir, job_id))
 
 
@@ -204,12 +211,23 @@ def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any
     exit_code = process.wait()
     if exit_code != 0:
         return exit_code, None
+    result = load_generation_result(output_dir)
+    include_paths = None
+    clip_id = None
+    if operation == "clip_render":
+        clip_index = int(request.get("clip_index") or 0)
+        clips = result.get("clips") or []
+        clip = clips[clip_index] if clip_index < len(clips) else {}
+        clip_filename = clip.get("video_filename") or f"source_clip_{clip_index + 1}.mp4"
+        include_paths = {clip_filename}
+        clip_id = str(request["id"])
     uploaded = upload_generation_artifacts(
         output_dir,
         artifact_job_id,
         excluded_paths=excluded_paths or None,
+        include_paths=include_paths,
+        clip_id=clip_id,
     )
-    result = load_generation_result(output_dir)
     if uploaded:
         cleanup_generation_scratch(
             output_dir,

@@ -261,6 +261,28 @@ def test_upload_generation_artifacts_forwards_exclusions(monkeypatch, tmp_path):
     assert calls == [(str(tmp_path), "job-1", {"source.mp4"})]
 
 
+def test_upload_generation_artifacts_forwards_clip_scope(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_upload(directory, job_id, excluded_paths=None, include_paths=None, clip_id=None):
+        calls.append((directory, job_id, excluded_paths, include_paths, clip_id))
+        return True
+
+    monkeypatch.setenv("AWS_S3_BUCKET", "openshorts-media")
+    monkeypatch.setattr("s3_uploader.upload_job_artifacts", fake_upload)
+
+    assert upload_generation_artifacts(
+        str(tmp_path),
+        "job-1",
+        excluded_paths={"source.mp4"},
+        include_paths={"source_clip_2.mp4"},
+        clip_id="clip-2",
+    ) is True
+    assert calls == [
+        (str(tmp_path), "job-1", {"source.mp4"}, {"source_clip_2.mp4"}, "clip-2")
+    ]
+
+
 def test_thumbnail_publish_status_returns_persisted_result():
     tmp_path = Path(".cache") / "python-worker-publish-test"
     tmp_path.mkdir(parents=True, exist_ok=True)

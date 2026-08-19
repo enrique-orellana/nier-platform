@@ -8,6 +8,20 @@ import s3_uploader
 
 
 class S3ClipUrlTests(unittest.TestCase):
+    def test_artifact_object_key_separates_master_and_clips(self):
+        self.assertEqual(
+            s3_uploader.artifact_object_key("job-1", "source.mp4"),
+            "job-1/master/source.mp4",
+        )
+        self.assertEqual(
+            s3_uploader.artifact_object_key("job-1", "source_metadata.json"),
+            "job-1/master/source_metadata.json",
+        )
+        self.assertEqual(
+            s3_uploader.artifact_object_key("job-1", "source_clip_1.mp4"),
+            "job-1/clips/job-1/source_clip_1.mp4",
+        )
+
     def test_download_transfer_config_is_environment_configurable(self):
         with patch.dict(
             os.environ,
@@ -42,37 +56,31 @@ class S3ClipUrlTests(unittest.TestCase):
                 )
 
         self.assertEqual(result, "fresh-url")
-        presign.assert_called_once_with("openshorts-media", "job-1/clip-1.mp4", expiration=7200)
+        presign.assert_called_once_with(
+            "openshorts-media",
+            "job-1/clips/job-1/clip-1.mp4",
+            expiration=7200,
+        )
 
-    def test_history_clip_url_falls_back_to_uploaded_temp_video(self):
-        class FakeS3Client:
-            def head_object(self, *, Bucket, Key):
-                if Key.endswith("_temp_video.mp4"):
-                    return {}
-                raise s3_uploader.ClientError(
-                    {"Error": {"Code": "404", "Message": "missing"}},
-                    "HeadObject",
-                )
-
+    def test_history_clip_url_uses_only_the_canonical_clip_object(self):
         clip = {
             "video_url": "http://minio.example/media/job-1/source_clip_1.mp4?signature=old",
         }
 
-        with patch.object(s3_uploader, "get_s3_client", return_value=FakeS3Client()):
-            with patch.object(
-                s3_uploader,
-                "generate_presigned_url",
-                side_effect=lambda bucket, key, expiration: f"signed:{key}",
-            ):
-                result = s3_uploader.resolve_clip_video_url(
-                    bucket_name="openshorts-media",
-                    job_id="job-1",
-                    base_name="source",
-                    clip=clip,
-                    clip_index=0,
-                )
+        with patch.object(
+            s3_uploader,
+            "generate_presigned_url",
+            side_effect=lambda bucket, key, expiration: f"signed:{key}",
+        ):
+            result = s3_uploader.resolve_clip_video_url(
+                bucket_name="openshorts-media",
+                job_id="job-1",
+                base_name="source",
+                clip=clip,
+                clip_index=0,
+            )
 
-        self.assertEqual(result, "signed:job-1/source_clip_1_temp_video.mp4")
+        self.assertEqual(result, "signed:job-1/clips/job-1/source_clip_1.mp4")
 
     def test_upload_job_artifacts_does_not_publish_temporary_video(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -85,9 +93,9 @@ class S3ClipUrlTests(unittest.TestCase):
                 assert s3_uploader.upload_job_artifacts(directory, "job-1") is True
 
         uploaded_names = [call.args[2] for call in upload.call_args_list]
-        self.assertIn("job-1/clip.mp4", uploaded_names)
-        self.assertIn("job-1/metadata.json", uploaded_names)
-        self.assertNotIn("job-1/clip_temp_video.mp4", uploaded_names)
+        self.assertIn("job-1/clips/job-1/clip.mp4", uploaded_names)
+        self.assertIn("job-1/clips/job-1/metadata.json", uploaded_names)
+        self.assertNotIn("job-1/clips/job-1/clip_temp_video.mp4", uploaded_names)
 
     def test_upload_job_artifacts_skips_clip_that_fails_output_validation(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -108,7 +116,7 @@ class S3ClipUrlTests(unittest.TestCase):
                     s3_uploader.upload_job_artifacts(directory, "job-1")
 
         uploaded_names = [call.args[2] for call in upload.call_args_list]
-        self.assertNotIn("job-1/clip.mp4", uploaded_names)
+        self.assertNotIn("job-1/clips/job-1/clip.mp4", uploaded_names)
 
     def test_upload_job_artifacts_reports_failed_upload(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -126,16 +134,19 @@ class S3ClipUrlTests(unittest.TestCase):
             with patch.object(s3_uploader, "upload_file_to_s3", return_value=True) as upload:
                 self.assertTrue(s3_uploader.upload_job_artifacts(directory, "job-1"))
 
-            self.assertIn("job-1/manifests/clip_0.json", [call.args[2] for call in upload.call_args_list])
+            self.assertIn("job-1/clips/job-1/manifests/clip_0.json", [call.args[2] for call in upload.call_args_list])
 
     def test_hydrate_job_artifacts_downloads_only_job_files(self):
         class FakePaginator:
             def paginate(self, **kwargs):
-                assert kwargs == {"Bucket": "openshorts-media", "Prefix": "job-1/"}
+                prefix = kwargs["Prefix"]
+                if prefix == "job-1/master/":
+                    return [{"Contents": [
+                        {"Key": "job-1/master/source.mp4"},
+                        {"Key": "job-1/master/source_metadata.json"},
+                    ]}]
+                assert prefix == "job-1/"
                 return [{"Contents": [
-                    {"Key": "job-1/source.mp4"},
-                    {"Key": "job-1/source_metadata.json"},
-                    {"Key": "job-1/manifests/clip_0.json"},
                     {"Key": "other-job/secret.mp4"},
                 ]}]
 
@@ -152,15 +163,16 @@ class S3ClipUrlTests(unittest.TestCase):
             with patch.object(s3_uploader, "get_s3_client", return_value=FakeS3Client()):
                 hydrated = s3_uploader.hydrate_job_artifacts(directory, "job-1")
 
-            self.assertEqual(hydrated, 3)
-            self.assertEqual(Path(directory, "source.mp4").read_bytes(), b"job-1/source.mp4")
-            self.assertEqual(Path(directory, "source_metadata.json").read_bytes(), b"job-1/source_metadata.json")
-            self.assertEqual(Path(directory, "manifests", "clip_0.json").read_bytes(), b"job-1/manifests/clip_0.json")
+            self.assertEqual(hydrated, 2)
+            self.assertEqual(Path(directory, "source.mp4").read_bytes(), b"job-1/master/source.mp4")
+            self.assertEqual(Path(directory, "source_metadata.json").read_bytes(), b"job-1/master/source_metadata.json")
 
     def test_hydrate_job_artifacts_forwards_multipart_transfer_config(self):
         class FakePaginator:
             def paginate(self, **kwargs):
-                return [{"Contents": [{"Key": "job-1/clip.mp4"}]}]
+                if kwargs["Prefix"] == "job-1/master/":
+                    return [{"Contents": [{"Key": "job-1/master/clip.mp4"}]}]
+                return []
 
         class FakeS3Client:
             def __init__(self):
@@ -186,10 +198,14 @@ class S3ClipUrlTests(unittest.TestCase):
     def test_hydrate_job_artifacts_reuses_existing_non_empty_files(self):
         class FakePaginator:
             def paginate(self, **kwargs):
-                assert kwargs == {"Bucket": "openshorts-media", "Prefix": "job-1/"}
+                prefix = kwargs["Prefix"]
+                if prefix == "job-1/master/":
+                    return [{"Contents": [
+                        {"Key": "job-1/master/source.mp4"},
+                        {"Key": "job-1/master/source_metadata.json"},
+                    ]}]
+                assert prefix == "job-1/"
                 return [{"Contents": [
-                    {"Key": "job-1/source.mp4"},
-                    {"Key": "job-1/source_metadata.json"},
                 ]}]
 
         class FakeS3Client:
@@ -213,7 +229,7 @@ class S3ClipUrlTests(unittest.TestCase):
 
             self.assertEqual(hydrated, 1)
             self.assertEqual(source.read_bytes(), b"existing-source")
-            self.assertEqual(client.downloads[0][1], "job-1/source_metadata.json")
+            self.assertEqual(client.downloads[0][1], "job-1/master/source_metadata.json")
 
     def test_upload_job_artifacts_can_exclude_worker_source(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -231,7 +247,53 @@ class S3ClipUrlTests(unittest.TestCase):
 
             uploaded = [call.args[2] for call in upload.call_args_list]
             self.assertNotIn("job-1/source.mp4", uploaded)
-            self.assertIn("job-1/source_metadata.json", uploaded)
+            self.assertIn("job-1/master/source_metadata.json", uploaded)
+
+    def test_upload_job_artifacts_can_upload_only_the_requested_clip(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "source.mp4").write_bytes(b"master")
+            Path(directory, "source_metadata.json").write_text("{}", encoding="utf-8")
+            Path(directory, "source_clip_1.mp4").write_bytes(b"old clip")
+            Path(directory, "source_clip_2.mp4").write_bytes(b"new clip")
+
+            with patch.object(s3_uploader, "upload_file_to_s3", return_value=True) as upload:
+                self.assertTrue(
+                    s3_uploader.upload_job_artifacts(
+                        directory,
+                        "job-1",
+                        excluded_paths={"source.mp4"},
+                        include_paths={"source_clip_2.mp4"},
+                        clip_id="clip-2",
+                    )
+                )
+
+        uploaded = [call.args[2] for call in upload.call_args_list]
+        self.assertEqual(uploaded, ["job-1/clips/clip-2/source_clip_2.mp4"])
+
+    def test_hydrate_job_artifacts_maps_canonical_master_prefix(self):
+        class FakePaginator:
+            def paginate(self, **kwargs):
+                prefix = kwargs["Prefix"]
+                if prefix == "job-1/master/":
+                    return [{"Contents": [{"Key": "job-1/master/source_metadata.json"}]}]
+                return []
+
+        class FakeS3Client:
+            def get_paginator(self, name):
+                self.name = name
+                return FakePaginator()
+
+            def download_file(self, bucket, key, destination, **kwargs):
+                Path(destination).write_bytes(key.encode("utf-8"))
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(s3_uploader, "get_s3_client", return_value=FakeS3Client()):
+                self.assertEqual(s3_uploader.hydrate_job_artifacts(directory, "job-1"), 1)
+
+            self.assertEqual(
+                Path(directory, "source_metadata.json").read_bytes(),
+                b"job-1/master/source_metadata.json",
+            )
 
 
 if __name__ == "__main__":

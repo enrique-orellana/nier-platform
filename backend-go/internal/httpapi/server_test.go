@@ -871,7 +871,7 @@ func TestDeferredClipWebcamRegionPatchHydratesAndUpdatesS3Metadata(t *testing.T)
 	if res.Code != http.StatusOK {
 		t.Fatalf("expected S3-backed webcam region patch to succeed, got %d: %s", res.Code, res.Body.String())
 	}
-	if client.putKey != parent.ID+"/source_metadata.json" {
+	if client.putKey != parent.ID+"/master/source_metadata.json" {
 		t.Fatalf("unexpected S3 metadata key: %q", client.putKey)
 	}
 	if !strings.Contains(client.putBody, `"webcam_region"`) {
