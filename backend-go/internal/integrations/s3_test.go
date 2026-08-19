@@ -2,7 +2,11 @@ package integrations
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/base64"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -64,6 +68,59 @@ func TestDeletePrefixDeletesAllMatchingKeys(t *testing.T) {
 	}
 	if count != 2 || len(client.deleted) != 2 {
 		t.Fatalf("unexpected delete result: %d %#v", count, client.deleted)
+	}
+}
+
+func TestDeletePrefixSendsContentMD5ForS3CompatibleStores(t *testing.T) {
+	var receivedContentMD5 string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Has("list-type") {
+			w.Header().Set("Content-Type", "application/xml")
+			_, _ = io.WriteString(w, `<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>openshorts-media</Name><Prefix>jobs/job-1/</Prefix><KeyCount>1</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>jobs/job-1/one.mp4</Key></Contents></ListBucketResult>`)
+			return
+		}
+		if r.URL.Query().Has("delete") {
+			receivedContentMD5 = r.Header.Get("Content-MD5")
+			payload, _ := io.ReadAll(r.Body)
+			digest := md5.Sum(payload)
+			expectedContentMD5 := base64.StdEncoding.EncodeToString(digest[:])
+			if receivedContentMD5 == "" || receivedContentMD5 != expectedContentMD5 {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = io.WriteString(w, `<Error><Code>InvalidDigest</Code><Message>Content-Md5 does not match request body.</Message></Error>`)
+				return
+			}
+			w.Header().Set("Content-Type", "application/xml")
+			_, _ = io.WriteString(w, `<DeleteResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Deleted><Key>jobs/job-1/one.mp4</Key></Deleted></DeleteResult>`)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	store, err := NewS3Store(context.Background(), S3Config{
+		Endpoint:       server.URL,
+		Region:         "us-east-1",
+		AccessKey:      "test-access",
+		SecretKey:      "test-secret",
+		ForcePathStyle: true,
+		Bucket:         "openshorts-media",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	count, err := store.DeletePrefix(context.Background(), "jobs/job-1/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("expected one deleted object, got %d", count)
+	}
+
+	if receivedContentMD5 == "" {
+		t.Fatal("expected Content-MD5 header on DeleteObjects request")
+	}
+	if _, err := base64.StdEncoding.DecodeString(receivedContentMD5); err != nil {
+		t.Fatalf("expected Content-MD5 to be base64 encoded: %v", err)
 	}
 }
 

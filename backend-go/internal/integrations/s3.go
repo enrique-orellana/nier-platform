@@ -3,6 +3,8 @@ package integrations
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +18,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go/middleware"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
 type S3API interface {
@@ -56,6 +60,37 @@ type S3Store struct {
 	SourceBucket  string
 	Presigner     *s3.PresignClient
 	PublicURLBase string
+}
+
+type contentMD5Middleware struct{}
+
+func (*contentMD5Middleware) ID() string {
+	return "openshorts:ContentMD5"
+}
+
+func (*contentMD5Middleware) HandleFinalize(ctx context.Context, in middleware.FinalizeInput, next middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
+	request, ok := in.Request.(*smithyhttp.Request)
+	if !ok {
+		return middleware.FinalizeOutput{}, middleware.Metadata{}, fmt.Errorf("expected Smithy HTTP request, got %T", in.Request)
+	}
+
+	payload, err := io.ReadAll(request.GetStream())
+	if err != nil {
+		return middleware.FinalizeOutput{}, middleware.Metadata{}, fmt.Errorf("read DeleteObjects payload: %w", err)
+	}
+	request, err = request.SetStream(bytes.NewReader(payload))
+	if err != nil {
+		return middleware.FinalizeOutput{}, middleware.Metadata{}, fmt.Errorf("reset DeleteObjects payload: %w", err)
+	}
+	digest := md5.Sum(payload)
+	request.Header.Set("Content-MD5", base64.StdEncoding.EncodeToString(digest[:]))
+
+	in.Request = request
+	return next.HandleFinalize(ctx, in)
+}
+
+func addContentMD5Middleware(stack *middleware.Stack) error {
+	return stack.Finalize.Insert(&contentMD5Middleware{}, "Signing", middleware.Before)
 }
 
 func NewS3Store(ctx context.Context, config S3Config) (*S3Store, error) {
@@ -218,7 +253,9 @@ func (s *S3Store) DeletePrefix(ctx context.Context, prefix string) (int, error) 
 			for _, object := range output.Contents {
 				identifiers = append(identifiers, types.ObjectIdentifier{Key: object.Key})
 			}
-			response, err := s.Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{Bucket: aws.String(s.Bucket), Delete: &types.Delete{Objects: identifiers, Quiet: aws.Bool(false)}})
+			response, err := s.Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{Bucket: aws.String(s.Bucket), Delete: &types.Delete{Objects: identifiers, Quiet: aws.Bool(false)}}, func(options *s3.Options) {
+				options.APIOptions = append(options.APIOptions, addContentMD5Middleware)
+			})
 			if err != nil {
 				return deleted, err
 			}
