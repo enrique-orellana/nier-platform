@@ -1268,7 +1268,7 @@ export default function ProjectLibrary({
                       editorOpen && (clip.index ?? index) === editorClipIndex
                     }
                     editorVersionId={versionId}
-                    onOpenEditor={() =>
+                    onEditorOpen={() =>
                       onOpenEditor?.(
                         selectedProject.job_id ||
                           selectedProject.session_id ||

@@ -18,6 +18,71 @@ describe("ProjectLibrary", () => {
     );
   });
 
+  it("notifies the router when opening a clip editor", async () => {
+    const onOpenEditor = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url) => {
+        if (String(url).includes("/api/projects/history")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              projects: [
+                {
+                  job_id: "job-editor",
+                  title: "Editor project",
+                  clips: [
+                    {
+                      index: 0,
+                      title: "Clip 1",
+                      start: 0,
+                      end: 10,
+                      video_url: "/videos/job-editor/clip-0.mp4",
+                    },
+                  ],
+                  clip_count: 1,
+                },
+              ],
+            }),
+          });
+        }
+        if (String(url).includes("/api/projects/job-editor/statuses")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ clips: {} }),
+          });
+        }
+        if (String(url).includes("/api/projects/clips/job-editor")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              clips: [
+                {
+                  index: 0,
+                  title: "Clip 1",
+                  start: 0,
+                  end: 10,
+                  video_url: "/videos/job-editor/clip-0.mp4",
+                },
+              ],
+            }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }),
+    );
+
+    render(
+      <ProjectLibrary projectId="job-editor" onOpenEditor={onOpenEditor} />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Edit Timeline" }),
+    );
+
+    expect(onOpenEditor).toHaveBeenCalledWith("job-editor", 0, null);
+  });
+
   it("rehydrates an active clip render after mounting the project", async () => {
     const fetchMock = vi.fn((url) => {
       const value = String(url);
