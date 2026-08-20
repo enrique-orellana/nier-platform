@@ -116,6 +116,37 @@ describe("LocalEditorTab", () => {
     ).toHaveAttribute("src", "/api/video-proxy/project.mp4");
   });
 
+  it("hides unavailable local-only controls for streamed project clips", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="https://minio.example/project.mp4"
+        initialVideoName="project.mp4"
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /toggle subtitles settings/i }),
+      ).toBeInTheDocument(),
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Save Project" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Undo" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Redo" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Export Video" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Export Subtitles" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("uses the rendered export URL when both export and source URLs exist", async () => {
     const sourceUrl = "/videos/job/source.mp4";
     const exportUrl = "/videos/job/rendered.mp4";
@@ -1145,11 +1176,14 @@ describe("LocalEditorTab", () => {
       fireEvent.click(
         screen.getByRole("button", { name: /add subtitle cue/i }),
       );
-    for (let index = 0; index < 11; index += 1)
+    for (let index = 0; index < 10; index += 1)
       fireEvent.click(
         screen.getByRole("button", { name: "Undo", exact: true }),
       );
 
+    expect(
+      screen.queryByRole("button", { name: "Undo", exact: true }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getAllByRole("button", { name: "Timeline cue" }),
     ).toHaveLength(2);
@@ -1555,8 +1589,8 @@ describe("LocalEditorTab", () => {
     fireEvent.click(screen.getByRole("button", { name: /remove subtitles/i }));
     expect(screen.queryByText("Hello")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /export subtitles/i }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: /export subtitles/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("saves a named project and auto-saves later edits", async () => {

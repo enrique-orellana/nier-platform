@@ -1990,15 +1990,17 @@ export default function LocalEditorTab({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {headerActions}
-          <button
-            type="button"
-            onClick={openSaveProjectDialog}
-            disabled={busy || !videoFile}
-            className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Save size={13} />
-            Save Project
-          </button>
+          {videoFile && (
+            <button
+              type="button"
+              onClick={openSaveProjectDialog}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Save size={13} />
+              Save Project
+            </button>
+          )}
           <button
             type="button"
             onClick={openProjects}
@@ -2007,46 +2009,56 @@ export default function LocalEditorTab({
             <FolderOpen size={13} />
             Projects
           </button>
-          <button
-            type="button"
-            onClick={undo}
-            disabled={!editHistory.past.length}
-            aria-label="Undo"
-            title="Undo (Ctrl/Cmd+Z)"
-            className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Undo2 size={13} />
-            Undo
-          </button>
-          <button
-            type="button"
-            onClick={redo}
-            disabled={!editHistory.future.length}
-            aria-label="Redo"
-            title="Redo (Ctrl/Cmd+Shift+Z)"
-            className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Redo2 size={13} />
-            Redo
-          </button>
-          <button
-            type="button"
-            onClick={exportVideo}
-            disabled={busy || !videoFile}
-            className="flex items-center gap-1.5 rounded-lg bg-fuchsia-500 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Film size={13} />
-            {busy ? `Exporting ${Math.round(progress * 100)}%` : "Export Video"}
-          </button>
-          <button
-            type="button"
-            onClick={exportSubtitles}
-            disabled={busy || !subtitleCues.length}
-            className="flex items-center gap-1.5 rounded-lg bg-violet-500 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Download size={13} />
-            Export Subtitles
-          </button>
+          {editHistory.past.length > 0 && (
+            <button
+              type="button"
+              onClick={undo}
+              disabled={busy}
+              aria-label="Undo"
+              title="Undo (Ctrl/Cmd+Z)"
+              className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Undo2 size={13} />
+              Undo
+            </button>
+          )}
+          {editHistory.future.length > 0 && (
+            <button
+              type="button"
+              onClick={redo}
+              disabled={busy}
+              aria-label="Redo"
+              title="Redo (Ctrl/Cmd+Shift+Z)"
+              className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Redo2 size={13} />
+              Redo
+            </button>
+          )}
+          {videoFile && (
+            <button
+              type="button"
+              onClick={exportVideo}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-lg bg-fuchsia-500 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Film size={13} />
+              {busy
+                ? `Exporting ${Math.round(progress * 100)}%`
+                : "Export Video"}
+            </button>
+          )}
+          {subtitleCues.length > 0 && (
+            <button
+              type="button"
+              onClick={exportSubtitles}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-lg bg-violet-500 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download size={13} />
+              Export Subtitles
+            </button>
+          )}
           <button
             type="button"
             onClick={reset}
