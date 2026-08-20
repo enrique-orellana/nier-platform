@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { initBundle } from "./bundle.js";
 import { executeRender } from "./render-worker.js";
+import { buildRenderProps } from "./render-props.js";
 
 // --- Render status types ---
 
@@ -28,12 +29,15 @@ const renderRequestSchema = z.object({
   clipIndex: z.number().int().min(0),
   props: z.object({
     videoUrl: z.string(),
+    videoStartSeconds: z.number().min(0).optional(),
     durationInFrames: z.number().int().positive(),
     fps: z.number().positive(),
     width: z.number().int().positive(),
     height: z.number().int().positive(),
     videoFit: z.enum(["cover", "contain"]).optional(),
     subtitles: z.any().nullable().optional(),
+    subtitleTracks: z.array(z.any()).optional(),
+    activeSubtitleTrackId: z.string().nullable().optional(),
     hook: z.any().nullable().optional(),
     effects: z.any().nullable().optional(),
     versionId: z.string().min(1).optional(),
@@ -121,20 +125,26 @@ app.post("/render", (req, res) => {
     renderId,
     jobId,
     clipIndex,
-    props: {
-      videoUrl: resolvedVideoUrl,
-      durationInFrames: props.durationInFrames,
-      fps: props.fps,
-      width: props.width,
-      height: props.height,
-      videoFit: props.videoFit,
-      subtitles: props.subtitles ?? null,
-      hook: props.hook ?? null,
-      effects: props.effects ?? null,
-      versionId: props.versionId,
-      manifestPath: props.manifestPath,
-      manifestRevision: props.manifestRevision,
-    },
+    props: buildRenderProps(
+      {
+        videoUrl: props.videoUrl,
+        videoStartSeconds: props.videoStartSeconds,
+        durationInFrames: props.durationInFrames,
+        fps: props.fps,
+        width: props.width,
+        height: props.height,
+        videoFit: props.videoFit,
+        subtitles: props.subtitles ?? null,
+        subtitleTracks: props.subtitleTracks,
+        activeSubtitleTrackId: props.activeSubtitleTrackId,
+        hook: props.hook ?? null,
+        effects: props.effects ?? null,
+        versionId: props.versionId,
+        manifestPath: props.manifestPath,
+        manifestRevision: props.manifestRevision,
+      },
+      resolvedVideoUrl,
+    ),
   }).catch((err) => {
     console.error(`[render] Unhandled error for ${renderId}:`, err);
     const existingJob = renderJobs.get(renderId);

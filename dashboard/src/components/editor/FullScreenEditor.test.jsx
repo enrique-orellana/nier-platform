@@ -952,6 +952,71 @@ describe("FullScreenEditor", () => {
     ).toBeInTheDocument();
   });
 
+  it("hydrates an empty saved subtitle track before loading the editor", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (String(url).endsWith("/versions")) {
+          return {
+            ok: true,
+            json: async () => ({
+              current_version_id: "v4",
+              versions: [{ version_id: "v4", status: "done" }],
+            }),
+          };
+        }
+        if (String(url).endsWith("/versions/v4")) {
+          return {
+            ok: true,
+            json: async () => ({
+              version: { version_id: "v4", status: "done" },
+              manifest: {
+                timeline: {
+                  source_video_url: "/videos/clip.mp4",
+                  trim: { start_sec: 10, end_sec: 14 },
+                  transcript: {
+                    language: "it",
+                    segments: [
+                      { start: 10.5, end: 11.5, text: "Source transcript" },
+                    ],
+                  },
+                },
+                subtitle_tracks: [{ id: "original", cues: [] }],
+                layers: {},
+              },
+            }),
+          };
+        }
+        if (String(url).endsWith("/transcript")) {
+          return {
+            ok: true,
+            json: async () => ({
+              language: "it",
+              durationSec: 4,
+              captions: [{ text: "Ciao", startMs: 500, endMs: 1500 }],
+            }),
+          };
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(
+      <FullScreenEditor
+        jobId="job"
+        clipIndex={1}
+        clip={{ output_fps: 30, video_url: "/videos/clip.mp4" }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Ciao clip" }),
+      ).toBeInTheDocument(),
+    );
+  });
+
   it("applies asynchronously hydrated subtitles when a source preview URL stays unchanged", async () => {
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
     vi.stubGlobal(

@@ -53,7 +53,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
         {environment.isRendering ? (
           <Video
             src={videoUrl}
-            startFrom={videoStartFrame}
+            trimBefore={videoStartFrame}
             style={{
               width: "100%",
               height: "100%",
@@ -63,7 +63,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
         ) : (
           <Html5Video
             src={videoUrl}
-            startFrom={videoStartFrame}
+            trimBefore={videoStartFrame}
             onAutoPlayError={onAutoPlayError}
             onLoadedMetadata={seekBrowserVideoToMasterOffset}
             onCanPlay={seekBrowserVideoToMasterOffset}

@@ -354,6 +354,27 @@ describe("designcomboAdapter", () => {
     ]);
   });
 
+  it("fills an empty original subtitle track from the source transcript", () => {
+    const source = {
+      timeline: {
+        trim: { start_sec: 10, end_sec: 14 },
+        transcript: {
+          language: "it",
+          segments: [{ start: 10.5, end: 11.5, text: "Ciao" }],
+        },
+      },
+      subtitle_tracks: [{ id: "original", language: "it", cues: [] }],
+      layers: {},
+    };
+
+    const hydrated = manifestWithTranscriptCaptions(source, null);
+
+    expect(hydrated.subtitle_tracks[0].cues).toEqual([
+      expect.objectContaining({ text: "Ciao", startMs: 500, endMs: 1500 }),
+    ]);
+    expect(hydrated.active_subtitle_track_id).toBe("original");
+  });
+
   it("exposes the master-video offset for a clip preview", () => {
     const props = manifestToRenderProps({
       ...manifest,

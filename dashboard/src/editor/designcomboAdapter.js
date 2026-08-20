@@ -114,17 +114,29 @@ const transcriptTrack = (manifest, transcript) => {
 };
 
 export function manifestWithTranscriptCaptions(manifest, transcript) {
-  if (
-    Array.isArray(manifest?.subtitle_tracks) &&
-    manifest.subtitle_tracks.length
-  )
-    return manifest;
   const track = transcriptTrack(manifest, transcript);
   if (!track) return manifest;
+
+  const existingTracks = Array.isArray(manifest?.subtitle_tracks)
+    ? manifest.subtitle_tracks
+    : [];
+  const originalIndex = existingTracks.findIndex(isOriginalSubtitleTrack);
+  if (
+    originalIndex >= 0 &&
+    trackItems(existingTracks[originalIndex]).length > 0
+  )
+    return manifest;
+
+  const nextTracks =
+    originalIndex >= 0
+      ? existingTracks.map((existing, index) =>
+          index === originalIndex ? { ...existing, ...track } : existing,
+        )
+      : [track, ...existingTracks];
   const captions = track.captions || [];
   return {
     ...manifest,
-    subtitle_tracks: [track],
+    subtitle_tracks: nextTracks,
     active_subtitle_track_id: manifest.active_subtitle_track_id || track.id,
     timeline: {
       ...(manifest?.timeline || {}),

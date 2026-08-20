@@ -38,6 +38,14 @@ const defaultSubtitleTrackId = (nextManifest) =>
   nextManifest?.subtitle_tracks?.[0]?.id ||
   (nextManifest?.timeline?.transcript?.segments?.length ? "original" : null);
 
+const hasSubtitleTrackContent = (nextManifest) =>
+  Array.isArray(nextManifest?.subtitle_tracks) &&
+  nextManifest.subtitle_tracks.some(
+    (track) =>
+      (Array.isArray(track?.cues) && track.cues.length > 0) ||
+      (Array.isArray(track?.captions) && track.captions.length > 0),
+  );
+
 const manifestFromClip = (clip = {}) => {
   const start = Number(clip.start);
   const end = Number(clip.end);
@@ -275,23 +283,25 @@ export default function FullScreenEditor({
           !Number.isFinite(trimEnd) ||
           Math.abs(trimStart - clipStart) > 0.001 ||
           Math.abs(trimEnd - clipEnd) > 0.001);
-      if (!rangeChanged && baseManifest?.subtitle_tracks?.length)
-        return baseManifest;
-      try {
-        const response = await fetch(
-          getApiUrl(`/api/clip/${jobId}/${clipIndex}/transcript`),
-        );
-        if (!response.ok) return baseManifest;
-        const transcript = await response.json();
-        return rangeChanged
+      const applyTranscript = (transcript) =>
+        rangeChanged
           ? manifestWithRefreshedSourceRange(
               baseManifest,
               { startSec: clipStart, endSec: clipEnd },
               transcript,
             )
           : manifestWithTranscriptCaptions(baseManifest, transcript);
-      } catch {
+      if (!rangeChanged && hasSubtitleTrackContent(baseManifest))
         return baseManifest;
+      try {
+        const response = await fetch(
+          getApiUrl(`/api/clip/${jobId}/${clipIndex}/transcript`),
+        );
+        if (!response.ok) return applyTranscript(null);
+        const transcript = await response.json();
+        return applyTranscript(transcript);
+      } catch {
+        return applyTranscript(null);
       }
     },
     [clip?.end, clip?.start, clipIndex, jobId],

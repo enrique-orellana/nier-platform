@@ -9,25 +9,13 @@ import { validateOutputFile } from "./output-validation.js";
 import { applyRequestedCompositionMetadata } from "./composition.js";
 import { outputFileNameForVersion } from "./version-render.js";
 import { normalizeOutputFile } from "./output-normalization.js";
+import type { RenderRequestProps } from "./render-props.js";
 
 export interface RenderParams {
   renderId: string;
   jobId: string;
   clipIndex: number;
-  props: {
-    videoUrl: string;
-    durationInFrames: number;
-    fps: number;
-    width: number;
-    height: number;
-    videoFit?: "cover" | "contain";
-    subtitles: unknown;
-    hook: unknown;
-    effects: unknown;
-    versionId?: string;
-    manifestPath?: string;
-    manifestRevision?: string;
-  };
+  props: RenderRequestProps;
 }
 
 /**

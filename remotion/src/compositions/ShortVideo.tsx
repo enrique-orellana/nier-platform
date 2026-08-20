@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill } from "remotion";
+import { AbsoluteFill, Html5Video, useRemotionEnvironment } from "remotion";
 import { Video } from "@remotion/media";
 import type { ShortVideoProps } from "../lib/types";
 import { Subtitles } from "./Subtitles";
@@ -11,8 +11,31 @@ import { VideoEffects } from "./VideoEffects";
  * Uses @remotion/media Video for browser-side rendering compatibility.
  */
 export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
-  const { videoUrl, videoFit, subtitles, subtitleTracks, activeSubtitleTrackId, hook, effects } =
-    rawProps as unknown as ShortVideoProps;
+  const {
+    videoUrl,
+    videoFit,
+    videoStartSeconds = 0,
+    onAutoPlayError,
+    fps = 30,
+    subtitles,
+    subtitleTracks,
+    activeSubtitleTrackId,
+    hook,
+    effects,
+  } = rawProps as unknown as ShortVideoProps & {
+    onAutoPlayError?: () => void;
+  };
+  const videoStartFrame = Math.max(
+    0,
+    Math.round(Number(videoStartSeconds) * Number(fps)),
+  );
+  const environment = useRemotionEnvironment();
+  const seekBrowserVideoToMasterOffset = (
+    event: React.SyntheticEvent<HTMLVideoElement>,
+  ) => {
+    if (videoStartFrame <= 0) return;
+    event.currentTarget.currentTime = Math.max(0, Number(videoStartSeconds));
+  };
   const activeTrack = subtitleTracks?.find(
     (track) => track.id === (activeSubtitleTrackId || subtitleTracks[0]?.id)
   );
@@ -23,11 +46,30 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
       {/* Layer 1: Base video with optional zoom/color effects */}
       <VideoEffects config={effects}>
-        <Video
-          src={videoUrl}
-          style={{ width: "100%", height: "100%" }}
-          objectFit={videoFit || "cover"}
-        />
+        {environment.isRendering ? (
+          <Video
+            src={videoUrl}
+            trimBefore={videoStartFrame}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: videoFit || "cover",
+            }}
+          />
+        ) : (
+          <Html5Video
+            src={videoUrl}
+            trimBefore={videoStartFrame}
+            onAutoPlayError={onAutoPlayError}
+            onLoadedMetadata={seekBrowserVideoToMasterOffset}
+            onCanPlay={seekBrowserVideoToMasterOffset}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: videoFit || "cover",
+            }}
+          />
+        )}
       </VideoEffects>
 
       {/* Layer 2: Animated subtitles */}

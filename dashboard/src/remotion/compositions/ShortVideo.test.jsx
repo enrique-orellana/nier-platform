@@ -48,7 +48,7 @@ describe("ShortVideo media source", () => {
       "/videos/clip.mp4",
     );
     expect(html5VideoPropsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ startFrom: 510 }),
+      expect.objectContaining({ trimBefore: 510 }),
     );
   });
 
@@ -67,7 +67,7 @@ describe("ShortVideo media source", () => {
       "/videos/clip.mp4",
     );
     expect(remotionVideoPropsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ startFrom: 510 }),
+      expect.objectContaining({ trimBefore: 510 }),
     );
   });
 
