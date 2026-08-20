@@ -873,6 +873,7 @@ export default function FullScreenEditor({
             subtitles: projectInputProps.subtitles,
             subtitleTracks: projectInputProps.subtitleTracks,
             activeSubtitleTrackId: projectInputProps.activeSubtitleTrackId,
+            layout: projectInputProps.layout,
             hook: projectInputProps.hook,
             effects: projectInputProps.effects,
           }}

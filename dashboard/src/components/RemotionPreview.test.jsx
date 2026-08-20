@@ -68,6 +68,23 @@ describe("RemotionPreview", () => {
     );
   });
 
+  it("passes the standard layout into the Remotion composition", () => {
+    playerPropsMock.mockClear();
+    render(
+      <RemotionPreview
+        videoUrl="/master.mp4"
+        layout={{ format: "standard", facecam_size: "medium" }}
+      />,
+    );
+    expect(playerPropsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        inputProps: expect.objectContaining({
+          layout: { format: "standard", facecam_size: "medium" },
+        }),
+      }),
+    );
+  });
+
   it("offers a user-gesture recovery when autoplay audio is blocked", () => {
     playerPropsMock.mockClear();
     playMock.mockClear();

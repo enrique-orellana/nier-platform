@@ -8,11 +8,17 @@ const renderVersionMocks = vi.hoisted(() => ({
 }));
 vi.mock("../../editor/renderVersion", () => renderVersionMocks);
 vi.mock("../../components/RemotionPreview", () => ({
-  default: ({ currentFrame = 0, durationInSeconds, videoUrl }) => (
+  default: ({
+    currentFrame = 0,
+    durationInSeconds,
+    videoUrl,
+    layout = null,
+  }) => (
     <div
       data-testid="remotion-player-frame"
       data-duration={durationInSeconds}
       data-video-url={videoUrl}
+      data-layout-format={layout?.format || ""}
     >
       {currentFrame}
     </div>
@@ -444,6 +450,10 @@ describe("FullScreenEditor", () => {
       "Inspector",
     );
     expect(screen.getByText(/version history/i)).toBeInTheDocument();
+    expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
+      "data-layout-format",
+      "standard",
+    );
     expect(
       screen.getByRole("button", { name: /save as new version/i }),
     ).toBeInTheDocument();
