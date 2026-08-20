@@ -26,6 +26,33 @@ vi.mock("./HookOverlay", () => ({ HookOverlay: () => null }));
 import { ShortVideo } from "./ShortVideo";
 
 describe("ShortVideo media source", () => {
+  it("renders the standard layout with a blurred background and contained foreground", () => {
+    remotionVideoPropsMock.mockClear();
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        layout={{ format: "standard" }}
+      />,
+    );
+
+    expect(screen.getAllByTestId("remotion-video")).toHaveLength(2);
+    expect(remotionVideoPropsMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        objectFit: "cover",
+        muted: true,
+        style: expect.objectContaining({
+          filter: expect.stringContaining("blur"),
+        }),
+      }),
+    );
+    expect(screen.getAllByTestId("remotion-video")[1]).toHaveAttribute(
+      "objectfit",
+      "contain",
+    );
+  });
+
   it("uses the Remotion media decoder in the Player", () => {
     render(
       <ShortVideo

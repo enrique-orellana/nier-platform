@@ -22,13 +22,16 @@ export function manifestToRenderProps(
     : [];
   const activeTrack =
     subtitleTracks.find((track) => track.id === activeSubtitleTrackId) || null;
-  const subtitles = activeTrack
-    ? {
-        ...(clone(manifest.layers?.subtitles) || {}),
-        captions: trackCaptions(activeTrack),
-        style: activeTrack.style || manifest.layers?.subtitles?.style,
-      }
-    : null;
+  const activeCaptions = activeTrack ? trackCaptions(activeTrack) : [];
+  const subtitles =
+    activeTrack && activeCaptions.length
+      ? {
+          ...(clone(manifest.layers?.subtitles) || {}),
+          captions: activeCaptions,
+          style: activeTrack.style || manifest.layers?.subtitles?.style,
+        }
+      : null;
+  const layout = manifest.layers?.layout || null;
   return {
     videoUrl: manifest.timeline?.source_video_url || "",
     videoStartSeconds: Math.max(
@@ -37,7 +40,8 @@ export function manifestToRenderProps(
     ),
     subtitles,
     subtitleTracks,
-    activeSubtitleTrackId: activeTrack?.id || null,
+    activeSubtitleTrackId: subtitles ? activeTrack.id : null,
+    layout,
     hook: manifest.layers?.hook || null,
     effects: manifest.layers?.effects || null,
     audio: manifest.layers?.audio || null,

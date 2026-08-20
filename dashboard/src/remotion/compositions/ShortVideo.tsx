@@ -22,6 +22,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     subtitles,
     subtitleTracks,
     activeSubtitleTrackId,
+    layout,
     hook,
     effects,
   } = rawProps as unknown as ShortVideoProps;
@@ -41,14 +42,30 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
           style: activeTrack.style || subtitles.style,
         }
       : subtitles;
+  const usesStandardLayout = layout?.format === "standard";
   return (
-    <AbsoluteFill style={{ backgroundColor: "#000" }}>
-      {/* Layer 1: Base video with optional zoom/color effects */}
+    <AbsoluteFill style={{ backgroundColor: "#000", overflow: "hidden" }}>
+      {usesStandardLayout && (
+        <Video
+          src={videoUrl}
+          trimBefore={videoStartFrame}
+          objectFit="cover"
+          muted
+          style={{
+            width: "100%",
+            height: "100%",
+            filter: "blur(24px)",
+            transform: "scale(1.08)",
+          }}
+        />
+      )}
+
+      {/* Base video with optional zoom/color effects */}
       <VideoEffects config={effects}>
         <Video
           src={videoUrl}
           trimBefore={videoStartFrame}
-          objectFit={videoFit || "cover"}
+          objectFit={usesStandardLayout ? "contain" : videoFit || "cover"}
           fallbackOffthreadVideoProps={{
             onAutoPlayError,
             pauseWhenBuffering: true,

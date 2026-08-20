@@ -84,6 +84,11 @@ export interface EffectsConfig {
   segments: EffectSegment[];
 }
 
+export interface LayoutConfig {
+  format: "standard" | "streamer_stack";
+  facecam_size?: "small" | "medium" | "large";
+}
+
 // --- Main composition props ---
 export interface ShortVideoProps {
   videoUrl: string;
@@ -96,6 +101,7 @@ export interface ShortVideoProps {
   subtitles: SubtitleConfig | null;
   subtitleTracks?: SubtitleTrack[];
   activeSubtitleTrackId?: string | null;
+  layout?: LayoutConfig | null;
   hook: HookConfig | null;
   effects: EffectsConfig | null;
 }
@@ -166,6 +172,11 @@ export const effectsConfigSchema = z.object({
   segments: z.array(effectSegmentSchema),
 });
 
+export const layoutConfigSchema = z.object({
+  format: z.enum(["standard", "streamer_stack"]),
+  facecam_size: z.enum(["small", "medium", "large"]).optional(),
+});
+
 export const shortVideoPropsSchema = z.object({
   videoUrl: z.string(),
   videoStartSeconds: z.number().min(0).optional(),
@@ -176,6 +187,7 @@ export const shortVideoPropsSchema = z.object({
   subtitles: subtitleConfigSchema.nullable(),
   subtitleTracks: z.array(subtitleTrackSchema).optional(),
   activeSubtitleTrackId: z.string().nullable().optional(),
+  layout: layoutConfigSchema.nullable().optional(),
   hook: hookConfigSchema.nullable(),
   effects: effectsConfigSchema.nullable(),
 });

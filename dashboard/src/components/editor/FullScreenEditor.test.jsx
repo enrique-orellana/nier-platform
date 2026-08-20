@@ -658,6 +658,12 @@ describe("FullScreenEditor", () => {
         expect.objectContaining({
           manifest: expect.objectContaining({
             publishing_metadata: { hashtags: ["#editedclip"] },
+            layers: expect.objectContaining({
+              layout: { format: "standard", facecam_size: "medium" },
+            }),
+          }),
+          props: expect.objectContaining({
+            layout: { format: "standard", facecam_size: "medium" },
           }),
         }),
       ),

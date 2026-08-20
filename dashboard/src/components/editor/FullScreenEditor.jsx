@@ -161,44 +161,42 @@ const localEditorStateToManifest = (sourceManifest, localState, trackId) => {
       ? { captions: cue.captions }
       : {}),
   }));
-  source.subtitle_tracks = [
-    ...existingTracks.filter((track) => track.id !== nextTrackId),
-    {
-      ...existingTrack,
-      id: nextTrackId,
-      language: state.subtitleLanguage || existingTrack.language || "en",
-      label: existingTrack.label || state.subtitleLanguage || "Original",
-      origin: existingTrack.origin || "manual",
-      cues,
-      captions: cues.flatMap(
-        (cue) =>
-          cue.captions || [
-            { text: cue.text, startMs: cue.startMs, endMs: cue.endMs },
-          ],
-      ),
-      style:
-        state.subtitleStyle || existingTrack.style || DEFAULT_SUBTITLE_STYLE,
-    },
-  ];
-  source.active_subtitle_track_id = nextTrackId;
+  const nextTrack = {
+    ...existingTrack,
+    id: nextTrackId,
+    language: state.subtitleLanguage || existingTrack.language || "en",
+    label: existingTrack.label || state.subtitleLanguage || "Original",
+    origin: existingTrack.origin || "manual",
+    cues,
+    captions: cues.flatMap(
+      (cue) =>
+        cue.captions || [
+          { text: cue.text, startMs: cue.startMs, endMs: cue.endMs },
+        ],
+    ),
+    style: state.subtitleStyle || existingTrack.style || DEFAULT_SUBTITLE_STYLE,
+  };
+  source.subtitle_tracks = cues.length
+    ? [...existingTracks.filter((track) => track.id !== nextTrackId), nextTrack]
+    : existingTracks.filter((track) => track.id !== nextTrackId);
+  source.active_subtitle_track_id = cues.length ? nextTrackId : null;
   source.layers = {
     ...(source.layers || {}),
-    subtitles: {
-      ...(source.layers?.subtitles || {}),
-      captions: cues.flatMap(
-        (cue) =>
-          cue.captions || [
-            { text: cue.text, startMs: cue.startMs, endMs: cue.endMs },
-          ],
-      ),
-      cues,
-      style:
-        state.subtitleStyle ||
-        source.layers?.subtitles?.style ||
-        DEFAULT_SUBTITLE_STYLE,
-      language:
-        state.subtitleLanguage || source.layers?.subtitles?.language || "en",
-    },
+    subtitles: cues.length
+      ? {
+          ...(source.layers?.subtitles || {}),
+          captions: nextTrack.captions,
+          cues,
+          style:
+            state.subtitleStyle ||
+            source.layers?.subtitles?.style ||
+            DEFAULT_SUBTITLE_STYLE,
+          language:
+            state.subtitleLanguage ||
+            source.layers?.subtitles?.language ||
+            "en",
+        }
+      : null,
     hook: state.hook
       ? {
           ...(source.layers?.hook || {}),
@@ -426,13 +424,35 @@ export default function FullScreenEditor({
     }),
     [activeTrackId, editorState, initialManifest, manifest, publishingMetadata],
   );
-  const projectManifest = useMemo(
-    () =>
-      useLocalEditor
-        ? localEditorStateToManifest(currentManifest, localDraft, activeTrackId)
-        : currentManifest,
-    [activeTrackId, currentManifest, localDraft, useLocalEditor],
-  );
+  const projectManifest = useMemo(() => {
+    if (!useLocalEditor) return currentManifest;
+    const layout =
+      currentManifest.layers?.layout ||
+      (currentManifest.export_policy?.layout_format
+        ? {
+            format: currentManifest.export_policy.layout_format,
+            facecam_size: currentManifest.export_policy.facecam_size,
+          }
+        : {
+            format: clip.layout_format || "standard",
+            facecam_size: clip.facecam_size || "medium",
+          });
+    return localEditorStateToManifest(
+      {
+        ...currentManifest,
+        layers: { ...(currentManifest.layers || {}), layout },
+      },
+      localDraft,
+      activeTrackId,
+    );
+  }, [
+    activeTrackId,
+    clip.facecam_size,
+    clip.layout_format,
+    currentManifest,
+    localDraft,
+    useLocalEditor,
+  ]);
   const projectInputProps = useMemo(
     () => ({
       ...manifestToRenderProps(projectManifest, {

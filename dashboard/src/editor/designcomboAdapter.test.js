@@ -331,6 +331,31 @@ describe("designcomboAdapter", () => {
     ]);
   });
 
+  it("does not emit subtitles for an empty active track", () => {
+    const props = manifestToRenderProps({
+      timeline: { source_video_url: "/videos/source.mp4" },
+      layers: { subtitles: { style: { fontSize: 24 } } },
+      subtitle_tracks: [{ id: "original", cues: [], captions: [] }],
+      active_subtitle_track_id: "original",
+    });
+
+    expect(props.subtitles).toBeNull();
+    expect(props.activeSubtitleTrackId).toBeNull();
+  });
+
+  it("passes the manifest layout to the render props", () => {
+    const props = manifestToRenderProps({
+      timeline: { source_video_url: "/videos/source.mp4" },
+      layers: { layout: { format: "standard", facecam_size: "medium" } },
+      subtitle_tracks: [],
+    });
+
+    expect(props.layout).toEqual({
+      format: "standard",
+      facecam_size: "medium",
+    });
+  });
+
   it("uses populated captions when a subtitle track has an empty cues array", () => {
     const source = {
       timeline: { trim: { start_sec: 0, end_sec: 4 } },
