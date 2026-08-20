@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildRangeProxyArgs, rangeProxyCacheName } from "./source-proxy.js";
+import {
+  buildRangeProxyArgs,
+  rangeProxyCacheName,
+  rangeProxyTemporaryPath,
+} from "./source-proxy.js";
 
 describe("range source proxy", () => {
   it("creates a stable cache name for a source range", () => {
@@ -17,5 +21,11 @@ describe("range source proxy", () => {
       "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "192k", "-shortest",
       "-movflags", "+faststart", "proxy.mp4",
     ]);
+  });
+
+  it("keeps an mp4 suffix on temporary extraction files for ffmpeg", () => {
+    expect(rangeProxyTemporaryPath("proxy.mp4", 42, 123)).toBe(
+      "proxy.mp4.tmp-42-123.mp4",
+    );
   });
 });

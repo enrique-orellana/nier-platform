@@ -54,10 +54,10 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
           <Video
             src={videoUrl}
             trimBefore={videoStartFrame}
+            objectFit={videoFit || "cover"}
             style={{
               width: "100%",
               height: "100%",
-              objectFit: videoFit || "cover",
             }}
           />
         ) : (

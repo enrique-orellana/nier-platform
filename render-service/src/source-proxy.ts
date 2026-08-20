@@ -44,6 +44,14 @@ export function buildRangeProxyArgs(
   ];
 }
 
+export function rangeProxyTemporaryPath(
+  cachePath: string,
+  processId: number,
+  timestamp: number,
+): string {
+  return `${cachePath}.tmp-${processId}-${timestamp}.mp4`;
+}
+
 function localOutputPath(videoUrl: string, outputDir: string): string | null {
   let parsed: URL;
   try {
@@ -98,7 +106,11 @@ export function prepareRangeProxy(options: RangeProxyOptions): Promise<RangeProx
   const work = (async (): Promise<RangeProxyResult> => {
     fs.mkdirSync(cacheDir, { recursive: true });
     if (!fs.existsSync(cachePath) || fs.statSync(cachePath).size === 0) {
-      const temporaryPath = `${cachePath}.tmp-${process.pid}-${Date.now()}`;
+      const temporaryPath = rangeProxyTemporaryPath(
+        cachePath,
+        process.pid,
+        Date.now(),
+      );
       try {
         await runFfmpeg(buildRangeProxyArgs(sourcePath, temporaryPath, startSeconds, durationSeconds));
         fs.renameSync(temporaryPath, cachePath);

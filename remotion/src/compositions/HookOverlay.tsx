@@ -43,15 +43,26 @@ const HookBox: React.FC<HookBoxProps> = ({ config, displayFrames, width }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const elapsedMs = (frame / fps) * 1000;
-  const positionStyle = getHookPositionStyle(config.position);
-  const boxStyle = getHookBoxStyle({
-    ...config,
-    color: config.color || "#000000",
-    background: config.background || "rgba(255, 255, 255, 0.94)",
-    fontFamily: config.fontFamily || getHookFontStack() || HOOK_FONT_FAMILY,
-    fontSize: config.fontSize || 46.8,
-  }, width);
-  const animationStyle = getHookAnimationStyle(config.entranceAnimation, elapsedMs, width);
+  const positionStyle = getHookPositionStyle(
+    config.position,
+    config.layoutFormat,
+    config.facecamSize,
+  );
+  const boxStyle = getHookBoxStyle(
+    {
+      ...config,
+      color: config.color || "#000000",
+      background: config.background || "rgba(255, 255, 255, 0.94)",
+      fontFamily: config.fontFamily || getHookFontStack() || HOOK_FONT_FAMILY,
+      fontSize: config.fontSize || 46.8,
+    },
+    width,
+  );
+  const animationStyle = getHookAnimationStyle(
+    config.entranceAnimation,
+    elapsedMs,
+    width,
+  );
 
   return (
     <div

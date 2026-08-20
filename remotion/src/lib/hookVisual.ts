@@ -3,6 +3,11 @@ import type { CSSProperties } from "react";
 export const HOOK_PREVIEW_WIDTH = 360;
 export const HOOK_FONT_FAMILY = "Arial, Helvetica, sans-serif";
 export const HOOK_SIZE_SCALE: Record<string, number> = { S: 0.8, M: 1, L: 1.3 };
+export const FACECAM_HEIGHT_RATIOS: Record<string, number> = {
+  small: 0.3,
+  medium: 0.38,
+  large: 0.46,
+};
 
 const widthScale = (renderWidth = HOOK_PREVIEW_WIDTH) => {
   const width = Number(renderWidth);
@@ -20,8 +25,13 @@ export const getHookFontSize = (
       (HOOK_SIZE_SCALE[size] || HOOK_SIZE_SCALE.M),
   ) * widthScale(renderWidth);
 
+export const getStreamerBoundaryRatio = (facecamSize = "medium") =>
+  FACECAM_HEIGHT_RATIOS[facecamSize] || FACECAM_HEIGHT_RATIOS.medium;
+
 export const getHookPositionStyle = (
   position = "top",
+  layoutFormat = "standard",
+  facecamSize = "medium",
 ): CSSProperties => {
   if (position === "center") {
     return {
@@ -35,6 +45,13 @@ export const getHookPositionStyle = (
       top: "auto",
       bottom: "18%",
       transform: "translateX(-50%)",
+    };
+  }
+  if (layoutFormat === "streamer_stack") {
+    return {
+      top: `${getStreamerBoundaryRatio(facecamSize) * 100}%`,
+      bottom: "auto",
+      transform: "translate(-50%, -50%)",
     };
   }
   return {
@@ -76,21 +93,30 @@ export const getHookBoxStyle = (
     fontFamily?: string;
     fontSize?: number;
     size?: string;
+    layoutFormat?: string;
   } = {},
   renderWidth = HOOK_PREVIEW_WIDTH,
 ): CSSProperties => {
   const scale = widthScale(renderWidth);
+  const isStreamer = hook.layoutFormat === "streamer_stack";
   return {
-    color: hook.color || "#FFFFFF",
-    backgroundColor: hook.background || "#111111",
+    color: isStreamer ? "#FFE840" : hook.color || "#FFFFFF",
+    backgroundColor: isStreamer ? "transparent" : hook.background || "#111111",
     fontFamily: hook.fontFamily || HOOK_FONT_FAMILY,
     fontSize: getHookFontSize(hook.fontSize, hook.size, renderWidth),
     fontWeight: 700,
     lineHeight: 1.5,
     padding: `${8 * scale}px ${12 * scale}px`,
-    borderRadius: 8 * scale,
-    boxShadow:
-      "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)",
+    borderRadius: isStreamer ? "0px" : `${8 * scale}px`,
+    boxShadow: isStreamer
+      ? "none"
+      : "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)",
+    WebkitTextStroke: isStreamer
+      ? `${Math.max(2, Math.round(2 * scale))}px #000000`
+      : undefined,
+    textShadow: isStreamer
+      ? "1px 1px 0 #000000, -1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000"
+      : undefined,
     textAlign: "center",
   };
 };

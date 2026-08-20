@@ -64,6 +64,8 @@ export interface HookConfig {
   fontFamily?: string;
   startMs?: number;
   endMs?: number;
+  layoutFormat?: "standard" | "streamer_stack";
+  facecamSize?: "small" | "medium" | "large";
 }
 
 // --- Effects config ---

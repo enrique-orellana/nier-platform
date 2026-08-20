@@ -67,7 +67,7 @@ describe("ShortVideo media source", () => {
       "/videos/clip.mp4",
     );
     expect(remotionVideoPropsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ trimBefore: 510 }),
+      expect.objectContaining({ trimBefore: 510, objectFit: "cover" }),
     );
   });
 
