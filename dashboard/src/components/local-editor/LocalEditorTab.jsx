@@ -861,6 +861,8 @@ export default function LocalEditorTab({
   const videoRef = useRef(null);
   const playerRef = useRef(null);
   const remotionPlayerRef = useRef(null);
+  const remotionPlayheadRef = useRef(0);
+  const remotionPlayheadTimerRef = useRef(null);
   const objectUrlRef = useRef("");
   const previewObjectUrlRef = useRef("");
   const subtitleInputRef = useRef(null);
@@ -920,6 +922,32 @@ export default function LocalEditorTab({
       ? Number(initialPlaybackDurationMs)
       : null;
   const remotionFps = Number(remotionPreviewProps?.fps || 30);
+
+  const handleRemotionFrameChange = useCallback(
+    (frame) => {
+      remotionPlayheadRef.current = Math.min(
+        durationMs,
+        (frame / remotionFps) * 1000,
+      );
+      if (remotionPlayheadTimerRef.current) return;
+      remotionPlayheadTimerRef.current = window.setTimeout(() => {
+        remotionPlayheadTimerRef.current = null;
+        setPlayheadMs(remotionPlayheadRef.current);
+      }, 100);
+    },
+    [durationMs, remotionFps],
+  );
+  const handleRemotionPlayerReady = useCallback((player) => {
+    remotionPlayerRef.current = player;
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (remotionPlayheadTimerRef.current)
+        window.clearTimeout(remotionPlayheadTimerRef.current);
+    },
+    [],
+  );
 
   const { subtitleCues, subtitleStyle, subtitleLanguage, hook } =
     editHistory.present;
@@ -2225,20 +2253,13 @@ export default function LocalEditorTab({
                 {remotionPreviewProps ? (
                   <RemotionPreview
                     {...remotionPreviewProps}
-                    currentFrame={Math.round((playheadMs / 1000) * remotionFps)}
                     playing={isPlaying}
                     loop={isLooping}
                     controls={false}
                     className="h-full w-full"
-                    onFrameChange={(frame) =>
-                      setPlayheadMs(
-                        Math.min(durationMs, (frame / remotionFps) * 1000),
-                      )
-                    }
+                    onFrameChange={handleRemotionFrameChange}
                     onPlayingChange={setIsPlaying}
-                    onPlayerReady={(player) => {
-                      remotionPlayerRef.current = player;
-                    }}
+                    onPlayerReady={handleRemotionPlayerReady}
                   />
                 ) : (
                   <>

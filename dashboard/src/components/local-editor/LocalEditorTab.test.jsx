@@ -27,11 +27,12 @@ vi.mock("./AudioWaveform", () => ({
 }));
 
 vi.mock("../RemotionPreview", () => ({
-  default: ({ videoUrl, currentFrame = 0 }) => (
+  default: ({ videoUrl, currentFrame, controls = true }) => (
     <div
       data-testid="local-editor-remotion-preview"
       data-video-url={videoUrl}
-      data-current-frame={currentFrame}
+      data-current-frame={currentFrame ?? "uncontrolled"}
+      data-controls={String(controls)}
     />
   ),
 }));
@@ -583,6 +584,14 @@ describe("LocalEditorTab", () => {
     expect(
       screen.queryByTestId("local-editor-native-video"),
     ).not.toBeInTheDocument();
+    expect(screen.getByTestId("local-editor-remotion-preview")).toHaveAttribute(
+      "data-current-frame",
+      "uncontrolled",
+    );
+    expect(screen.getByTestId("local-editor-remotion-preview")).toHaveAttribute(
+      "data-controls",
+      "false",
+    );
   });
 
   it("allows the player to fill the preview when fit mode leaves bars visible", async () => {

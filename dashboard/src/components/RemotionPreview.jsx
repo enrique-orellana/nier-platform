@@ -20,7 +20,7 @@ import { ShortVideo } from "../remotion/compositions/ShortVideo";
  * @param {object|null} props.effects - EffectsConfig or null
  * @param {string} [props.className] - Additional CSS classes
  */
-export default function RemotionPreview({
+function RemotionPreview({
   videoUrl,
   videoStartSeconds = 0,
   durationInSeconds = 30,
@@ -174,3 +174,5 @@ export default function RemotionPreview({
     </div>
   );
 }
+
+export default React.memo(RemotionPreview);

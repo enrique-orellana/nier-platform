@@ -1,18 +1,11 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-const useRemotionEnvironmentMock = vi.hoisted(() => vi.fn());
-const html5VideoPropsMock = vi.hoisted(() => vi.fn());
 const remotionVideoPropsMock = vi.hoisted(() => vi.fn());
 
 vi.mock("remotion", () => ({
   AbsoluteFill: ({ children }) => <div>{children}</div>,
-  Html5Video: (props) => {
-    html5VideoPropsMock(props);
-    return <video data-testid="html5-video" {...props} />;
-  },
-  useRemotionEnvironment: useRemotionEnvironmentMock,
   useCurrentFrame: () => 0,
   useVideoConfig: () => ({ fps: 30 }),
   interpolate: (value) => value,
@@ -33,9 +26,7 @@ vi.mock("./HookOverlay", () => ({ HookOverlay: () => null }));
 import { ShortVideo } from "./ShortVideo";
 
 describe("ShortVideo media source", () => {
-  it("uses native HTML5 playback in the Remotion Player", () => {
-    useRemotionEnvironmentMock.mockReturnValue({ isRendering: false });
-    html5VideoPropsMock.mockClear();
+  it("uses the Remotion media decoder in the Player", () => {
     render(
       <ShortVideo
         videoUrl="/videos/clip.mp4"
@@ -43,17 +34,16 @@ describe("ShortVideo media source", () => {
         fps={30}
       />,
     );
-    expect(screen.getByTestId("html5-video")).toHaveAttribute(
+    expect(screen.getByTestId("remotion-video")).toHaveAttribute(
       "src",
       "/videos/clip.mp4",
     );
-    expect(html5VideoPropsMock).toHaveBeenCalledWith(
+    expect(remotionVideoPropsMock).toHaveBeenCalledWith(
       expect.objectContaining({ trimBefore: 510 }),
     );
   });
 
   it("uses the browser-compatible Remotion Video for rendering", () => {
-    useRemotionEnvironmentMock.mockReturnValue({ isRendering: true });
     remotionVideoPropsMock.mockClear();
     render(
       <ShortVideo
@@ -72,7 +62,6 @@ describe("ShortVideo media source", () => {
   });
 
   it("seeks the browser preview to the master offset when metadata loads", () => {
-    useRemotionEnvironmentMock.mockReturnValue({ isRendering: false });
     render(
       <ShortVideo
         videoUrl="/videos/master.mp4"
@@ -80,22 +69,14 @@ describe("ShortVideo media source", () => {
         fps={30}
       />,
     );
-    const video = screen.getByTestId("html5-video");
-    Object.defineProperty(video, "currentTime", {
-      configurable: true,
-      value: 0,
-      writable: true,
-    });
-
-    fireEvent.loadedMetadata(video);
-
-    expect(video.currentTime).toBe(17);
+    expect(remotionVideoPropsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ trimBefore: 510 }),
+    );
   });
 
-  it("forwards browser autoplay failures to the preview controller", () => {
-    useRemotionEnvironmentMock.mockReturnValue({ isRendering: false });
+  it("forwards fallback autoplay failures to the preview controller", () => {
     const onAutoPlayError = vi.fn();
-    html5VideoPropsMock.mockClear();
+    remotionVideoPropsMock.mockClear();
 
     render(
       <ShortVideo
@@ -104,8 +85,12 @@ describe("ShortVideo media source", () => {
       />,
     );
 
-    expect(html5VideoPropsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ onAutoPlayError }),
+    expect(remotionVideoPropsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fallbackOffthreadVideoProps: expect.objectContaining({
+          onAutoPlayError,
+        }),
+      }),
     );
   });
 });
