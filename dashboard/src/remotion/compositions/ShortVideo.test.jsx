@@ -43,10 +43,16 @@ describe("ShortVideo media source", () => {
         objectFit: "cover",
         muted: true,
         style: expect.objectContaining({
+          position: "absolute",
+          inset: 0,
           filter: expect.stringContaining("blur"),
         }),
       }),
     );
+    expect(screen.getAllByTestId("remotion-video")[1]).toHaveStyle({
+      position: "absolute",
+      inset: "0",
+    });
     expect(screen.getAllByTestId("remotion-video")[1]).toHaveAttribute(
       "objectfit",
       "contain",

@@ -52,6 +52,8 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
           objectFit="cover"
           muted
           style={{
+            position: "absolute",
+            inset: 0,
             width: "100%",
             height: "100%",
             filter: "blur(24px)",
@@ -72,6 +74,8 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             useWebAudioApi: true,
           }}
           style={{
+            position: "absolute",
+            inset: 0,
             width: "100%",
             height: "100%",
           }}

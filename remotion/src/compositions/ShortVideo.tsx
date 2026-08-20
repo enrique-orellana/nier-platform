@@ -53,6 +53,8 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
           objectFit="cover"
           muted
           style={{
+            position: "absolute",
+            inset: 0,
             width: "100%",
             height: "100%",
             filter: "blur(24px)",
@@ -69,6 +71,8 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             trimBefore={videoStartFrame}
             objectFit={usesStandardLayout ? "contain" : videoFit || "cover"}
             style={{
+              position: "absolute",
+              inset: 0,
               width: "100%",
               height: "100%",
             }}
@@ -81,6 +85,8 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             onLoadedMetadata={seekBrowserVideoToMasterOffset}
             onCanPlay={seekBrowserVideoToMasterOffset}
             style={{
+              position: "absolute",
+              inset: 0,
               width: "100%",
               height: "100%",
               objectFit: usesStandardLayout ? "contain" : videoFit || "cover",
