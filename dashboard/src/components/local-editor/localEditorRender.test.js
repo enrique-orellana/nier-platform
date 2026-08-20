@@ -30,6 +30,12 @@ describe("local editor Remotion rendering", () => {
         position: "center",
         size: "M",
         entranceAnimation: "fade",
+        color: "#FFFFFF",
+        background: "#111111",
+        fontFamily: "Arial, Helvetica, sans-serif",
+        fontSize: 48,
+        layoutFormat: "standard",
+        facecamSize: "medium",
       },
     });
 
@@ -59,6 +65,12 @@ describe("local editor Remotion rendering", () => {
       text: "Hook",
       displayDurationSec: 2,
       position: "center",
+      color: "#FFFFFF",
+      background: "#111111",
+      fontFamily: "Arial, Helvetica, sans-serif",
+      fontSize: 48,
+      layoutFormat: "standard",
+      facecamSize: "medium",
     });
   });
 

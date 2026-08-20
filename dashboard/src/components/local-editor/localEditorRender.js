@@ -172,6 +172,7 @@ export const buildRemotionRenderProps = ({
     : null,
   hook: hook
     ? {
+        ...hook,
         text: String(hook.text || ""),
         position: hook.position || "top",
         size: hook.size || "M",
