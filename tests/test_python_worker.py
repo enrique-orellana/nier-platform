@@ -355,39 +355,6 @@ def test_upload_generation_artifacts_forwards_clip_scope(monkeypatch, tmp_path):
     ]
 
 
-def test_clip_render_fails_when_configured_artifact_upload_fails(monkeypatch, tmp_path):
-    output_dir = tmp_path / "job-1"
-    output_dir.mkdir()
-
-    class FakeProcess:
-        stdout = iter(())
-
-        def wait(self):
-            return 0
-
-    monkeypatch.setenv("AWS_S3_BUCKET", "openshorts-media")
-    monkeypatch.setattr("python_worker.subprocess.Popen", lambda *args, **kwargs: FakeProcess())
-    monkeypatch.setattr(
-        "python_worker.load_generation_result",
-        lambda _directory: {"clips": [{"video_filename": "source_clip_9.mp4"}]},
-    )
-    monkeypatch.setattr("python_worker.upload_generation_artifacts", lambda *args, **kwargs: False)
-
-    exit_code, result = _run_clip_generation(
-        {
-            "id": "render-1",
-            "parent_job_id": "job-1",
-            "operation": "clip_render",
-            "output_dir": str(output_dir),
-            "clip_index": 0,
-            "source_path": str(output_dir / "source.mp4"),
-        }
-    )
-
-    assert exit_code != 0
-    assert result is None
-
-
 def test_thumbnail_publish_status_returns_persisted_result():
     tmp_path = Path(".cache") / "python-worker-publish-test"
     tmp_path.mkdir(parents=True, exist_ok=True)

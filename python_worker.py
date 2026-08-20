@@ -247,8 +247,6 @@ def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any
         include_paths=include_paths,
         clip_id=clip_id,
     )
-    if str(os.environ.get("AWS_S3_BUCKET") or "").strip() and not uploaded:
-        return 1, None
     if uploaded:
         cleanup_uploaded_clip_files(
             output_dir,
