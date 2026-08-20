@@ -13,6 +13,7 @@ from python_worker import (
     handle_request,
     load_generation_result,
     cleanup_generation_scratch,
+    cleanup_uploaded_clip_files,
     _run_clip_generation,
     upload_generation_artifacts,
     parse_request,
@@ -317,6 +318,21 @@ def test_clip_generation_cleanup_removes_clips_but_retains_master_cache(tmp_path
     assert metadata.exists()
     assert master.exists()
     assert not clip.exists()
+
+
+def test_uploaded_clip_cleanup_preserves_range_render_cache(tmp_path):
+    output_dir = tmp_path / "job-1"
+    output_dir.mkdir()
+    cache = output_dir / "render-cache" / "clip-range.mp4"
+    cache.parent.mkdir()
+    cache.write_bytes(b"range proxy")
+    published_clip = output_dir / "source_clip_1.mp4"
+    published_clip.write_bytes(b"published clip")
+
+    cleanup_uploaded_clip_files(str(output_dir), "job-1")
+
+    assert cache.exists()
+    assert not published_clip.exists()
 
 
 def test_upload_generation_artifacts_forwards_exclusions(monkeypatch, tmp_path):

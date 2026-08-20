@@ -163,6 +163,8 @@ def cleanup_uploaded_clip_files(output_dir: str, job_id: str, preserve_paths=Non
     for candidate in output_path.rglob("*"):
         if not candidate.is_file() or candidate.resolve() in preserved:
             continue
+        if "render-cache" in candidate.relative_to(output_path).parts:
+            continue
         if candidate.name == "source.mp4" or candidate.name.endswith("_metadata.json"):
             continue
         if candidate.name.startswith("master_") and candidate.suffix.lower() == ".mp4":
