@@ -37,12 +37,12 @@ SOURCE_DURATION_SECONDS: {video_duration}
 MINIMUM_REEL_SECONDS: {min_seconds}
 IDEAL_REEL_SECONDS: {ideal_seconds}
 SOURCE_CONTEXT: {source_context}
-TRANSCRIPT:
+TRANSCRIPT (JSON array of segments with absolute start/end seconds and text):
 {transcript}
 """.strip()
 
 MAX_PROMPT_CHARS = 48000
-MAX_TRANSCRIPT_CHARS_PER_CHUNK = 36000
+MAX_TRANSCRIPT_CHARS_PER_CHUNK = 24000
 HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS = 120.0
 OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS = 300.0
 OPENROUTER_TRANSCRIPTION_OVERLAP_SECONDS = 5.0
@@ -207,41 +207,49 @@ def transcribe_video_with_config(
 
 
 def _analysis_chunks(transcript: Mapping[str, Any]) -> list[dict[str, Any]]:
-    segments = transcript.get("segments", []) or []
-    if not segments:
-        text = _transcript_text(transcript)
-        if len(text) <= MAX_TRANSCRIPT_CHARS_PER_CHUNK:
-            return [{"text": text, "words": []}]
-        return [
-            {"text": text[start:start + MAX_TRANSCRIPT_CHARS_PER_CHUNK], "words": []}
-            for start in range(0, len(text), MAX_TRANSCRIPT_CHARS_PER_CHUNK)
-        ]
+    compact_segments: list[dict[str, Any]] = []
+
+    def append_text_parts(start: float, end: float, text: str) -> None:
+        remaining = str(text or "").strip()
+        while remaining:
+            low, high = 1, len(remaining)
+            best = 1
+            while low <= high:
+                midpoint = (low + high) // 2
+                candidate = {"start": start, "end": end, "text": remaining[:midpoint]}
+                if len(json.dumps([candidate], ensure_ascii=False)) <= MAX_TRANSCRIPT_CHARS_PER_CHUNK:
+                    best = midpoint
+                    low = midpoint + 1
+                else:
+                    high = midpoint - 1
+            compact_segments.append({"start": start, "end": end, "text": remaining[:best]})
+            remaining = remaining[best:].lstrip()
+
+    for raw_segment in transcript.get("segments", []) or []:
+        text = " ".join(str(raw_segment.get("text") or "").split())
+        if not text:
+            continue
+        try:
+            start = round(float(raw_segment.get("start")), 3)
+            end = round(float(raw_segment.get("end")), 3)
+        except (TypeError, ValueError):
+            continue
+        if end > start:
+            append_text_parts(start, end, text)
+
+    if not compact_segments:
+        append_text_parts(0.0, 0.0, _transcript_text(transcript))
 
     chunks: list[dict[str, Any]] = []
     current: list[dict[str, Any]] = []
-    current_size = 0
-    for segment in segments:
-        words = [
-            {"w": word.get("word", ""), "s": word.get("start"), "e": word.get("end")}
-            for word in segment.get("words", []) or []
-        ]
-        item = {"text": str(segment.get("text") or "").strip(), "start": segment.get("start"), "end": segment.get("end"), "words": words}
-        item_size = len(json.dumps(item, ensure_ascii=False))
-        if current and current_size + item_size > MAX_TRANSCRIPT_CHARS_PER_CHUNK:
-            chunks.append({
-                "text": " ".join(str(entry.get("text") or "") for entry in current),
-                "words": [word for entry in current for word in entry["words"]],
-            })
+    for segment in compact_segments:
+        if current and len(json.dumps(current + [segment], ensure_ascii=False)) > MAX_TRANSCRIPT_CHARS_PER_CHUNK:
+            chunks.append({"segments": current})
             current = []
-            current_size = 0
-        current.append(item)
-        current_size += item_size
+        current.append(segment)
     if current:
-        chunks.append({
-            "text": " ".join(str(entry.get("text") or "") for entry in current),
-            "words": [word for entry in current for word in entry["words"]],
-        })
-    return chunks or [{"text": "", "words": []}]
+        chunks.append({"segments": current})
+    return chunks or [{"segments": []}]
 
 
 def rank_highlights(

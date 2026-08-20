@@ -284,3 +284,27 @@ def test_rank_highlights_chunks_oversized_transcripts(monkeypatch):
     assert len(result["candidates"]) == chat.call_count
     assert chat.call_count > 1
     assert all(len(call.args[1]) <= highlight_generation.MAX_PROMPT_CHARS for call in chat.call_args_list)
+
+
+def test_analysis_chunks_use_timestamped_segments_without_word_data():
+    transcript = {
+        "segments": [
+            {
+                "text": "segment " + ("x" * 12000),
+                "start": index * 30,
+                "end": index * 30 + 20,
+                "words": [{"word": "segment", "start": index * 30, "end": index * 30 + 1}],
+            }
+            for index in range(4)
+        ],
+    }
+
+    chunks = highlight_generation._analysis_chunks(transcript)
+
+    assert len(chunks) > 1
+    assert all("segments" in chunk for chunk in chunks)
+    assert all("words" not in chunk for chunk in chunks)
+    assert all(
+        all(set(segment) == {"start", "end", "text"} for segment in chunk["segments"])
+        for chunk in chunks
+    )

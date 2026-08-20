@@ -134,11 +134,11 @@ def scene_strategy_workers() -> int:
     return min(max(value, 1), MAX_SCENE_STRATEGY_WORKERS)
 
 GEMINI_PROMPT_TEMPLATE = """
-You are a senior short-form video editor. Read the ENTIRE transcript and word-level timestamps to choose the 3–15 MOST VIRAL moments for TikTok/IG Reels/YouTube Shorts. Each clip must be between 15 and 60 seconds long.
+You are a senior short-form video editor. Read the supplied timestamped transcript segments and choose the strongest viral moments for TikTok/IG Reels/YouTube Shorts. Each clip must be between 15 and 60 seconds long.
 
 TARGET_CLIP_COUNT: {target_clips}
 
-If possible, aim to return about TARGET_CLIP_COUNT clips. Do not stop early unless the video genuinely has fewer strong moments.
+Return at most TARGET_CLIP_COUNT candidates from this transcript window. Do not stop early unless the window genuinely has fewer strong moments.
 
 ⚠️ FFMPEG TIME CONTRACT — STRICT REQUIREMENTS:
 - Return timestamps in ABSOLUTE SECONDS from the start of the video (usable in: ffmpeg -ss <start> -to <end> -i <input> ...).
@@ -155,11 +155,8 @@ ORIGINAL SOURCE CONTEXT (grounded facts only; may be unavailable):
 {source_context}
 Use this context to improve titles, descriptions, and hooks. Do not invent identities, locations, dates, events, or entities that are not supported by the context or transcript.
 
-TRANSCRIPT_TEXT (raw):
-{transcript_text}
-
-WORDS_JSON (array of {{w, s, e}} where s/e are seconds):
-{words_json}
+TIMESTAMPED_TRANSCRIPT_SEGMENTS (each segment has absolute start/end seconds):
+{transcript_segments}
 
 STRICT EXCLUSIONS:
 - No generic intros/outros or purely sponsorship segments unless they contain the hook.
@@ -171,6 +168,7 @@ OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by pre
     {{
       "start": <number in seconds, e.g., 12.340>,
       "end": <number in seconds, e.g., 37.900>,
+      "score": <number from 0 to 1>,
       "video_description_for_tiktok": "<description for TikTok oriented to get views with contextual CTA>",
       "video_description_for_instagram": "<description for Instagram oriented to get views with contextual CTA>",
       "video_title_for_youtube_short": "<title for YouTube Short oriented to get views 100 chars max>",
@@ -179,6 +177,9 @@ OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by pre
   ]
 }}
 """
+
+CLIP_ANALYSIS_MAX_CHUNK_CHARS = 24000
+CLIP_ANALYSIS_MAX_PROMPT_CHARS = 32000
 
 # Load the YOLO model once for GPU-backed face/person analysis and fallback framing.
 model = None
@@ -2207,6 +2208,108 @@ def _stretch_clip_window(start, end, total_duration, *, min_duration=15.0, targe
 
     return round(new_start, 3), round(new_end, 3)
 
+
+def _clip_analysis_chunks(transcript_result, video_duration=0.0):
+    """Build compact absolute-time transcript chunks for clip analysis prompts."""
+    compact_segments = []
+    raw_segments = transcript_result.get("segments", []) or []
+
+    def append_text_parts(start, end, text):
+        remaining = str(text or "").strip()
+        while remaining:
+            low, high = 1, len(remaining)
+            best = 1
+            while low <= high:
+                midpoint = (low + high) // 2
+                candidate = {"start": start, "end": end, "text": remaining[:midpoint]}
+                if len(json.dumps([candidate], ensure_ascii=False)) <= CLIP_ANALYSIS_MAX_CHUNK_CHARS:
+                    best = midpoint
+                    low = midpoint + 1
+                else:
+                    high = midpoint - 1
+            compact_segments.append({"start": start, "end": end, "text": remaining[:best]})
+            remaining = remaining[best:].lstrip()
+
+    for raw_segment in raw_segments:
+        text = re.sub(r"\s+", " ", str(raw_segment.get("text") or "").strip())
+        if not text:
+            continue
+        try:
+            start = round(float(raw_segment.get("start")), 3)
+            end = round(float(raw_segment.get("end")), 3)
+        except (TypeError, ValueError):
+            continue
+        if end <= start:
+            continue
+        append_text_parts(start, end, text)
+
+    if not compact_segments:
+        text = re.sub(r"\s+", " ", str(transcript_result.get("text") or "").strip())
+        if text:
+            append_text_parts(0.0, round(max(float(video_duration or 0.0), 0.0), 3), text)
+
+    chunks = []
+    current = []
+    for segment in compact_segments:
+        if current and len(json.dumps(current + [segment], ensure_ascii=False)) > CLIP_ANALYSIS_MAX_CHUNK_CHARS:
+            chunks.append(current)
+            current = []
+        current.append(segment)
+    if current:
+        chunks.append(current)
+    return chunks or [[]]
+
+
+def _snap_clip_boundaries(short, transcript_result, video_duration):
+    """Snap AI timestamps outward to nearby local word boundaries."""
+    if not isinstance(short, dict):
+        return short
+    try:
+        start = float(short.get("start"))
+        end = float(short.get("end"))
+    except (TypeError, ValueError):
+        return short
+
+    total_duration = max(float(video_duration or 0.0), 0.0)
+    start = max(0.0, start)
+    end = min(total_duration, end) if total_duration else max(0.0, end)
+    if end <= start:
+        return short
+
+    starts = []
+    ends = []
+    for segment in transcript_result.get("segments", []) or []:
+        for word in segment.get("words", []) or []:
+            try:
+                word_start = float(word.get("start", word.get("s")))
+                word_end = float(word.get("end", word.get("e")))
+            except (TypeError, ValueError):
+                continue
+            if word_end > word_start:
+                starts.append(word_start)
+                ends.append(word_end)
+
+    if starts:
+        starts.sort()
+        end_starts = [value for value in starts if value <= start]
+        start = max(end_starts) if end_starts else starts[0]
+    if ends:
+        ends.sort()
+        following_ends = [value for value in ends if value >= end]
+        end = min(following_ends) if following_ends else ends[-1]
+
+    if total_duration:
+        start = min(start, total_duration)
+        end = min(end, total_duration)
+    if end <= start:
+        return short
+
+    snapped = dict(short)
+    snapped["start"] = round(start, 3)
+    snapped["end"] = round(end, 3)
+    return snapped
+
+
 def get_viral_clips(transcript_result, video_duration, target_clips=6, source_context=None):
     ai_config = load_ai_config()
     print(f"🤖  Analyzing with {ai_config.normalized_provider()}...")
@@ -2215,58 +2318,55 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
         print("❌ Error: GEMINI_API_KEY not found in environment variables.")
         return None
 
-    # Extract words
-    words = []
-    for segment in transcript_result['segments']:
-        for word in segment.get('words', []):
-            words.append({
-                'w': word['word'],
-                's': word['start'],
-                'e': word['end']
-            })
-
-    prompt = GEMINI_PROMPT_TEMPLATE.format(
-        video_duration=video_duration,
-        target_clips=target_clips,
-        source_context=json.dumps(normalize_source_context(source_context), ensure_ascii=False) if source_context else "No original source context was provided.",
-        transcript_text=json.dumps(transcript_result['text']),
-        words_json=json.dumps(words)
-    )
-
     is_lmstudio = ai_config.is_lmstudio()
     local_min_duration = 24.0 if is_lmstudio else 15.0
     local_target_duration = 32.0 if is_lmstudio else None
 
     try:
         model_name = ai_config.analyze_model or ai_config.text_model or ("gemini-2.5-flash" if ai_config.is_gemini() else "")
-        text = chat_json(
-            ai_config,
-            prompt,
-            model=model_name,
-            reasoning_effort=ai_config.analyze_reasoning_effort,
+        chunks = _clip_analysis_chunks(transcript_result, video_duration)
+        per_chunk_target = max(1, min(15, (int(target_clips or 1) + len(chunks) - 1) // len(chunks)))
+        result_json = {}
+        all_shorts = []
+        source_context_json = (
+            json.dumps(normalize_source_context(source_context), ensure_ascii=False)
+            if source_context
+            else "No original source context was provided."
         )
 
-        result_json = text if isinstance(text, dict) else {}
-        if not result_json:
-            print("⚠️ AI returned an empty payload. Using transcript-based fallback clips.")
-            return _build_fallback_clip_plan(
-                transcript_result,
-                video_duration,
-                target_clips,
-                min_duration=local_min_duration,
-                target_duration=local_target_duration,
+        for chunk in chunks:
+            prompt = GEMINI_PROMPT_TEMPLATE.format(
+                video_duration=video_duration,
+                target_clips=per_chunk_target,
+                source_context=source_context_json,
+                transcript_segments=json.dumps(chunk, ensure_ascii=False),
             )
+            if len(prompt) > CLIP_ANALYSIS_MAX_PROMPT_CHARS:
+                raise ValueError("Clip analysis prompt exceeds the configured size limit")
 
-        # Some models use alternate keys. Normalize those here before fallback.
-        if "shorts" not in result_json or not isinstance(result_json.get("shorts"), list):
-            for alt_key in ("clips", "moments", "clip_plan", "viral_clips"):
-                alt_value = result_json.get(alt_key)
-                if isinstance(alt_value, list) and alt_value:
-                    result_json["shorts"] = alt_value
-                    break
+            response = chat_json(
+                ai_config,
+                prompt,
+                model=model_name,
+                reasoning_effort=ai_config.analyze_reasoning_effort,
+            )
+            if not isinstance(response, dict):
+                continue
+            result_json = dict(response)
 
-        shorts = result_json.get("shorts")
-        if not isinstance(shorts, list) or not shorts:
+            # Some models use alternate keys. Normalize those here before fallback.
+            if "shorts" not in result_json or not isinstance(result_json.get("shorts"), list):
+                for alt_key in ("clips", "moments", "clip_plan", "viral_clips"):
+                    alt_value = result_json.get(alt_key)
+                    if isinstance(alt_value, list) and alt_value:
+                        result_json["shorts"] = alt_value
+                        break
+
+            shorts = result_json.get("shorts")
+            if isinstance(shorts, list):
+                all_shorts.extend(short for short in shorts if isinstance(short, dict))
+
+        if not all_shorts:
             print("⚠️ AI returned no usable shorts. Using transcript-based fallback clips.")
             return _build_fallback_clip_plan(
                 transcript_result,
@@ -2276,9 +2376,17 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
                 target_duration=local_target_duration,
             )
 
-        if is_lmstudio:
-            adjusted_shorts = []
-            for clip in shorts:
+        clip_limit = max(1, min(int(target_clips or 1), 15))
+        def score_value(clip):
+            try:
+                return float(clip.get("score", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        all_shorts.sort(key=score_value, reverse=True)
+        adjusted_shorts = []
+        for clip in all_shorts[:clip_limit]:
+            if is_lmstudio:
                 if not isinstance(clip, dict):
                     continue
                 try:
@@ -2296,11 +2404,10 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
                 updated_clip = dict(clip)
                 updated_clip["start"] = clip_start
                 updated_clip["end"] = clip_end
-                adjusted_shorts.append(updated_clip)
+                clip = updated_clip
+            adjusted_shorts.append(_snap_clip_boundaries(clip, transcript_result, video_duration))
 
-            if adjusted_shorts:
-                shorts = adjusted_shorts
-                result_json["shorts"] = shorts
+        result_json["shorts"] = adjusted_shorts
 
         if ai_config.is_gemini():
             result_json['cost_analysis'] = {
