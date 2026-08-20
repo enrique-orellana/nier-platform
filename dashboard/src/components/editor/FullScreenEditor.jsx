@@ -265,6 +265,7 @@ export default function FullScreenEditor({
     ),
   );
   const [localDraftRevision, setLocalDraftRevision] = useState(0);
+  const [refreshedMasterVideoUrl, setRefreshedMasterVideoUrl] = useState("");
   const durationSeconds = editorState.durationSec || 30;
   const fps = editorState.fps || clip.output_fps || 30;
 
@@ -369,6 +370,39 @@ export default function FullScreenEditor({
     jobId,
   ]);
 
+  useEffect(() => {
+    if (!isOpen || !useLocalEditor || !jobId) return undefined;
+    let cancelled = false;
+    const refreshMasterVideoUrl = async () => {
+      try {
+        const response = await fetch(
+          getApiUrl(
+            `/api/projects/clips/${encodeURIComponent(jobId)}?refresh=true`,
+          ),
+        );
+        if (!response.ok) return;
+        const payload = await response.json();
+        const clips = Array.isArray(payload.clips) ? payload.clips : [];
+        const clipPosition = Number(clipIndex);
+        const refreshedClip = clips.find(
+          (candidate, index) =>
+            Number(candidate?.index) === clipPosition || index === clipPosition,
+        );
+        const nextUrl =
+          refreshedClip?.source_video_url ||
+          refreshedClip?.original_video_url ||
+          "";
+        if (!cancelled && nextUrl) setRefreshedMasterVideoUrl(nextUrl);
+      } catch {
+        // Keep the URL already present in the manifest as a fallback.
+      }
+    };
+    void refreshMasterVideoUrl();
+    return () => {
+      cancelled = true;
+    };
+  }, [clipIndex, isOpen, jobId, useLocalEditor]);
+
   const inputProps = useMemo(() => {
     const nextManifest = editorStateToManifest(
       editorState,
@@ -410,6 +444,7 @@ export default function FullScreenEditor({
     }),
     [activeTrackId, clip.video_url, projectManifest],
   );
+  const projectVideoUrl = refreshedMasterVideoUrl || projectInputProps.videoUrl;
   const localEditorPreviewUrl = useMemo(
     () =>
       proxyUrl(
@@ -698,7 +733,9 @@ export default function FullScreenEditor({
     setBusy(true);
     setError(null);
     const props = {
-      ...(useLocalEditor ? projectInputProps : inputProps),
+      ...(useLocalEditor
+        ? { ...projectInputProps, videoUrl: projectVideoUrl }
+        : inputProps),
       durationInFrames: editorState.durationFrames,
       fps,
       width: clip.output_width || 1080,
@@ -707,7 +744,16 @@ export default function FullScreenEditor({
     const result = await saveAndRenderVersion({
       jobId,
       clipIndex,
-      manifest: { ...projectManifest, active_subtitle_track_id: activeTrackId },
+      manifest: {
+        ...projectManifest,
+        timeline: useLocalEditor
+          ? {
+              ...(projectManifest.timeline || {}),
+              source_video_url: projectVideoUrl,
+            }
+          : projectManifest.timeline,
+        active_subtitle_track_id: activeTrackId,
+      },
       parentVersionId: version?.version_id,
       props,
     });
@@ -738,6 +784,7 @@ export default function FullScreenEditor({
     onVersionChange,
     projectInputProps,
     projectManifest,
+    projectVideoUrl,
     useLocalEditor,
     version,
   ]);
@@ -797,7 +844,7 @@ export default function FullScreenEditor({
             Number(durationSeconds || 0) * 1000,
           )}
           remotionPreviewProps={{
-            videoUrl: projectInputProps.videoUrl,
+            videoUrl: projectVideoUrl,
             videoStartSeconds: projectInputProps.videoStartSeconds,
             durationInSeconds: durationSeconds,
             fps,

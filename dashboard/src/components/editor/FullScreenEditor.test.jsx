@@ -530,7 +530,9 @@ describe("FullScreenEditor", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /toggle subtitles settings/i }),
     );
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/clips/job?refresh=true",
+    );
     expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
       "data-video-url",
       "/videos/job/source_clip_1.mp4",
@@ -539,6 +541,58 @@ describe("FullScreenEditor", () => {
       screen.getByRole("button", { name: /generate subtitles/i }),
     ).not.toBeDisabled();
     expect(screen.getAllByText("00:00 / 00:26")).toHaveLength(2);
+  });
+
+  it("refreshes the direct MinIO master URL for the project preview", async () => {
+    const fetchMock = vi.fn(async (url) => {
+      if (String(url).includes("/api/projects/clips/job?refresh=true")) {
+        return {
+          ok: true,
+          json: async () => ({
+            clips: [
+              {
+                source_video_url:
+                  "https://minio.example/master/source.mp4?X-Amz-Date=fresh",
+              },
+            ],
+          }),
+        };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          video_url: "https://minio.example/master/source.mp4?X-Amz-Date=stale",
+          source_video_url:
+            "https://minio.example/master/source.mp4?X-Amz-Date=stale",
+        }}
+        initialManifest={{
+          timeline: {
+            source_video_url:
+              "https://minio.example/master/source.mp4?X-Amz-Date=stale",
+            trim: { start_sec: 0, end_sec: 10 },
+          },
+          layers: {},
+          subtitle_tracks: [],
+        }}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
+        "data-video-url",
+        "https://minio.example/master/source.mp4?X-Amz-Date=fresh",
+      ),
+    );
   });
 
   it("saves generated hashtags in the new version manifest", async () => {
