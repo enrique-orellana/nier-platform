@@ -1,33 +1,15 @@
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
-export const requiresAiApiKey = (provider = "", transcriptionProvider = "") => {
-  const normalizedProvider = String(provider || "")
-    .trim()
-    .toLowerCase();
-  const normalizedTranscriptionProvider = String(transcriptionProvider || "")
-    .trim()
-    .toLowerCase();
-  return (
-    normalizedProvider === "gemini" ||
-    normalizedProvider === "openrouter" ||
-    normalizedTranscriptionProvider === "openrouter"
-  );
-};
+export const requiresAiApiKey = () => true;
 
 export const shouldForwardApiKey = (
   provider = "",
-  transcriptionProvider = "",
+  { requiresRemoteTranscription = false } = {},
 ) => {
   const normalizedProvider = String(provider || "")
     .trim()
     .toLowerCase();
-  const normalizedTranscriptionProvider = String(transcriptionProvider || "")
-    .trim()
-    .toLowerCase();
-  return (
-    normalizedProvider !== "openai-codex" ||
-    normalizedTranscriptionProvider === "openrouter"
-  );
+  return requiresRemoteTranscription || normalizedProvider !== "openai-codex";
 };
 
 export const resolveAiBaseUrl = (provider, baseUrl = "") =>

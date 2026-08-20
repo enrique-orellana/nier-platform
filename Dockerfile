@@ -68,14 +68,9 @@ ENV USER=appuser
 # Pre-download YOLO model on build (now running as appuser, fully cached before source code copy)
 RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
 
-# LOCAL_WHISPER_REACTIVATE: Local Whisper is removed from the runtime and its
-# dependency is no longer installed. To reactivate it, restore faster-whisper,
-# restore the guarded local transcription path, and optionally add this preload:
-# RUN python -c "from faster_whisper import WhisperModel; WhisperModel('large-v3', device='cpu', compute_type='int8')"
-
-# Keep the Go binary copy after the large model layers. Backend source changes
+# Keep the Go binary copy after the large model layer. Backend source changes
 # now invalidate only the small control-plane layer instead of redownloading
-# YOLO and Whisper models.
+# the YOLO model.
 COPY --from=go-builder /out/openshorts-api /usr/local/bin/openshorts-api
 
 # Copy application code (doing this last maximizes layer cache hits)

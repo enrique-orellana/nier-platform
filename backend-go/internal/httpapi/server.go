@@ -68,6 +68,7 @@ func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, 
 	}
 	mux.HandleFunc("/health", server.health)
 	mux.HandleFunc("/ready", server.readiness)
+	mux.HandleFunc("/videos/", server.legacyVideoRedirect)
 	mux.HandleFunc("/thumbnails/", server.staticThumbnail)
 	mux.HandleFunc("/gallery", server.galleryPage)
 	mux.HandleFunc("/video/", server.videoPage)

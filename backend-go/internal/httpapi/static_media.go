@@ -1,11 +1,14 @@
 package httpapi
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -31,6 +34,38 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request, relative, r
 		return
 	}
 	http.ServeFile(w, r, candidate)
+}
+
+func (s *Server) legacyVideoRedirect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	relative := strings.TrimPrefix(r.URL.Path, "/videos/")
+	if relative == "" || strings.Contains(relative, "\\") || path.Clean(relative) != relative || strings.HasPrefix(relative, "../") {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
+		return
+	}
+	parts := strings.Split(relative, "/")
+	if len(parts) >= 2 && s.s3Store != nil && s.s3Store.Bucket != "" {
+		jobID := parts[0]
+		filename := path.Base(relative)
+		var publishedURL string
+		if filename == "source.mp4" || strings.HasPrefix(filename, "master_") || strings.HasSuffix(filename, "_metadata.json") {
+			publishedURL = s.directMasterArtifactURL(jobID, filename)
+		} else {
+			publishedURL = s.directClipArtifactURL(jobID, jobID, filename)
+		}
+		if strings.HasPrefix(publishedURL, "http://") || strings.HasPrefix(publishedURL, "https://") {
+			http.Redirect(w, r, publishedURL, http.StatusTemporaryRedirect)
+			return
+		}
+	}
+	target := "/output/" + relative
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+	http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 }
 
 func (s *Server) renderProxy(w http.ResponseWriter, r *http.Request) {
@@ -66,9 +101,72 @@ func (s *Server) renderProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer response.Body.Close()
+	contents, err := io.ReadAll(response.Body)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Could not read render status"})
+		return
+	}
+	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+		var payload map[string]any
+		if json.Unmarshal(contents, &payload) == nil {
+			status, _ := payload["status"].(string)
+			outputURL, _ := payload["outputUrl"].(string)
+			if (status == "done" || status == "completed") && outputURL != "" {
+				publishedURL, publishErr := s.publishRenderOutput(r.Context(), outputURL)
+				if publishErr != nil {
+					writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Could not publish rendered master: %s", publishErr)})
+					return
+				}
+				payload["outputUrl"] = publishedURL
+				contents, _ = json.Marshal(payload)
+			}
+		}
+	}
 	w.Header().Set("Content-Type", response.Header.Get("Content-Type"))
 	w.WriteHeader(response.StatusCode)
-	_, _ = io.Copy(w, response.Body)
+	_, _ = w.Write(contents)
+}
+
+func (s *Server) publishRenderOutput(ctx context.Context, outputURL string) (string, error) {
+	if s.s3Store == nil || s.s3Store.Client == nil || s.s3Store.Bucket == "" {
+		return outputURL, nil
+	}
+	normalized := strings.ReplaceAll(strings.TrimSpace(outputURL), "\\", "/")
+	parsed, err := url.Parse(normalized)
+	if err == nil && parsed.Path != "" {
+		normalized = parsed.Path
+	}
+	marker := "/output/"
+	markerIndex := strings.Index(normalized, marker)
+	if markerIndex < 0 {
+		return outputURL, nil
+	}
+	relative := strings.TrimPrefix(normalized[markerIndex+len(marker):], "/")
+	if relative == "" || path.Clean(relative) != relative || strings.Contains(relative, "..") {
+		return "", fmt.Errorf("invalid rendered output path")
+	}
+	parts := strings.Split(relative, "/")
+	if len(parts) < 2 || parts[0] == "" || path.Base(relative) == "." {
+		return "", fmt.Errorf("invalid rendered output path")
+	}
+	root := s.config.OutputDir
+	if root == "" {
+		root = "output"
+	}
+	localPath := filepath.Join(root, filepath.FromSlash(relative))
+	if !safePath(root, localPath) {
+		return "", fmt.Errorf("rendered output is outside the output directory")
+	}
+	if _, err := os.Stat(localPath); err != nil {
+		return "", err
+	}
+	jobID := parts[0]
+	filename := path.Base(relative)
+	key := jobID + "/master/" + filename
+	if err := s.s3Store.UploadFile(ctx, key, localPath, "video/mp4"); err != nil {
+		return "", err
+	}
+	return s.s3Store.DirectObjectURL(ctx, key, 2*time.Hour)
 }
 
 func (s *Server) videoProxy(w http.ResponseWriter, r *http.Request) {

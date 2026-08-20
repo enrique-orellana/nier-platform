@@ -53,10 +53,6 @@ class AIConfig:
     reasoning_effort: str = ""
     analyze_reasoning_effort: str = ""
     vision_reasoning_effort: str = ""
-    # LOCAL_WHISPER_REACTIVATE: Local transcription is intentionally removed
-    # from the runtime. Reintroducing it requires restoring the dependency and
-    # replacing the explicit guards in the transcription entry points.
-    transcription_provider: str = "openrouter"
     transcription_model: str = OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL
     transcription_openrouter_provider: str = ""
     transcription_language: str = "auto"
@@ -98,9 +94,7 @@ class AIConfig:
         return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 
     def resolved_transcription_base_url(self) -> str:
-        if (self.transcription_provider or "openrouter").strip().lower() == "openrouter":
-            return OPENROUTER_BASE_URL
-        return self.resolved_base_url()
+        return OPENROUTER_BASE_URL
 
 
 def _is_placeholder_model(model: str, provider: str) -> bool:
@@ -210,14 +204,6 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         )
     )
 
-    transcription_provider = _pick(
-        source,
-        "X-AI-Transcription-Provider",
-        "AI_TRANSCRIPTION_PROVIDER",
-        default="openrouter",
-    ).strip().lower()
-    if transcription_provider in {"openshorts-local", "local-editor", "faster-whisper"}:
-        transcription_provider = "local"
     transcription_model = _pick(
         source,
         "X-AI-Transcription-Model",
@@ -255,7 +241,6 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         reasoning_effort=reasoning_effort,
         analyze_reasoning_effort=analyze_reasoning_effort,
         vision_reasoning_effort=vision_reasoning_effort,
-        transcription_provider=transcription_provider,
         transcription_model=transcription_model,
         transcription_openrouter_provider=transcription_openrouter_provider,
         transcription_language=transcription_language,
@@ -273,7 +258,6 @@ def ai_config_to_env(config: AIConfig) -> dict[str, str]:
         "AI_REASONING_EFFORT": config.reasoning_effort,
         "AI_ANALYZE_REASONING_EFFORT": config.analyze_reasoning_effort,
         "AI_VISION_REASONING_EFFORT": config.vision_reasoning_effort,
-        "AI_TRANSCRIPTION_PROVIDER": config.transcription_provider,
         "AI_TRANSCRIPTION_MODEL": config.transcription_model,
         "AI_TRANSCRIPTION_OPENROUTER_PROVIDER": config.transcription_openrouter_provider,
         "AI_TRANSCRIPTION_LANGUAGE": config.transcription_language,

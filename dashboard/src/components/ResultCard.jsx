@@ -921,7 +921,11 @@ export default function ResultCard({
         clip={clip}
         jobId={jobId}
         clipIndex={index}
-        aiHeaders={getAiHeaders ? getAiHeaders("json") : {}}
+        aiHeaders={
+          getAiHeaders
+            ? getAiHeaders("json", { requiresRemoteTranscription: true })
+            : {}
+        }
         onRendered={(url) => applyRenderedVideoUrl(url, { persist: true })}
         onSessionReady={(session) => {
           editorSessionRef.current = session;

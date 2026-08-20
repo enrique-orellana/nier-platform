@@ -7,12 +7,12 @@ import saasshorts
 import subtitles
 
 
-def test_subtitle_transcription_uses_remote_provider_without_local_whisper(monkeypatch, tmp_path):
+def test_subtitle_transcription_uses_remote_provider(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
-    config = Mock(transcription_provider="openrouter")
+    config = Mock()
     transcript = {"text": "Remote text", "segments": [], "language": "en"}
-    headers = {"X-AI-Transcription-Provider": "openrouter"}
+    headers = {"X-AI-Transcription-Language": "en"}
     transcribe = Mock(return_value=transcript)
 
     monkeypatch.setattr(ai_client, "load_ai_config", lambda _headers=None: config)
@@ -28,7 +28,7 @@ def test_subtitle_transcription_uses_remote_provider_without_local_whisper(monke
 def test_subtitle_transcription_forwards_clip_range(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
-    config = Mock(transcription_provider="openrouter")
+    config = Mock()
     transcribe = Mock(return_value={"text": "Remote text", "segments": [], "language": "en"})
 
     monkeypatch.setattr(ai_client, "load_ai_config", lambda _headers=None: config)
@@ -37,7 +37,7 @@ def test_subtitle_transcription_forwards_clip_range(monkeypatch, tmp_path):
 
     subtitles.transcribe_audio(
         source,
-        headers={"X-AI-Transcription-Provider": "openrouter"},
+        headers={"X-AI-Transcription-Language": "en"},
         start_seconds=10.0,
         end_seconds=18.5,
     )
@@ -45,16 +45,16 @@ def test_subtitle_transcription_forwards_clip_range(monkeypatch, tmp_path):
     transcribe.assert_called_once_with(
         source,
         42.0,
-        headers={"X-AI-Transcription-Provider": "openrouter"},
+        headers={"X-AI-Transcription-Language": "en"},
         start_seconds=10.0,
         end_seconds=18.5,
     )
 
 
-def test_saas_subtitles_use_remote_provider_without_local_whisper(monkeypatch, tmp_path):
+def test_saas_subtitles_use_remote_provider(monkeypatch, tmp_path):
     audio = tmp_path / "voice.mp3"
     audio.write_bytes(b"audio")
-    monkeypatch.setattr(saasshorts, "load_ai_config", lambda _headers=None: Mock(transcription_provider="openrouter"))
+    monkeypatch.setattr(saasshorts, "load_ai_config", lambda _headers=None: Mock())
     monkeypatch.setattr(
         saasshorts,
         "transcribe_audio_openrouter",
@@ -63,7 +63,7 @@ def test_saas_subtitles_use_remote_provider_without_local_whisper(monkeypatch, t
         },
     )
 
-    words = saasshorts.transcribe_audio_for_subs(str(audio), headers={"X-AI-Transcription-Provider": "openrouter"})
+    words = saasshorts.transcribe_audio_for_subs(str(audio), headers={"X-AI-Transcription-Language": "en"})
 
     assert [word["word"] for word in words] == ["Remote", "subtitle", "words"]
     assert words[-1]["end"] == 2.0

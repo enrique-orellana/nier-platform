@@ -5,10 +5,10 @@ import {
 } from "./renderVersion";
 
 describe("saveAndRenderVersion", () => {
-  it("normalizes renderer filesystem output paths to the public videos route", () => {
+  it("normalizes renderer filesystem output paths to the renderer output route", () => {
     expect(
       normalizeRenderedOutputUrl("/output/job/master_0_v4_123.mp4", "job"),
-    ).toBe("/videos/job/master_0_v4_123.mp4");
+    ).toBe("/output/job/master_0_v4_123.mp4");
     expect(
       normalizeRenderedOutputUrl("/videos/job/master_0_v4_123.mp4", "job"),
     ).toBe("/videos/job/master_0_v4_123.mp4");

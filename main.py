@@ -42,7 +42,6 @@ try:
 except ImportError:  # pragma: no cover - required only for URL ingestion
     yt_dlp = None
 
-# Local Whisper was removed from the runtime; transcription uses the configured remote provider.
 from dotenv import load_dotenv
 import json
 from pathlib import Path
@@ -2039,11 +2038,6 @@ def render_clip_plan(
 
 
 def transcribe_video(video_path, *, duration_seconds=None, emit_log=None, headers=None):
-    ai_config = load_ai_config(headers)
-    if ai_config.transcription_provider != "openrouter":
-        raise RuntimeError(
-            "Local Whisper transcription is disabled. Configure OpenRouter transcription and retry."
-        )
     if duration_seconds is None:
         duration_seconds = probe_media(video_path).duration_seconds
     return transcribe_video_with_config(

@@ -134,6 +134,17 @@ class AlwaysUnavailableTranscriptionClient(RecordingClient):
 
 
 class OpenRouterTests(unittest.TestCase):
+    def test_transcription_config_has_no_provider_selector(self):
+        config = ai_client.load_ai_config({
+            "X-AI-Api-Key": "secret",
+        })
+
+        self.assertFalse(hasattr(config, "transcription_provider"))
+        self.assertEqual(
+            config.resolved_transcription_base_url(),
+            "https://openrouter.ai/api/v1",
+        )
+
     def test_load_ai_config_applies_openrouter_defaults(self):
         config = ai_client.load_ai_config({
             "X-AI-Provider": "openrouter",
@@ -145,7 +156,6 @@ class OpenRouterTests(unittest.TestCase):
         self.assertEqual(config.resolved_base_url(), "https://openrouter.ai/api/v1")
         self.assertEqual(config.text_model, "openai/gpt-4o-mini")
         self.assertEqual(config.analyze_model, "openai/gpt-4o-mini")
-        self.assertEqual(config.transcription_provider, "openrouter")
         self.assertEqual(config.transcription_model, "openai/whisper-large-v3")
         self.assertEqual(config.transcription_openrouter_provider, "")
 
@@ -181,7 +191,6 @@ class OpenRouterTests(unittest.TestCase):
             provider="lmstudio",
             api_key="secret",
             base_url="http://host.docker.internal:1234",
-            transcription_provider="openrouter",
             transcription_model="openai/whisper-large-v3",
         )
         with TemporaryDirectory() as directory:
@@ -284,7 +293,6 @@ class OpenRouterTests(unittest.TestCase):
         config = ai_client.AIConfig(
             provider="lmstudio",
             base_url="http://host.docker.internal:1234",
-            transcription_provider="openrouter",
         )
         with TemporaryDirectory() as directory:
             audio_path = Path(directory) / "audio.wav"

@@ -27,15 +27,32 @@ import (
 	"github.com/mutonby/openshorts/backend-go/internal/manifests"
 )
 
-func TestLegacyVideoRouteIsRemoved(t *testing.T) {
+func TestLegacyVideoRouteRedirectsToRendererOutput(t *testing.T) {
 	server := NewServer(config.Config{OutputDir: t.TempDir()})
 
 	request := httptest.NewRequest(http.MethodGet, "/videos/job-1/source.mp4", nil)
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, request)
 
-	if response.Code != http.StatusNotFound {
-		t.Fatalf("expected legacy video route to be removed, got %d: %s", response.Code, response.Body.String())
+	if response.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("expected legacy video route to redirect, got %d: %s", response.Code, response.Body.String())
+	}
+	if location := response.Header().Get("Location"); location != "/output/job-1/source.mp4" {
+		t.Fatalf("unexpected redirect location: %q", location)
+	}
+}
+
+func TestLegacyMasterVideoRouteRedirectsToMinioWhenConfigured(t *testing.T) {
+	server := NewServer(config.Config{OutputDir: t.TempDir()})
+	server.s3Store = &integrations.S3Store{Bucket: "openshorts-media", PublicURLBase: "https://minio.example"}
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/videos/job-1/master_0_version-1_123.mp4", nil))
+
+	if response.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("expected redirect, got %d: %s", response.Code, response.Body.String())
+	}
+	if location := response.Header().Get("Location"); location != "https://minio.example/openshorts-media/job-1/master/master_0_version-1_123.mp4" {
+		t.Fatalf("unexpected MinIO location: %s", location)
 	}
 }
 
@@ -348,6 +365,7 @@ func TestProcessCreatesQueuedJob(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodPost, "/api/process", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true,"clip_count":6}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-AI-Api-Key", "test-key")
 	res := httptest.NewRecorder()
 
 	server.Handler().ServeHTTP(res, req)
@@ -385,11 +403,25 @@ func TestProcessCreatesQueuedJob(t *testing.T) {
 	}
 }
 
+func TestProcessRejectsMissingRemoteTranscriptionApiKey(t *testing.T) {
+	server := NewServer(config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/process", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true,"clip_count":6}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest || !strings.Contains(res.Body.String(), "OpenRouter API key is required") {
+		t.Fatalf("expected missing transcription key validation, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
 func TestProcessStoresStreamerLayoutOptions(t *testing.T) {
 	store := jobs.NewMemoryStore()
 	server := NewServerWithStore(config.Config{}, store)
 	req := httptest.NewRequest(http.MethodPost, "/api/process", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true,"layout_format":"streamer_stack","facecam_size":"large"}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-AI-Api-Key", "test-key")
 	res := httptest.NewRecorder()
 	server.Handler().ServeHTTP(res, req)
 	if res.Code != http.StatusAccepted {
@@ -438,6 +470,7 @@ func TestProcessStartsConfiguredWorker(t *testing.T) {
 	server := NewServerWithStoreAndRunner(config.Config{}, store, runner)
 	req := httptest.NewRequest(http.MethodPost, "/api/process", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-AI-Api-Key", "test-key")
 	res := httptest.NewRecorder()
 
 	server.Handler().ServeHTTP(res, req)
@@ -547,6 +580,58 @@ func TestRenderRoutesProxyToRendererService(t *testing.T) {
 	}
 }
 
+func TestRenderStatusPublishesCompletedMasterToS3(t *testing.T) {
+	outputDir := t.TempDir()
+	jobDir := filepath.Join(outputDir, "job-1")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatalf("create output directory: %v", err)
+	}
+	masterPath := filepath.Join(jobDir, "master_0_version-1_123.mp4")
+	if err := os.WriteFile(masterPath, []byte("master cache"), 0o644); err != nil {
+		t.Fatalf("write master cache: %v", err)
+	}
+	renderer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"renderId":"render-1","status":"done","outputUrl":"/output/job-1/master_0_version-1_123.mp4"}`))
+	}))
+	defer renderer.Close()
+
+	server := NewServer(config.Config{OutputDir: outputDir, RenderServiceURL: renderer.URL})
+	client := &regionMetadataS3Client{}
+	server.s3Store = &integrations.S3Store{
+		Client:        client,
+		Bucket:        "openshorts-media",
+		PublicURLBase: "https://minio.example",
+	}
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/render/render-1", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "https://minio.example/openshorts-media/job-1/master/master_0_version-1_123.mp4") {
+		t.Fatalf("expected MinIO master URL, got %s", response.Body.String())
+	}
+	if client.putKey != "job-1/master/master_0_version-1_123.mp4" || client.putBody != "master cache" {
+		t.Fatalf("master was not uploaded to the canonical cache key: key=%q body=%q", client.putKey, client.putBody)
+	}
+	if _, err := os.Stat(masterPath); err != nil {
+		t.Fatalf("master cache was removed: %v", err)
+	}
+}
+
+func TestLocalRenderVideoURLUsesMasterCacheForMinioURL(t *testing.T) {
+	server := NewServer(config.Config{})
+	server.s3Store = &integrations.S3Store{Bucket: "openshorts-media"}
+	got := server.localRenderVideoURL(
+		"job-1",
+		"http://minio.example/openshorts-media/job-1/master/source.mp4?X-Amz-Signature=test",
+	)
+	if got != "/videos/job-1/source.mp4" {
+		t.Fatalf("expected local master cache URL, got %q", got)
+	}
+}
+
 func TestClipVersionRoutesPersistAndBranchManifests(t *testing.T) {
 	outputDir := t.TempDir()
 	server := NewServer(config.Config{OutputDir: outputDir})
@@ -592,6 +677,52 @@ func TestClipVersionRoutesPersistAndBranchManifests(t *testing.T) {
 	server.Handler().ServeHTTP(completeRes, completeReq)
 	if completeRes.Code != http.StatusOK || !strings.Contains(completeRes.Body.String(), `"current_version_id":"`+created.Version.VersionID+`"`) {
 		t.Fatalf("unexpected complete response: %d %s", completeRes.Code, completeRes.Body.String())
+	}
+}
+
+func TestCompleteVersionPublishesLocalMasterToS3(t *testing.T) {
+	outputDir := t.TempDir()
+	masterDir := filepath.Join(outputDir, "job-1")
+	if err := os.MkdirAll(masterDir, 0o755); err != nil {
+		t.Fatalf("create master directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(masterDir, "master_0_version-1_123.mp4"), []byte("master cache"), 0o644); err != nil {
+		t.Fatalf("write master cache: %v", err)
+	}
+	server := NewServer(config.Config{OutputDir: outputDir})
+	client := &regionMetadataS3Client{}
+	server.s3Store = &integrations.S3Store{
+		Client:        client,
+		Bucket:        "openshorts-media",
+		PublicURLBase: "https://minio.example",
+	}
+	createReq := httptest.NewRequest(http.MethodPost, "/api/clip/job-1/0/versions", strings.NewReader(`{"manifest":{"schema_version":1,"timeline":{},"layers":{}}}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(createRes, createReq)
+	var payload struct {
+		Version struct {
+			VersionID string `json:"version_id"`
+		} `json:"version"`
+	}
+	if createRes.Code != http.StatusOK || json.Unmarshal(createRes.Body.Bytes(), &payload) != nil {
+		t.Fatalf("create version failed: %d %s", createRes.Code, createRes.Body.String())
+	}
+
+	completeReq := httptest.NewRequest(
+		http.MethodPost,
+		"/api/clip/job-1/0/versions/"+payload.Version.VersionID+"/complete",
+		strings.NewReader(`{"output_url":"/output/job-1/master_0_version-1_123.mp4"}`),
+	)
+	completeReq.Header.Set("Content-Type", "application/json")
+	completeRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(completeRes, completeReq)
+
+	if completeRes.Code != http.StatusOK || !strings.Contains(completeRes.Body.String(), "https://minio.example/openshorts-media/job-1/master/master_0_version-1_123.mp4") {
+		t.Fatalf("expected published master version, got %d %s", completeRes.Code, completeRes.Body.String())
+	}
+	if client.putKey != "job-1/master/master_0_version-1_123.mp4" || client.putBody != "master cache" {
+		t.Fatalf("master version was not uploaded: key=%q body=%q", client.putKey, client.putBody)
 	}
 }
 
@@ -1344,6 +1475,7 @@ func TestProcessPersistsDeferredModeAndDurableOutputDir(t *testing.T) {
 	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
 	req := httptest.NewRequest(http.MethodPost, "/api/process?clip_count=3", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true,"defer_render":true,"layout_format":"streamer_stack","facecam_size":"large"}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-AI-Api-Key", "test-key")
 	res := httptest.NewRecorder()
 	server.Handler().ServeHTTP(res, req)
 	if res.Code != http.StatusAccepted {
@@ -1372,6 +1504,7 @@ func TestProcessDefaultsToDeferredClipDiscovery(t *testing.T) {
 	server := NewServerWithStore(config.Config{OutputDir: t.TempDir()}, store)
 	req := httptest.NewRequest(http.MethodPost, "/api/process?clip_count=3", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true,"layout_format":"streamer_stack","facecam_size":"large"}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-AI-Api-Key", "test-key")
 	res := httptest.NewRecorder()
 	server.Handler().ServeHTTP(res, req)
 	if res.Code != http.StatusAccepted {
@@ -1392,25 +1525,11 @@ func TestProcessDefaultsToDeferredClipDiscovery(t *testing.T) {
 	}
 }
 
-func TestProcessRejectsOpenRouterTranscriptionWithoutAPIKey(t *testing.T) {
-	server := NewServer(config.Config{})
-	req := httptest.NewRequest(http.MethodPost, "/api/process", strings.NewReader(`{"url":"https://example.com/video.mp4","acknowledged":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-AI-Provider", "lmstudio")
-	req.Header.Set("X-AI-Transcription-Provider", "openrouter")
-	res := httptest.NewRecorder()
-
-	server.Handler().ServeHTTP(res, req)
-
-	if res.Code != http.StatusBadRequest || !strings.Contains(res.Body.String(), "OpenRouter API key is required") {
-		t.Fatalf("expected missing OpenRouter key rejection, got %d %s", res.Code, res.Body.String())
-	}
-}
-
 func TestProcessAcceptsMinioObjectSource(t *testing.T) {
 	server := NewServer(config.Config{})
 	req := httptest.NewRequest(http.MethodPost, "/api/process?clip_count=5", strings.NewReader(`{"source_object":{"bucket":"videos","key":"source.mp4"},"source_url":"https://youtube.com/watch?v=1","acknowledged":true}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-AI-Api-Key", "test-key")
 	res := httptest.NewRecorder()
 	server.Handler().ServeHTTP(res, req)
 	if res.Code != http.StatusAccepted {
@@ -1437,6 +1556,7 @@ func TestProcessAcceptsMultipartVideoAndStoresWorkerSourcePath(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/process?clip_count=4", &body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("X-AI-Api-Key", "test-key")
 	res := httptest.NewRecorder()
 	server.Handler().ServeHTTP(res, req)
 	if res.Code != http.StatusAccepted {

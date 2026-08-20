@@ -18,7 +18,7 @@ export function normalizeRenderedOutputUrl(outputUrl, jobId) {
   const normalized = String(outputUrl).replace(/\\/g, "/");
   if (normalized.startsWith("/videos/")) return normalized;
   const outputMatch = normalized.match(/(?:^|\/)output\/[^/]+\/([^/?#]+)$/);
-  return outputMatch ? `/videos/${jobId}/${outputMatch[1]}` : outputUrl;
+  return outputMatch ? `/output/${jobId}/${outputMatch[1]}` : outputUrl;
 }
 
 const defaultApi = {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -185,6 +186,9 @@ func (s *Server) renderVersion(w http.ResponseWriter, r *http.Request, jobID str
 	if request.Props == nil {
 		request.Props = map[string]any{}
 	}
+	if videoURL, ok := request.Props["videoUrl"].(string); ok {
+		request.Props["videoUrl"] = s.localRenderVideoURL(jobID, videoURL)
+	}
 	request.Props["versionId"] = versionID
 	request.Props["manifestRevision"] = version.ManifestRevision
 	body := map[string]any{"jobId": jobID, "clipIndex": clipIndex, "props": request.Props}
@@ -222,6 +226,28 @@ func (s *Server) renderVersion(w http.ResponseWriter, r *http.Request, jobID str
 	_, _ = io.Copy(w, response.Body)
 }
 
+func (s *Server) localRenderVideoURL(jobID, videoURL string) string {
+	if s.s3Store == nil || s.s3Store.Bucket == "" || strings.TrimSpace(videoURL) == "" {
+		return videoURL
+	}
+	parsed, err := url.Parse(videoURL)
+	if err != nil || parsed.Path == "" {
+		return videoURL
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	for index := 0; index+3 < len(parts); index++ {
+		if parts[index] != s.s3Store.Bucket || parts[index+1] != jobID || parts[index+2] != "master" {
+			continue
+		}
+		filename := parts[len(parts)-1]
+		if filename == "" || filename == "." || filename == ".." || strings.Contains(filename, "\\") {
+			return videoURL
+		}
+		return "/videos/" + jobID + "/" + filename
+	}
+	return videoURL
+}
+
 func (s *Server) completeVersion(w http.ResponseWriter, r *http.Request, store *versions.Store, versionID string) {
 	var request struct {
 		OutputURL string `json:"output_url"`
@@ -248,6 +274,12 @@ func (s *Server) completeVersion(w http.ResponseWriter, r *http.Request, store *
 		writeJSON(w, http.StatusConflict, map[string]string{"detail": "output URL is required"})
 		return
 	}
+	publishedURL, err := s.publishRenderOutput(r.Context(), request.OutputURL)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Could not publish rendered master: %s", err)})
+		return
+	}
+	request.OutputURL = publishedURL
 	if _, err := store.UpdateRender(versionID, versions.RenderStatusDone, ""); err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"detail": err.Error()})
 		return

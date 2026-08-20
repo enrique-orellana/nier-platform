@@ -18,8 +18,6 @@ export const getLocalAiHeaders = () => {
       localStorage.getItem("ai_analyze_effort_v1") || "auto",
     "X-AI-Vision-Reasoning-Effort":
       localStorage.getItem("ai_vision_effort_v1") || "auto",
-    "X-AI-Transcription-Provider":
-      localStorage.getItem("ai_transcription_provider_v1") || "local",
     "X-AI-Transcription-Model":
       localStorage.getItem("ai_transcription_model_v1") ||
       "openai/whisper-large-v3",

@@ -95,7 +95,7 @@ export default function HighlightProjectList({ getAiHeaders, aiProvider }) {
     try {
       const response = await fetch(getApiUrl("/api/highlights/projects"), {
         method: "POST",
-        headers: getAiHeaders("json"),
+        headers: getAiHeaders("json", { requiresRemoteTranscription: true }),
         body: JSON.stringify({
           name: name.trim(),
           source_object: { bucket: selected.bucket, key: selected.key },
@@ -139,7 +139,12 @@ export default function HighlightProjectList({ getAiHeaders, aiProvider }) {
     try {
       const response = await fetch(
         getApiUrl(`/api/highlights/projects/${project.id}/${action}`),
-        { method: "POST", headers: getAiHeaders("json") },
+        {
+          method: "POST",
+          headers: getAiHeaders("json", {
+            requiresRemoteTranscription: action === "retry",
+          }),
+        },
       );
       const payload = await response.json().catch(() => ({}));
       if (!response.ok)

@@ -25,8 +25,3 @@ def preferred_device() -> str:
     if requested == "cuda":
         return "cuda" if cuda_available() else "cpu"
     return "cuda" if cuda_available() else "cpu"
-
-
-# LOCAL_WHISPER_REACTIVATE: Whisper model construction was removed from the
-# runtime. To reactivate it, restore faster-whisper and add an explicit model
-# builder here, then remove the guards in the transcription entry points.

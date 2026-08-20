@@ -15,7 +15,6 @@ describe("AISettingsPanel", () => {
         aiAnalyzeModel="openai/gpt-4o-mini"
         aiVisionModel="openai/gpt-4o-mini"
         aiImageModel=""
-        transcriptionProvider="openrouter"
         transcriptionModel="openai/whisper-large-v3"
         transcriptionOpenRouterProvider=""
         lmStudioAvailable={false}
@@ -23,17 +22,20 @@ describe("AISettingsPanel", () => {
       />,
     );
 
-    expect(screen.getAllByRole("option", { name: /OpenRouter/i })).toHaveLength(
-      2,
-    );
+    expect(
+      screen.getByRole("option", { name: /OpenRouter/i }),
+    ).toBeInTheDocument();
     expect(screen.getByPlaceholderText("sk-or-v1-...")).toBeInTheDocument();
     expect(screen.getByLabelText("OpenRouter API key")).toBeInTheDocument();
     expect(
       screen.getByLabelText("OpenRouter transcription provider"),
     ).toHaveValue("");
     expect(
-      screen.getByText(/only the API key is required/i),
-    ).toBeInTheDocument();
+      screen.queryByRole("combobox", { name: "Transcription provider" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Global transcription provider"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("option", { name: /OpenShorts local/i }),
     ).not.toBeInTheDocument();

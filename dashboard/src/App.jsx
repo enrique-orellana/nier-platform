@@ -325,10 +325,6 @@ function App() {
   const [aiVisionEffort, setAiVisionEffort] = useState(
     () => localStorage.getItem("ai_vision_effort_v1") || "auto",
   );
-  const [transcriptionProvider, setTranscriptionProvider] = useState(() => {
-    const stored = localStorage.getItem("ai_transcription_provider_v1");
-    return stored === "local" ? "openrouter" : stored || "openrouter";
-  });
   const [transcriptionModel, setTranscriptionModel] = useState(
     () =>
       localStorage.getItem("ai_transcription_model_v1") ||
@@ -724,11 +720,9 @@ function App() {
     }
   }, [aiProvider, aiBaseUrl, detectLmStudio]);
 
-  const needsOpenRouterKey =
-    (aiProvider === "openrouter" || transcriptionProvider === "openrouter") &&
-    !apiKey;
+  const needsOpenRouterKey = !apiKey;
   const needsAiConnection =
-    (requiresAiApiKey(aiProvider, transcriptionProvider) && !apiKey) ||
+    (requiresAiApiKey() && !apiKey) ||
     (aiProvider === "openai-codex" && !codexStatus.connected);
   const lastProviderRef = useRef(aiProvider);
 
@@ -890,10 +884,6 @@ function App() {
   }, [aiVisionEffort]);
 
   useEffect(() => {
-    localStorage.setItem("ai_transcription_provider_v1", transcriptionProvider);
-  }, [transcriptionProvider]);
-
-  useEffect(() => {
     localStorage.setItem("ai_transcription_model_v1", transcriptionModel);
   }, [transcriptionModel]);
 
@@ -1020,7 +1010,10 @@ function App() {
     }
   }, [falKey]);
 
-  const getAiHeaders = (contentType = null) => {
+  const getAiHeaders = (
+    contentType = null,
+    { requiresRemoteTranscription = false } = {},
+  ) => {
     const headers = {
       "X-AI-Provider": aiProvider,
       "X-AI-Model": aiTextModel,
@@ -1030,7 +1023,6 @@ function App() {
       "X-AI-Reasoning-Effort": aiTextEffort,
       "X-AI-Analyze-Reasoning-Effort": aiAnalyzeEffort,
       "X-AI-Vision-Reasoning-Effort": aiVisionEffort,
-      "X-AI-Transcription-Provider": transcriptionProvider,
       "X-AI-Transcription-Model": transcriptionModel,
       "X-AI-Transcription-Language": transcriptionLanguage,
     };
@@ -1049,7 +1041,7 @@ function App() {
       headers["X-Gemini-Key"] = apiKey;
     } else if (
       apiKey &&
-      shouldForwardApiKey(aiProvider, transcriptionProvider)
+      shouldForwardApiKey(aiProvider, { requiresRemoteTranscription })
     ) {
       headers["X-AI-Api-Key"] = apiKey;
     }
@@ -1189,7 +1181,7 @@ function App() {
   }, [clipRenderJobs, jobId]);
 
   const handleProcess = async (data) => {
-    if (requiresAiApiKey(aiProvider, transcriptionProvider) && !apiKey) {
+    if (requiresAiApiKey() && !apiKey) {
       setShowKeyModal(true);
       return;
     }
@@ -1218,7 +1210,7 @@ function App() {
     try {
       const { headers, body } = buildProcessRequest({
         data,
-        headers: getAiHeaders(),
+        headers: getAiHeaders(null, { requiresRemoteTranscription: true }),
       });
       const selectedClipCount = data.clipCount || clipCount;
       const processUrl = getApiUrl(
@@ -1598,8 +1590,6 @@ function App() {
                 setAiAnalyzeEffort={setAiAnalyzeEffort}
                 aiVisionEffort={aiVisionEffort}
                 setAiVisionEffort={setAiVisionEffort}
-                transcriptionProvider={transcriptionProvider}
-                setTranscriptionProvider={setTranscriptionProvider}
                 transcriptionModel={transcriptionModel}
                 setTranscriptionModel={setTranscriptionModel}
                 transcriptionLanguage={transcriptionLanguage}

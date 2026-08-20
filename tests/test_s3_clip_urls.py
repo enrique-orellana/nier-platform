@@ -52,6 +52,10 @@ class S3ClipUrlTests(unittest.TestCase):
             s3_uploader.artifact_object_key("job-1", "source_clip_1.mp4"),
             "job-1/clips/job-1/source_clip_1.mp4",
         )
+        self.assertEqual(
+            s3_uploader.artifact_object_key("job-1", "master_0_version-1_123.mp4"),
+            "job-1/master/master_0_version-1_123.mp4",
+        )
 
     def test_download_transfer_config_is_environment_configurable(self):
         with patch.dict(
@@ -156,7 +160,7 @@ class S3ClipUrlTests(unittest.TestCase):
                 side_effect=ValueError("invalid clip"),
             ):
                 with patch.object(s3_uploader, "upload_file_to_s3") as upload:
-                    s3_uploader.upload_job_artifacts(directory, "job-1")
+                    self.assertFalse(s3_uploader.upload_job_artifacts(directory, "job-1"))
 
         uploaded_names = [call.args[2] for call in upload.call_args_list]
         self.assertNotIn("job-1/clips/job-1/clip.mp4", uploaded_names)

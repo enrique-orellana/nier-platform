@@ -183,6 +183,24 @@ func (s *S3Store) WriteObject(ctx context.Context, key string, contents []byte, 
 	return err
 }
 
+func (s *S3Store) UploadFile(ctx context.Context, key, sourcePath, contentType string) error {
+	if s.Client == nil || s.Bucket == "" || key == "" || sourcePath == "" {
+		return fmt.Errorf("S3 file upload is not configured")
+	}
+	file, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	_, err = s.Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(s.Bucket),
+		Key:         aws.String(key),
+		Body:        file,
+		ContentType: aws.String(contentType),
+	})
+	return err
+}
+
 func (s *S3Store) ListSourceObjects(ctx context.Context, search string, limit int, continuation string) (SourceObjectPage, error) {
 	if s.Client == nil || s.SourceBucket == "" {
 		return SourceObjectPage{}, fmt.Errorf("S3 source store is not configured")

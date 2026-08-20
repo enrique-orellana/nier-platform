@@ -21,8 +21,6 @@ export default function AISettingsPanel({
   setAiVisionModel,
   aiImageModel,
   setAiImageModel,
-  transcriptionProvider = "openrouter",
-  setTranscriptionProvider = () => {},
   transcriptionModel = "openai/whisper-large-v3",
   setTranscriptionModel = () => {},
   transcriptionLanguage = "auto",
@@ -499,46 +497,27 @@ export default function AISettingsPanel({
           </>
         )}
         <div className="md:col-span-2 rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
-          <div>
-            <span className="block text-sm text-zinc-300">
-              Global transcription provider
+          <label className="block">
+            <span className="block text-sm text-zinc-300 mb-2">
+              OpenRouter API key
             </span>
-            <p className="mt-1 text-xs text-zinc-500">
-              Highlights and other timed-text features use this setting.
+            <input
+              aria-label="OpenRouter API key"
+              type="password"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              className="input-field"
+              placeholder="sk-or-v1-..."
+              autoComplete="off"
+            />
+            <p className="mt-2 text-xs text-zinc-500">
+              Used for remote audio transcription. Paste your key here.
             </p>
-          </div>
-          <select
-            aria-label="Transcription provider"
-            value={transcriptionProvider}
-            onChange={(event) => setTranscriptionProvider(event.target.value)}
-            className="input-field"
-          >
-            <option value="openrouter">OpenRouter audio transcription</option>
-          </select>
-          {(isOpenRouter || transcriptionProvider === "openrouter") && (
-            <label className="block">
-              <span className="block text-sm text-zinc-300 mb-2">
-                OpenRouter API key
-              </span>
-              <input
-                aria-label="OpenRouter API key"
-                type="password"
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-                className="input-field"
-                placeholder="sk-or-v1-..."
-                autoComplete="off"
-              />
-              <p className="mt-2 text-xs text-zinc-500">
-                Shared by OpenRouter AI and transcription. Paste your key here.
-              </p>
-            </label>
-          )}
+          </label>
           <input
             aria-label="Transcription model"
             value={transcriptionModel}
             onChange={(event) => setTranscriptionModel(event.target.value)}
-            readOnly={transcriptionProvider !== "openrouter"}
             className="input-field"
             placeholder="openai/whisper-large-v3"
           />
@@ -574,7 +553,6 @@ export default function AISettingsPanel({
               onChange={(event) =>
                 setTranscriptionOpenRouterProvider(event.target.value)
               }
-              readOnly={transcriptionProvider !== "openrouter"}
               className="input-field"
               placeholder="deepinfra"
             />

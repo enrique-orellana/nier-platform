@@ -135,12 +135,8 @@ def transcribe_video_with_config(
     start_seconds: float = 0.0,
     end_seconds: float | None = None,
 ) -> dict[str, Any]:
-    """Transcribe through the configured remote provider; local Whisper is disabled."""
+    """Transcribe through OpenRouter with bounded audio chunks."""
     config = load_ai_config(headers)
-    if config.transcription_provider != "openrouter":
-        raise RuntimeError(
-            "Local Whisper transcription is disabled. Configure OpenRouter transcription and retry."
-        )
 
     source_duration = max(0.0, float(duration_seconds))
     range_start = max(0.0, min(source_duration, float(start_seconds or 0.0)))

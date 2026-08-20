@@ -114,7 +114,6 @@ def build_ai_config(
     reasoning_effort: Optional[str] = None,
     analyze_reasoning_effort: Optional[str] = None,
     vision_reasoning_effort: Optional[str] = None,
-    transcription_provider: Optional[str] = None,
     transcription_model: Optional[str] = None,
     extra: Optional[Dict[str, str]] = None,
 ) -> AIConfig:
@@ -139,8 +138,6 @@ def build_ai_config(
         source["X-AI-Analyze-Reasoning-Effort"] = analyze_reasoning_effort
     if vision_reasoning_effort:
         source["X-AI-Vision-Reasoning-Effort"] = vision_reasoning_effort
-    if transcription_provider:
-        source["X-AI-Transcription-Provider"] = transcription_provider
     if transcription_model:
         source["X-AI-Transcription-Model"] = transcription_model
     ai_config = load_ai_config(source)

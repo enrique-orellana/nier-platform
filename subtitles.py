@@ -14,16 +14,10 @@ def transcribe_audio(
     start_seconds: float = 0.0,
     end_seconds: float | None = None,
 ):
-    """Transcribe audio through OpenRouter; local Whisper is not available at runtime."""
-    from ai_client import load_ai_config
+    """Transcribe audio through OpenRouter."""
     from highlight_generation import transcribe_video_with_config
     from media_probe import probe_media
 
-    config = load_ai_config(headers)
-    if config.transcription_provider != "openrouter":
-        raise RuntimeError(
-            "Local Whisper transcription is disabled. Configure OpenRouter transcription and retry."
-        )
     duration_seconds = probe_media(video_path).duration_seconds
     if start_seconds == 0.0 and end_seconds is None:
         return transcribe_video_with_config(video_path, duration_seconds, headers=headers)

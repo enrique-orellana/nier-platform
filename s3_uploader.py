@@ -602,7 +602,12 @@ def artifact_object_key(job_id, relative_name, clip_id=None):
     """Return the canonical object key for a job artifact."""
     relative_name = str(relative_name).replace("\\", "/").lstrip("/")
     job_id = str(job_id).strip()
-    if relative_name == "source.mp4" or relative_name.startswith("source.") or relative_name.endswith("_metadata.json"):
+    if (
+        relative_name == "source.mp4"
+        or relative_name.startswith("source.")
+        or relative_name.startswith("master_")
+        or relative_name.endswith("_metadata.json")
+    ):
         return f"{job_id}/master/{relative_name}"
     clip_id = str(clip_id or job_id).strip()
     return f"{job_id}/clips/{clip_id}/{relative_name}"
@@ -657,6 +662,7 @@ def upload_job_artifacts(directory, job_id, excluded_paths=None, include_paths=N
                     )
                 except (OSError, TypeError, ValueError) as error:
                     logger.warning("Skipping invalid clip artifact %s: %s", relative_name, error)
+                    all_uploaded = False
                     continue
             s3_key = artifact_object_key(job_id, relative_name, clip_id=clip_id)
             eligible_count += 1

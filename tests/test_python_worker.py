@@ -276,7 +276,47 @@ def test_clip_generation_cleanup_retains_master_source(tmp_path, monkeypatch):
     )
 
     assert source.read_bytes() == b"master"
-    assert not metadata.exists()
+    assert metadata.exists()
+
+
+def test_clip_generation_cleanup_removes_clips_but_retains_master_cache(tmp_path, monkeypatch):
+    output_dir = tmp_path / "job-1"
+    output_dir.mkdir()
+    source = output_dir / "source.mp4"
+    source.write_bytes(b"master")
+    metadata = output_dir / "source_metadata.json"
+    metadata.write_text("{}", encoding="utf-8")
+    master = output_dir / "master_8_version_123.mp4"
+    master.write_bytes(b"rendered master cache")
+    clip = output_dir / "source_clip_1.mp4"
+    clip.write_bytes(b"published clip")
+
+    class FakeProcess:
+        stdout = iter(())
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr("python_worker.subprocess.Popen", lambda *args, **kwargs: FakeProcess())
+    monkeypatch.setattr(
+        "python_worker.load_generation_result",
+        lambda _directory: {"clips": [{"video_filename": "source_clip_1.mp4"}]},
+    )
+    monkeypatch.setattr("python_worker.upload_generation_artifacts", lambda *args, **kwargs: True)
+
+    _run_clip_generation(
+        {
+            "id": "job-1",
+            "operation": "clip_generation",
+            "output_dir": str(output_dir),
+            "source_url": "https://example.com/source.mp4",
+        }
+    )
+
+    assert source.exists()
+    assert metadata.exists()
+    assert master.exists()
+    assert not clip.exists()
 
 
 def test_upload_generation_artifacts_forwards_exclusions(monkeypatch, tmp_path):

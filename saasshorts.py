@@ -1048,12 +1048,8 @@ def _format_ass_time(seconds: float) -> str:
 
 
 def transcribe_audio_for_subs(audio_path: str, headers: Optional[dict] = None) -> list:
-    """Transcribe SaaS subtitles through OpenRouter without local Whisper."""
+    """Transcribe SaaS subtitles through OpenRouter."""
     config = load_ai_config(headers)
-    if config.transcription_provider != "openrouter":
-        raise RuntimeError(
-            "Local Whisper transcription is disabled. Configure OpenRouter transcription and retry."
-        )
 
     print("[SaaSShorts] 🎙️ Transcribing audio for subtitles through OpenRouter...")
     transcript = transcribe_audio_openrouter(audio_path, config)

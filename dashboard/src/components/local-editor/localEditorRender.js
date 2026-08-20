@@ -294,7 +294,7 @@ export async function renderLocalVideoOnBackend({
         throw new Error("Render completed without an output file.");
       onProgress(1);
       const result = {
-        outputUrl: getApiUrl(`/videos/${started.jobId}/${filename}`),
+        outputUrl: getApiUrl(`/output/${started.jobId}/${filename}`),
         jobId: started.jobId,
         filename,
       };

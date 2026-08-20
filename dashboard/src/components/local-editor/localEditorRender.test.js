@@ -225,7 +225,7 @@ describe("local editor Remotion rendering", () => {
       fetchImpl,
     });
 
-    expect(outputUrl).toBe("/videos/local-editor-1/render.mp4");
+    expect(outputUrl).toBe("/output/local-editor-1/render.mp4");
     expect(fetchImpl.mock.calls[0][1].body).toBeInstanceOf(FormData);
   });
 
@@ -262,7 +262,7 @@ describe("local editor Remotion rendering", () => {
       fetchImpl,
     });
 
-    expect(outputUrl).toBe("/videos/local-editor-1/render.mp4");
+    expect(outputUrl).toBe("/output/local-editor-1/render.mp4");
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(
       JSON.parse(fetchImpl.mock.calls[0][1].body.get("props")).subtitles.blocks,
@@ -312,7 +312,7 @@ describe("local editor Remotion rendering", () => {
       fetchImpl,
     });
 
-    expect(outputUrl).toBe("/videos/local-editor-1/render.mp4");
+    expect(outputUrl).toBe("/output/local-editor-1/render.mp4");
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(
       JSON.parse(fetchImpl.mock.calls[0][1].body.get("props")).subtitles

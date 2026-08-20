@@ -18,13 +18,20 @@ describe("AI provider URL resolution", () => {
     ).toBe("http://host.docker.internal:1234");
   });
 
-  it("requires a key when transcription uses OpenRouter with a local main provider", () => {
-    expect(requiresAiApiKey("lmstudio", "openrouter")).toBe(true);
-    expect(requiresAiApiKey("lmstudio", "local")).toBe(false);
+  it("requires a key because transcription is always remote", () => {
+    expect(requiresAiApiKey("lmstudio")).toBe(true);
+    expect(requiresAiApiKey("openai-codex")).toBe(true);
   });
 
-  it("forwards the key for OpenRouter transcription even with Codex as the main provider", () => {
-    expect(shouldForwardApiKey("openai-codex", "openrouter")).toBe(true);
-    expect(shouldForwardApiKey("openai-codex", "local")).toBe(false);
+  it("does not forward a provider key to Codex-only requests", () => {
+    expect(shouldForwardApiKey("openai-codex")).toBe(false);
+  });
+
+  it("forwards the key to Codex requests that require remote transcription", () => {
+    expect(
+      shouldForwardApiKey("openai-codex", {
+        requiresRemoteTranscription: true,
+      }),
+    ).toBe(true);
   });
 });

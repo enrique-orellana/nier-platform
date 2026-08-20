@@ -152,6 +152,25 @@ def cleanup_generation_scratch(output_dir: str, job_id: str, preserve_paths=None
             child.unlink()
 
 
+def cleanup_uploaded_clip_files(output_dir: str, job_id: str, preserve_paths=None) -> None:
+    """Remove published clip videos while retaining the local rendering cache."""
+    job_id = str(job_id or "").strip()
+    output_path = Path(output_dir).resolve()
+    if not job_id or output_path.name != job_id:
+        raise ValueError("refusing to clean a non-job-scoped output directory")
+
+    preserved = {Path(path).resolve() for path in (preserve_paths or [])}
+    for candidate in output_path.rglob("*"):
+        if not candidate.is_file() or candidate.resolve() in preserved:
+            continue
+        if candidate.name == "source.mp4" or candidate.name.endswith("_metadata.json"):
+            continue
+        if candidate.name.startswith("master_") and candidate.suffix.lower() == ".mp4":
+            continue
+        if candidate.suffix.lower() == ".mp4":
+            candidate.unlink()
+
+
 def build_clip_generation_environment(request: Mapping[str, Any]) -> dict[str, str]:
     """Translate per-job AI headers into the environment consumed by main.py."""
     from ai_client import ai_config_to_env, load_ai_config
@@ -229,7 +248,7 @@ def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any
         clip_id=clip_id,
     )
     if uploaded:
-        cleanup_generation_scratch(
+        cleanup_uploaded_clip_files(
             output_dir,
             artifact_job_id,
             preserve_paths=preserve_paths or None,

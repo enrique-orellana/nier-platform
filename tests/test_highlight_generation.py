@@ -15,7 +15,7 @@ def test_plan_transcription_chunks_bounds_long_sources():
 def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
-    config = Mock(transcription_provider="openrouter")
+    config = Mock()
     monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
     monkeypatch.setattr(highlight_generation, "_extract_openrouter_audio_chunk", lambda _source, _start, _end, destination: destination.write_bytes(b"audio"))
     transcribe = Mock(return_value={
@@ -41,23 +41,10 @@ def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch
     }]
 
 
-def test_transcribe_video_with_config_rejects_local_whisper(monkeypatch, tmp_path):
-    source = tmp_path / "source.mp4"
-    source.write_bytes(b"source")
-    monkeypatch.setattr(
-        highlight_generation,
-        "load_ai_config",
-        lambda _headers=None: Mock(transcription_provider="local"),
-    )
-
-    with pytest.raises(RuntimeError, match="Local Whisper transcription is disabled"):
-        highlight_generation.transcribe_video_with_config(source, 60.0)
-
-
 def test_openrouter_transcription_uses_single_chunk_for_short_source(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
-    config = Mock(transcription_provider="openrouter")
+    config = Mock()
     monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
     extracted = []
 
@@ -85,7 +72,7 @@ def test_openrouter_transcription_uses_single_chunk_for_short_source(monkeypatch
 def test_openrouter_transcription_uses_selected_clip_range(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
-    config = Mock(transcription_provider="openrouter")
+    config = Mock()
     monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
     extracted = []
 
@@ -129,7 +116,7 @@ def test_openrouter_transcription_uses_selected_clip_range(monkeypatch, tmp_path
 def test_openrouter_transcription_reports_failed_chunk(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
-    config = Mock(transcription_provider="openrouter")
+    config = Mock()
     monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
     monkeypatch.setattr(
         highlight_generation,
@@ -149,7 +136,7 @@ def test_openrouter_transcription_reports_failed_chunk(monkeypatch, tmp_path):
 def test_openrouter_transcription_uses_five_minute_overlapping_chunks(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
-    config = Mock(transcription_provider="openrouter")
+    config = Mock()
     monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
     extracted = []
 
