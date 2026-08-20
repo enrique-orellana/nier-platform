@@ -470,8 +470,15 @@ function SubtitleStyleInspector({ style, onChange, onRemove, hasCues }) {
           min="12"
           max="120"
           value={current.fontSize}
-          onChange={(event) =>
-            update("fontSize", Math.max(12, Number(event.target.value) || 12))
+          onChange={(event) => {
+            const rawValue = event.target.value;
+            update("fontSize", rawValue === "" ? "" : Number(rawValue));
+          }}
+          onBlur={(event) =>
+            update(
+              "fontSize",
+              Math.min(120, Math.max(12, Number(event.target.value) || 12)),
+            )
           }
           className="input-field mt-2"
         />

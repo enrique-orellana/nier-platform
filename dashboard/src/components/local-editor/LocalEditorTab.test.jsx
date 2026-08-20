@@ -304,6 +304,30 @@ describe("LocalEditorTab", () => {
     );
   });
 
+  it("allows replacing the subtitle font size one digit at a time", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoName="project.mp4"
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /toggle subtitles settings/i }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /toggle subtitles settings/i }),
+    );
+
+    const input = screen.getByLabelText("Subtitle font size");
+    fireEvent.change(input, { target: { value: "4" } });
+    expect(input).toHaveValue(4);
+    fireEvent.change(input, { target: { value: "48" } });
+    expect(input).toHaveValue(48);
+  });
+
   it("applies remembered settings to a new editor without copying content", async () => {
     localStorage.setItem(
       EDITOR_PREFERENCES_STORAGE_KEY,
