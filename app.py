@@ -22,6 +22,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Hea
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel
 from render_manifest import load_manifest, save_manifest_atomic, verify_manifest_assets, calculate_revision, master_is_current
 from version_store import VersionStore
@@ -1684,9 +1685,13 @@ async def video_proxy(request: Request, url: str = Query(...), filename: str | N
         ))
         upstream_headers["Host"] = original_netloc
 
+    client = httpx.AsyncClient(
+        timeout=httpx.Timeout(connect=10.0, read=None, write=None, pool=10.0),
+        follow_redirects=True,
+    )
     try:
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            upstream = await client.get(url, headers=upstream_headers)
+        upstream_request = client.build_request("GET", url, headers=upstream_headers)
+        upstream = await client.send(upstream_request, stream=True)
 
         status_code = upstream.status_code  # 200 or 206 (partial content)
 
@@ -1694,23 +1699,33 @@ async def video_proxy(request: Request, url: str = Query(...), filename: str | N
             "Content-Type": upstream.headers.get("content-type", "video/mp4"),
             "Accept-Ranges": "bytes",
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Expose-Headers": "Accept-Ranges, Content-Length, Content-Range, Content-Type, ETag",
+            "Access-Control-Expose-Headers": "Accept-Ranges, Content-Length, Content-Range, Content-Type, ETag, Last-Modified, Cache-Control",
         }
-        if "content-length" in upstream.headers:
-            response_headers["Content-Length"] = upstream.headers["content-length"]
-        if "content-range" in upstream.headers:
-            response_headers["Content-Range"] = upstream.headers["content-range"]
-        if "etag" in upstream.headers:
-            response_headers["ETag"] = upstream.headers["etag"]
+        header_map = {
+            "content-length": "Content-Length",
+            "content-range": "Content-Range",
+            "etag": "ETag",
+            "last-modified": "Last-Modified",
+            "cache-control": "Cache-Control",
+        }
+        for source_name, target_name in header_map.items():
+            if source_name in upstream.headers:
+                response_headers[target_name] = upstream.headers[source_name]
         if filename:
             response_headers["Content-Disposition"] = _build_inline_content_disposition(filename)
 
+        async def close_upstream():
+            await upstream.aclose()
+            await client.aclose()
+
         return StreamingResponse(
-            iter([upstream.content]),
+            upstream.aiter_bytes(),
             status_code=status_code,
             headers=response_headers,
+            background=BackgroundTask(close_upstream),
         )
     except Exception as e:
+        await client.aclose()
         raise HTTPException(status_code=502, detail=f"Video proxy error: {e}")
 
 

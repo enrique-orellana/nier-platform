@@ -1,6 +1,6 @@
 import unittest
 
-from master_policy import choose_master_spec, master_audio_encode_args, master_video_encode_args
+from master_policy import choose_master_spec, load_master_policy, master_audio_encode_args, master_video_encode_args
 from media_probe import MediaProbe
 
 
@@ -34,30 +34,33 @@ class MasterPolicyTests(unittest.TestCase):
         self.assertTrue(spec.tone_map_to_sdr)
 
     def test_encoder_contract_is_fixed(self):
+        policy = load_master_policy()
         spec = choose_master_spec(video(1080, 1920, 30), "crop")
-        self.assertEqual(spec.codec, "h264")
-        self.assertEqual(spec.crf, 14)
-        self.assertEqual(spec.preset, "veryslow")
-        self.assertEqual(spec.pixel_format, "yuv420p")
-        self.assertEqual(spec.audio_bitrate, "192k")
+        self.assertEqual(spec.codec, policy["codec"])
+        self.assertEqual(spec.crf, policy["crf"])
+        self.assertEqual(spec.preset, policy["preset"])
+        self.assertEqual(spec.pixel_format, policy["pixel_format"])
+        self.assertEqual(spec.audio_bitrate, policy["audio_bitrate"])
 
     def test_ffmpeg_contract_is_centralized(self):
+        policy = load_master_policy()
         args = master_video_encode_args()
-        self.assertEqual(args[args.index("-crf") + 1], "14")
-        self.assertEqual(args[args.index("-preset") + 1], "veryslow")
-        self.assertEqual(args[args.index("-b:a") + 1], "192k")
-        self.assertEqual(args[args.index("-ac") + 1], "2")
-        self.assertEqual(args[args.index("-colorspace") + 1], "bt709")
+        self.assertEqual(args[args.index("-crf") + 1], str(policy["crf"]))
+        self.assertEqual(args[args.index("-preset") + 1], policy["preset"])
+        self.assertEqual(args[args.index("-b:a") + 1], policy["audio_bitrate"])
+        self.assertEqual(args[args.index("-ac") + 1], str(policy["audio_channels"]))
+        self.assertEqual(args[args.index("-colorspace") + 1], policy["color_space"])
 
     def test_ffmpeg_contract_can_fix_gop_to_two_seconds(self):
         args = master_video_encode_args(fps=30)
         self.assertEqual(args[args.index("-g") + 1], "60")
 
     def test_standalone_audio_contract_is_centralized(self):
+        policy = load_master_policy()
         args = master_audio_encode_args()
-        self.assertEqual(args[args.index("-c:a") + 1], "aac")
-        self.assertEqual(args[args.index("-ar") + 1], "48000")
-        self.assertEqual(args[args.index("-b:a") + 1], "192k")
+        self.assertEqual(args[args.index("-c:a") + 1], policy["audio_codec"])
+        self.assertEqual(args[args.index("-ar") + 1], str(policy["audio_sample_rate"]))
+        self.assertEqual(args[args.index("-b:a") + 1], policy["audio_bitrate"])
 
 
 if __name__ == "__main__":

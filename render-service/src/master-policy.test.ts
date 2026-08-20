@@ -1,20 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { buildRenderOptions } from "./master-policy.js";
+import { buildRenderOptions, loadMasterPolicy, parseMasterPolicy } from "./master-policy.js";
 
 describe("master policy", () => {
   it("uses the mandatory H.264 contract", () => {
-    expect(buildRenderOptions()).toEqual({
-      codec: "h264",
-      crf: 14,
-      x264Preset: "veryslow",
-      pixelFormat: "yuv420p",
-      colorSpace: "bt709",
-      audioCodec: "aac",
-      audioBitrate: "192k",
-      gopSize: 60,
+    const policy = loadMasterPolicy();
+    expect(buildRenderOptions(policy)).toEqual({
+      codec: policy.codec,
+      crf: policy.crf,
+      x264Preset: policy.preset,
+      pixelFormat: policy.pixel_format,
+      colorSpace: policy.color_space,
+      audioCodec: policy.audio_codec,
+      audioBitrate: policy.audio_bitrate,
+      gopSize: Math.round(30 * policy.gop_seconds),
       everyNthFrame: 1,
       concurrency: null,
-      sampleRate: 48000,
+      sampleRate: policy.audio_sample_rate,
     });
+  });
+
+  it("uses the preset supplied by the shared policy", () => {
+    const policy = loadMasterPolicy();
+    const customPolicy = parseMasterPolicy({ ...policy, preset: "superfast" });
+
+    expect(buildRenderOptions(customPolicy).x264Preset).toBe("superfast");
   });
 });

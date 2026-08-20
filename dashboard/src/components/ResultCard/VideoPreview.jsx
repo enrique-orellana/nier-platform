@@ -60,6 +60,7 @@ export default function VideoPreview({
       <video
         ref={videoRef}
         src={displayUrl}
+        preload="metadata"
         controls
         className="w-full h-full object-cover"
         playsInline

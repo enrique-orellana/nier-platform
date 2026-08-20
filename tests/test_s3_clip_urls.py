@@ -8,6 +8,37 @@ import s3_uploader
 
 
 class S3ClipUrlTests(unittest.TestCase):
+    def test_upload_file_to_s3_sets_video_cache_metadata(self):
+        class FakeS3Client:
+            def upload_file(self, *args, **kwargs):
+                self.args = args
+                self.kwargs = kwargs
+
+        fake_client = FakeS3Client()
+        with patch.dict(
+            os.environ,
+            {
+                "AWS_ACCESS_KEY_ID": "access",
+                "AWS_SECRET_ACCESS_KEY": "secret",
+            },
+            clear=False,
+        ), patch.object(s3_uploader, "_make_s3_client", return_value=fake_client):
+            self.assertTrue(
+                s3_uploader.upload_file_to_s3(
+                    "clip.mp4",
+                    "openshorts-media",
+                    "job-1/clips/clip.mp4",
+                )
+            )
+
+        self.assertEqual(
+            fake_client.kwargs["ExtraArgs"],
+            {
+                "ContentType": "video/mp4",
+                "CacheControl": "public, max-age=31536000, immutable",
+            },
+        )
+
     def test_artifact_object_key_separates_master_and_clips(self):
         self.assertEqual(
             s3_uploader.artifact_object_key("job-1", "source.mp4"),

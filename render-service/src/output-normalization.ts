@@ -24,7 +24,7 @@ export function buildNormalizationArgs(
     "-preset", policy.preset,
     "-crf", String(policy.crf),
     "-pix_fmt", policy.pixel_format,
-    "-vf", "setsar=1,colorspace=all=bt709:iall=bt709:range=tv:irange=tv",
+    "-vf", `setsar=1,colorspace=all=${policy.color_space}:iall=${policy.color_space}:range=${policy.color_range}:irange=${policy.color_range}`,
     "-g", String(gopSize),
     "-keyint_min", String(gopSize),
     "-sc_threshold", "0",
@@ -39,7 +39,7 @@ export function buildNormalizationArgs(
   if (options.hasAudio) {
     args.push(
       "-map", "0:a:0",
-      "-c:a", "aac",
+      "-c:a", policy.audio_codec,
       "-ar", String(policy.audio_sample_rate),
       "-ac", String(policy.audio_channels),
       "-b:a", policy.audio_bitrate,
@@ -49,7 +49,8 @@ export function buildNormalizationArgs(
     args.push("-an");
   }
 
-  args.push("-movflags", "+faststart", "-map_metadata", "-1", outputPath);
+  if (policy.faststart) args.push("-movflags", "+faststart");
+  args.push("-map_metadata", "-1", outputPath);
   return args;
 }
 

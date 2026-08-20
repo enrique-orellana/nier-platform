@@ -81,11 +81,18 @@ def upload_file_to_s3(file_path, bucket_name, s3_key):
         elif not content_type:
             content_type = 'application/octet-stream'
             
+        extra_args = {'ContentType': content_type}
+        if content_type.startswith('video/'):
+            extra_args['CacheControl'] = os.environ.get(
+                'MINIO_VIDEO_CACHE_CONTROL',
+                'public, max-age=31536000, immutable',
+            )
+
         s3_client.upload_file(
             file_path, 
             bucket_name, 
             s3_key,
-            ExtraArgs={'ContentType': content_type}
+            ExtraArgs=extra_args,
         )
         return True
     except ClientError:

@@ -40,8 +40,8 @@ export function validateProbePayload(
   const audio = streams.find((stream) => stream.codec_type === "audio");
   if (!video) throw new Error("master output has no video stream");
   if (video.codec_name !== policy.codec) throw new Error("master output is not H.264");
-  if (text(video.profile).toLowerCase() !== "high") throw new Error("master output is not H.264 High profile");
-  if (video.pix_fmt !== policy.pixel_format) throw new Error("master output is not yuv420p");
+  if (text(video.profile).toLowerCase() !== policy.profile) throw new Error("master output profile does not match the export policy");
+  if (video.pix_fmt !== policy.pixel_format) throw new Error("master output pixel format does not match the export policy");
   if (number(video.width) !== expected.width || number(video.height) !== expected.height) {
     throw new Error("master output dimensions do not match the export policy");
   }
@@ -72,7 +72,7 @@ export function validateProbePayload(
   if (Math.abs(duration - expected.durationSeconds) > (1 / expected.fps) + 0.01) {
     throw new Error("master output duration is outside the one-frame tolerance");
   }
-  if (expected.toneMappedToSdr && video.color_transfer && video.color_transfer !== "bt709") {
+  if (expected.toneMappedToSdr && video.color_transfer && video.color_transfer !== policy.color_transfer) {
     throw new Error("HDR transfer metadata remained in the SDR master");
   }
 }

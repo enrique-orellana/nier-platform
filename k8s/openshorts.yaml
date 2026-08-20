@@ -81,6 +81,7 @@ data:
   AWS_S3_PUBLIC_URL_BASE: http://minio-standalone.openshorts.127.0.0.1.nip.io
   AWS_S3_PUBLIC_ENDPOINT_URL: http://minio-standalone.openshorts.127.0.0.1.nip.io
   AWS_S3_FORCE_PATH_STYLE: "true"
+  MINIO_VIDEO_CACHE_CONTROL: public, max-age=31536000, immutable
   RENDER_SERVICE_URL: http://openshorts-renderer.openshorts.svc.cluster.local:3100
   OPENSHORTS_CODEX_AUTH_FILE: /app/output/.openshorts/codex-auth.json
   REMOTION_BUNDLE_PATH: /app/remotion

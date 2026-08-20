@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { loadMasterPolicy, parseMasterPolicy } from "./master-policy.js";
 import { buildNormalizationArgs } from "./output-normalization.js";
 
 describe("publishable MP4 normalization", () => {
@@ -44,5 +45,43 @@ describe("publishable MP4 normalization", () => {
     expect(args).toContain("-g");
     expect(args[args.indexOf("-g") + 1]).toBe("120");
     expect(args).not.toContain("-c:a");
+  });
+
+  it("uses the shared policy for normalization settings", () => {
+    const basePolicy = loadMasterPolicy();
+    const policy = parseMasterPolicy({
+      ...basePolicy,
+      profile: "baseline",
+      h264_level: "5.1",
+      pixel_format: "yuv444p",
+      color_range: "pc",
+      color_space: "bt2020nc",
+      color_transfer: "smpte2084",
+      color_primaries: "bt2020",
+      audio_codec: "libopus",
+      audio_sample_rate: 44100,
+      audio_channels: 1,
+      audio_bitrate: "128k",
+      gop_seconds: 1,
+      faststart: false,
+    });
+    const args = buildNormalizationArgs("rendered.mp4", "normalized.mp4", { fps: 30, hasAudio: true }, policy);
+
+    expect(args).toEqual(expect.arrayContaining([
+      "-profile:v", "baseline",
+      "-level:v", "5.1",
+      "-pix_fmt", "yuv444p",
+      "-vf", "setsar=1,colorspace=all=bt2020nc:iall=bt2020nc:range=pc:irange=pc",
+      "-colorspace", "bt2020nc",
+      "-color_range", "pc",
+      "-color_trc", "smpte2084",
+      "-color_primaries", "bt2020",
+      "-c:a", "libopus",
+      "-ar", "44100",
+      "-ac", "1",
+      "-b:a", "128k",
+      "-g", "30",
+    ]));
+    expect(args).not.toContain("-movflags");
   });
 });
