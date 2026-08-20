@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -17,11 +19,15 @@ import (
 )
 
 type fakeS3 struct {
-	objects []types.Object
-	deleted []string
+	objects   []types.Object
+	deleted   []string
+	getBucket string
+	getKey    string
 }
 
-func (f *fakeS3) GetObject(_ context.Context, _ *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+func (f *fakeS3) GetObject(_ context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	f.getBucket = aws.ToString(input.Bucket)
+	f.getKey = aws.ToString(input.Key)
 	return &s3.GetObjectOutput{Body: io.NopCloser(strings.NewReader("source"))}, nil
 }
 
@@ -132,5 +138,25 @@ func TestDirectObjectURLUsesConfiguredPublicBaseWithoutClient(t *testing.T) {
 	}
 	if url != "https://storage.example/openshorts-media/job-1/source.mp4" {
 		t.Fatalf("unexpected direct object URL: %s", url)
+	}
+}
+
+func TestDownloadJobSourceArtifactUsesParentMasterObject(t *testing.T) {
+	client := &fakeS3{}
+	store := &S3Store{Client: client, Bucket: "openshorts-media"}
+	destination := filepath.Join(t.TempDir(), "source.mp4")
+
+	if err := store.DownloadJobSourceArtifact(context.Background(), "parent-job", destination, 1024); err != nil {
+		t.Fatal(err)
+	}
+	if client.getBucket != "openshorts-media" || client.getKey != "parent-job/master/source.mp4" {
+		t.Fatalf("unexpected artifact request: bucket=%q key=%q", client.getBucket, client.getKey)
+	}
+	contents, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "source" {
+		t.Fatalf("unexpected downloaded contents: %q", contents)
 	}
 }

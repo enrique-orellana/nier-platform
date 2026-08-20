@@ -30,6 +30,10 @@ type SourceDownloader interface {
 	DownloadSourceObject(context.Context, string, string, string, int64) error
 }
 
+type ArtifactDownloader interface {
+	DownloadJobSourceArtifact(context.Context, string, string, int64) error
+}
+
 type ExecProtocolRunner struct{}
 
 func (ExecProtocolRunner) RunProtocol(ctx context.Context, spec CommandSpec, request map[string]any, onEvent func(ProtocolEvent)) error {
@@ -113,11 +117,12 @@ func (ExecProtocolRunner) RunProtocol(ctx context.Context, spec CommandSpec, req
 }
 
 type PythonWorkerAdapter struct {
-	PythonBinary     string
-	WorkerScript     string
-	Runner           ProtocolRunner
-	SourceDownloader SourceDownloader
-	SourceMaxBytes   int64
+	PythonBinary       string
+	WorkerScript       string
+	Runner             ProtocolRunner
+	SourceDownloader   SourceDownloader
+	ArtifactDownloader ArtifactDownloader
+	SourceMaxBytes     int64
 }
 
 func (a PythonWorkerAdapter) Run(ctx context.Context, job domain.Job, outputDir string, onLog func(string)) error {
@@ -222,7 +227,16 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 			if maxBytes <= 0 {
 				maxBytes = 16 * 1024 * 1024 * 1024
 			}
-			if a.SourceDownloader == nil {
+			restoredFromMaster := false
+			masterDestination := filepath.Join(outputDir, "source.mp4")
+			if operation == "clip_render" && a.ArtifactDownloader != nil && job.ParentJobID != "" {
+				if err := a.ArtifactDownloader.DownloadJobSourceArtifact(ctx, job.ParentJobID, masterDestination, maxBytes); err == nil {
+					restoredFromMaster = true
+				}
+			}
+			if restoredFromMaster {
+				request["source_path"] = masterDestination
+			} else if a.SourceDownloader == nil {
 				delete(request, "source_path")
 				request["source_object"] = sourceObject
 			} else if err := a.SourceDownloader.DownloadSourceObject(ctx, bucket, key, destination, maxBytes); err != nil {

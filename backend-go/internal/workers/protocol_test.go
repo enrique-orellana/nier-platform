@@ -60,6 +60,13 @@ func (d *recordingSourceDownloader) DownloadSourceObject(_ context.Context, buck
 	return nil
 }
 
+type recordingArtifactDownloader struct{ jobID, destination string }
+
+func (d *recordingArtifactDownloader) DownloadJobSourceArtifact(_ context.Context, jobID, destination string, _ int64) error {
+	d.jobID, d.destination = jobID, destination
+	return nil
+}
+
 func TestPythonWorkerAdapterReturnsProtocolError(t *testing.T) {
 	adapter := PythonWorkerAdapter{Runner: errorEventRunner{}}
 
@@ -141,11 +148,13 @@ func TestPythonWorkerAdapterDownloadsSourceObjectsBeforeStartingPython(t *testin
 
 func TestPythonWorkerAdapterRehydratesMissingPersistedSourcePath(t *testing.T) {
 	runner := &recordingProtocolRunner{}
-	downloader := &recordingSourceDownloader{}
-	adapter := PythonWorkerAdapter{Runner: runner, SourceDownloader: downloader}
+	sourceDownloader := &recordingSourceDownloader{}
+	artifactDownloader := &recordingArtifactDownloader{}
+	adapter := PythonWorkerAdapter{Runner: runner, SourceDownloader: sourceDownloader, ArtifactDownloader: artifactDownloader}
 	job := domain.Job{
-		ID:   "render-job-1",
-		Kind: "clip-render",
+		ID:          "render-job-1",
+		Kind:        "clip-render",
+		ParentJobID: "parent-job-1",
 		Metadata: map[string]any{
 			"source_path":   "output/parent/source.mp4",
 			"source_object": map[string]any{"bucket": "youtube-downloads", "key": "source.mp4"},
@@ -154,10 +163,13 @@ func TestPythonWorkerAdapterRehydratesMissingPersistedSourcePath(t *testing.T) {
 	if err := adapter.Run(context.Background(), job, "output/parent", nil); err != nil {
 		t.Fatal(err)
 	}
-	if downloader.bucket != "youtube-downloads" || downloader.key != "source.mp4" {
-		t.Fatalf("expected missing source path to be rehydrated, got %#v", downloader)
+	if artifactDownloader.jobID != "parent-job-1" || artifactDownloader.destination != filepath.Join("output", "parent", "source.mp4") {
+		t.Fatalf("expected missing source path to be restored from the parent master artifact, got %#v", artifactDownloader)
 	}
-	if runner.request["source_path"] != filepath.Join("output/parent", "source.mp4") || runner.request["source_object"] != nil {
+	if sourceDownloader.bucket != "" || sourceDownloader.key != "" {
+		t.Fatalf("clip render fell back to the obsolete source object: %#v", sourceDownloader)
+	}
+	if runner.request["source_path"] != filepath.Join("output", "parent", "source.mp4") || runner.request["source_object"] != nil {
 		t.Fatalf("unexpected worker request: %#v", runner.request)
 	}
 }

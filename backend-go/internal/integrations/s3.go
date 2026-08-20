@@ -318,6 +318,17 @@ func (s *S3Store) DownloadSourceObject(ctx context.Context, bucket, key, destina
 	if bucket != s.SourceBucket || key == "" || strings.Contains(key, "\\") || strings.Contains(key, "..") {
 		return fmt.Errorf("invalid source object")
 	}
+	return s.downloadObject(ctx, s.SourceBucket, key, destination, maxBytes)
+}
+
+func (s *S3Store) DownloadJobSourceArtifact(ctx context.Context, jobID, destination string, maxBytes int64) error {
+	if s.Client == nil || s.Bucket == "" || jobID == "" || strings.Contains(jobID, "/") || strings.Contains(jobID, "\\") || strings.Contains(jobID, "..") {
+		return fmt.Errorf("invalid job source artifact")
+	}
+	return s.downloadObject(ctx, s.Bucket, jobID+"/master/source.mp4", destination, maxBytes)
+}
+
+func (s *S3Store) downloadObject(ctx context.Context, bucket, key, destination string, maxBytes int64) error {
 	output, err := s.Client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
 	if err != nil {
 		return err
