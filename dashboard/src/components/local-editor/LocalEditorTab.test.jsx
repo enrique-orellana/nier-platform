@@ -27,12 +27,13 @@ vi.mock("./AudioWaveform", () => ({
 }));
 
 vi.mock("../RemotionPreview", () => ({
-  default: ({ videoUrl, currentFrame, controls = true }) => (
+  default: ({ videoUrl, currentFrame, controls = true, hook = null }) => (
     <div
       data-testid="local-editor-remotion-preview"
       data-video-url={videoUrl}
       data-current-frame={currentFrame ?? "uncontrolled"}
       data-controls={String(controls)}
+      data-hook-text={hook?.text || ""}
     />
   ),
 }));
@@ -615,6 +616,34 @@ describe("LocalEditorTab", () => {
     expect(screen.getByTestId("local-editor-remotion-preview")).toHaveAttribute(
       "data-controls",
       "false",
+    );
+  });
+
+  it("renders the current local hook state in the Remotion preview", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="https://example.test/master.mp4"
+        initialExportVideoUrl="https://example.test/master.mp4"
+        initialPlaybackDurationMs={10000}
+        initialEditorState={{
+          ...controlledEditorState,
+          hook: { text: "Current local hook", startMs: 0, endMs: 5000 },
+        }}
+        remotionPreviewProps={{
+          videoUrl: "https://example.test/master.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+          width: 1080,
+          height: 1920,
+          hook: { text: "Stale parent hook", startMs: 0, endMs: 5000 },
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("local-editor-remotion-preview"),
+      ).toHaveAttribute("data-hook-text", "Current local hook"),
     );
   });
 

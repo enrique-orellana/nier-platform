@@ -2260,6 +2260,7 @@ export default function LocalEditorTab({
                 {remotionPreviewProps ? (
                   <RemotionPreview
                     {...remotionPreviewProps}
+                    hook={hook}
                     playing={isPlaying}
                     loop={isLooping}
                     controls={false}
