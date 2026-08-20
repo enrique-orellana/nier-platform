@@ -302,7 +302,9 @@ export default function ResultCard({
       );
     }
 
-    const newVideoUrl = `/videos/${jobId}/${outputFilename}`;
+    const newVideoUrl = /^https?:\/\//i.test(outputUrl)
+      ? outputUrl
+      : `/videos/${jobId}/${outputFilename}`;
     const subtitleLayer = renderLayers?.subtitles || null;
     const subtitleCaptions =
       subtitleLayer?.captions || subtitleLayer?.cues || [];
@@ -330,6 +332,7 @@ export default function ResultCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           new_video_url: newVideoUrl,
+          render_job_id: renderId,
           layers: persistedLayers,
           ...(subtitleTracks
             ? {

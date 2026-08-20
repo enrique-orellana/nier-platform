@@ -70,11 +70,13 @@ func (s *Server) legacyVideoRedirect(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) renderProxy(w http.ResponseWriter, r *http.Request) {
 	var upstreamPath string
+	renderID := ""
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == "/api/render":
 		upstreamPath = "/render"
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/render/"):
 		upstreamPath = "/render/" + strings.TrimPrefix(r.URL.Path, "/api/render/")
+		renderID = strings.TrimPrefix(r.URL.Path, "/api/render/")
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
 		return
@@ -112,9 +114,9 @@ func (s *Server) renderProxy(w http.ResponseWriter, r *http.Request) {
 			status, _ := payload["status"].(string)
 			outputURL, _ := payload["outputUrl"].(string)
 			if (status == "done" || status == "completed") && outputURL != "" {
-				publishedURL, publishErr := s.publishRenderOutput(r.Context(), outputURL)
+				publishedURL, publishErr := s.publishRenderOutput(r.Context(), outputURL, renderID)
 				if publishErr != nil {
-					writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Could not publish rendered master: %s", publishErr)})
+					writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Could not publish rendered artifact: %s", publishErr)})
 					return
 				}
 				payload["outputUrl"] = publishedURL
@@ -127,7 +129,7 @@ func (s *Server) renderProxy(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(contents)
 }
 
-func (s *Server) publishRenderOutput(ctx context.Context, outputURL string) (string, error) {
+func (s *Server) publishRenderOutput(ctx context.Context, outputURL, clipID string) (string, error) {
 	if s.s3Store == nil || s.s3Store.Client == nil || s.s3Store.Bucket == "" {
 		return outputURL, nil
 	}
@@ -163,6 +165,13 @@ func (s *Server) publishRenderOutput(ctx context.Context, outputURL string) (str
 	jobID := parts[0]
 	filename := path.Base(relative)
 	key := jobID + "/master/" + filename
+	if filename != "source.mp4" && !strings.HasPrefix(filename, "master_") && !strings.HasSuffix(filename, "_metadata.json") {
+		clipID = strings.TrimSpace(clipID)
+		if clipID == "" || path.Base(clipID) != clipID {
+			return "", fmt.Errorf("missing clip render ID for rendered clip")
+		}
+		key = jobID + "/clips/" + clipID + "/" + filename
+	}
 	if err := s.s3Store.UploadFile(ctx, key, localPath, "video/mp4"); err != nil {
 		return "", err
 	}

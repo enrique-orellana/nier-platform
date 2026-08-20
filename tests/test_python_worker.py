@@ -15,6 +15,7 @@ from python_worker import (
     cleanup_generation_scratch,
     cleanup_uploaded_clip_files,
     _run_clip_generation,
+    _persist_clip_url,
     upload_generation_artifacts,
     parse_request,
 )
@@ -369,6 +370,23 @@ def test_upload_generation_artifacts_forwards_clip_scope(monkeypatch, tmp_path):
     assert calls == [
         (str(tmp_path), "job-1", {"source.mp4"}, {"source_clip_2.mp4"}, "clip-2")
     ]
+
+
+def test_persist_clip_url_keeps_render_job_id_for_clip_artifact_scope(tmp_path):
+    metadata = {"shorts": [{"video_filename": "remotion_8_1787260172918.mp4"}]}
+    metadata_path = tmp_path / "source_metadata.json"
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    _persist_clip_url(
+        tmp_path,
+        metadata,
+        0,
+        "/videos/job-1/remotion_8_1787260172918.mp4",
+        render_job_id="clip-render-1",
+    )
+
+    persisted = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert persisted["shorts"][0]["render_job_id"] == "clip-render-1"
 
 
 def test_thumbnail_publish_status_returns_persisted_result():

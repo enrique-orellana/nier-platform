@@ -191,6 +191,15 @@ func (burnOperation) Run(_ context.Context, _ string, operation string, payload 
 	return json.RawMessage(`{"outputUrl":"/videos/local-editor-1/subtitled_source.mp4"}`), nil
 }
 
+type clipVideoURLOperation struct{}
+
+func (clipVideoURLOperation) Run(_ context.Context, _ string, operation string, _ map[string]any, _ map[string]string) (json.RawMessage, error) {
+	if operation != "legacy_api" {
+		return nil, fmt.Errorf("unexpected operation: %s", operation)
+	}
+	return json.RawMessage(`{"success":true}`), nil
+}
+
 type subtitleCommandRunner struct{ args []string }
 
 func (r *subtitleCommandRunner) Run(_ context.Context, _ string, args ...string) error {
@@ -618,6 +627,44 @@ func TestRenderStatusPublishesCompletedMasterToS3(t *testing.T) {
 	}
 	if _, err := os.Stat(masterPath); err != nil {
 		t.Fatalf("master cache was removed: %v", err)
+	}
+}
+
+func TestRenderStatusPublishesRemotionOutputToClipScope(t *testing.T) {
+	outputDir := t.TempDir()
+	jobDir := filepath.Join(outputDir, "job-1")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatalf("create output directory: %v", err)
+	}
+	remotionPath := filepath.Join(jobDir, "remotion_8_1787260172918.mp4")
+	if err := os.WriteFile(remotionPath, []byte("clip render"), 0o644); err != nil {
+		t.Fatalf("write remotion output: %v", err)
+	}
+	renderer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"renderId":"clip-render-1","status":"done","outputUrl":"/output/job-1/remotion_8_1787260172918.mp4"}`))
+	}))
+	defer renderer.Close()
+
+	server := NewServer(config.Config{OutputDir: outputDir, RenderServiceURL: renderer.URL})
+	client := &regionMetadataS3Client{}
+	server.s3Store = &integrations.S3Store{
+		Client:        client,
+		Bucket:        "openshorts-media",
+		PublicURLBase: "https://minio.example",
+	}
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/render/clip-render-1", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+	expectedKey := "job-1/clips/clip-render-1/remotion_8_1787260172918.mp4"
+	if !strings.Contains(response.Body.String(), "https://minio.example/openshorts-media/"+expectedKey) {
+		t.Fatalf("expected MinIO clip URL, got %s", response.Body.String())
+	}
+	if client.putKey != expectedKey || client.putBody != "clip render" {
+		t.Fatalf("remotion output was not uploaded to the clip key: key=%q body=%q", client.putKey, client.putBody)
 	}
 }
 
@@ -1877,6 +1924,56 @@ func TestProjectClipsReturnsDirectS3ArtifactURLWhenConfigured(t *testing.T) {
 
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "https://storage.example/openshorts-media/"+job.ID+"/source_clip_1.mp4?") {
 		t.Fatalf("expected direct S3 URL, got %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestProjectClipsUsesPersistedRenderJobIDForClipArtifactURL(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"clips":[{"video_filename":"remotion_8_1787260172918.mp4","render_job_id":"clip-render-1"}]}`)); err != nil {
+		t.Fatalf("set result: %v", err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: t.TempDir()}, store)
+	server.s3Store = &integrations.S3Store{Bucket: "openshorts-media", PublicURLBase: "https://minio.example"}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/projects/clips/"+job.ID, nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	want := "https://minio.example/openshorts-media/" + job.ID + "/clips/clip-render-1/remotion_8_1787260172918.mp4"
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), want) {
+		t.Fatalf("expected clip-scoped Remotion URL, got %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestClipVideoURLPersistsRenderJobIDInProjectResult(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"clips":[{"video_filename":"remotion_8_1787260172918.mp4"}]}`)); err != nil {
+		t.Fatalf("set result: %v", err)
+	}
+	server := NewServerWithDependencies(config.Config{OutputDir: t.TempDir()}, store, nil, clipVideoURLOperation{})
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/clip/"+job.ID+"/0/video-url",
+		strings.NewReader(`{"new_video_url":"/videos/`+job.ID+`/remotion_8_1787260172918.mp4","render_job_id":"clip-render-1"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected video URL persistence to succeed, got %d: %s", response.Code, response.Body.String())
+	}
+	updated, ok := store.Get(context.Background(), job.ID)
+	if !ok || !strings.Contains(string(updated.Result), `"render_job_id":"clip-render-1"`) {
+		t.Fatalf("render job ID was not persisted in project result: %#v", updated.Result)
 	}
 }
 

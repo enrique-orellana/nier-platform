@@ -302,8 +302,17 @@ def _write_thumbnail_publish_state(root: Path, publish_id: str, state: dict[str,
     _thumbnail_publish_state_path(root, publish_id).write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
 
 
-def _persist_clip_url(job_root: Path, metadata: dict[str, Any], clip_index: int, url: str) -> None:
-    metadata.setdefault("shorts", [])[clip_index]["video_url"] = url
+def _persist_clip_url(
+    job_root: Path,
+    metadata: dict[str, Any],
+    clip_index: int,
+    url: str,
+    render_job_id: str | None = None,
+) -> None:
+    clip = metadata.setdefault("shorts", [])[clip_index]
+    clip["video_url"] = url
+    if render_job_id:
+        clip["render_job_id"] = str(render_job_id).strip()
     metadata_files = sorted(job_root.glob("*_metadata.json"))
     if metadata_files:
         metadata_files[0].write_text(json.dumps(metadata, indent=4, ensure_ascii=False), encoding="utf-8")
@@ -330,7 +339,13 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
         url = str(payload.get("new_video_url") or "").strip()
         if not url:
             raise ValueError("new_video_url is required")
-        _persist_clip_url(job_root_path, metadata, clip_index, url)
+        _persist_clip_url(
+            job_root_path,
+            metadata,
+            clip_index,
+            url,
+            render_job_id=payload.get("render_job_id"),
+        )
         return {"success": True, "job_id": payload["job_id"], "clip_index": clip_index, "video_url": url}
 
     if action in {"subtitle", "hook", "translate"}:

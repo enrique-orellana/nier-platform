@@ -320,7 +320,7 @@ func (s *Server) completeVersion(w http.ResponseWriter, r *http.Request, store *
 		writeJSON(w, http.StatusConflict, map[string]string{"detail": "output URL is required"})
 		return
 	}
-	publishedURL, err := s.publishRenderOutput(r.Context(), request.OutputURL)
+	publishedURL, err := s.publishRenderOutput(r.Context(), request.OutputURL, versionID)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Could not publish rendered master: %s", err)})
 		return

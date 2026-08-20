@@ -182,6 +182,35 @@ func clipArtifactID(jobID string, clip map[string]any) string {
 	return jobID
 }
 
+func (s *Server) persistClipRenderJobID(ctx context.Context, jobID string, clipIndex int, renderJobID string) error {
+	renderJobID = strings.TrimSpace(renderJobID)
+	if renderJobID == "" {
+		return nil
+	}
+	job, ok := s.store.Get(ctx, jobID)
+	if !ok || len(job.Result) == 0 {
+		return nil
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(job.Result, &payload); err != nil {
+		return err
+	}
+	clips, ok := payload["clips"].([]any)
+	if !ok || clipIndex < 0 || clipIndex >= len(clips) {
+		return nil
+	}
+	clip, ok := clips[clipIndex].(map[string]any)
+	if !ok {
+		return nil
+	}
+	clip["render_job_id"] = renderJobID
+	updated, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	return s.store.SetResult(ctx, jobID, updated)
+}
+
 func (s *Server) directClipArtifactURL(jobID, clipID, filename string) string {
 	if s.artifactURLOverride != nil {
 		return s.artifactURLOverride(jobID, filename)
@@ -243,7 +272,8 @@ func (s *Server) readProjectClips(jobID string) ([]map[string]any, time.Time, bo
 	}
 	for _, clip := range data.Shorts {
 		if filename, ok := clip["video_filename"].(string); ok && filename != "" {
-			clip["video_url"] = s.directArtifactURL(jobID, filename)
+			clipID := clipArtifactID(jobID, clip)
+			clip["video_url"] = s.directClipArtifactURL(jobID, clipID, filename)
 		}
 		if sourceFilename, ok := clip["source_video_filename"].(string); ok && sourceFilename != "" {
 			clip["source_video_url"] = s.directMasterArtifactURL(jobID, sourceFilename)

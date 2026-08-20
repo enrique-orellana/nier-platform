@@ -48,6 +48,16 @@ func (s *Server) legacyJSONRouteWithExtras(action string, extras map[string]any)
 			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": err.Error()})
 			return
 		}
+		if action == "clip_video_url" {
+			if renderJobID, ok := payload["render_job_id"].(string); ok {
+				if clipIndex, ok := payload["clip_index"].(int); ok {
+					if err := s.persistClipRenderJobID(r.Context(), fmt.Sprint(payload["job_id"]), clipIndex, renderJobID); err != nil {
+						writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not persist clip render ID"})
+						return
+					}
+				}
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(result)
 	}
