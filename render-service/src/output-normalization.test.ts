@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadMasterPolicy, parseMasterPolicy } from "./master-policy.js";
-import { buildNormalizationArgs } from "./output-normalization.js";
+import { buildNormalizationArgs, outputNeedsNormalization } from "./output-normalization.js";
 
 describe("publishable MP4 normalization", () => {
   it("builds a canonical social-video FFmpeg command", () => {
@@ -83,5 +83,47 @@ describe("publishable MP4 normalization", () => {
       "-g", "30",
     ]));
     expect(args).not.toContain("-movflags");
+  });
+
+  it("skips normalization for a policy-compliant fast-start output", () => {
+    const policy = loadMasterPolicy();
+    const probe = {
+      streams: [
+        {
+          codec_type: "video",
+          codec_name: policy.codec,
+          profile: policy.profile,
+          pix_fmt: policy.pixel_format,
+          width: 1080,
+          height: 1920,
+          avg_frame_rate: "30/1",
+          sample_aspect_ratio: "1:1",
+          color_range: policy.color_range,
+          color_space: policy.color_space,
+          color_transfer: policy.color_transfer,
+          color_primaries: policy.color_primaries,
+          duration: "4",
+        },
+        {
+          codec_type: "audio",
+          codec_name: policy.audio_codec,
+          sample_rate: String(policy.audio_sample_rate),
+          channels: policy.audio_channels,
+          bit_rate: "192000",
+        },
+      ],
+      format: { duration: "4" },
+    };
+    const expected = {
+      width: 1080,
+      height: 1920,
+      fps: 30,
+      durationSeconds: 4,
+      requireAudio: true,
+      toneMappedToSdr: true,
+    };
+
+    expect(outputNeedsNormalization(probe, expected, policy, true)).toBe(false);
+    expect(outputNeedsNormalization(probe, expected, policy, false)).toBe(true);
   });
 });

@@ -102,14 +102,18 @@ function assertFastStart(filePath: string): void {
   if (moov < 0 || (mdat >= 0 && moov > mdat)) throw new Error("master output is not fast-start");
 }
 
-export async function validateOutputFile(
-  outputPath: string,
-  expected: OutputExpectation,
-  policy: MasterPolicy,
-): Promise<void> {
-  if (!fs.existsSync(outputPath)) throw new Error("master output file does not exist");
-  const payload = await new Promise<ProbePayload>((resolve, reject) => {
-    const child = spawn("ffprobe", ["-v", "error", "-show_streams", "-show_format", "-of", "json", outputPath]);
+export function isFastStart(filePath: string): boolean {
+  try {
+    assertFastStart(path.resolve(filePath));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function probeOutputFile(filePath: string): Promise<ProbePayload> {
+  return await new Promise<ProbePayload>((resolve, reject) => {
+    const child = spawn("ffprobe", ["-v", "error", "-show_streams", "-show_format", "-of", "json", filePath]);
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += chunk; });
@@ -117,6 +121,15 @@ export async function validateOutputFile(
     child.on("error", reject);
     child.on("close", (code) => code === 0 ? resolve(JSON.parse(stdout)) : reject(new Error(stderr || "ffprobe failed")));
   });
+}
+
+export async function validateOutputFile(
+  outputPath: string,
+  expected: OutputExpectation,
+  policy: MasterPolicy,
+): Promise<void> {
+  if (!fs.existsSync(outputPath)) throw new Error("master output file does not exist");
+  const payload = await probeOutputFile(outputPath);
   validateProbePayload(payload, expected, policy);
   assertFastStart(path.resolve(outputPath));
   await new Promise<void>((resolve, reject) => {

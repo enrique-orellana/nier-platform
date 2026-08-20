@@ -1,10 +1,38 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { loadMasterPolicy, type MasterPolicy } from "./master-policy.js";
+import { isFastStart, probeOutputFile, validateProbePayload, type OutputExpectation, type ProbePayload } from "./output-validation.js";
 
 export interface NormalizationOptions {
   fps: number;
   hasAudio: boolean;
+}
+
+export function outputNeedsNormalization(
+  probe: ProbePayload,
+  expected: OutputExpectation,
+  policy: MasterPolicy,
+  fastStart: boolean,
+): boolean {
+  try {
+    validateProbePayload(probe, expected, policy);
+    return policy.faststart && !fastStart;
+  } catch {
+    return true;
+  }
+}
+
+export async function needsOutputNormalization(
+  outputPath: string,
+  expected: OutputExpectation,
+  policy: MasterPolicy,
+): Promise<boolean> {
+  try {
+    const probe = await probeOutputFile(outputPath);
+    return outputNeedsNormalization(probe, expected, policy, isFastStart(outputPath));
+  } catch {
+    return true;
+  }
 }
 
 export function buildNormalizationArgs(

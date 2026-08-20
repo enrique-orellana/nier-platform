@@ -1,9 +1,10 @@
 import express from "express";
 import { v4 as uuidv4 } from "uuid";
-import { z } from "zod";
 import { initBundle } from "./bundle.js";
 import { executeRender } from "./render-worker.js";
 import { buildRenderProps } from "./render-props.js";
+import { renderRequestSchema } from "./render-request.js";
+import { RenderQueue } from "./render-queue.js";
 
 // --- Render status types ---
 
@@ -22,30 +23,6 @@ export interface RenderJob {
 // In-memory render job map
 export const renderJobs = new Map<string, RenderJob>();
 
-// --- Request validation schema ---
-
-const renderRequestSchema = z.object({
-  jobId: z.string().min(1),
-  clipIndex: z.number().int().min(0),
-  props: z.object({
-    videoUrl: z.string(),
-    videoStartSeconds: z.number().min(0).optional(),
-    durationInFrames: z.number().int().positive(),
-    fps: z.number().positive(),
-    width: z.number().int().positive(),
-    height: z.number().int().positive(),
-    videoFit: z.enum(["cover", "contain"]).optional(),
-    subtitles: z.any().nullable().optional(),
-    subtitleTracks: z.array(z.any()).optional(),
-    activeSubtitleTrackId: z.string().nullable().optional(),
-    hook: z.any().nullable().optional(),
-    effects: z.any().nullable().optional(),
-    versionId: z.string().min(1).optional(),
-    manifestPath: z.string().min(1).optional(),
-    manifestRevision: z.string().min(1).optional(),
-  }),
-});
-
 // --- Express app ---
 
 const app = express();
@@ -53,6 +30,8 @@ app.use(express.json({ limit: "10mb" }));
 
 const PORT = parseInt(process.env.PORT || "3100", 10);
 const OUTPUT_DIR = process.env.OUTPUT_DIR || "/output";
+const RENDER_MAX_CONCURRENCY = Math.max(1, parseInt(process.env.RENDER_MAX_CONCURRENCY || "1", 10));
+const renderQueue = new RenderQueue(RENDER_MAX_CONCURRENCY);
 
 // Serve video files from the shared output volume so Remotion can access them via HTTP.
 // The Remotion bundle runs from a different origin (localhost:3000), so media
@@ -120,8 +99,8 @@ app.post("/render", (req, res) => {
     console.log(`[render] Resolved video URL: ${props.videoUrl} -> ${resolvedVideoUrl}`);
   }
 
-  // Fire and forget - render runs in background
-  executeRender({
+  // Queue renders so one CPU-heavy job cannot starve every other request.
+  renderQueue.add(() => executeRender({
     renderId,
     jobId,
     clipIndex,
@@ -153,7 +132,7 @@ app.post("/render", (req, res) => {
       existingJob.error =
         err instanceof Error ? err.message : "Unknown error";
     }
-  });
+  }));
 
   res.status(202).json({ renderId, status: "queued" });
 });

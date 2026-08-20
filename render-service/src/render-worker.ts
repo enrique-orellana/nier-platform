@@ -8,8 +8,10 @@ import { loadMasterPolicy } from "./master-policy.js";
 import { validateOutputFile } from "./output-validation.js";
 import { applyRequestedCompositionMetadata } from "./composition.js";
 import { outputFileNameForVersion } from "./version-render.js";
-import { normalizeOutputFile } from "./output-normalization.js";
+import { needsOutputNormalization, normalizeOutputFile } from "./output-normalization.js";
 import type { RenderRequestProps } from "./render-props.js";
+import { prepareRangeProxy } from "./source-proxy.js";
+import { shouldLogRenderProgress } from "./progress.js";
 
 export interface RenderParams {
   renderId: string;
@@ -47,6 +49,20 @@ export async function executeRender(params: RenderParams): Promise<void> {
       height: policy.output_height,
     };
 
+    const outputDir = process.env.OUTPUT_DIR
+      ? path.resolve(process.env.OUTPUT_DIR)
+      : path.resolve(import.meta.dirname, "../../output");
+    const sourceRange = await prepareRangeProxy({
+      videoUrl: props.videoUrl,
+      outputDir,
+      serverPort: Number(process.env.PORT || 3100),
+      jobId,
+      startSeconds: props.videoStartSeconds || 0,
+      durationSeconds: props.durationInFrames / props.fps,
+    });
+    renderProps.videoUrl = sourceRange.videoUrl;
+    renderProps.videoStartSeconds = sourceRange.videoStartSeconds;
+
     // Select the composition with the provided input props
     const selectedComposition = await selectComposition({
       serveUrl: bundleLocation,
@@ -56,10 +72,6 @@ export async function executeRender(params: RenderParams): Promise<void> {
     const composition = applyRequestedCompositionMetadata(selectedComposition, renderProps);
 
     // Determine output directory and file path
-    const outputDir = process.env.OUTPUT_DIR
-      ? path.resolve(process.env.OUTPUT_DIR)
-      : path.resolve(import.meta.dirname, "../../output");
-
     const jobOutputDir = path.join(outputDir, jobId);
     fs.mkdirSync(jobOutputDir, { recursive: true });
 
@@ -70,6 +82,7 @@ export async function executeRender(params: RenderParams): Promise<void> {
     console.log(`[render-worker] Output: ${outputLocation}`);
 
     // Render the video
+    let lastLoggedPercent = -1;
     await renderMedia({
       composition,
       serveUrl: bundleLocation,
@@ -80,26 +93,26 @@ export async function executeRender(params: RenderParams): Promise<void> {
         const percent = Math.round(progress * 100);
         job.progress = percent;
 
-        if (percent % 10 === 0) {
+        if (shouldLogRenderProgress(percent, lastLoggedPercent)) {
+          lastLoggedPercent = percent;
           console.log(`[render-worker] ${renderId} progress: ${percent}%`);
         }
       },
     });
 
-    await normalizeOutputFile(outputLocation, { fps: renderProps.fps, hasAudio: true });
+    const outputExpectation = {
+      width: renderProps.width,
+      height: renderProps.height,
+      fps: renderProps.fps,
+      durationSeconds: renderProps.durationInFrames / renderProps.fps,
+      requireAudio: true,
+      toneMappedToSdr: true,
+    };
+    if (await needsOutputNormalization(outputLocation, outputExpectation, policy)) {
+      await normalizeOutputFile(outputLocation, { fps: renderProps.fps, hasAudio: true });
+    }
 
-    await validateOutputFile(
-      outputLocation,
-      {
-        width: renderProps.width,
-        height: renderProps.height,
-        fps: renderProps.fps,
-        durationSeconds: renderProps.durationInFrames / renderProps.fps,
-        requireAudio: true,
-        toneMappedToSdr: true,
-      },
-      policy,
-    );
+    await validateOutputFile(outputLocation, outputExpectation, policy);
 
     // Success
     job.status = "done";
