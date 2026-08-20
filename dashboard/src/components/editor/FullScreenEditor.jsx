@@ -648,6 +648,41 @@ export default function FullScreenEditor({
       setBusy(false);
     }
   };
+  const deleteVersion = async (versionId) => {
+    if (!window.confirm(`Delete version ${versionId.slice(0, 8)}?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions/${versionId}`),
+        { method: "DELETE" },
+      );
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || "Delete failed.");
+
+      const remainingVersions = versions.filter(
+        (candidate) => candidate.version_id !== versionId,
+      );
+      setVersions(remainingVersions);
+      const nextVersionId =
+        payload.current_version_id || remainingVersions.at(-1)?.version_id;
+      if (nextVersionId) {
+        await loadVersion(
+          remainingVersions.find(
+            (candidate) => candidate.version_id === nextVersionId,
+          ) || { version_id: nextVersionId },
+        );
+      } else {
+        setVersion(null);
+        setManifest(null);
+        setPublishingMetadata(publishingMetadataFrom(null, clip));
+      }
+    } catch (deleteError) {
+      setError(deleteError.message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const saveVersion = useCallback(async () => {
     if (busy) return;
     setBusy(true);
@@ -778,6 +813,7 @@ export default function FullScreenEditor({
                   selectedVersionId={version?.version_id}
                   onSelect={loadVersion}
                   onBranch={branchVersion}
+                  onDelete={deleteVersion}
                 />
               </section>
             </>
@@ -907,6 +943,7 @@ export default function FullScreenEditor({
               selectedVersionId={version?.version_id}
               onSelect={loadVersion}
               onBranch={branchVersion}
+              onDelete={deleteVersion}
             />
           </div>
         </aside>

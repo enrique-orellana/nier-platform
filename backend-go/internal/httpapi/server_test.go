@@ -671,6 +671,14 @@ func TestClipVersionRoutesPersistAndBranchManifests(t *testing.T) {
 	if branchRes.Code != http.StatusOK || !strings.Contains(branchRes.Body.String(), `"parent_version_id":"`+created.Version.VersionID+`"`) {
 		t.Fatalf("unexpected branch response: %d %s", branchRes.Code, branchRes.Body.String())
 	}
+	var branched struct {
+		Version struct {
+			VersionID string `json:"version_id"`
+		} `json:"version"`
+	}
+	if err := json.Unmarshal(branchRes.Body.Bytes(), &branched); err != nil {
+		t.Fatalf("decode branch response: %v", err)
+	}
 
 	completeReq := httptest.NewRequest(http.MethodPost, "/api/clip/job-1/0/versions/"+created.Version.VersionID+"/complete", strings.NewReader(`{"output_url":"/videos/job-1/rendered.mp4"}`))
 	completeReq.Header.Set("Content-Type", "application/json")
@@ -678,6 +686,33 @@ func TestClipVersionRoutesPersistAndBranchManifests(t *testing.T) {
 	server.Handler().ServeHTTP(completeRes, completeReq)
 	if completeRes.Code != http.StatusOK || !strings.Contains(completeRes.Body.String(), `"current_version_id":"`+created.Version.VersionID+`"`) {
 		t.Fatalf("unexpected complete response: %d %s", completeRes.Code, completeRes.Body.String())
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/clip/job-1/0/versions/"+created.Version.VersionID, nil)
+	deleteRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(deleteRes, deleteReq)
+	if deleteRes.Code != http.StatusOK || !strings.Contains(deleteRes.Body.String(), `"current_version_id":"`+branched.Version.VersionID+`"`) {
+		t.Fatalf("unexpected delete response: %d %s", deleteRes.Code, deleteRes.Body.String())
+	}
+	listRes = httptest.NewRecorder()
+	server.Handler().ServeHTTP(listRes, listReq)
+	var listed struct {
+		Versions []struct {
+			VersionID string `json:"version_id"`
+		} `json:"versions"`
+	}
+	if err := json.Unmarshal(listRes.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode post-delete list response: %v", err)
+	}
+	deletedStillListed := false
+	for _, version := range listed.Versions {
+		if version.VersionID == created.Version.VersionID {
+			deletedStillListed = true
+			break
+		}
+	}
+	if listRes.Code != http.StatusOK || deletedStillListed {
+		t.Fatalf("deleted version still appears in history: %d %s", listRes.Code, listRes.Body.String())
 	}
 }
 

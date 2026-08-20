@@ -1,4 +1,5 @@
 import React from "react";
+import { Trash2 } from "lucide-react";
 
 export default function VersionHistory({
   versions = [],
@@ -6,6 +7,7 @@ export default function VersionHistory({
   selectedVersionId,
   onSelect,
   onBranch,
+  onDelete,
 }) {
   return (
     <div className="space-y-2">
@@ -40,9 +42,24 @@ export default function VersionHistory({
           <button
             className="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-bold text-primary opacity-0 transition-opacity hover:bg-primary hover:text-white group-hover:opacity-100 shadow-sm"
             onClick={() => onBranch?.(version.version_id)}
+            type="button"
           >
             Branch
           </button>
+          {onDelete && (
+            <button
+              aria-label={`Delete version ${version.version_id}`}
+              className="rounded-lg bg-white/5 p-1.5 text-zinc-400 opacity-0 transition-opacity hover:bg-red-500/20 hover:text-red-300 group-hover:opacity-100"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete(version.version_id);
+              }}
+              title="Delete version"
+              type="button"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       ))}
     </div>

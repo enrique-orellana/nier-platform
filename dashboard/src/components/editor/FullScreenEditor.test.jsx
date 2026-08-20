@@ -45,6 +45,72 @@ describe("FullScreenEditor", () => {
     renderVersionMocks.saveAndRenderVersion.mockReset();
   });
 
+  it("deletes the selected version and loads the newest remaining version", async () => {
+    const fetchMock = vi.fn(async (url, options = {}) => {
+      const value = String(url);
+      if (value.endsWith("/versions") && !options.method) {
+        return {
+          ok: true,
+          json: async () => ({
+            current_version_id: "v2",
+            versions: [
+              { version_id: "v1", status: "done" },
+              { version_id: "v2", status: "done" },
+            ],
+          }),
+        };
+      }
+      if (value.endsWith("/versions/v2") && options.method === "DELETE") {
+        return {
+          ok: true,
+          json: async () => ({
+            current_version_id: "v1",
+            deleted_version: { version_id: "v2" },
+          }),
+        };
+      }
+      if (value.endsWith("/versions/v2") || value.endsWith("/versions/v1")) {
+        const versionId = value.endsWith("/versions/v2") ? "v2" : "v1";
+        return {
+          ok: true,
+          json: async () => ({
+            version: { version_id: versionId, status: "done" },
+            manifest: {
+              ...manifest,
+              subtitle_tracks: [{ id: "original", cues: [] }],
+            },
+          }),
+        };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
+    );
+
+    render(
+      <FullScreenEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /delete version v2/i }),
+    );
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/clip/job/0/versions/v2",
+        expect.objectContaining({ method: "DELETE" }),
+      ),
+    );
+    expect(await screen.findByText("Version v1")).toBeInTheDocument();
+  });
+
   it("renders the editor workspace and advances the preview one frame", () => {
     render(
       <FullScreenEditor

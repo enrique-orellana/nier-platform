@@ -47,6 +47,16 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 		s.createVersion(w, r, store)
 	case r.Method == http.MethodPost && len(segments) == 2 && segments[1] == "branch":
 		s.branchVersion(w, r, store)
+	case r.Method == http.MethodDelete && len(segments) == 2:
+		deleted, currentVersionID, err := store.DeleteVersion(segments[1])
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"detail": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"deleted_version":    deleted,
+			"current_version_id": currentVersionID,
+		})
 	case r.Method == http.MethodGet && len(segments) == 2:
 		s.getVersion(w, store, segments[1])
 	case r.Method == http.MethodGet && len(segments) == 3 && segments[0] == "versions" && segments[2] == "download":

@@ -193,6 +193,37 @@ func (s *Store) PromoteVersion(versionID, outputURL string) (VersionRecord, erro
 	return record, nil
 }
 
+func (s *Store) DeleteVersion(versionID string) (VersionRecord, string, error) {
+	if !validUUID(versionID) {
+		return VersionRecord{}, "", errors.New("invalid version id")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	index := s.readIndex()
+	record, ok := index.Versions[versionID]
+	if !ok {
+		return VersionRecord{}, "", errors.New("version does not exist")
+	}
+	manifestPath := filepath.Join(s.versionsDir, versionID+".json")
+	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return VersionRecord{}, "", err
+	}
+	delete(index.Versions, versionID)
+	if index.CurrentVersionID == versionID {
+		index.CurrentVersionID = ""
+		for candidateID, candidate := range index.Versions {
+			if index.CurrentVersionID == "" || candidate.CreatedAt > index.Versions[index.CurrentVersionID].CreatedAt {
+				index.CurrentVersionID = candidateID
+			}
+		}
+	}
+	if err := s.writeIndex(index); err != nil {
+		return VersionRecord{}, "", err
+	}
+	return record, index.CurrentVersionID, nil
+}
+
 func (s *Store) readIndex() indexFile {
 	if _, err := os.Stat(s.indexPath); errors.Is(err, os.ErrNotExist) {
 		return indexFile{Versions: make(map[string]VersionRecord)}
