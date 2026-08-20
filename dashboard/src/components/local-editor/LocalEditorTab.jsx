@@ -34,6 +34,7 @@ import {
 import LocalEditorTimeline from "./LocalEditorTimeline";
 import ClipMetadataPanel from "./ClipMetadataPanel";
 import SubtitleCueTable from "./SubtitleCueTable";
+import RemotionPreview from "../RemotionPreview";
 import { parseSubtitleFile, serializeSrt } from "./subtitleFormats";
 import { activeCueAt, formatClock } from "./localEditorExport";
 import {
@@ -836,6 +837,7 @@ export default function LocalEditorTab({
   initialClipIndex = null,
   initialPlaybackStartMs = 0,
   initialPlaybackDurationMs = null,
+  remotionPreviewProps = null,
   initialEditorState = null,
   initialStateKey = null,
   onStateChange,
@@ -858,6 +860,7 @@ export default function LocalEditorTab({
   );
   const videoRef = useRef(null);
   const playerRef = useRef(null);
+  const remotionPlayerRef = useRef(null);
   const objectUrlRef = useRef("");
   const previewObjectUrlRef = useRef("");
   const subtitleInputRef = useRef(null);
@@ -916,6 +919,7 @@ export default function LocalEditorTab({
     Number(initialPlaybackDurationMs) > 0
       ? Number(initialPlaybackDurationMs)
       : null;
+  const remotionFps = Number(remotionPreviewProps?.fps || 30);
 
   const { subtitleCues, subtitleStyle, subtitleLanguage, hook } =
     editHistory.present;
@@ -1570,6 +1574,12 @@ export default function LocalEditorTab({
   const handleSeek = (nextMs) => {
     const clampedMs = clamp(nextMs, 0, durationMs);
     setPlayheadMs(clampedMs);
+    if (remotionPlayerRef.current) {
+      remotionPlayerRef.current.seekTo?.(
+        Math.round((clampedMs / 1000) * remotionFps),
+      );
+      return;
+    }
     if (videoRef.current)
       videoRef.current.currentTime =
         clipTimeToSourceTime(clampedMs, playbackStartMs, durationMs) / 1000;
@@ -1616,6 +1626,21 @@ export default function LocalEditorTab({
   };
 
   const togglePlayback = async () => {
+    const remotionPlayer = remotionPlayerRef.current;
+    if (remotionPlayer) {
+      if (isPlaying) {
+        remotionPlayer.pause?.();
+        setIsPlaying(false);
+      } else {
+        try {
+          await remotionPlayer.play?.();
+          setIsPlaying(true);
+        } catch (playError) {
+          setError(playError.message || "Could not play project video.");
+        }
+      }
+      return;
+    }
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
@@ -1632,6 +1657,13 @@ export default function LocalEditorTab({
   };
 
   const stopVideo = () => {
+    if (remotionPlayerRef.current) {
+      remotionPlayerRef.current.pause?.();
+      remotionPlayerRef.current.seekTo?.(0);
+      setPlayheadMs(0);
+      setIsPlaying(false);
+      return;
+    }
     const video = videoRef.current;
     if (!video) return;
     video.pause();
@@ -1649,7 +1681,10 @@ export default function LocalEditorTab({
   const toggleMute = () => {
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
-    if (videoRef.current) videoRef.current.muted = nextMuted;
+    if (remotionPlayerRef.current) {
+      if (nextMuted) remotionPlayerRef.current.mute?.();
+      else remotionPlayerRef.current.unmute?.();
+    } else if (videoRef.current) videoRef.current.muted = nextMuted;
   };
 
   const handlePlayerKeyDown = (event) => {
@@ -2187,22 +2222,123 @@ export default function LocalEditorTab({
               }
             >
               <div className="relative h-full max-h-full w-auto max-w-full aspect-[9/16]">
-                <video
-                  ref={videoRef}
-                  src={previewVideoUrl || videoUrl}
-                  controls={false}
-                  className={`h-full w-full ${shouldCropVideo ? "object-cover" : "object-contain"}`}
-                  onLoadedMetadata={handleMetadata}
-                  onLoadedData={detectVideoFraming}
-                  onError={handleVideoError}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onEnded={() => {
-                    setPlayheadMs(durationMs);
-                    setIsPlaying(false);
-                  }}
-                  onTimeUpdate={handleVideoTimeUpdate}
-                />
+                {remotionPreviewProps ? (
+                  <RemotionPreview
+                    {...remotionPreviewProps}
+                    currentFrame={Math.round((playheadMs / 1000) * remotionFps)}
+                    playing={isPlaying}
+                    loop={isLooping}
+                    controls={false}
+                    className="h-full w-full"
+                    onFrameChange={(frame) =>
+                      setPlayheadMs(
+                        Math.min(durationMs, (frame / remotionFps) * 1000),
+                      )
+                    }
+                    onPlayingChange={setIsPlaying}
+                    onPlayerReady={(player) => {
+                      remotionPlayerRef.current = player;
+                    }}
+                  />
+                ) : (
+                  <>
+                    <video
+                      ref={videoRef}
+                      data-testid="local-editor-native-video"
+                      src={previewVideoUrl || videoUrl}
+                      controls={false}
+                      className={`h-full w-full ${shouldCropVideo ? "object-cover" : "object-contain"}`}
+                      onLoadedMetadata={handleMetadata}
+                      onLoadedData={detectVideoFraming}
+                      onError={handleVideoError}
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
+                      onEnded={() => {
+                        setPlayheadMs(durationMs);
+                        setIsPlaying(false);
+                      }}
+                      onTimeUpdate={handleVideoTimeUpdate}
+                    />
+                    <div className="pointer-events-none absolute inset-0">
+                      {activeHook && (
+                        <div
+                          className="absolute w-[88%]"
+                          style={{
+                            left: "50%",
+                            ...getHookPositionStyle(activeHook.position),
+                          }}
+                        >
+                          <div
+                            className="text-center"
+                            style={{
+                              ...getHookBoxStyle(activeHook),
+                              ...hookEntranceStyle,
+                            }}
+                          >
+                            {activeHook.text}
+                          </div>
+                        </div>
+                      )}
+                      {activeSubtitle && (
+                        <div
+                          className={`absolute left-1/2 flex w-[88%] -translate-x-1/2 flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`}
+                          style={{
+                            fontFamily: previewSubtitleStyle.fontFamily,
+                            fontSize: `${Math.max(12, previewSubtitleStyle.fontSize * (20 / 24))}px`,
+                            textShadow: outlineTextShadow(
+                              previewSubtitleStyle.borderWidth,
+                              previewSubtitleStyle.borderColor,
+                            ),
+                            backgroundColor:
+                              previewSubtitleStyle.bgOpacity > 0
+                                ? hexToRgba(
+                                    previewSubtitleStyle.bgColor,
+                                    previewSubtitleStyle.bgOpacity,
+                                  )
+                                : "transparent",
+                          }}
+                        >
+                          {activeSubtitleWords.map((word, index) => {
+                            const isActive = index === activeSubtitleWordIndex;
+                            const isKaraoke =
+                              previewSubtitleStyle.animation === "karaoke" &&
+                              isActive;
+                            return (
+                              <span
+                                key={`${word.startMs}-${index}`}
+                                style={{
+                                  color: isKaraoke
+                                    ? previewSubtitleStyle.bgColor
+                                    : isActive
+                                      ? previewSubtitleStyle.highlightColor
+                                      : previewSubtitleStyle.fontColor,
+                                  display: "inline-block",
+                                  transform:
+                                    isActive &&
+                                    previewSubtitleStyle.animation === "pop"
+                                      ? "scale(1.1)"
+                                      : "none",
+                                  textShadow:
+                                    previewSubtitleStyle.animation ===
+                                      "word-highlight" && isActive
+                                      ? `0 0 12px ${previewSubtitleStyle.highlightColor}, 0 0 24px ${previewSubtitleStyle.highlightColor}40`
+                                      : "inherit",
+                                  backgroundColor: isKaraoke
+                                    ? previewSubtitleStyle.highlightColor
+                                    : "transparent",
+                                  borderRadius: isKaraoke ? 4 : 0,
+                                  padding: isKaraoke ? "2px 6px" : 0,
+                                }}
+                              >
+                                {word.text}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={toggleFullscreen}
@@ -2218,84 +2354,6 @@ export default function LocalEditorTab({
                     <Maximize2 size={16} />
                   )}
                 </button>
-                <div className="pointer-events-none absolute inset-0">
-                  {activeHook && (
-                    <div
-                      className="absolute w-[88%]"
-                      style={{
-                        left: "50%",
-                        ...getHookPositionStyle(activeHook.position),
-                      }}
-                    >
-                      <div
-                        className="text-center"
-                        style={{
-                          ...getHookBoxStyle(activeHook),
-                          ...hookEntranceStyle,
-                        }}
-                      >
-                        {activeHook.text}
-                      </div>
-                    </div>
-                  )}
-                  {activeSubtitle && (
-                    <div
-                      className={`absolute left-1/2 flex w-[88%] -translate-x-1/2 flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`}
-                      style={{
-                        fontFamily: previewSubtitleStyle.fontFamily,
-                        fontSize: `${Math.max(12, previewSubtitleStyle.fontSize * (20 / 24))}px`,
-                        textShadow: outlineTextShadow(
-                          previewSubtitleStyle.borderWidth,
-                          previewSubtitleStyle.borderColor,
-                        ),
-                        backgroundColor:
-                          previewSubtitleStyle.bgOpacity > 0
-                            ? hexToRgba(
-                                previewSubtitleStyle.bgColor,
-                                previewSubtitleStyle.bgOpacity,
-                              )
-                            : "transparent",
-                      }}
-                    >
-                      {activeSubtitleWords.map((word, index) => {
-                        const isActive = index === activeSubtitleWordIndex;
-                        const isKaraoke =
-                          previewSubtitleStyle.animation === "karaoke" &&
-                          isActive;
-                        return (
-                          <span
-                            key={`${word.startMs}-${index}`}
-                            style={{
-                              color: isKaraoke
-                                ? previewSubtitleStyle.bgColor
-                                : isActive
-                                  ? previewSubtitleStyle.highlightColor
-                                  : previewSubtitleStyle.fontColor,
-                              display: "inline-block",
-                              transform:
-                                isActive &&
-                                previewSubtitleStyle.animation === "pop"
-                                  ? "scale(1.1)"
-                                  : "none",
-                              textShadow:
-                                previewSubtitleStyle.animation ===
-                                  "word-highlight" && isActive
-                                  ? `0 0 12px ${previewSubtitleStyle.highlightColor}, 0 0 24px ${previewSubtitleStyle.highlightColor}40`
-                                  : "inherit",
-                              backgroundColor: isKaraoke
-                                ? previewSubtitleStyle.highlightColor
-                                : "transparent",
-                              borderRadius: isKaraoke ? 4 : 0,
-                              padding: isKaraoke ? "2px 6px" : 0,
-                            }}
-                          >
-                            {word.text}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
                 <div
                   data-testid="local-editor-video-controls"
                   className="absolute bottom-0 left-0 right-0 z-30 flex items-center justify-center gap-1 border-t border-white/10 bg-[#202126]/95 px-2 py-1.5 text-zinc-300 shadow-lg backdrop-blur"
@@ -2430,6 +2488,8 @@ export default function LocalEditorTab({
                 onLoopSegmentChange={setSubtitleTableLoop}
                 onSpeedChange={(speed) => {
                   if (videoRef.current) videoRef.current.playbackRate = speed;
+                  if (remotionPlayerRef.current)
+                    remotionPlayerRef.current.setPlaybackRate?.(speed);
                 }}
               />
             ) : (

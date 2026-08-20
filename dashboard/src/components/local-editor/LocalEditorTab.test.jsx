@@ -26,6 +26,16 @@ vi.mock("./AudioWaveform", () => ({
   ),
 }));
 
+vi.mock("../RemotionPreview", () => ({
+  default: ({ videoUrl, currentFrame = 0 }) => (
+    <div
+      data-testid="local-editor-remotion-preview"
+      data-video-url={videoUrl}
+      data-current-frame={currentFrame}
+    />
+  ),
+}));
+
 const makeVideoFile = () =>
   new File(["video"], "demo.mp4", { type: "video/mp4" });
 
@@ -547,6 +557,32 @@ describe("LocalEditorTab", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /enter fullscreen/i }));
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the standard Remotion preview for project clips", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="https://example.test/master.mp4"
+        initialExportVideoUrl="https://example.test/master.mp4"
+        initialPlaybackDurationMs={10000}
+        remotionPreviewProps={{
+          videoUrl: "https://example.test/master.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+          width: 1080,
+          height: 1920,
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("local-editor-remotion-preview"),
+      ).toHaveAttribute("data-video-url", "https://example.test/master.mp4"),
+    );
+    expect(
+      screen.queryByTestId("local-editor-native-video"),
+    ).not.toBeInTheDocument();
   });
 
   it("allows the player to fill the preview when fit mode leaves bars visible", async () => {

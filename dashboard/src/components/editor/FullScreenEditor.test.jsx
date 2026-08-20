@@ -531,8 +531,8 @@ describe("FullScreenEditor", () => {
       screen.getByRole("button", { name: /toggle subtitles settings/i }),
     );
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(document.querySelector("video")).toHaveAttribute(
-      "src",
+    expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
+      "data-video-url",
       "/videos/job/source_clip_1.mp4",
     );
     expect(

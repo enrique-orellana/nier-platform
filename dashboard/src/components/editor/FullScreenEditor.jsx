@@ -796,6 +796,19 @@ export default function FullScreenEditor({
             1,
             Number(durationSeconds || 0) * 1000,
           )}
+          remotionPreviewProps={{
+            videoUrl: projectInputProps.videoUrl,
+            videoStartSeconds: projectInputProps.videoStartSeconds,
+            durationInSeconds: durationSeconds,
+            fps,
+            width: clip.output_width || 1080,
+            height: clip.output_height || 1920,
+            subtitles: projectInputProps.subtitles,
+            subtitleTracks: projectInputProps.subtitleTracks,
+            activeSubtitleTrackId: projectInputProps.activeSubtitleTrackId,
+            hook: projectInputProps.hook,
+            effects: projectInputProps.effects,
+          }}
           initialEditorState={localDraft}
           initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}:${localDraftRevision}`}
           clipMetadata={{ ...clip, hashtags: publishingMetadata.hashtags }}

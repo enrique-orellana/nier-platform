@@ -34,6 +34,8 @@ export default function RemotionPreview({
   effects = null,
   currentFrame = 0,
   playing = true,
+  loop = true,
+  controls = true,
   onFrameChange,
   onPlayingChange,
   onPlayerReady,
@@ -155,9 +157,9 @@ export default function RemotionPreview({
           width: "100%",
           height: "100%",
         }}
-        controls
+        controls={controls}
         autoPlay={playing}
-        loop
+        loop={loop}
         acknowledgeRemotionLicense={true}
       />
       {audioPlaybackBlocked && (
