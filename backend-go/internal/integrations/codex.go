@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -32,6 +33,27 @@ type PendingDeviceLogin struct {
 	UserCode        string  `json:"user_code"`
 	IntervalSeconds int     `json:"interval_seconds"`
 	StartedAt       float64 `json:"started_at"`
+}
+
+type flexibleInt int
+
+func (value *flexibleInt) UnmarshalJSON(data []byte) error {
+	var number int
+	if err := json.Unmarshal(data, &number); err == nil {
+		*value = flexibleInt(number)
+		return nil
+	}
+
+	var text string
+	if err := json.Unmarshal(data, &text); err != nil {
+		return err
+	}
+	parsed, err := strconv.Atoi(strings.TrimSpace(text))
+	if err != nil {
+		return err
+	}
+	*value = flexibleInt(parsed)
+	return nil
 }
 
 type codexCredentials struct {
@@ -71,10 +93,10 @@ func (a *CodexAuth) Connect(ctx context.Context) (map[string]any, error) {
 		return pendingPublic(pending), nil
 	}
 	var response struct {
-		DeviceAuthID string `json:"device_auth_id"`
-		UserCode     string `json:"user_code"`
-		Usercode     string `json:"usercode"`
-		Interval     int    `json:"interval"`
+		DeviceAuthID string      `json:"device_auth_id"`
+		UserCode     string      `json:"user_code"`
+		Usercode     string      `json:"usercode"`
+		Interval     flexibleInt `json:"interval"`
 	}
 	if err := a.postJSON(ctx, "/api/accounts/deviceauth/usercode", map[string]string{"client_id": a.config.ClientID}, &response); err != nil {
 		return nil, fmt.Errorf("unable to start ChatGPT device authorization: %w", err)
@@ -85,7 +107,7 @@ func (a *CodexAuth) Connect(ctx context.Context) (map[string]any, error) {
 	if response.UserCode == "" {
 		response.UserCode = response.Usercode
 	}
-	pending := PendingDeviceLogin{DeviceAuthID: response.DeviceAuthID, UserCode: response.UserCode, IntervalSeconds: maxInt(response.Interval, 5), StartedAt: float64(time.Now().Unix())}
+	pending := PendingDeviceLogin{DeviceAuthID: response.DeviceAuthID, UserCode: response.UserCode, IntervalSeconds: maxInt(int(response.Interval), 5), StartedAt: float64(time.Now().Unix())}
 	if err := a.savePending(pending); err != nil {
 		return nil, err
 	}

@@ -33,6 +33,26 @@ func TestCodexConnectPersistsPendingDeviceLogin(t *testing.T) {
 	}
 }
 
+func TestCodexConnectAcceptsStringPollingInterval(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/accounts/deviceauth/usercode" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"device_auth_id":"device-1","user_code":"ABCD","interval":"5"}`))
+	}))
+	defer server.Close()
+
+	auth := NewCodexAuth(CodexConfig{StorePath: filepath.Join(t.TempDir(), "codex.json"), AuthBaseURL: server.URL, ClientID: "client"}, server.Client())
+	result, err := auth.Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["intervalSeconds"] != 5 {
+		t.Fatalf("unexpected polling interval: %#v", result)
+	}
+}
+
 func TestCodexPollReturnsPendingForUnapprovedDevice(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/accounts/deviceauth/token" {
