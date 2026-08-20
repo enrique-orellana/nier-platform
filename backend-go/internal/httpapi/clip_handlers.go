@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -48,6 +49,8 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 		s.branchVersion(w, r, store)
 	case r.Method == http.MethodGet && len(segments) == 2:
 		s.getVersion(w, store, segments[1])
+	case r.Method == http.MethodGet && len(segments) == 3 && segments[0] == "versions" && segments[2] == "download":
+		s.downloadVersion(w, r, jobID, store, segments[1])
 	case r.Method == http.MethodPost && len(segments) == 3 && segments[2] == "render":
 		s.renderVersion(w, r, jobID, clipIndex, store, segments[1])
 	case r.Method == http.MethodPost && len(segments) == 3 && segments[2] == "complete":
@@ -246,6 +249,39 @@ func (s *Server) localRenderVideoURL(jobID, videoURL string) string {
 		return "/videos/" + jobID + "/" + filename
 	}
 	return videoURL
+}
+
+func (s *Server) downloadVersion(w http.ResponseWriter, r *http.Request, jobID string, store *versions.Store, versionID string) {
+	version, err := store.LoadVersion(versionID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": err.Error()})
+		return
+	}
+	if version.Status != versions.RenderStatusDone || version.OutputURL == "" {
+		writeJSON(w, http.StatusConflict, map[string]string{"detail": "version has no completed rendered output"})
+		return
+	}
+	parsed, parseErr := url.Parse(version.OutputURL)
+	if parseErr != nil || parsed.Path == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "version output URL is invalid"})
+		return
+	}
+	filename := path.Base(parsed.Path)
+	if filename == "" || filename == "." || filename == ".." || strings.Contains(filename, "\\") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "version output filename is invalid"})
+		return
+	}
+	if s.s3Store != nil && s.s3Store.Bucket != "" {
+		key := jobID + "/master/" + filename
+		downloadURL, urlErr := s.s3Store.DirectDownloadURL(r.Context(), key, filename, 2*time.Hour)
+		if urlErr != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Could not create download URL: %s", urlErr)})
+			return
+		}
+		http.Redirect(w, r, downloadURL, http.StatusTemporaryRedirect)
+		return
+	}
+	http.Redirect(w, r, version.OutputURL, http.StatusTemporaryRedirect)
 }
 
 func (s *Server) completeVersion(w http.ResponseWriter, r *http.Request, store *versions.Store, versionID string) {

@@ -25,6 +25,7 @@ import (
 	"github.com/mutonby/openshorts/backend-go/internal/integrations"
 	"github.com/mutonby/openshorts/backend-go/internal/jobs"
 	"github.com/mutonby/openshorts/backend-go/internal/manifests"
+	"github.com/mutonby/openshorts/backend-go/internal/versions"
 )
 
 func TestLegacyVideoRouteRedirectsToRendererOutput(t *testing.T) {
@@ -723,6 +724,36 @@ func TestCompleteVersionPublishesLocalMasterToS3(t *testing.T) {
 	}
 	if client.putKey != "job-1/master/master_0_version-1_123.mp4" || client.putBody != "master cache" {
 		t.Fatalf("master version was not uploaded: key=%q body=%q", client.putKey, client.putBody)
+	}
+}
+
+func TestVersionDownloadRedirectsDirectlyToMinio(t *testing.T) {
+	server := NewServer(config.Config{OutputDir: t.TempDir()})
+	server.s3Store = &integrations.S3Store{Bucket: "openshorts-media", PublicURLBase: "https://minio.example"}
+	store, err := server.versionStore("job-1", 0)
+	if err != nil {
+		t.Fatalf("create version store: %v", err)
+	}
+	created, err := store.CreateVersion(map[string]any{"timeline": map[string]any{}, "layers": map[string]any{}}, nil)
+	if err != nil {
+		t.Fatalf("create version: %v", err)
+	}
+	if _, err := store.UpdateRender(created.VersionID, versions.RenderStatusDone, ""); err != nil {
+		t.Fatalf("mark version done: %v", err)
+	}
+	if _, err := store.PromoteVersion(created.VersionID, "https://minio.example/openshorts-media/job-1/master/master.mp4"); err != nil {
+		t.Fatalf("promote version: %v", err)
+	}
+
+	response := httptest.NewRecorder()
+	path := "/api/clip/job-1/0/versions/" + created.VersionID + "/download"
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+
+	if response.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("expected direct download redirect, got %d: %s", response.Code, response.Body.String())
+	}
+	if location := response.Header().Get("Location"); location != "https://minio.example/openshorts-media/job-1/master/master.mp4" {
+		t.Fatalf("unexpected direct download location: %s", location)
 	}
 }
 

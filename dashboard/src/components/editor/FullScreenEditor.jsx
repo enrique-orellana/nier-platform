@@ -699,22 +699,15 @@ export default function FullScreenEditor({
 
   const downloadVersion = async () => {
     if (!version?.output_url || version.status !== "done") return;
-    const outputUrl = getApiUrl(version.output_url);
-    try {
-      const response = await fetch(outputUrl);
-      if (!response.ok) throw new Error("Download failed");
-      const blob = await response.blob();
-      const objectUrl = window.URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = `clip-${Number(clipIndex) + 1}-${version.version_id.slice(0, 8)}.mp4`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      window.URL.revokeObjectURL(objectUrl);
-    } catch {
-      window.open(outputUrl, "_blank");
-    }
+    const downloadUrl = getApiUrl(
+      `/api/clip/${encodeURIComponent(jobId)}/${encodeURIComponent(clipIndex)}/versions/${encodeURIComponent(version.version_id)}/download`,
+    );
+    const anchor = document.createElement("a");
+    anchor.href = downloadUrl;
+    anchor.download = `clip-${Number(clipIndex) + 1}-${version.version_id.slice(0, 8)}.mp4`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
   };
 
   useEffect(() => {

@@ -155,6 +155,30 @@ func (s *S3Store) DirectObjectURL(ctx context.Context, key string, expiration ti
 	return "", fmt.Errorf("S3 public endpoint is not configured")
 }
 
+func (s *S3Store) DirectDownloadURL(ctx context.Context, key, filename string, expiration time.Duration) (string, error) {
+	if s.Bucket == "" || key == "" || filename == "" {
+		return "", fmt.Errorf("S3 download object identity is required")
+	}
+	if s.Presigner != nil {
+		if expiration <= 0 {
+			expiration = 2 * time.Hour
+		}
+		contentDisposition := fmt.Sprintf(`attachment; filename="%s"`, strings.ReplaceAll(filename, `"`, ""))
+		request, err := s.Presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+			Bucket:                     aws.String(s.Bucket),
+			Key:                        aws.String(key),
+			ResponseContentDisposition: aws.String(contentDisposition),
+		}, func(options *s3.PresignOptions) {
+			options.Expires = expiration
+		})
+		if err != nil {
+			return "", err
+		}
+		return request.URL, nil
+	}
+	return s.DirectObjectURL(ctx, key, expiration)
+}
+
 func (s *S3Store) ReadObject(ctx context.Context, key string) ([]byte, error) {
 	if s.Client == nil || s.Bucket == "" || key == "" {
 		return nil, fmt.Errorf("S3 object store is not configured")

@@ -638,18 +638,6 @@ describe("FullScreenEditor", () => {
   });
 
   it("downloads the exact completed version output", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, blob: async () => new Blob(["video"]) });
-    vi.stubGlobal("fetch", fetchMock);
-    Object.defineProperty(window.URL, "createObjectURL", {
-      configurable: true,
-      value: vi.fn(() => "blob:download"),
-    });
-    Object.defineProperty(window.URL, "revokeObjectURL", {
-      configurable: true,
-      value: vi.fn(),
-    });
     const anchorClick = vi
       .spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => {});
@@ -671,16 +659,55 @@ describe("FullScreenEditor", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /download saved version/i }),
     );
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith("/videos/job/version-123456.mp4"),
-    );
+    await waitFor(() => expect(anchorClick).toHaveBeenCalled());
     expect(
       appendChild.mock.calls.some(
-        ([node]) => node?.download === "clip-3-version-.mp4",
+        ([node]) =>
+          node?.download === "clip-3-version-.mp4" &&
+          node?.href.endsWith(
+            "/api/clip/job/2/versions/version-123456/download",
+          ),
       ),
     ).toBe(true);
     anchorClick.mockRestore();
     appendChild.mockRestore();
+  });
+
+  it("downloads a MinIO version through a direct download URL", async () => {
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    const appendChild = vi.spyOn(document.body, "appendChild");
+
+    render(
+      <FullScreenEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }}
+        initialManifest={manifest}
+        initialVersion={{
+          version_id: "version-123456",
+          status: "done",
+          output_url:
+            "http://192.168.1.189:32280/openshorts-media/job/master/master.mp4?X-Amz-Signature=test",
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /download saved version/i }),
+    );
+
+    await waitFor(() => expect(anchorClick).toHaveBeenCalled());
+    expect(
+      appendChild.mock.calls.some(
+        ([node]) =>
+          node?.download === "clip-1-version-.mp4" &&
+          node?.href.endsWith(
+            "/api/clip/job/0/versions/version-123456/download",
+          ),
+      ),
+    ).toBe(true);
   });
 
   it("shows and edits subtitles from the legacy layer shape", () => {
