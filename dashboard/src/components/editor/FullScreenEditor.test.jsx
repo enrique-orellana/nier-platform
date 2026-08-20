@@ -12,12 +12,14 @@ vi.mock("../../components/RemotionPreview", () => ({
     currentFrame = 0,
     durationInSeconds,
     videoUrl,
+    videoStartSeconds = 0,
     layout = null,
   }) => (
     <div
       data-testid="remotion-player-frame"
       data-duration={durationInSeconds}
       data-video-url={videoUrl}
+      data-video-start-seconds={videoStartSeconds}
       data-layout-format={layout?.format || ""}
     >
       {currentFrame}
@@ -505,7 +507,17 @@ describe("FullScreenEditor", () => {
   });
 
   it("streams the rendered clip instead of downloading the source video", async () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn(async (url) => {
+      if (String(url).includes("/api/projects/clips/job?refresh=true")) {
+        return {
+          ok: true,
+          json: async () => ({
+            clips: [{ source_video_url: "/videos/job/source.mp4" }],
+          }),
+        };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
     vi.stubGlobal("fetch", fetchMock);
     const localManifest = {
       timeline: {
@@ -546,6 +558,10 @@ describe("FullScreenEditor", () => {
     expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
       "data-video-url",
       "/videos/job/source_clip_1.mp4",
+    );
+    expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
+      "data-video-start-seconds",
+      "0",
     );
     expect(
       screen.getByRole("button", { name: /generate subtitles/i }),

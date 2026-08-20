@@ -33,6 +33,29 @@ const proxyUrl = (url) => {
   return url;
 };
 
+const videoPath = (url) => {
+  if (!url) return "";
+  try {
+    return new URL(url, window.location.origin).pathname;
+  } catch {
+    return String(url).split("?")[0].split("#")[0];
+  }
+};
+
+const generatedClipVideoUrl = (clip, projectManifest) => {
+  const candidate = clip?.video_url || clip?.url || "";
+  if (!candidate) return "";
+  const sourcePaths = [
+    clip?.source_video_url,
+    clip?.original_video_url,
+    projectManifest?.timeline?.source_video_url,
+  ]
+    .map(videoPath)
+    .filter(Boolean);
+  if (!sourcePaths.length) return candidate;
+  return sourcePaths.includes(videoPath(candidate)) ? "" : candidate;
+};
+
 const defaultSubtitleTrackId = (nextManifest) =>
   nextManifest?.active_subtitle_track_id ||
   nextManifest?.subtitle_tracks?.[0]?.id ||
@@ -465,6 +488,11 @@ export default function FullScreenEditor({
     [activeTrackId, clip.video_url, projectManifest],
   );
   const projectVideoUrl = refreshedMasterVideoUrl || projectInputProps.videoUrl;
+  const generatedClipUrl = generatedClipVideoUrl(clip, projectManifest);
+  const previewVideoUrl = generatedClipUrl || projectVideoUrl;
+  const previewVideoStartSeconds = generatedClipUrl
+    ? 0
+    : projectInputProps.videoStartSeconds;
   const localEditorPreviewUrl = useMemo(
     () =>
       proxyUrl(
@@ -864,8 +892,8 @@ export default function FullScreenEditor({
             Number(durationSeconds || 0) * 1000,
           )}
           remotionPreviewProps={{
-            videoUrl: projectVideoUrl,
-            videoStartSeconds: projectInputProps.videoStartSeconds,
+            videoUrl: previewVideoUrl,
+            videoStartSeconds: previewVideoStartSeconds,
             durationInSeconds: durationSeconds,
             fps,
             width: clip.output_width || 1080,
