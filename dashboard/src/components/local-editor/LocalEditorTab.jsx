@@ -1661,7 +1661,7 @@ export default function LocalEditorTab({
     handleSeek(playheadMs + deltaMs);
   };
 
-  const togglePlayback = async () => {
+  const togglePlayback = async (event) => {
     const remotionPlayer = remotionPlayerRef.current;
     if (remotionPlayer) {
       if (isPlaying) {
@@ -1669,7 +1669,7 @@ export default function LocalEditorTab({
         setIsPlaying(false);
       } else {
         try {
-          await remotionPlayer.play?.();
+          await remotionPlayer.play?.(event);
           setIsPlaying(true);
         } catch (playError) {
           setError(playError.message || "Could not play project video.");
@@ -1731,7 +1731,7 @@ export default function LocalEditorTab({
     const key = event.key.toLowerCase();
     if (event.key === " " || key === "k") {
       event.preventDefault();
-      togglePlayback();
+      togglePlayback(event);
     } else if (event.key === "ArrowLeft") {
       event.preventDefault();
       seekBy(-5000);

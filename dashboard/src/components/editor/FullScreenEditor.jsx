@@ -261,14 +261,9 @@ export default function FullScreenEditor({
     initialVersion ? [initialVersion] : [],
   );
   const [editorState, setEditorState] = useState(() =>
-    manifestToEditorState(
-      initialManifest || {
-        timeline: { trim: { start_sec: 0, end_sec: clip.duration || 30 } },
-        layers: {},
-        subtitle_tracks: [],
-      },
-      { fps: clip.output_fps || 30 },
-    ),
+    manifestToEditorState(initialManifest || manifestFromClip(clip), {
+      fps: clip.output_fps || 30,
+    }),
   );
   const [currentFrame, setCurrentFrame] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -441,11 +436,21 @@ export default function FullScreenEditor({
 
   const currentManifest = useMemo(
     () => ({
-      ...editorStateToManifest(editorState, manifest || initialManifest || {}),
+      ...editorStateToManifest(
+        editorState,
+        manifest || initialManifest || manifestFromClip(clip),
+      ),
       active_subtitle_track_id: activeTrackId || null,
       publishing_metadata: publishingMetadata,
     }),
-    [activeTrackId, editorState, initialManifest, manifest, publishingMetadata],
+    [
+      activeTrackId,
+      clip,
+      editorState,
+      initialManifest,
+      manifest,
+      publishingMetadata,
+    ],
   );
   const projectManifest = useMemo(() => {
     if (!useLocalEditor) return currentManifest;

@@ -8,7 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { StrictMode, useState } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LocalEditorTab from "./LocalEditorTab";
 import { DEFAULT_SUBTITLE_STYLE } from "./localEditorStyles";
@@ -26,25 +26,40 @@ vi.mock("./AudioWaveform", () => ({
   ),
 }));
 
+const remotionPlayerMock = vi.hoisted(() => ({
+  play: vi.fn(),
+  pause: vi.fn(),
+  seekTo: vi.fn(),
+  mute: vi.fn(),
+  unmute: vi.fn(),
+}));
+
 vi.mock("../RemotionPreview", () => ({
-  default: ({
+  default: function MockRemotionPreview({
     videoUrl,
     currentFrame,
     controls = true,
     hook = null,
     subtitles = null,
-  }) => (
-    <div
-      data-testid="local-editor-remotion-preview"
-      data-video-url={videoUrl}
-      data-current-frame={currentFrame ?? "uncontrolled"}
-      data-controls={String(controls)}
-      data-hook-text={hook?.text || ""}
-      data-subtitle-text={
-        subtitles?.captions?.map((caption) => caption.text).join("|") || ""
-      }
-    />
-  ),
+    onPlayerReady,
+  }) {
+    useEffect(() => {
+      onPlayerReady?.(remotionPlayerMock);
+      return () => onPlayerReady?.(null);
+    }, [onPlayerReady]);
+    return (
+      <div
+        data-testid="local-editor-remotion-preview"
+        data-video-url={videoUrl}
+        data-current-frame={currentFrame ?? "uncontrolled"}
+        data-controls={String(controls)}
+        data-hook-text={hook?.text || ""}
+        data-subtitle-text={
+          subtitles?.captions?.map((caption) => caption.text).join("|") || ""
+        }
+      />
+    );
+  },
 }));
 
 const makeVideoFile = () =>
@@ -135,6 +150,29 @@ describe("LocalEditorTab", () => {
     expect(
       screen.getByTestId("local-editor-player").querySelector("video"),
     ).toHaveAttribute("src", "/api/video-proxy/project.mp4");
+  });
+
+  it("passes the Play button gesture to the Remotion player for audio", async () => {
+    remotionPlayerMock.play.mockClear();
+
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        remotionPreviewProps={{
+          videoUrl: "/videos/project.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /play video/i }));
+
+    await waitFor(() =>
+      expect(remotionPlayerMock.play).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "click" }),
+      ),
+    );
   });
 
   it("hides unavailable local-only controls for streamed project clips", async () => {

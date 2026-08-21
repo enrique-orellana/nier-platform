@@ -153,6 +153,45 @@ describe("FullScreenEditor", () => {
     expect(screen.getByTestId("remotion-player-frame")).toHaveTextContent("1");
   });
 
+  it("starts an unrendered master preview at the clip source offset", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        const value = String(url);
+        if (value.endsWith("/versions"))
+          return {
+            ok: true,
+            json: async () => ({ current_version_id: "", versions: [] }),
+          };
+        return { ok: false, status: 404, json: async () => ({}) };
+      }),
+    );
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={12}
+        clip={{
+          output_fps: 60,
+          source_video_url: "https://minio.example/master/source.mp4",
+          start: 579.082,
+          end: 631.35,
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
+      "data-video-url",
+      "https://minio.example/master/source.mp4",
+    );
+    expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
+      "data-video-start-seconds",
+      "579.082",
+    );
+  });
+
   it("connects timeline selection to hook and subtitle inspectors", () => {
     render(
       <FullScreenEditor
