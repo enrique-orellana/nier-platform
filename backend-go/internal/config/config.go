@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -15,26 +16,33 @@ const (
 	defaultUploadPostUserURL = "https://api.upload-post.com/api/uploadposts/users"
 )
 
+var defaultAuditBodyHostAllowlist = []string{
+	"chatgpt.com",
+	"openrouter.ai",
+	"generativelanguage.googleapis.com",
+}
+
 type Config struct {
-	Port              int
-	MaxConcurrentJobs int
-	RenderServiceURL  string
-	OutputDir         string
-	DisableYouTubeURL bool
-	UploadPostUserURL string
-	UploadPostURL     string
-	CodexAuthFile     string
-	S3Endpoint        string
-	S3Region          string
-	S3AccessKey       string
-	S3SecretKey       string
-	S3Bucket          string
-	S3SourceBucket    string
-	S3PublicEndpoint  string
-	S3PublicURLBase   string
-	S3ForcePathStyle  bool
-	ElevenLabsURL     string
-	DatabaseURL       string
+	Port                   int
+	MaxConcurrentJobs      int
+	RenderServiceURL       string
+	OutputDir              string
+	DisableYouTubeURL      bool
+	UploadPostUserURL      string
+	UploadPostURL          string
+	CodexAuthFile          string
+	S3Endpoint             string
+	S3Region               string
+	S3AccessKey            string
+	S3SecretKey            string
+	S3Bucket               string
+	S3SourceBucket         string
+	S3PublicEndpoint       string
+	S3PublicURLBase        string
+	S3ForcePathStyle       bool
+	ElevenLabsURL          string
+	DatabaseURL            string
+	AuditBodyHostAllowlist []string
 }
 
 func Load() (Config, error) {
@@ -82,6 +90,7 @@ func Load() (Config, error) {
 		cfg.CodexAuthFile = fmt.Sprintf("%s/.openshorts/codex-auth.json", strings.TrimRight(cfg.OutputDir, `/\\`))
 	}
 	cfg.S3Endpoint = os.Getenv("AWS_S3_ENDPOINT_URL")
+	cfg.AuditBodyHostAllowlist = normalizeAuditBodyHostAllowlist(os.Getenv("AUDIT_BODY_HOST_ALLOWLIST"), cfg.S3Endpoint)
 	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
 	cfg.ElevenLabsURL = os.Getenv("ELEVENLABS_API_BASE_URL")
 	if cfg.ElevenLabsURL == "" {
@@ -102,6 +111,42 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func normalizeAuditBodyHostAllowlist(raw, s3Endpoint string) []string {
+	values := defaultAuditBodyHostAllowlist
+	if strings.TrimSpace(raw) != "" {
+		values = strings.Split(raw, ",")
+	}
+	result := make([]string, 0, len(values)+1)
+	seen := make(map[string]struct{})
+	for _, value := range append(values, s3Endpoint) {
+		host := normalizeHost(value)
+		if host == "" {
+			continue
+		}
+		if _, ok := seen[host]; ok {
+			continue
+		}
+		seen[host] = struct{}{}
+		result = append(result, host)
+	}
+	return result
+}
+
+func normalizeHost(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return ""
+	}
+	if !strings.Contains(value, "://") {
+		value = "http://" + value
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
 }
 
 func (c Config) Address() string {
