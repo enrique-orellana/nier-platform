@@ -8,6 +8,7 @@ from streamer_layout import (
     clamp_focus_to_region,
     crop_gameplay_region,
     crop_webcam_region,
+    enhance_webcam_crop,
     filter_candidates_inside_gameplay_region,
     filter_candidates_outside_webcam_region,
     normalize_clip_layout,
@@ -194,6 +195,18 @@ def test_crop_webcam_region_avoids_halos_when_upscaling():
     assert int(result.min()) >= int(baseline.min())
     assert int(result.max()) <= int(baseline.max())
     assert np.unique(result[:, :, 0]).size > np.unique(baseline[:, :, 0]).size
+
+
+def test_webcam_enhancement_stays_subtle_on_noisy_source():
+    source = np.random.default_rng(7).integers(
+        32, 224, size=(24, 32, 3), dtype=np.uint8
+    )
+    result = enhance_webcam_crop(source, target_width=128, target_height=96)
+    baseline = cv2.resize(source, (128, 96), interpolation=cv2.INTER_LINEAR)
+    difference = np.abs(result.astype(np.int16) - baseline.astype(np.int16))
+
+    assert int(difference.max()) <= 1
+    assert float(difference.mean()) < 0.01
 
 
 def test_filter_candidates_rejects_webcam_region_and_touching_boxes():

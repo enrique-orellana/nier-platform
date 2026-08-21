@@ -79,7 +79,7 @@ Define the helper near the webcam crop functions:
 
 ```python
 WEBCAM_SHARPEN_SIGMA = 1.0
-WEBCAM_SHARPEN_AMOUNT = 0.08
+WEBCAM_SHARPEN_AMOUNT = 0.02
 
 
 def enhance_webcam_crop(

@@ -26,8 +26,9 @@ a small `enhance_webcam_crop()` helper:
    intentionally used instead of Lanczos because Lanczos ringing becomes
    visible around high-contrast webcam edges when the source is very small.
 2. Build a Gaussian-blurred copy of the resized image.
-3. Apply a conservative unsharp mask with `cv2.addWeighted`, using the resized
-   image as the base and the blurred image as the low-frequency component.
+3. Apply a very subtle unsharp mask with `cv2.addWeighted`, using the resized
+   image as the base and the blurred image as the low-frequency component. The
+   low amount is intentional so frame-to-frame webcam noise does not shimmer.
 
 The helper will validate positive target dimensions, preserve the input image
 type/channel layout, and return the requested dimensions. The existing final
