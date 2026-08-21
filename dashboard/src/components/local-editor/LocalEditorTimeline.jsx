@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { moveCue, resizeCue } from "../../editor/timelineModel";
 import AudioWaveform from "./AudioWaveform";
 
@@ -61,7 +61,12 @@ function CueBlock({
       onPointerDown={(event) => beginDrag(event, "move")}
       onKeyDown={(event) => event.key === "Enter" && onSelect(cue)}
       className={`absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[10px] text-white shadow-sm transition-shadow ${selected ? "ring-2 ring-white" : ""}`}
-      style={{ left: `${left}%`, width: `${width}%`, background: color }}
+      style={{
+        left: `${left}%`,
+        width: `${width}%`,
+        background: color,
+        zIndex: selected ? 10 : 1,
+      }}
     >
       <span className="pointer-events-none block truncate">
         {cue.text || "Untitled cue"}
@@ -139,10 +144,11 @@ export default function LocalEditorTimeline({
   onSeek,
 }) {
   const timelineRef = useRef(null);
+  const [timelineZoom, setTimelineZoom] = useState(1);
   const safeDuration = Math.max(1, durationMs);
   const timelineWidth = Math.max(
     MIN_LANE_WIDTH,
-    Math.ceil((safeDuration / 1000) * BASE_PIXELS_PER_SECOND),
+    Math.ceil((safeDuration / 1000) * BASE_PIXELS_PER_SECOND * timelineZoom),
   );
   const canvasWidth = TRACK_LABEL_WIDTH + timelineWidth;
   const durationSeconds = safeDuration / 1000;
@@ -150,6 +156,7 @@ export default function LocalEditorTimeline({
     12,
     Math.max(2, Math.ceil(durationSeconds / 5) + 1),
   );
+  const hookCues = hook ? [hook] : [];
   const rulerMarks = Array.from(
     { length: tickCount },
     (_, index) => (index / (tickCount - 1)) * 100,
@@ -184,13 +191,28 @@ export default function LocalEditorTimeline({
       ),
     );
   };
-  const hookCues = hook ? [hook] : [];
-
   return (
     <div className="rounded-xl border border-white/10 bg-[#101014]">
       <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-[10px] text-zinc-500">
         <span>Timeline</span>
-        <span>Scroll horizontally for precise subtitle timing</span>
+        <div className="flex items-center gap-2">
+          <span>Scroll horizontally for precise subtitle timing</span>
+          <label className="flex items-center gap-1 text-zinc-400">
+            <span className="sr-only">Timeline zoom</span>
+            <select
+              aria-label="Timeline zoom"
+              value={timelineZoom}
+              onChange={(event) => setTimelineZoom(Number(event.target.value))}
+              className="rounded bg-black/30 px-1.5 py-1 text-[10px] text-zinc-300"
+            >
+              <option value="0.5">50%</option>
+              <option value="1">100%</option>
+              <option value="2">200%</option>
+              <option value="4">400%</option>
+              <option value="8">800%</option>
+            </select>
+          </label>
+        </div>
       </div>
       <div
         ref={timelineRef}

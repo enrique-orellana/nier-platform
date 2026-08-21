@@ -29,4 +29,27 @@ describe("TransportControls", () => {
     );
     dispatchSpy.mockRestore();
   });
+
+  it("offers high zoom levels for uninterrupted cue timeline inspection", () => {
+    const onZoomChange = vi.fn();
+    render(
+      <TransportControls
+        currentFrame={0}
+        durationFrames={300}
+        fps={30}
+        playing={false}
+        onPlayingChange={vi.fn()}
+        onFrameChange={vi.fn()}
+        zoom={1}
+        onZoomChange={onZoomChange}
+      />,
+    );
+
+    const zoom = screen.getByRole("combobox", { name: "Timeline zoom" });
+    expect(screen.getByRole("option", { name: "400%" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "800%" })).toBeInTheDocument();
+    fireEvent.change(zoom, { target: { value: "8" } });
+
+    expect(onZoomChange).toHaveBeenCalledWith(8);
+  });
 });

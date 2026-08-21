@@ -91,6 +91,8 @@ export default function TransportControls({
         <option value="0.5">50%</option>
         <option value="1">100%</option>
         <option value="2">200%</option>
+        <option value="4">400%</option>
+        <option value="8">800%</option>
       </select>
     </div>
   );

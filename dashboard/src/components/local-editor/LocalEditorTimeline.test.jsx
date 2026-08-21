@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import LocalEditorTimeline from "./LocalEditorTimeline";
 
@@ -32,6 +32,23 @@ describe("LocalEditorTimeline", () => {
     expect(screen.getByRole("button", { name: "Caption" })).toBeInTheDocument();
   });
 
+  it("brings a selected overlapping cue to the front for editing", () => {
+    render(
+      <LocalEditorTimeline
+        durationMs={10000}
+        subtitleCues={[
+          { id: "cue-back", text: "Back", startMs: 1000, endMs: 5000 },
+          { id: "cue-front", text: "Front", startMs: 2000, endMs: 4000 },
+        ]}
+        selectedId="cue-front"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Front" })).toHaveStyle({
+      zIndex: "10",
+    });
+  });
+
   it("keeps short adjacent subtitle cues at their actual timeline widths", () => {
     render(
       <LocalEditorTimeline
@@ -55,6 +72,19 @@ describe("LocalEditorTimeline", () => {
     });
     expect(screen.getByRole("button", { name: "Two" })).toHaveStyle({
       width: "0.5%",
+    });
+  });
+
+  it("allows high zoom levels for uninterrupted cue inspection", () => {
+    render(<LocalEditorTimeline durationMs={10000} />);
+
+    const zoom = screen.getByRole("combobox", { name: "Timeline zoom" });
+    expect(screen.getByRole("option", { name: "400%" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "800%" })).toBeInTheDocument();
+    fireEvent.change(zoom, { target: { value: "4" } });
+
+    expect(screen.getByTestId("local-editor-timeline-canvas")).toHaveStyle({
+      width: "3344px",
     });
   });
 
