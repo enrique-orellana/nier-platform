@@ -197,7 +197,7 @@ def test_codex_transport_aggregates_response_output_text_deltas(monkeypatch):
     assert FakeCodexStreamClient.last_payload["store"] is False
 
 
-def test_codex_transport_caps_requested_timeout_at_30_seconds(monkeypatch):
+def test_codex_transport_caps_requested_timeout_at_maximum(monkeypatch):
     config = ai_client.AIConfig(provider="openai-codex", text_model="auto")
     monkeypatch.setattr(ai_client, "get_access_token", lambda: "access")
     monkeypatch.setattr(ai_client, "get_codex_account_id", lambda: "account")
@@ -206,8 +206,8 @@ def test_codex_transport_caps_requested_timeout_at_30_seconds(monkeypatch):
 
     ai_client.chat_completion(config, "Return JSON", timeout=300.0)
 
-    assert ai_client.CODEX_MAX_TIMEOUT_SECONDS == 30.0
-    assert FakeCodexStreamClient.last_timeout == 30.0
+    assert ai_client.CODEX_MAX_TIMEOUT_SECONDS == 180.0
+    assert FakeCodexStreamClient.last_timeout == 180.0
 
 
 def test_codex_transport_sends_selected_reasoning_effort(monkeypatch):
