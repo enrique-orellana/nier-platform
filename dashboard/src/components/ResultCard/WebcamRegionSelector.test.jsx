@@ -118,12 +118,15 @@ describe("WebcamRegionSelector", () => {
     fireEvent(window, pointerEvent("pointerup", 250, 250));
     fireEvent.click(screen.getByRole("button", { name: "Save webcam area" }));
 
-    expect(onSave).toHaveBeenCalledWith({
-      x: expect.closeTo(0.125, 3),
-      y: expect.closeTo((100 - 87.5) / 225, 3),
-      width: expect.closeTo(0.5, 3),
-      height: expect.closeTo((250 - 100) / 225, 3),
-    }, "medium");
+    expect(onSave).toHaveBeenCalledWith(
+      {
+        x: expect.closeTo(0.125, 3),
+        y: expect.closeTo((100 - 87.5) / 225, 3),
+        width: expect.closeTo(0.5, 3),
+        height: expect.closeTo((250 - 100) / 225, 3),
+      },
+      "medium",
+    );
   });
 
   it("clamps a drawn region to the source content area and can close without saving", () => {
