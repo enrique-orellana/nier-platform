@@ -17,6 +17,8 @@ FACECAM_HEIGHT_RATIOS = {
 }
 GAMEPLAY_ZOOM_MIN = 0.6
 GAMEPLAY_ZOOM_MAX = 2.0
+WEBCAM_SHARPEN_SIGMA = 1.0
+WEBCAM_SHARPEN_AMOUNT = 0.28
 
 
 @dataclass(frozen=True)
@@ -119,6 +121,33 @@ def webcam_region_pixel_bounds(
     return left, top, right, bottom
 
 
+def enhance_webcam_crop(
+    crop: np.ndarray,
+    target_width: int,
+    target_height: int,
+) -> np.ndarray:
+    """Upscale and lightly sharpen a webcam crop without AI reconstruction."""
+
+    if target_width <= 0 or target_height <= 0:
+        raise ValueError("target dimensions must be positive")
+
+    source_width = crop.shape[1]
+    interpolation = (
+        cv2.INTER_LANCZOS4
+        if target_width > source_width or target_height > crop.shape[0]
+        else cv2.INTER_AREA
+    )
+    resized = cv2.resize(crop, (target_width, target_height), interpolation=interpolation)
+    blurred = cv2.GaussianBlur(resized, (0, 0), sigmaX=WEBCAM_SHARPEN_SIGMA)
+    return cv2.addWeighted(
+        resized,
+        1.0 + WEBCAM_SHARPEN_AMOUNT,
+        blurred,
+        -WEBCAM_SHARPEN_AMOUNT,
+        0,
+    )
+
+
 def crop_webcam_region(
     frame: np.ndarray,
     region: Mapping[str, object],
@@ -147,7 +176,7 @@ def crop_webcam_region(
     crop_left = max(0, (selected_width - crop_width) // 2)
     crop_top = max(0, (selected_height - crop_height) // 2)
     cropped = selected[crop_top:crop_top + crop_height, crop_left:crop_left + crop_width]
-    return cv2.resize(cropped, (target_width, target_height), interpolation=cv2.INTER_AREA)
+    return enhance_webcam_crop(cropped, target_width, target_height)
 
 
 def gameplay_region_pixel_bounds(

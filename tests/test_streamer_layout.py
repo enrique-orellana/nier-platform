@@ -1,4 +1,5 @@
 import pytest
+import cv2
 import numpy as np
 
 from streamer_layout import (
@@ -178,6 +179,20 @@ def test_crop_webcam_region_preserves_selection_without_stretching():
 
     assert result.shape == (40, 40, 3)
     assert 70 <= int(result[:, :, 0].mean()) <= 130
+
+
+def test_crop_webcam_region_sharpens_a_low_resolution_webcam_edge():
+    source = np.zeros((24, 32, 3), dtype=np.uint8)
+    source[:, :16] = 72
+    source[:, 16:] = 184
+    region = {"x": 0.0, "y": 0.0, "width": 1.0, "height": 1.0}
+
+    result = crop_webcam_region(source, region, target_width=128, target_height=96)
+    baseline = cv2.resize(source, (128, 96), interpolation=cv2.INTER_AREA)
+
+    assert result.shape == baseline.shape
+    assert int(result.min()) < int(baseline.min())
+    assert int(result.max()) > int(baseline.max())
 
 
 def test_filter_candidates_rejects_webcam_region_and_touching_boxes():
