@@ -30,6 +30,8 @@ type Server struct {
 	mediaRunner         media.CommandRunner
 	s3Store             *integrations.S3Store
 	artifactURLOverride func(string, string) string
+	publicationMu       sync.Mutex
+	publishedOutputs    map[string]string
 	versionMu           sync.Mutex
 	versionStores       map[string]*versions.Store
 	highlightMu         sync.Mutex
@@ -54,7 +56,7 @@ func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs
 
 func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, runner *jobs.Runner, translationRunner OperationClient, scheduler *jobs.Scheduler) *Server {
 	mux := http.NewServeMux()
-	server := &Server{config: cfg, mux: mux, store: store, runner: runner, scheduler: scheduler, translationRunner: translationRunner, versionStores: make(map[string]*versions.Store), highlightRuntime: make(map[string]map[string]any)}
+	server := &Server{config: cfg, mux: mux, store: store, runner: runner, scheduler: scheduler, translationRunner: translationRunner, publishedOutputs: make(map[string]string), versionStores: make(map[string]*versions.Store), highlightRuntime: make(map[string]map[string]any)}
 	if runner != nil {
 		runner.RuntimeMetadata = server.highlightRuntimeMetadata
 		runner.ReleaseRuntimeMetadata = server.releaseHighlightRuntimeMetadata

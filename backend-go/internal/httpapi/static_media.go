@@ -178,9 +178,6 @@ func (s *Server) publishRenderOutput(ctx context.Context, outputURL, clipID stri
 	if !safePath(root, localPath) {
 		return "", fmt.Errorf("rendered output is outside the output directory")
 	}
-	if _, err := os.Stat(localPath); err != nil {
-		return "", err
-	}
 	jobID := parts[0]
 	filename := path.Base(relative)
 	key := jobID + "/master/" + filename
@@ -191,10 +188,31 @@ func (s *Server) publishRenderOutput(ctx context.Context, outputURL, clipID stri
 		}
 		key = jobID + "/clips/" + clipID + "/" + filename
 	}
+	s.publicationMu.Lock()
+	defer s.publicationMu.Unlock()
+	if publishedURL := s.publishedOutputs[key]; publishedURL != "" {
+		return publishedURL, nil
+	}
+	if _, err := os.Stat(localPath); err != nil {
+		return "", err
+	}
 	if err := s.s3Store.UploadFile(ctx, key, localPath, "video/mp4"); err != nil {
 		return "", err
 	}
-	return s.s3Store.DirectObjectURL(ctx, key, 2*time.Hour)
+	publishedURL, err := s.s3Store.DirectObjectURL(ctx, key, 2*time.Hour)
+	if err != nil {
+		return "", err
+	}
+	s.publishedOutputs[key] = publishedURL
+	if strings.HasPrefix(jobID, "local-editor-") {
+		_ = os.RemoveAll(filepath.Join(root, jobID))
+	} else {
+		if filename != "source.mp4" && !strings.HasSuffix(filename, "_metadata.json") {
+			_ = os.Remove(localPath)
+		}
+		_ = os.RemoveAll(filepath.Join(root, jobID, "render-cache"))
+	}
+	return publishedURL, nil
 }
 
 func (s *Server) videoProxy(w http.ResponseWriter, r *http.Request) {

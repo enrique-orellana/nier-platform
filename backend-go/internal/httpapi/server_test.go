@@ -683,8 +683,16 @@ func TestRenderStatusPublishesCompletedMasterToS3(t *testing.T) {
 	if client.putKey != "job-1/master/master_0_version-1_123.mp4" || client.putBody != "master cache" {
 		t.Fatalf("master was not uploaded to the canonical cache key: key=%q body=%q", client.putKey, client.putBody)
 	}
-	if _, err := os.Stat(masterPath); err != nil {
-		t.Fatalf("master cache was removed: %v", err)
+	if _, err := os.Stat(masterPath); !os.IsNotExist(err) {
+		t.Fatalf("master staging file was not removed: %v", err)
+	}
+	secondResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(secondResponse, httptest.NewRequest(http.MethodGet, "/api/render/render-1", nil))
+	if secondResponse.Code != http.StatusOK || !strings.Contains(secondResponse.Body.String(), "https://minio.example/openshorts-media/job-1/master/master_0_version-1_123.mp4") {
+		t.Fatalf("expected cached MinIO master URL on repeat poll, got %d: %s", secondResponse.Code, secondResponse.Body.String())
+	}
+	if client.putCalls != 1 {
+		t.Fatalf("expected one MinIO upload across repeated polls, got %d", client.putCalls)
 	}
 }
 
@@ -723,6 +731,57 @@ func TestRenderStatusPublishesRemotionOutputToClipScope(t *testing.T) {
 	}
 	if client.putKey != expectedKey || client.putBody != "clip render" {
 		t.Fatalf("remotion output was not uploaded to the clip key: key=%q body=%q", client.putKey, client.putBody)
+	}
+	if _, err := os.Stat(remotionPath); !os.IsNotExist(err) {
+		t.Fatalf("remotion staging file was not removed: %v", err)
+	}
+}
+
+func TestRenderStatusPublishesLocalEditorOutputOnceAndCleansStaging(t *testing.T) {
+	outputDir := t.TempDir()
+	jobDir := filepath.Join(outputDir, "local-editor-1")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatalf("create output directory: %v", err)
+	}
+	outputPath := filepath.Join(jobDir, "remotion_0_123.mp4")
+	if err := os.WriteFile(outputPath, []byte("local editor render"), 0o644); err != nil {
+		t.Fatalf("write local editor output: %v", err)
+	}
+	renderer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"renderId":"local-render-1","status":"done","outputUrl":"/output/local-editor-1/remotion_0_123.mp4"}`))
+	}))
+	defer renderer.Close()
+
+	server := NewServer(config.Config{OutputDir: outputDir, RenderServiceURL: renderer.URL})
+	client := &regionMetadataS3Client{}
+	server.s3Store = &integrations.S3Store{
+		Client:        client,
+		Bucket:        "openshorts-media",
+		PublicURLBase: "https://minio.example",
+	}
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/render/local-render-1", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "https://minio.example/openshorts-media/local-editor-1/clips/local-render-1/remotion_0_123.mp4") {
+		t.Fatalf("expected MinIO output URL, got %s", response.Body.String())
+	}
+	if client.putCalls != 1 {
+		t.Fatalf("expected one local editor upload, got %d", client.putCalls)
+	}
+	if _, err := os.Stat(jobDir); !os.IsNotExist(err) {
+		t.Fatalf("local editor staging directory was not removed: %v", err)
+	}
+	secondResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(secondResponse, httptest.NewRequest(http.MethodGet, "/api/render/local-render-1", nil))
+	if secondResponse.Code != http.StatusOK || !strings.Contains(secondResponse.Body.String(), "https://minio.example/openshorts-media/local-editor-1/clips/local-render-1/remotion_0_123.mp4") {
+		t.Fatalf("expected cached MinIO output URL on repeat poll, got %d: %s", secondResponse.Code, secondResponse.Body.String())
+	}
+	if client.putCalls != 1 {
+		t.Fatalf("expected repeat local editor poll not to re-upload, got %d uploads", client.putCalls)
 	}
 }
 
@@ -1901,9 +1960,10 @@ func TestClipTranscriptRouteReadsSegmentTimingFromMetadata(t *testing.T) {
 }
 
 type regionMetadataS3Client struct {
-	body    string
-	putKey  string
-	putBody string
+	body     string
+	putKey   string
+	putBody  string
+	putCalls int
 }
 
 func (c *regionMetadataS3Client) GetObject(_ context.Context, _ *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
@@ -1911,6 +1971,7 @@ func (c *regionMetadataS3Client) GetObject(_ context.Context, _ *s3.GetObjectInp
 }
 
 func (c *regionMetadataS3Client) PutObject(_ context.Context, input *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+	c.putCalls++
 	contents, err := io.ReadAll(input.Body)
 	if err != nil {
 		return nil, err
@@ -1992,6 +2053,36 @@ func TestProjectClipStatusesPersistInStoreInsteadOfSidecar(t *testing.T) {
 	server.Handler().ServeHTTP(getRes, getReq)
 	if getRes.Code != http.StatusOK || !strings.Contains(getRes.Body.String(), `"0"`) || !strings.Contains(getRes.Body.String(), `"discarded"`) {
 		t.Fatalf("unexpected statuses response: %d %s", getRes.Code, getRes.Body.String())
+	}
+}
+
+func TestDeleteProjectRemovesItsLocalOutputDirectory(t *testing.T) {
+	outputDir := t.TempDir()
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	projectDir := filepath.Join(outputDir, job.ID)
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatalf("create project directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "render-cache.mp4"), []byte("stale"), 0o644); err != nil {
+		t.Fatalf("write project artifact: %v", err)
+	}
+
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/projects/"+job.ID, nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected delete status 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if _, err := os.Stat(projectDir); !os.IsNotExist(err) {
+		t.Fatalf("project output directory was not removed: %v", err)
+	}
+	if _, exists := store.Get(context.Background(), job.ID); exists {
+		t.Fatal("deleted project still exists in the store")
 	}
 }
 

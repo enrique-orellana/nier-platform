@@ -320,15 +320,19 @@ export async function renderLocalVideoOnBackend({
     if (status.status === "error" || status.status === "failed")
       throw new Error(status.error || "Native video render failed.");
     if (status.status === "done" || status.status === "completed") {
-      const filename = String(status.outputUrl || "")
+      const publishedOutputUrl = String(status.outputUrl || "");
+      const filename = publishedOutputUrl
         .split(/[\\/]/)
         .filter(Boolean)
-        .pop();
+        .pop()
+        ?.split("?")[0];
       if (!filename)
         throw new Error("Render completed without an output file.");
       onProgress(1);
       const result = {
-        outputUrl: getApiUrl(`/output/${renderJobId}/${filename}`),
+        outputUrl: /^https?:\/\//i.test(publishedOutputUrl)
+          ? publishedOutputUrl
+          : getApiUrl(publishedOutputUrl),
         jobId: renderJobId,
         filename,
       };

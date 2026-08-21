@@ -264,6 +264,7 @@ describe("local editor Remotion rendering", () => {
 
     expect(outputUrl).toBe("/output/local-editor-1/render.mp4");
     expect(fetchImpl.mock.calls[0][1].body).toBeInstanceOf(FormData);
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/render/render-1");
   });
 
   it("uses the project backend render path without downloading the source", async () => {
@@ -296,6 +297,7 @@ describe("local editor Remotion rendering", () => {
 
     expect(outputUrl).toBe("/output/job-1/render.mp4");
     expect(fetchImpl.mock.calls[0][0]).toBe("/api/render");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/render/render-1");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toMatchObject({
       jobId: "job-1",
       clipIndex: 2,
@@ -304,6 +306,34 @@ describe("local editor Remotion rendering", () => {
         fps: 60,
       },
     });
+  });
+
+  it("keeps the published MinIO URL returned by the backend", async () => {
+    const publishedUrl =
+      "http://minio.example/openshorts-media/job-1/clips/render-1/remotion.mp4";
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ renderId: "render-1", jobId: "local-editor-1" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: "done",
+          progress: 100,
+          outputUrl: publishedUrl,
+        }),
+      });
+
+    const outputUrl = await renderLocalVideoOnBackend({
+      file: new File(["video"], "source.mp4", { type: "video/mp4" }),
+      durationSeconds: 2,
+      pollMs: 0,
+      fetchImpl,
+    });
+
+    expect(outputUrl).toBe(publishedUrl);
   });
 
   it("renders imported and edited cues through the native Remotion path once", async () => {
