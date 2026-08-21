@@ -42,6 +42,43 @@ function pointerEvent(type, clientX, clientY) {
 }
 
 describe("WebcamRegionSelector", () => {
+  it("defaults the webcam panel size to medium for legacy clips", () => {
+    render(
+      <WebcamRegionSelector
+        videoUrl="/videos/source.mp4"
+        initialRegion={{ x: 0.1, y: 0.2, width: 0.3, height: 0.4 }}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Webcam panel size")).toHaveValue("medium");
+  });
+
+  it("restores the current facecam size and returns the selected size on save", () => {
+    const onSave = vi.fn();
+    render(
+      <WebcamRegionSelector
+        videoUrl="/videos/source.mp4"
+        initialRegion={{ x: 0.1, y: 0.2, width: 0.3, height: 0.4 }}
+        initialFacecamSize="large"
+        onSave={onSave}
+        onClose={vi.fn()}
+      />,
+    );
+
+    prepareStage();
+    const size = screen.getByLabelText("Webcam panel size");
+    expect(size).toHaveValue("large");
+    fireEvent.change(size, { target: { value: "small" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save webcam area" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+      "small",
+    );
+  });
+
   it("keeps Save disabled until a region is drawn", () => {
     render(
       <WebcamRegionSelector
@@ -86,7 +123,7 @@ describe("WebcamRegionSelector", () => {
       y: expect.closeTo((100 - 87.5) / 225, 3),
       width: expect.closeTo(0.5, 3),
       height: expect.closeTo((250 - 100) / 225, 3),
-    });
+    }, "medium");
   });
 
   it("clamps a drawn region to the source content area and can close without saving", () => {

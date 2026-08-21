@@ -124,6 +124,9 @@ export default function SourceRegionSelector({
   onClose,
   isSaving = false,
   error = "",
+  panelSizeOptions = null,
+  initialPanelSize = "medium",
+  panelSizeLabel = "Panel size",
 }) {
   const stageRef = useRef(null);
   const videoRef = useRef(null);
@@ -136,8 +139,10 @@ export default function SourceRegionSelector({
     height: 100,
   });
   const [isInteracting, setIsInteracting] = useState(false);
+  const [panelSize, setPanelSize] = useState(initialPanelSize);
 
   useEffect(() => setRegion(normalizeRegion(initialRegion)), [initialRegion]);
+  useEffect(() => setPanelSize(initialPanelSize), [initialPanelSize]);
 
   const getPoint = (clientX, clientY) => {
     const contentRect = getRegionContentRect(
@@ -381,6 +386,28 @@ export default function SourceRegionSelector({
                 Select a rectangle before saving.
               </p>
             )}
+            {panelSizeOptions?.length ? (
+              <div className="space-y-1.5">
+                <label
+                  htmlFor={`${regionTestId}-panel-size`}
+                  className="text-xs font-semibold uppercase tracking-wide text-zinc-500"
+                >
+                  {panelSizeLabel}
+                </label>
+                <select
+                  id={`${regionTestId}-panel-size`}
+                  value={panelSize}
+                  onChange={(event) => setPanelSize(event.target.value)}
+                  className="w-full rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-sm text-zinc-200 outline-none focus:border-red-400/60"
+                >
+                  {panelSizeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
             {error && (
               <p role="alert" className="text-xs text-red-300">
                 {error}
@@ -399,7 +426,14 @@ export default function SourceRegionSelector({
           <button
             type="button"
             disabled={!canSave}
-            onClick={() => onSave(normalizeRegion(region))}
+            onClick={() => {
+              const normalizedRegion = normalizeRegion(region);
+              if (panelSizeOptions?.length) {
+                onSave(normalizedRegion, panelSize);
+              } else {
+                onSave(normalizedRegion);
+              }
+            }}
             className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isSaving ? "Saving…" : `Save ${lowerLabel}`}
