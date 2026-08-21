@@ -43,6 +43,7 @@ import {
   cueCaptionsForRender,
   cleanSubtitleCue,
   renderLocalVideoOnBackend,
+  resolveProjectExportStartSeconds,
   syncSubtitleCue,
 } from "./localEditorRender";
 import {
@@ -1856,6 +1857,13 @@ export default function LocalEditorTab({
       const renderParams = {
         durationSeconds: durationMs / 1000,
         fps: 60,
+        videoStartSeconds: projectSourceUrl
+          ? resolveProjectExportStartSeconds(
+              projectSourceUrl,
+              clipMetadata?.start,
+              remotionPreviewProps?.videoStartSeconds,
+            )
+          : 0,
         ...outputDimensions,
         videoFit: cropForExport ? "cover" : "contain",
         subtitleCues,

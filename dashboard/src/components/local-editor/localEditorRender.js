@@ -5,6 +5,32 @@ import { toClipGeneratorSubtitleStyle } from "./localEditorStyles";
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+const generatedSourceClipPattern = /(?:^|\/)source_clip_[^/]+\.mp4(?:[?#]|$)/i;
+
+const isGeneratedSourceClipUrl = (url) => {
+  if (!url) return false;
+  try {
+    return generatedSourceClipPattern.test(
+      new URL(url, window.location.origin).pathname,
+    );
+  } catch {
+    return generatedSourceClipPattern.test(String(url));
+  }
+};
+
+export const resolveProjectExportStartSeconds = (
+  sourceUrl,
+  clipStartSeconds = 0,
+  editorStartSeconds,
+) => {
+  if (isGeneratedSourceClipUrl(sourceUrl)) return 0;
+  const preferredStart = Number(editorStartSeconds);
+  const start = Number.isFinite(preferredStart)
+    ? preferredStart
+    : Number(clipStartSeconds);
+  return Number.isFinite(start) && start > 0 ? start : 0;
+};
+
 const cueWords = (text) =>
   String(text || "")
     .trim()
@@ -161,6 +187,7 @@ export const cueCaptionsForRender = (cue) => {
 export const buildRemotionRenderProps = ({
   durationSeconds,
   fps = 30,
+  videoStartSeconds = 0,
   width,
   height,
   videoFit = "cover",
@@ -173,6 +200,7 @@ export const buildRemotionRenderProps = ({
     Math.round(Number(durationSeconds || 0) * Number(fps || 30)),
   ),
   fps: Number(fps || 30),
+  videoStartSeconds: Math.max(0, Number(videoStartSeconds) || 0),
   width: Number(width),
   height: Number(height),
   videoFit,
@@ -211,6 +239,7 @@ export async function renderLocalVideoOnBrowser({
   videoUrl,
   durationSeconds,
   fps = 30,
+  videoStartSeconds = 0,
   width,
   height,
   videoFit = "cover",
@@ -223,6 +252,7 @@ export async function renderLocalVideoOnBrowser({
   const props = buildRemotionRenderProps({
     durationSeconds,
     fps,
+    videoStartSeconds,
     width,
     height,
     videoFit,
@@ -232,6 +262,7 @@ export async function renderLocalVideoOnBrowser({
   });
   return renderInBrowser({
     videoUrl,
+    videoStartSeconds,
     durationInSeconds: durationSeconds,
     fps,
     width,
@@ -260,6 +291,7 @@ export async function renderLocalVideoOnBackend({
   clipIndex = 0,
   durationSeconds,
   fps = 30,
+  videoStartSeconds = 0,
   width,
   height,
   videoFit = "cover",
@@ -275,6 +307,7 @@ export async function renderLocalVideoOnBackend({
   const props = buildRemotionRenderProps({
     durationSeconds,
     fps,
+    videoStartSeconds,
     width,
     height,
     videoFit,
@@ -348,6 +381,7 @@ export async function burnLocalEditorSubtitles({
   clipIndex = 0,
   durationSeconds,
   fps = 30,
+  videoStartSeconds = 0,
   width,
   height,
   videoFit = "cover",
@@ -365,6 +399,7 @@ export async function burnLocalEditorSubtitles({
     clipIndex,
     durationSeconds,
     fps,
+    videoStartSeconds,
     width,
     height,
     videoFit,

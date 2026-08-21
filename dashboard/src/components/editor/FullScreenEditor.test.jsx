@@ -2,6 +2,7 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import FullScreenEditor from "./FullScreenEditor";
+import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
 
 const renderVersionMocks = vi.hoisted(() => ({
   saveAndRenderVersion: vi.fn(),
@@ -51,6 +52,26 @@ describe("FullScreenEditor", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     renderVersionMocks.saveAndRenderVersion.mockReset();
+  });
+
+  it("uses the renewed master URL for local editor media", () => {
+    expect(
+      resolveLocalEditorSourceUrl({
+        refreshedMasterVideoUrl:
+          "https://minio.example/master/source.mp4?X-Amz-Date=fresh",
+        clip: {
+          video_url: "https://minio.example/master/source.mp4?X-Amz-Date=stale",
+          source_video_url:
+            "https://minio.example/master/source.mp4?X-Amz-Date=stale",
+        },
+        projectManifest: {
+          timeline: {
+            source_video_url:
+              "https://minio.example/master/source.mp4?X-Amz-Date=manifest-stale",
+          },
+        },
+      }),
+    ).toBe("https://minio.example/master/source.mp4?X-Amz-Date=fresh");
   });
 
   it("deletes the selected version and loads the newest remaining version", async () => {
@@ -989,7 +1010,7 @@ describe("FullScreenEditor", () => {
           version_id: "version-123456",
           status: "done",
           output_url:
-            "http://192.168.1.189:32280/openshorts-media/job/master/master.mp4?X-Amz-Signature=test",
+            "http://192.168.50.2:32280/openshorts-media/job/master/master.mp4?X-Amz-Signature=test",
         }}
         onClose={vi.fn()}
       />,

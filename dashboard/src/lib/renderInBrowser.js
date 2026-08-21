@@ -17,6 +17,7 @@ import { ShortVideo } from "../remotion/compositions/ShortVideo";
  */
 export async function renderInBrowser({
   videoUrl,
+  videoStartSeconds = 0,
   durationInSeconds = 30,
   fps = 30,
   width = 1080,
@@ -42,6 +43,7 @@ export async function renderInBrowser({
     },
     inputProps: {
       videoUrl,
+      videoStartSeconds,
       durationInFrames,
       fps,
       width,

@@ -6,12 +6,38 @@ import {
   cleanSubtitleCue,
   renderLocalVideoOnBackend,
   renderLocalVideoOnBrowser,
+  resolveProjectExportStartSeconds,
   syncSubtitleCue,
 } from "./localEditorRender";
 
 vi.mock("../../lib/renderInBrowser", () => ({ renderInBrowser: vi.fn() }));
 
 describe("local editor Remotion rendering", () => {
+  it("uses the master clip offset but not for an already-trimmed source clip", () => {
+    expect(
+      resolveProjectExportStartSeconds(
+        "https://minio.example/openshorts-media/job-1/master/source.mp4",
+        1686,
+      ),
+    ).toBe(1686);
+    expect(
+      resolveProjectExportStartSeconds(
+        "https://minio.example/openshorts-media/job-1/clips/render-1/source_clip_4.mp4",
+        1686,
+      ),
+    ).toBe(0);
+  });
+
+  it("prefers the active editor trim over stale clip metadata", () => {
+    expect(
+      resolveProjectExportStartSeconds(
+        "https://minio.example/openshorts-media/job-1/master/source.mp4",
+        1686,
+        962,
+      ),
+    ).toBe(962);
+  });
+
   it("removes terminal periods without changing cue or word timings", () => {
     expect(
       cleanSubtitleCue({
@@ -289,6 +315,7 @@ describe("local editor Remotion rendering", () => {
       clipIndex: 2,
       durationSeconds: 2,
       fps: 60,
+      videoStartSeconds: 1686,
       width: 1080,
       height: 1920,
       pollMs: 0,
@@ -304,6 +331,7 @@ describe("local editor Remotion rendering", () => {
       props: {
         videoUrl: "https://minio.example/openshorts-media/job-1/clips/clip.mp4",
         fps: 60,
+        videoStartSeconds: 1686,
       },
     });
   });
@@ -355,6 +383,7 @@ describe("local editor Remotion rendering", () => {
     const outputUrl = await burnLocalEditorSubtitles({
       file: new File(["video"], "source.mp4", { type: "video/mp4" }),
       durationSeconds: 2,
+      videoStartSeconds: 962,
       width: 608,
       height: 1080,
       subtitleCues: [
@@ -371,6 +400,9 @@ describe("local editor Remotion rendering", () => {
 
     expect(outputUrl).toBe("/output/local-editor-1/render.mp4");
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(
+      JSON.parse(fetchImpl.mock.calls[0][1].body.get("props")),
+    ).toMatchObject({ videoStartSeconds: 962 });
     expect(
       JSON.parse(fetchImpl.mock.calls[0][1].body.get("props")).subtitles.blocks,
     ).toEqual([
