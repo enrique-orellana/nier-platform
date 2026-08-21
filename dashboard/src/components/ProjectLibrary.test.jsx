@@ -1004,6 +1004,7 @@ describe("ProjectLibrary", () => {
                     end: 20,
                     source_video_url: "/videos/job-5/source.mp4",
                     layout_format: "streamer_stack",
+                    facecam_size: "large",
                     streamer_tracking_enabled: false,
                     gameplay_zoom: 1,
                     render_status: "found",
@@ -1017,13 +1018,16 @@ describe("ProjectLibrary", () => {
       }
       if (String(url).includes("/api/jobs/job-5/clips/0/webcam-region")) {
         expect(options.method).toBe("PATCH");
-        expect(JSON.parse(options.body).webcam_region).toEqual(
+        const body = JSON.parse(options.body);
+        expect(body.webcam_region).toEqual(
           expect.objectContaining({ width: expect.any(Number) }),
         );
+        expect(body.facecam_size).toBe("small");
         return Promise.resolve({
           ok: true,
           json: async () => ({
             webcam_region: { x: 0.05, y: 0.1, width: 0.25, height: 0.4 },
+            facecam_size: "small",
           }),
         });
       }
@@ -1099,6 +1103,9 @@ describe("ProjectLibrary", () => {
       value: 900,
     });
     fireEvent.loadedMetadata(video);
+    fireEvent.change(screen.getByLabelText("Webcam panel size"), {
+      target: { value: "small" },
+    });
     const down = new Event("pointerdown", { bubbles: true });
     Object.defineProperty(down, "clientX", { value: 40 });
     Object.defineProperty(down, "clientY", { value: 30 });
@@ -1116,6 +1123,12 @@ describe("ProjectLibrary", () => {
         expect.objectContaining({ method: "PATCH" }),
       );
     });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Edit Webcam Area" }),
+    );
+    expect(screen.getByLabelText("Webcam panel size")).toHaveValue("small");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(
       screen.getByRole("button", { name: "Analyze & Render" }),

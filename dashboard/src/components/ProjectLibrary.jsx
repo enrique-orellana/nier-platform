@@ -695,7 +695,11 @@ export default function ProjectLibrary({
     }
   };
 
-  const handleSaveWebcamRegion = async (clipIndex, webcamRegion) => {
+  const handleSaveWebcamRegion = async (
+    clipIndex,
+    webcamRegion,
+    facecamSize = "medium",
+  ) => {
     const jobId =
       selectedProject?.job_id ||
       selectedProject?.session_id ||
@@ -712,24 +716,32 @@ export default function ProjectLibrary({
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ webcam_region: webcamRegion }),
+          body: JSON.stringify({
+            webcam_region: webcamRegion,
+            facecam_size: facecamSize,
+          }),
         },
       );
       const payload = await response.json();
       if (!response.ok)
         throw new Error(payload.detail || "Could not save webcam area");
       const savedRegion = payload.webcam_region || webcamRegion;
+      const savedFacecamSize = payload.facecam_size || facecamSize || "medium";
       setProjectClips((current) =>
         current.map((clip, index) => {
           const currentIndex = Number.isInteger(clip.index)
             ? clip.index
             : index;
           return currentIndex === clipIndex
-            ? { ...clip, webcam_region: savedRegion }
+            ? {
+                ...clip,
+                webcam_region: savedRegion,
+                facecam_size: savedFacecamSize,
+              }
             : clip;
         }),
       );
-      return savedRegion;
+      return { webcam_region: savedRegion, facecam_size: savedFacecamSize };
     } catch (error) {
       setWebcamRegionErrors((current) => ({
         ...current,

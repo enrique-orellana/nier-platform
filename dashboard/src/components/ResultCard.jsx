@@ -160,12 +160,16 @@ export default function ResultCard({
     ),
   );
 
-  const handleSaveWebcamRegion = async (region) => {
+  const handleSaveWebcamRegion = async (region, facecamSize) => {
     if (!onSaveWebcamRegion) {
       setShowWebcamRegionSelector(false);
       return true;
     }
-    const saved = await onSaveWebcamRegion(index, region);
+    const saved = await onSaveWebcamRegion(
+      index,
+      region,
+      facecamSize || clip.facecam_size || "medium",
+    );
     if (saved !== false) setShowWebcamRegionSelector(false);
     return saved;
   };
@@ -877,6 +881,7 @@ export default function ResultCard({
           videoUrl={webcamSourceUrl}
           startTime={clip.start}
           initialRegion={clip.webcam_region}
+          initialFacecamSize={clip.facecam_size || "medium"}
           onSave={handleSaveWebcamRegion}
           onClose={() => setShowWebcamRegionSelector(false)}
           isSaving={webcamRegionSaving}
