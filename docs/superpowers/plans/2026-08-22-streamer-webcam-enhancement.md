@@ -4,7 +4,7 @@
 
 **Goal:** Improve the perceived sharpness of the Streamer Stack upper webcam panel with deterministic, non-AI image processing.
 
-**Architecture:** Keep region selection and aspect cropping in `streamer_layout.py`, then route only the webcam crop through a focused enhancement helper. Use Lanczos interpolation for enlargement and a conservative Gaussian unsharp mask; leave gameplay, metadata, tracking, and panel geometry untouched.
+**Architecture:** Keep region selection and aspect cropping in `streamer_layout.py`, then route only the webcam crop through a focused enhancement helper. Use linear interpolation for enlargement and a very mild Gaussian unsharp mask to avoid ringing; leave gameplay, metadata, tracking, and panel geometry untouched.
 
 **Tech Stack:** Python, NumPy, OpenCV, pytest.
 
@@ -35,7 +35,7 @@ def test_enhance_webcam_crop_returns_requested_dimensions():
 Add this deterministic synthetic edge test:
 
 ```python
-def test_crop_webcam_region_sharpens_a_low_resolution_webcam_edge():
+def test_crop_webcam_region_avoids_halos_when_upscaling():
     source = np.zeros((24, 32, 3), dtype=np.uint8)
     source[:, :16] = 72
     source[:, 16:] = 184
@@ -44,28 +44,28 @@ def test_crop_webcam_region_sharpens_a_low_resolution_webcam_edge():
     result = crop_webcam_region(source, region, target_width=128, target_height=96)
     baseline = cv2.resize(source, (128, 96), interpolation=cv2.INTER_AREA)
 
-    result_edges = np.abs(np.diff(result[:, :, 0].astype(np.int16), axis=1))
-    baseline_edges = np.abs(np.diff(baseline[:, :, 0].astype(np.int16), axis=1))
-
     assert result.shape == baseline.shape
-    assert int(result_edges.max()) > int(baseline_edges.max())
+    assert int(result.min()) >= int(baseline.min())
+    assert int(result.max()) <= int(baseline.max())
+    assert np.unique(result[:, :, 0]).size > np.unique(baseline[:, :, 0]).size
 ```
 
-The assertion expresses the user-visible contract: an enlarged webcam edge
-should be crisper than the existing area-upscaled output.
+The assertions express the user-visible contract: an enlarged webcam edge
+should gain intermediate detail without creating values outside the original
+area-upscaled range, which would appear as a halo.
 
 - [ ] **Step 3: Run only the new tests and verify they fail for the missing behavior**
 
 Run:
 
 ```powershell
-pytest tests/test_streamer_layout.py -k "enhance_webcam_crop or sharpens_a_low_resolution_webcam_edge" -q
+python -m pytest tests/test_streamer_layout.py -k "avoids_halos_when_upscaling" -q
 ```
 
-Expected: the dimension test errors because `enhance_webcam_crop` is not yet
-defined, and the edge test fails because `crop_webcam_region()` still uses
-`INTER_AREA` with no sharpening. Fix test syntax/import issues if needed, but
-do not add production code before observing the expected red result.
+Expected: the halo regression fails because the existing implementation
+produces values outside the area-upscaled range. Fix test syntax/import issues
+if needed, but do not add production code before observing the expected red
+result.
 
 ### Task 2: Implement the focused traditional enhancement
 
@@ -79,7 +79,7 @@ Define the helper near the webcam crop functions:
 
 ```python
 WEBCAM_SHARPEN_SIGMA = 1.0
-WEBCAM_SHARPEN_AMOUNT = 0.28
+WEBCAM_SHARPEN_AMOUNT = 0.08
 
 
 def enhance_webcam_crop(
@@ -94,7 +94,7 @@ def enhance_webcam_crop(
 
     source_height, source_width = crop.shape[:2]
     interpolation = (
-        cv2.INTER_LANCZOS4
+        cv2.INTER_LINEAR
         if target_width > source_width or target_height > source_height
         else cv2.INTER_AREA
     )
@@ -131,7 +131,7 @@ Do not change `crop_gameplay_region()` or the final gameplay resize in
 Run:
 
 ```powershell
-pytest tests/test_streamer_layout.py -k "enhance_webcam_crop or sharpens_a_low_resolution_webcam_edge" -q
+python -m pytest tests/test_streamer_layout.py -k "avoids_halos_when_upscaling" -q
 ```
 
 Expected: both tests pass.
@@ -181,4 +181,3 @@ git status --short
 Confirm that unrelated pre-existing working-tree changes remain untouched and
 that the final summary explicitly states that this is perceptual enhancement,
 not recovered source detail.
-

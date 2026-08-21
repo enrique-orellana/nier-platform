@@ -181,7 +181,7 @@ def test_crop_webcam_region_preserves_selection_without_stretching():
     assert 70 <= int(result[:, :, 0].mean()) <= 130
 
 
-def test_crop_webcam_region_sharpens_a_low_resolution_webcam_edge():
+def test_crop_webcam_region_avoids_halos_when_upscaling():
     source = np.zeros((24, 32, 3), dtype=np.uint8)
     source[:, :16] = 72
     source[:, 16:] = 184
@@ -191,8 +191,9 @@ def test_crop_webcam_region_sharpens_a_low_resolution_webcam_edge():
     baseline = cv2.resize(source, (128, 96), interpolation=cv2.INTER_AREA)
 
     assert result.shape == baseline.shape
-    assert int(result.min()) < int(baseline.min())
-    assert int(result.max()) > int(baseline.max())
+    assert int(result.min()) >= int(baseline.min())
+    assert int(result.max()) <= int(baseline.max())
+    assert np.unique(result[:, :, 0]).size > np.unique(baseline[:, :, 0]).size
 
 
 def test_filter_candidates_rejects_webcam_region_and_touching_boxes():

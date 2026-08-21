@@ -21,8 +21,10 @@ reconstruct information that was not captured by the source webcam.
 aspect-ratio crop. After that crop is selected, it will pass the pixels through
 a small `enhance_webcam_crop()` helper:
 
-1. Resize to the panel dimensions with `INTER_LANCZOS4` when the crop is being
-   enlarged, preserving `INTER_AREA` for downscaling.
+1. Resize to the panel dimensions with `INTER_LINEAR` when the crop is being
+   enlarged, preserving `INTER_AREA` for downscaling. Linear interpolation is
+   intentionally used instead of Lanczos because Lanczos ringing becomes
+   visible around high-contrast webcam edges when the source is very small.
 2. Build a Gaussian-blurred copy of the resized image.
 3. Apply a conservative unsharp mask with `cv2.addWeighted`, using the resized
    image as the base and the blurred image as the low-frequency component.
@@ -38,8 +40,8 @@ feature does not widen the composition change.
 source frame
   -> normalized webcam bounds
   -> aspect-ratio webcam crop
-  -> Lanczos upscale or area downscale
-  -> mild unsharp mask
+  -> linear upscale or area downscale
+  -> very mild unsharp mask
   -> upper Streamer Stack panel
 ```
 
@@ -51,4 +53,3 @@ Add unit coverage in `tests/test_streamer_layout.py` for the new helper's
 dimensions and for the webcam crop's sharper edge response relative to the
 current area-upscaled baseline. Keep the existing composition tests unchanged
 to demonstrate that the panel arrangement and gameplay path continue to work.
-

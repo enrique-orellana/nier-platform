@@ -18,7 +18,7 @@ FACECAM_HEIGHT_RATIOS = {
 GAMEPLAY_ZOOM_MIN = 0.6
 GAMEPLAY_ZOOM_MAX = 2.0
 WEBCAM_SHARPEN_SIGMA = 1.0
-WEBCAM_SHARPEN_AMOUNT = 0.28
+WEBCAM_SHARPEN_AMOUNT = 0.08
 
 
 @dataclass(frozen=True)
@@ -133,7 +133,7 @@ def enhance_webcam_crop(
 
     source_width = crop.shape[1]
     interpolation = (
-        cv2.INTER_LANCZOS4
+        cv2.INTER_LINEAR
         if target_width > source_width or target_height > crop.shape[0]
         else cv2.INTER_AREA
     )
