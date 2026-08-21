@@ -50,6 +50,36 @@ describe("LocalEditorTimeline", () => {
     });
   });
 
+  it("opens a cue editor only on double click", () => {
+    const onSelect = vi.fn();
+    const onDoubleClick = vi.fn();
+
+    render(
+      <LocalEditorTimeline
+        durationMs={10000}
+        subtitleCues={[
+          { id: "cue-1", text: "Caption", startMs: 1000, endMs: 2000 },
+        ]}
+        onSelect={onSelect}
+        onDoubleClick={onDoubleClick}
+      />,
+    );
+
+    const cue = screen.getByRole("button", { name: "Caption" });
+    fireEvent.click(cue);
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "cue-1" }),
+      "subtitle",
+    );
+    expect(onDoubleClick).not.toHaveBeenCalled();
+
+    fireEvent.doubleClick(cue);
+    expect(onDoubleClick).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "cue-1" }),
+      "subtitle",
+    );
+  });
+
   it("keeps short adjacent subtitle cues at their actual timeline widths", () => {
     render(
       <LocalEditorTimeline

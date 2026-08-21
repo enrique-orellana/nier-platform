@@ -2636,7 +2636,10 @@ export default function LocalEditorTab({
                 subtitleCues={subtitleCues}
                 hook={hook}
                 selectedId={selected?.id}
-                onSelect={handleTimelineSelect}
+                onSelect={(cue, type) =>
+                  handleTimelineSelect(cue, type, { openEditor: false })
+                }
+                onDoubleClick={handleTimelineSelect}
                 onChange={handleTimelineChange}
                 onChangeStart={beginTimelineEdit}
                 onChangeEnd={endTimelineEdit}

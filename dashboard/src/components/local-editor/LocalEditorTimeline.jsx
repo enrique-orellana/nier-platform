@@ -15,6 +15,7 @@ function CueBlock({
   color,
   selected,
   onSelect,
+  onDoubleClick,
   onChange,
   onChangeStart,
   onChangeEnd,
@@ -59,6 +60,7 @@ function CueBlock({
       tabIndex={0}
       aria-label={cue.text || "Timeline cue"}
       onClick={() => onSelect(cue)}
+      onDoubleClick={() => onDoubleClick?.(cue)}
       onPointerDown={(event) => beginDrag(event, "move")}
       onKeyDown={(event) => event.key === "Enter" && onSelect(cue)}
       className={`absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[10px] text-white shadow-sm transition-shadow ${selected ? "ring-2 ring-white" : ""}`}
@@ -96,6 +98,7 @@ function Track({
   color,
   selectedId,
   onSelect,
+  onDoubleClick,
   onChange,
   onChangeStart,
   onChangeEnd,
@@ -121,6 +124,7 @@ function Track({
             color={color}
             selected={selectedId === cue.id}
             onSelect={onSelect}
+            onDoubleClick={onDoubleClick}
             onChange={onChange}
             onChangeStart={onChangeStart}
             onChangeEnd={onChangeEnd}
@@ -139,6 +143,7 @@ export default function LocalEditorTimeline({
   hook = null,
   selectedId,
   onSelect,
+  onDoubleClick,
   onChange,
   onChangeStart,
   onChangeEnd,
@@ -260,6 +265,7 @@ export default function LocalEditorTimeline({
             color="#f59e0b"
             selectedId={selectedId}
             onSelect={(cue) => onSelect?.(cue, "hook")}
+            onDoubleClick={(cue) => onDoubleClick?.(cue, "hook")}
             onChange={(cue) => onChange?.(cue, "hook")}
             onChangeStart={onChangeStart}
             onChangeEnd={onChangeEnd}
@@ -273,6 +279,7 @@ export default function LocalEditorTimeline({
             color="#8b5cf6"
             selectedId={selectedId}
             onSelect={(cue) => onSelect?.(cue, "subtitle")}
+            onDoubleClick={(cue) => onDoubleClick?.(cue, "subtitle")}
             onChange={(cue) => onChange?.(cue, "subtitle")}
             onChangeStart={onChangeStart}
             onChangeEnd={onChangeEnd}

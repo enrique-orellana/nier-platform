@@ -290,6 +290,34 @@ describe("LocalEditorTab", () => {
     expect(anchorClick).toHaveBeenCalled();
   });
 
+  it("opens the subtitle cue modal on double click instead of single click", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        initialEditorState={{
+          subtitleCues: [
+            { id: "cue-1", text: "Caption", startMs: 1000, endMs: 2000 },
+          ],
+          subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+          subtitleLanguage: "en",
+          hook: null,
+        }}
+      />,
+    );
+
+    const cue = await screen.findByRole("button", { name: "Caption" });
+    fireEvent.click(cue);
+    expect(
+      screen.queryByRole("dialog", { name: /subtitle cue/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.doubleClick(cue);
+    expect(
+      await screen.findByRole("dialog", { name: /subtitle cue/i }),
+    ).toBeInTheDocument();
+  });
+
   it("does not offer local upload when a project editor has no remote video", () => {
     render(<LocalEditorTab allowLocalUpload={false} />);
 
@@ -1421,7 +1449,7 @@ describe("LocalEditorTab", () => {
     await waitFor(() =>
       expect(screen.getAllByText("Hello").length).toBeGreaterThan(0),
     );
-    fireEvent.click(screen.getAllByRole("button", { name: "Hello" })[0]);
+    fireEvent.doubleClick(screen.getAllByRole("button", { name: "Hello" })[0]);
     fireEvent.change(screen.getByLabelText("Subtitle text"), {
       target: { value: "Changed" },
     });
@@ -1460,7 +1488,7 @@ describe("LocalEditorTab", () => {
     await waitFor(() =>
       expect(screen.getAllByText("Hello").length).toBeGreaterThan(0),
     );
-    fireEvent.click(screen.getAllByRole("button", { name: "Hello" })[0]);
+    fireEvent.doubleClick(screen.getAllByRole("button", { name: "Hello" })[0]);
     fireEvent.change(screen.getByLabelText("Subtitle text"), {
       target: { value: "Changed" },
     });
