@@ -63,6 +63,10 @@ function RemotionPreview({
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
+    // The editor receives frame updates from this player and publishes them
+    // back on a throttled clock. Seeking from that delayed value while the
+    // player is running makes every update jump the media backwards.
+    if (playing) return;
     const targetFrame = Math.max(
       0,
       Math.min(durationInFrames - 1, Math.round(currentFrame)),
@@ -72,7 +76,7 @@ function RemotionPreview({
       return;
     }
     player.seekTo?.(targetFrame);
-  }, [currentFrame, durationInFrames]);
+  }, [currentFrame, durationInFrames, playing]);
 
   useEffect(() => {
     if (playing) playerRef.current?.play?.();

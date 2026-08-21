@@ -5,6 +5,7 @@ import RemotionPreview from "./RemotionPreview";
 
 const playMock = vi.hoisted(() => vi.fn());
 const pauseMock = vi.hoisted(() => vi.fn());
+const seekToMock = vi.hoisted(() => vi.fn());
 const unmuteMock = vi.hoisted(() => vi.fn());
 const playerPropsMock = vi.hoisted(() => vi.fn());
 
@@ -19,7 +20,7 @@ vi.mock("@remotion/player", () => ({
           listeners[name] = callback;
         },
         removeEventListener: vi.fn(),
-        seekTo: vi.fn(),
+        seekTo: seekToMock,
         play: playMock,
         pause: pauseMock,
         unmute: unmuteMock,
@@ -66,6 +67,33 @@ describe("RemotionPreview", () => {
         inputProps: expect.objectContaining({ videoStartSeconds: 1042.5 }),
       }),
     );
+  });
+
+  it("does not seek backward from a delayed editor clock while playing", () => {
+    seekToMock.mockClear();
+    const { rerender } = render(
+      <RemotionPreview videoUrl="/video.mp4" currentFrame={0} playing={true} />,
+    );
+
+    seekToMock.mockClear();
+    rerender(
+      <RemotionPreview
+        videoUrl="/video.mp4"
+        currentFrame={12}
+        playing={true}
+      />,
+    );
+
+    expect(seekToMock).not.toHaveBeenCalled();
+
+    rerender(
+      <RemotionPreview
+        videoUrl="/video.mp4"
+        currentFrame={12}
+        playing={false}
+      />,
+    );
+    expect(seekToMock).toHaveBeenCalledWith(12);
   });
 
   it("passes the standard layout into the Remotion composition", () => {

@@ -103,7 +103,7 @@ describe("ShortVideo media source", () => {
     );
   });
 
-  it("seeks the browser preview to the master offset when metadata loads", () => {
+  it("lets Remotion own the trimmed media clock during browser playback", () => {
     html5VideoPropsMock.mockClear();
     render(
       <ShortVideo
@@ -113,13 +113,16 @@ describe("ShortVideo media source", () => {
       />,
     );
     expect(html5VideoPropsMock.mock.calls[0][0]).toEqual(
-      expect.objectContaining({ trimBefore: 510 }),
+      expect.objectContaining({
+        trimBefore: 510,
+        pauseWhenBuffering: true,
+        preload: "auto",
+      }),
     );
-    const video = { currentTime: 0 };
-    html5VideoPropsMock.mock.calls[0][0].onLoadedMetadata({
-      currentTarget: video,
-    });
-    expect(video.currentTime).toBe(17);
+    expect(
+      html5VideoPropsMock.mock.calls[0][0].onLoadedMetadata,
+    ).toBeUndefined();
+    expect(html5VideoPropsMock.mock.calls[0][0].onCanPlay).toBeUndefined();
   });
 
   it("forwards fallback autoplay failures to the preview controller", () => {

@@ -45,14 +45,6 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
       : subtitles;
   const usesStandardLayout = layout?.format === "standard";
   const environment = useRemotionEnvironment();
-  const seekBrowserVideoToMasterOffset = (
-    event: React.SyntheticEvent<HTMLVideoElement>,
-  ) => {
-    if (videoStartFrame <= 0) return;
-    const targetSeconds = Math.max(0, Number(videoStartSeconds));
-    if (event.currentTarget.currentTime < targetSeconds - 0.05)
-      event.currentTarget.currentTime = targetSeconds;
-  };
   return (
     <AbsoluteFill style={{ backgroundColor: "#000", overflow: "hidden" }}>
       {usesStandardLayout && environment.isRendering && (
@@ -90,9 +82,9 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
           <Html5Video
             src={videoUrl}
             trimBefore={videoStartFrame}
+            pauseWhenBuffering={true}
+            preload="auto"
             onAutoPlayError={onAutoPlayError}
-            onLoadedMetadata={seekBrowserVideoToMasterOffset}
-            onCanPlay={seekBrowserVideoToMasterOffset}
             style={{
               position: "absolute",
               inset: 0,
