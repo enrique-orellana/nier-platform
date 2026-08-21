@@ -13,10 +13,22 @@ const trackCaptions = (track) =>
     endMs: Number(cue.endMs || cue.startMs || 0),
   }));
 
+const isGeneratedSourceClip = (url) => {
+  if (!url) return false;
+  try {
+    return /(?:^|\/)source_clip_[^/]+\.mp4$/i.test(
+      new URL(url, window.location.origin).pathname,
+    );
+  } catch {
+    return /(?:^|\/)source_clip_[^/]+\.mp4(?:[?#]|$)/i.test(String(url));
+  }
+};
+
 export function manifestToRenderProps(
   manifest = {},
   { activeSubtitleTrackId = manifest.active_subtitle_track_id || null } = {},
 ) {
+  const videoUrl = manifest.timeline?.source_video_url || "";
   const subtitleTracks = Array.isArray(manifest.subtitle_tracks)
     ? manifest.subtitle_tracks
     : [];
@@ -33,11 +45,13 @@ export function manifestToRenderProps(
       : null;
   const layout = manifest.layers?.layout || null;
   return {
-    videoUrl: manifest.timeline?.source_video_url || "",
-    videoStartSeconds: Math.max(
-      0,
-      Number(manifest.timeline?.trim?.start_sec) || 0,
-    ),
+    videoUrl,
+    // Generated source clips are already trimmed to the clip range. Applying
+    // the master-video offset again makes Remotion seek past the file and
+    // leaves the encoded video on its first decoded frame.
+    videoStartSeconds: isGeneratedSourceClip(videoUrl)
+      ? 0
+      : Math.max(0, Number(manifest.timeline?.trim?.start_sec) || 0),
     subtitles,
     subtitleTracks,
     activeSubtitleTrackId: subtitles ? activeTrack.id : null,

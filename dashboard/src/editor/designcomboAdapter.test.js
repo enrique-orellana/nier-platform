@@ -434,6 +434,19 @@ describe("designcomboAdapter", () => {
     expect(props.videoStartSeconds).toBe(1042.5);
   });
 
+  it("does not apply the master-video offset to a generated source clip", () => {
+    const props = manifestToRenderProps({
+      ...manifest,
+      timeline: {
+        ...manifest.timeline,
+        source_video_url:
+          "https://media.example/clips/74036096/source_clip_9.mp4",
+        trim: { start_sec: 1042.5, end_sec: 1050.5 },
+      },
+    });
+    expect(props.videoStartSeconds).toBe(0);
+  });
+
   it("keeps saved transcript timestamps on the master-video clock", () => {
     const source = {
       timeline: {
