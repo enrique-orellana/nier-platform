@@ -1718,7 +1718,7 @@ func TestDeferredClipGameplayRegionPatchRejectsInvalidCoordinates(t *testing.T) 
 func TestDeferredClipRenderCopiesWebcamRegionToChildMetadata(t *testing.T) {
 	store := jobs.NewMemoryStore()
 	outputDir := t.TempDir()
-	parent, _ := createDeferredRegionTestJob(t, store, outputDir, `{"source_path":"source.mp4","clips":[{"layout_format":"streamer_stack","webcam_region":{"x":0.02,"y":0.18,"width":0.23,"height":0.43},"gameplay_region":{"x":0.28,"y":0.08,"width":0.70,"height":0.84},"gameplay_zoom":1.25,"streamer_tracking_enabled":true}]}`)
+	parent, _ := createDeferredRegionTestJob(t, store, outputDir, `{"source_path":"source.mp4","clips":[{"layout_format":"streamer_stack","facecam_size":"large","webcam_region":{"x":0.02,"y":0.18,"width":0.23,"height":0.43},"gameplay_region":{"x":0.28,"y":0.08,"width":0.70,"height":0.84},"gameplay_zoom":1.25,"streamer_tracking_enabled":true}]}`)
 	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
 
 	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/jobs/%s/clips/0/render", parent.ID), nil)
@@ -1733,6 +1733,9 @@ func TestDeferredClipRenderCopiesWebcamRegionToChildMetadata(t *testing.T) {
 	}
 	if children[0].Metadata["webcam_region"].(map[string]any)["width"] != 0.23 {
 		t.Fatalf("child job did not receive webcam region: %#v", children[0].Metadata)
+	}
+	if children[0].Metadata["facecam_size"] != "large" {
+		t.Fatalf("child job did not receive facecam size: %#v", children[0].Metadata)
 	}
 	if children[0].Metadata["gameplay_region"].(map[string]any)["height"] != 0.84 {
 		t.Fatalf("child job did not receive gameplay region: %#v", children[0].Metadata)
