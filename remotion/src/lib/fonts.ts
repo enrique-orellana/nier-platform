@@ -6,13 +6,14 @@ import { staticFile } from "remotion";
  */
 export const NOTO_SERIF_FONT_FAMILY = "NotoSerif-Bold";
 export const COLOR_EMOJI_FONT_FAMILY = "Noto Color Emoji";
+export const COLOR_EMOJI_FONT_STACK = `'Apple Color Emoji', 'Segoe UI Emoji', '${COLOR_EMOJI_FONT_FAMILY}'`;
 
 /**
  * Keep emoji fallback explicit because the renderer container does not use
  * the host operating system's font set.
  */
 export function getHookFontStack(): string {
-  return `'${NOTO_SERIF_FONT_FAMILY}', 'Noto Serif', '${COLOR_EMOJI_FONT_FAMILY}', Georgia, serif`;
+  return `'${NOTO_SERIF_FONT_FAMILY}', 'Noto Serif', ${COLOR_EMOJI_FONT_STACK}, Georgia, serif`;
 }
 
 export const notoSerifFontFace = `
@@ -39,5 +40,5 @@ export const SUBTITLE_FONTS: Record<string, string> = {
 
 export function getFontStack(fontFamily: string): string {
   const stack = SUBTITLE_FONTS[fontFamily] ?? fontFamily;
-  return stack.replace(/,\s*(sans-serif|serif)\s*$/, `, '${COLOR_EMOJI_FONT_FAMILY}', $1`);
+  return stack.replace(/,\s*(sans-serif|serif)\s*$/, `, ${COLOR_EMOJI_FONT_STACK}, $1`);
 }
