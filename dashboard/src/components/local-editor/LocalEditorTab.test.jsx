@@ -599,6 +599,7 @@ describe("LocalEditorTab", () => {
     fireEvent.change(screen.getByLabelText("Subtitle text"), {
       target: { value: "One two" },
     });
+    fireEvent.click(screen.getByRole("button", { name: "Save cue" }));
 
     await waitFor(() =>
       expect(screen.getByLabelText("Word 1 text")).toHaveValue("One"),
@@ -1291,6 +1292,7 @@ describe("LocalEditorTab", () => {
     fireEvent.change(screen.getByLabelText("Subtitle text"), {
       target: { value: "Changed" },
     });
+    fireEvent.click(screen.getByRole("button", { name: "Save cue" }));
     fireEvent.keyDown(screen.getByTestId("local-editor-player"), {
       key: "z",
       ctrlKey: true,
@@ -1329,6 +1331,7 @@ describe("LocalEditorTab", () => {
     fireEvent.change(screen.getByLabelText("Subtitle text"), {
       target: { value: "Changed" },
     });
+    fireEvent.click(screen.getByRole("button", { name: "Save cue" }));
     fireEvent.keyDown(screen.getByLabelText("Subtitle text"), {
       key: "z",
       ctrlKey: true,
@@ -1640,6 +1643,7 @@ describe("LocalEditorTab", () => {
     fireEvent.change(screen.getByLabelText("Subtitle text"), {
       target: { value: "Undo me" },
     });
+    fireEvent.click(screen.getByRole("button", { name: "Save cue" }));
     fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
     expect(screen.getByLabelText("Subtitle text")).toHaveValue("");
     fireEvent.click(screen.getByRole("button", { name: "Redo", exact: true }));

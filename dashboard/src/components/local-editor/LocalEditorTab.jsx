@@ -34,6 +34,7 @@ import {
 import LocalEditorTimeline from "./LocalEditorTimeline";
 import ClipMetadataPanel from "./ClipMetadataPanel";
 import SubtitleCueTable from "./SubtitleCueTable";
+import SubtitleCueModal from "./SubtitleCueModal";
 import RemotionPreview from "../RemotionPreview";
 import { parseSubtitleFile, serializeSrt } from "./subtitleFormats";
 import { activeCueAt, formatClock } from "./localEditorExport";
@@ -899,6 +900,7 @@ export default function LocalEditorTab({
     }
   });
   const [selected, setSelected] = useState(null);
+  const [editingSubtitle, setEditingSubtitle] = useState(null);
   const [pendingSubtitle, setPendingSubtitle] = useState(null);
   const [error, setError] = useState("");
   const [generatingSubtitles, setGeneratingSubtitles] = useState(false);
@@ -1356,7 +1358,10 @@ export default function LocalEditorTab({
     commitEdit((current) => ({ ...current, subtitleLanguage: nextLanguage }));
   };
 
-  const handleTimelineSelect = (cue, type) => setSelected({ id: cue.id, type });
+  const handleTimelineSelect = (cue, type) => {
+    setSelected({ id: cue.id, type });
+    if (type === "subtitle") setEditingSubtitle(cue);
+  };
   const beginTimelineEdit = () => {
     timelineDragRef.current = { recorded: false };
   };
@@ -1577,6 +1582,7 @@ export default function LocalEditorTab({
       subtitleLanguage: "en",
     }));
     setSelected((current) => (current?.type === "subtitle" ? null : current));
+    setEditingSubtitle(null);
   };
 
   const addSubtitleCue = () => {
@@ -1593,6 +1599,7 @@ export default function LocalEditorTab({
       subtitleCues: [...current.subtitleCues, nextCue],
     }));
     setSelected({ id: nextCue.id, type: "subtitle" });
+    setEditingSubtitle(nextCue);
     setSubtitlesOpen(true);
   };
 
@@ -1605,6 +1612,7 @@ export default function LocalEditorTab({
     setSelected((current) =>
       current?.id === id && current.type === "subtitle" ? null : current,
     );
+    setEditingSubtitle((current) => (current?.id === id ? null : current));
   };
 
   const handleSeek = (nextMs) => {
@@ -2808,19 +2816,6 @@ export default function LocalEditorTab({
               </div>
             )}
           </section>
-          <section className="rounded-xl border border-white/10 bg-white/[.02] p-4">
-            {selected?.type === "subtitle" ? (
-              <SubtitleInspector
-                cue={selectedCue}
-                onChange={updateSubtitle}
-                onDelete={removeSubtitleCue}
-              />
-            ) : (
-              <p className="text-xs text-zinc-500">
-                Select a subtitle cue or the hook track to edit its properties.
-              </p>
-            )}
-          </section>
           <div className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-xs text-zinc-500">
             <span>Playhead</span>
             <span className="font-mono text-zinc-300">
@@ -2834,6 +2829,20 @@ export default function LocalEditorTab({
         <div className="border-t border-white/10 px-6 py-3">{footer}</div>
       )}
       {projectsDialog}
+      {editingSubtitle && (
+        <SubtitleCueModal
+          cue={
+            selected?.type === "subtitle"
+              ? selectedCue || editingSubtitle
+              : editingSubtitle
+          }
+          onClose={() => setEditingSubtitle(null)}
+          onDelete={removeSubtitleCue}
+          onSave={(cue) => {
+            updateSubtitle(cue);
+          }}
+        />
+      )}
     </div>
   );
 }
