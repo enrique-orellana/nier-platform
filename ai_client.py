@@ -340,6 +340,21 @@ def _audit_request_finish(emitter, event_id: str, *, response_body: Any = None, 
     )
 
 
+def _transcription_audit_payload(payload: Mapping[str, Any]) -> str:
+    """Keep the JSON request envelope while excluding the encoded audio bytes."""
+    input_audio = payload.get("input_audio")
+    if not isinstance(input_audio, Mapping):
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    safe_payload = {
+        **payload,
+        "input_audio": {
+            **input_audio,
+            "data": "[BINARY_AUDIO_REDACTED]",
+        },
+    }
+    return json.dumps(safe_payload, ensure_ascii=False, separators=(",", ":"))
+
+
 def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: float = 300.0) -> dict[str, Any]:
     """Transcribe an extracted audio chunk through OpenRouter's audio endpoint."""
     if not config.api_key:
@@ -369,9 +384,8 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
             name="transcription.request",
             url=endpoint,
             method="POST",
-            body=payload,
+            body=_transcription_audit_payload(payload),
             provider="openrouter",
-            binary=True,
         )
         try:
             with httpx.Client(timeout=timeout) as client:
@@ -385,7 +399,6 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
                 audit_event_id,
                 response_body=getattr(response, "text", ""),
                 status_code=int(getattr(response, "status_code", 0) or 0),
-                binary=True,
             )
             detail = str(getattr(response, "text", "") or "").strip()
             if (
@@ -400,7 +413,7 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
                 continue
             break
         except httpx.RequestError as exc:
-            _audit_request_finish(audit_emitter, audit_event_id, error=str(exc), binary=True)
+            _audit_request_finish(audit_emitter, audit_event_id, error=str(exc))
             if attempt == OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS - 1:
                 raise RuntimeError(
                     f"could not connect to OpenRouter transcription endpoint at {transcription_base_url} "

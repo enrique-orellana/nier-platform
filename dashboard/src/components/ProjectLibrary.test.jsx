@@ -90,10 +90,20 @@ describe("ProjectLibrary", () => {
     expect(
       await screen.findByRole("dialog", { name: /processing timeline/i }),
     ).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: /processing timeline/i });
+    expect(dialog.className).toContain("flex-col");
+    expect(dialog.className).toContain("overflow-hidden");
+    expect(screen.getByTestId("audit-scroll-region").className).toContain(
+      "overflow-y-auto",
+    );
     expect(screen.getByText("ai.analysis")).toBeInTheDocument();
     expect(screen.getByText(/POST openrouter\.ai/)).toBeInTheDocument();
     fireEvent.click(screen.getByText("Inspect captured details"));
-    expect(screen.getByText('{"prompt":"hello"}')).toBeInTheDocument();
+    const auditBodies = Array.from(document.querySelectorAll("pre")).map(
+      (element) => element.textContent,
+    );
+    expect(auditBodies).toContain('{\n  "prompt": "hello"\n}');
+    expect(auditBodies).toContain('{\n  "result": "ok"\n}');
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/job-audit/audit");
   });
 

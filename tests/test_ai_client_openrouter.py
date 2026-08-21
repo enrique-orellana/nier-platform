@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import ai_client
+import audit_capture
 
 
 class DummyResponse:
@@ -92,6 +93,23 @@ class DetailedTranscriptionClient(RecordingClient):
     def post(self, url, headers=None, json=None):
         type(self).last_json = json
         return DetailedTranscriptionResponse()
+
+
+class AuditedTranscriptionResponse:
+    status_code = 200
+    text = '{"text":"Hola mundo","segments":[]}'
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {"text": "Hola mundo", "segments": []}
+
+
+class AuditedTranscriptionClient(RecordingClient):
+    def post(self, url, headers=None, json=None):
+        type(self).last_json = json
+        return AuditedTranscriptionResponse()
 
 
 class UnsupportedVerboseJsonResponse:
@@ -224,6 +242,31 @@ class OpenRouterTests(unittest.TestCase):
         ])
         self.assertEqual(DetailedTranscriptionClient.last_json["response_format"], "verbose_json")
         self.assertEqual(DetailedTranscriptionClient.last_json["timestamp_granularities"], ["segment", "word"])
+
+    @patch("ai_client.httpx.Client", AuditedTranscriptionClient)
+    def test_transcription_audits_redacted_json_request_and_response_bodies(self):
+        events = []
+        emitter = audit_capture.AuditEmitter(["openrouter.ai"], emit=events.append)
+        config = ai_client.AIConfig(
+            provider="openrouter",
+            api_key="secret",
+            transcription_model="qwen/qwen3-asr-1.7b",
+        )
+        with patch.object(audit_capture, "_emitter", emitter), TemporaryDirectory() as directory:
+            audio_path = Path(directory) / "audio.wav"
+            audio_path.write_bytes(b"audio bytes that must not be captured")
+
+            ai_client.transcribe_audio_openrouter(str(audio_path), config)
+
+        self.assertEqual([event["audit"]["phase"] for event in events], ["start", "finish"])
+        start = events[0]["audit"]
+        finish = events[1]["audit"]
+        self.assertEqual(start["capture_mode"], "full_redacted")
+        self.assertIn('"input_audio"', start["request_body"])
+        self.assertIn("[BINARY_AUDIO_REDACTED]", start["request_body"])
+        self.assertNotIn("YXVkaW8", start["request_body"])
+        self.assertEqual(finish["capture_mode"], "full_redacted")
+        self.assertIn('"text":"Hola mundo"', finish["response_body"])
 
     @patch("ai_client.httpx.Client", DetailedTranscriptionClient)
     def test_transcription_sends_configured_source_language(self):

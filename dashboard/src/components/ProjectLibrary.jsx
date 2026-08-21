@@ -88,6 +88,16 @@ function formatDate(value) {
   }
 }
 
+function formatAuditBody(value) {
+  if (!value) return "";
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
 function formatDuration(seconds) {
   const total = Number(seconds);
   if (!Number.isFinite(total) || total <= 0) return "";
@@ -1389,12 +1399,12 @@ export default function ProjectLibrary({
               onClick={() => setIsAuditOpen(false)}
             />
             <aside
-              className="absolute right-0 top-0 h-full w-full max-w-xl overflow-y-auto border-l border-white/10 bg-[#101216] shadow-2xl"
+              className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col overflow-hidden border-l border-white/10 bg-[#101216] shadow-2xl"
               role="dialog"
               aria-modal="true"
               aria-labelledby="processing-timeline-title"
             >
-              <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-white/10 bg-[#101216]/95 p-5 backdrop-blur-xl">
+              <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 bg-[#101216] p-5">
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">
                     Run auditor
@@ -1431,7 +1441,10 @@ export default function ProjectLibrary({
                 </div>
               </div>
 
-              <div className="space-y-5 p-5">
+              <div
+                data-testid="audit-scroll-region"
+                className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5"
+              >
                 {auditPolicy && (
                   <div className="rounded-xl border border-amber-300/15 bg-amber-300/5 p-3 text-xs text-zinc-400">
                     <p className="font-semibold text-amber-200">
@@ -1553,7 +1566,7 @@ export default function ProjectLibrary({
                                       Request body
                                     </p>
                                     <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-zinc-300">
-                                      {event.request_body}
+                                      {formatAuditBody(event.request_body)}
                                     </pre>
                                   </div>
                                 )}
@@ -1563,7 +1576,7 @@ export default function ProjectLibrary({
                                       Response body
                                     </p>
                                     <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-zinc-300">
-                                      {event.response_body}
+                                      {formatAuditBody(event.response_body)}
                                     </pre>
                                   </div>
                                 )}
