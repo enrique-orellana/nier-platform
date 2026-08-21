@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { moveCue, resizeCue } from "../../editor/timelineModel";
 import AudioWaveform from "./AudioWaveform";
+import { formatClock } from "./localEditorExport";
 
 const TRACK_LABEL_WIDTH = 144;
 const BASE_PIXELS_PER_SECOND = 80;
@@ -133,6 +134,7 @@ function Track({
 export default function LocalEditorTimeline({
   videoUrl = "",
   durationMs = 1,
+  fps = 30,
   subtitleCues = [],
   hook = null,
   selectedId,
@@ -241,7 +243,7 @@ export default function LocalEditorTimeline({
                 className="absolute top-2 -translate-x-1/2 text-[9px] text-zinc-600"
                 style={{ left: `${mark}%` }}
               >
-                {Math.round((safeDuration * mark) / 1000) / 10}s
+                {formatClock((safeDuration * mark) / 100, fps)}
               </span>
             ))}
             <div

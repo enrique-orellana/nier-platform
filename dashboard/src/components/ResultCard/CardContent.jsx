@@ -10,16 +10,10 @@ import {
   Clock,
   Hash,
 } from "lucide-react";
+import { formatClock } from "../local-editor/localEditorExport";
 
-const formatSourceTime = (seconds) => {
-  const totalSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const remainder = totalSeconds % 60;
-  if (hours > 0)
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
-  return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
-};
+const formatSourceTime = (seconds, fps = 30) =>
+  formatClock(Math.max(0, Number(seconds) || 0) * 1000, fps);
 
 const hasTimestamp = (value) =>
   value !== null &&
@@ -31,12 +25,15 @@ export default function CardContent({ clip, masterDuration }) {
   const [activeTab, setActiveTab] = useState("youtube");
   const [copiedField, setCopiedField] = useState(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const fps = Math.max(1, Number(clip.output_fps || clip.fps) || 30);
 
   const sourceMetadata = [
-    hasTimestamp(clip.start) ? `Start ${formatSourceTime(clip.start)}` : null,
-    hasTimestamp(clip.end) ? `End ${formatSourceTime(clip.end)}` : null,
+    hasTimestamp(clip.start)
+      ? `Start ${formatSourceTime(clip.start, fps)}`
+      : null,
+    hasTimestamp(clip.end) ? `End ${formatSourceTime(clip.end, fps)}` : null,
     hasTimestamp(masterDuration) && Number(masterDuration) > 0
-      ? `Master ${formatSourceTime(masterDuration)}`
+      ? `Master ${formatSourceTime(masterDuration, fps)}`
       : null,
   ].filter(Boolean);
 

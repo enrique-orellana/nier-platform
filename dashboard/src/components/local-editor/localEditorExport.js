@@ -10,9 +10,19 @@ export const activeCueAt = (cues, playheadMs) =>
     (cue) => playheadMs >= cue.startMs && playheadMs < cue.endMs,
   ) || null;
 
-export const formatClock = (ms) => {
-  const seconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+export const formatClock = (ms, fps = 30) => {
+  const safeFps = Math.max(1, Number(fps) || 30);
+  const nominalFps = Math.max(1, Math.round(safeFps));
+  const totalFrames = Math.max(
+    0,
+    Math.round(((Number(ms) || 0) / 1000) * safeFps),
+  );
+  const frames = totalFrames % nominalFps;
+  const totalSeconds = Math.floor(totalFrames / nominalFps);
+  const seconds = totalSeconds % 60;
+  const minutes = Math.floor(totalSeconds / 60) % 60;
+  const hours = Math.floor(totalSeconds / 3600);
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}:${String(frames).padStart(2, "0")}`;
 };
 
 export const chooseRecordingMimeType = (isTypeSupported = () => false) =>

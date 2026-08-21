@@ -69,6 +69,8 @@ describe("DesignComboTimeline", () => {
     expect(screen.getByTestId("timeline-scroll")).toHaveClass(
       "timeline-scroll",
     );
+    expect(screen.getByText("00:00:00:00")).toBeInTheDocument();
+    expect(screen.getByText("00:00:10:00")).toBeInTheDocument();
   });
 
   it("renders tracks and selects an item", () => {

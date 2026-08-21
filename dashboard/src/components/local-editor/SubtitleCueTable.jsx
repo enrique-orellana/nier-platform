@@ -5,17 +5,11 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { formatClock } from "./localEditorExport";
 
-const formatTimecode = (value) => {
-  const milliseconds = Math.max(0, Math.round(Number(value) || 0));
-  const hours = Math.floor(milliseconds / 3600000);
-  const minutes = Math.floor((milliseconds % 3600000) / 60000);
-  const seconds = Math.floor((milliseconds % 60000) / 1000);
-  const remainder = milliseconds % 1000;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(remainder).padStart(3, "0")}`;
-};
+const formatTimecode = (value, fps) => formatClock(value, fps);
 
-const parseTimecode = (value, fallback) => {
+const parseTimecode = (value, fallback, fps) => {
   const text = String(value || "")
     .trim()
     .replace(",", ".");
@@ -23,6 +17,20 @@ const parseTimecode = (value, fallback) => {
   if (/^\d+(?:\.\d+)?$/.test(text))
     return Math.max(0, Math.round(Number(text) * 1000));
   const parts = text.split(":");
+  if (parts.length === 4) {
+    const frames = Number(parts.pop());
+    const seconds = Number(parts.pop());
+    const minutes = Number(parts.pop());
+    const hours = Number(parts.pop());
+    if ([hours, minutes, seconds, frames].every(Number.isFinite))
+      return Math.max(
+        0,
+        Math.round(
+          (hours * 3600 + minutes * 60 + seconds) * 1000 +
+            (frames / Math.max(1, Number(fps) || 30)) * 1000,
+        ),
+      );
+  }
   if (parts.length === 2 || parts.length === 3) {
     const seconds = Number(parts.pop());
     const minutes = Number(parts.pop());
@@ -36,18 +44,18 @@ const parseTimecode = (value, fallback) => {
   return fallback;
 };
 
-function CueTimeInput({ cue, field, value, onCommit }) {
-  const [draft, setDraft] = useState(formatTimecode(value));
-  useEffect(() => setDraft(formatTimecode(value)), [value]);
+function CueTimeInput({ cue, field, value, fps, onCommit }) {
+  const [draft, setDraft] = useState(formatTimecode(value, fps));
+  useEffect(() => setDraft(formatTimecode(value, fps)), [fps, value]);
   return (
     <input
       aria-label={`Subtitle cue ${field} ${cue.id}`}
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
-      onFocus={() => setDraft(formatTimecode(value))}
+      onFocus={() => setDraft(formatTimecode(value, fps))}
       onBlur={() => {
-        const nextValue = parseTimecode(draft, value);
-        setDraft(formatTimecode(nextValue));
+        const nextValue = parseTimecode(draft, value, fps);
+        setDraft(formatTimecode(nextValue, fps));
         onCommit(nextValue);
       }}
       onClick={(event) => event.stopPropagation()}
@@ -73,6 +81,7 @@ function CueTextInput({ cue, onCommit }) {
 
 export default function SubtitleCueTable({
   cues = [],
+  fps = 30,
   selectedId,
   playheadMs = 0,
   onSelect,
@@ -243,6 +252,7 @@ export default function SubtitleCueTable({
                       cue={cue}
                       field="start"
                       value={cue.startMs}
+                      fps={fps}
                       onCommit={(value) => updateCue(cue, "startMs", value)}
                     />
                   </td>
@@ -251,6 +261,7 @@ export default function SubtitleCueTable({
                       cue={cue}
                       field="end"
                       value={cue.endMs}
+                      fps={fps}
                       onCommit={(value) => updateCue(cue, "endMs", value)}
                     />
                   </td>

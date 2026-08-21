@@ -30,6 +30,7 @@ describe("LocalEditorTimeline", () => {
       width: "2544px",
     });
     expect(screen.getByRole("button", { name: "Caption" })).toBeInTheDocument();
+    expect(screen.getByText("00:00:30:00")).toBeInTheDocument();
   });
 
   it("brings a selected overlapping cue to the front for editing", () => {

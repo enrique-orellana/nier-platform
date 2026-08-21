@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import StateManager from "@designcombo/state";
 import { moveCue, resizeCue } from "../../editor/timelineModel";
 import TrackControls from "./TrackControls";
+import { formatClock } from "../local-editor/localEditorExport";
 
 const colors = {
   video: "#2563eb",
@@ -14,12 +15,7 @@ const TRACK_CONTROLS_WIDTH = 160;
 const BASE_PIXELS_PER_SECOND = 80;
 
 const formatTimecode = (seconds, fps) => {
-  const frame = Math.max(0, Math.round(seconds * fps));
-  const totalSeconds = Math.floor(frame / fps);
-  const minutes = Math.floor(totalSeconds / 60);
-  const remainingSeconds = totalSeconds % 60;
-  const frames = frame % fps;
-  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}:${String(frames).padStart(2, "0")}`;
+  return formatClock(Math.max(0, Number(seconds) || 0) * 1000, fps);
 };
 
 const toDesignComboState = (editorState) => {

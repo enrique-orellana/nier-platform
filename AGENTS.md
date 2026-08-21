@@ -46,3 +46,7 @@ This project is indexed by GitNexus as **openshorts** (6224 symbols, 21270 relat
 ## Frontend verification
 
 - Whenever files under `dashboard/src/` are modified, run `npm run format`, `npm run format:check`, and `npm run lint` from `dashboard` before committing.
+
+## Browser testing
+
+- Use Brave for browser-based reproduction and end-to-end verification. Do not use Chrome or the in-app Chromium browser unless the user explicitly requests it.

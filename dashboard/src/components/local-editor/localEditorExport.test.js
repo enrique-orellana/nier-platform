@@ -20,7 +20,8 @@ describe("local editor export helpers", () => {
   });
 
   it("formats the player clock", () => {
-    expect(formatClock(65000)).toBe("01:05");
+    expect(formatClock(65000, 30)).toBe("00:01:05:00");
+    expect(formatClock(65000 + 966, 30)).toBe("00:01:05:29");
   });
 
   it("chooses a supported recording type", () => {

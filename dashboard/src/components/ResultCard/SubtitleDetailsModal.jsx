@@ -3,6 +3,7 @@ import { Clock3, Download, FileText, Loader2, X } from "lucide-react";
 import { getApiUrl } from "../../config";
 import RemotionPreview from "../RemotionPreview";
 import { normalizeSubtitleStyle } from "../local-editor/localEditorStyles";
+import { formatClock } from "../local-editor/localEditorExport";
 
 const toCueList = (track) =>
   (track?.cues || track?.captions || [])
@@ -20,17 +21,7 @@ const toCueList = (track) =>
     }))
     .filter((cue) => cue.text && cue.endMs > cue.startMs);
 
-const formatTimestamp = (milliseconds) => {
-  const totalMs = Math.max(0, Math.round(Number(milliseconds) || 0));
-  const hours = Math.floor(totalMs / 3600000);
-  const minutes = Math.floor((totalMs % 3600000) / 60000);
-  const seconds = Math.floor((totalMs % 60000) / 1000);
-  const ms = totalMs % 1000;
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
-  }
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
-};
+const formatTimestamp = (milliseconds, fps) => formatClock(milliseconds, fps);
 
 const trackFromClip = (clip) => {
   const tracks = Array.isArray(clip?.subtitle_tracks)
@@ -141,6 +132,7 @@ export default function SubtitleDetailsModal({
     [clip, cues, track],
   );
   const masterStartMs = Math.max(0, Math.round(Number(clip.start || 0) * 1000));
+  const fps = Math.max(1, Number(clip.output_fps || clip.fps) || 30);
 
   if (!isOpen) return null;
 
@@ -233,12 +225,12 @@ export default function SubtitleDetailsModal({
                     </span>
                     <span className="whitespace-nowrap text-right font-mono text-[10px] leading-5 text-zinc-400">
                       <span className="block">
-                        {formatTimestamp(cue.startMs)} →{" "}
-                        {formatTimestamp(cue.endMs)}
+                        {formatTimestamp(cue.startMs, fps)} →{" "}
+                        {formatTimestamp(cue.endMs, fps)}
                       </span>
                       <span className="block text-cyan-300/70">
-                        {formatTimestamp(masterStartMs + cue.startMs)} →{" "}
-                        {formatTimestamp(masterStartMs + cue.endMs)}
+                        {formatTimestamp(masterStartMs + cue.startMs, fps)} →{" "}
+                        {formatTimestamp(masterStartMs + cue.endMs, fps)}
                       </span>
                     </span>
                   </div>

@@ -41,8 +41,8 @@ describe("SubtitleDetailsModal", () => {
       screen.getByRole("heading", { name: /subtitle details/i }),
     ).toBeInTheDocument();
     expect(screen.getAllByText("Hello there")).toHaveLength(2);
-    expect(screen.getByText("00:00.500 → 00:01.500")).toBeInTheDocument();
-    expect(screen.getByText("02:00.500 → 02:01.500")).toBeInTheDocument();
+    expect(screen.getByText("00:00:00:15 → 00:00:01:15")).toBeInTheDocument();
+    expect(screen.getByText("00:02:00:15 → 00:02:01:15")).toBeInTheDocument();
     expect(screen.getByTestId("subtitle-details-preview")).toHaveTextContent(
       "Hello there",
     );

@@ -2494,7 +2494,8 @@ export default function LocalEditorTab({
                     {videoViewLabel}
                   </button>
                   <span className="ml-1 min-w-[74px] text-center font-mono text-[10px] text-zinc-400">
-                    {formatClock(playheadMs)} / {formatClock(durationMs)}
+                    {formatClock(playheadMs, remotionFps)} /{" "}
+                    {formatClock(durationMs, remotionFps)}
                   </span>
                 </div>
               </div>
@@ -2551,6 +2552,7 @@ export default function LocalEditorTab({
               <LocalEditorTimeline
                 videoUrl={videoUrl}
                 durationMs={durationMs}
+                fps={remotionFps}
                 subtitleCues={subtitleCues}
                 hook={hook}
                 selectedId={selected?.id}
@@ -2819,7 +2821,8 @@ export default function LocalEditorTab({
           <div className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-xs text-zinc-500">
             <span>Playhead</span>
             <span className="font-mono text-zinc-300">
-              {formatClock(playheadMs)} / {formatClock(durationMs)}
+              {formatClock(playheadMs, remotionFps)} /{" "}
+              {formatClock(durationMs, remotionFps)}
             </span>
           </div>
           {sidePanel}

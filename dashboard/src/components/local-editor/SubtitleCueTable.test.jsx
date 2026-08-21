@@ -21,4 +21,19 @@ describe("SubtitleCueTable", () => {
     expect(currentRow).toHaveAttribute("aria-current", "time");
     expect(currentRow).toHaveAttribute("data-current-cue", "true");
   });
+
+  it("displays cue times as frame-accurate timecode", () => {
+    render(
+      <SubtitleCueTable
+        fps={30}
+        cues={[{ id: "cue-1", text: "Frame cue", startMs: 1966, endMs: 3000 }]}
+        playheadMs={0}
+        onSelect={vi.fn()}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByDisplayValue("00:00:01:29")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("00:00:03:00")).toBeInTheDocument();
+  });
 });

@@ -8,8 +8,9 @@ describe("CardContent", () => {
     render(
       <CardContent
         clip={{
-          start: 176,
+          start: 176.966,
           end: 204,
+          output_fps: 30,
           video_title_for_youtube_short: "A useful clip",
           video_description_for_tiktok: "Caption",
         }}
@@ -18,7 +19,7 @@ describe("CardContent", () => {
     );
 
     expect(screen.getByTestId("clip-source-range")).toHaveTextContent(
-      "Start 02:56 · End 03:24 · Master 59:37",
+      "Start 00:02:56:29 · End 00:03:24:00 · Master 00:59:37:00",
     );
   });
 
@@ -36,7 +37,7 @@ describe("CardContent", () => {
     );
 
     expect(screen.getByTestId("clip-source-range")).toHaveTextContent(
-      "Start 02:56",
+      "Start 00:02:56:00",
     );
     expect(screen.getByTestId("clip-source-range")).not.toHaveTextContent(
       "End",

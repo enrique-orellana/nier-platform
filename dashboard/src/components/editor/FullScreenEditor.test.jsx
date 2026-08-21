@@ -605,7 +605,7 @@ describe("FullScreenEditor", () => {
     expect(
       screen.getByRole("button", { name: /generate subtitles/i }),
     ).not.toBeDisabled();
-    expect(screen.getAllByText("00:00 / 00:26")).toHaveLength(2);
+    expect(screen.getAllByText(/00:00:00:00/)).toHaveLength(3);
   });
 
   it("refreshes the direct MinIO master URL for the project preview", async () => {

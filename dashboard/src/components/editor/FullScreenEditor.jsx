@@ -26,6 +26,7 @@ import { saveAndRenderVersion } from "../../editor/renderVersion";
 import EditorActionToolbar from "./EditorActionToolbar";
 import LocalEditorTab from "../local-editor/LocalEditorTab";
 import { DEFAULT_SUBTITLE_STYLE } from "../local-editor/localEditorStyles";
+import { formatClock } from "../local-editor/localEditorExport";
 import { HOOK_FONT_FAMILY } from "../../remotion/lib/hookVisual";
 import { resolvePreviewStartSeconds } from "../../lib/videoUrls";
 
@@ -1136,8 +1137,8 @@ export default function FullScreenEditor({
           </div>
           <div className="flex-1 overflow-auto p-4 custom-scrollbar bg-black/20 inset-shadow-sm">
             <div className="mb-2 flex min-w-[760px] items-center justify-between text-xs text-primary/70 font-semibold tracking-wide">
-              <span>00:00:00</span>
-              <span>{durationSeconds.toFixed(2)}s</span>
+              <span>{formatClock((currentFrame / fps) * 1000, fps)}</span>
+              <span>{formatClock(durationSeconds * 1000, fps)}</span>
             </div>
             <DesignComboTimeline
               state={editorState}

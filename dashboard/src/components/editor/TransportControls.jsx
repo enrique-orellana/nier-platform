@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect } from "react";
+import { formatClock } from "../local-editor/localEditorExport";
 
 const clampFrame = (frame, durationFrames) =>
   Math.max(0, Math.min(durationFrames - 1, frame));
@@ -43,13 +44,7 @@ export default function TransportControls({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [currentFrame, durationFrames, onFrameChange, playing, requestPlayback]);
-  const time = `${Math.floor(currentFrame / fps / 60)
-    .toString()
-    .padStart(2, "0")}:${Math.floor((currentFrame / fps) % 60)
-    .toString()
-    .padStart(2, "0")}:${Math.floor(currentFrame % fps)
-    .toString()
-    .padStart(2, "0")}`;
+  const time = formatClock((currentFrame / fps) * 1000, fps);
   return (
     <div className="flex items-center gap-2 border-b border-white/10 bg-[#19191d] px-3 py-2 text-xs">
       <button

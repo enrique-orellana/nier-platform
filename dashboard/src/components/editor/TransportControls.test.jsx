@@ -52,4 +52,21 @@ describe("TransportControls", () => {
 
     expect(onZoomChange).toHaveBeenCalledWith(8);
   });
+
+  it("shows the current frame as frame-accurate timecode", () => {
+    render(
+      <TransportControls
+        currentFrame={59}
+        durationFrames={300}
+        fps={30}
+        playing={false}
+        onPlayingChange={vi.fn()}
+        onFrameChange={vi.fn()}
+        zoom={1}
+        onZoomChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("00:00:01:29")).toBeInTheDocument();
+  });
 });
