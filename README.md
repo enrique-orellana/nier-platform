@@ -212,7 +212,7 @@ Navigate to **`http://localhost:18575`**
 
 ### MinIO storage
 The Docker Compose deployment uses the migrated standalone MinIO endpoint
-`http://minio.192.168.1.189.nip.io:32280` and the `openshorts-media` bucket for
+`http://minio.192.168.50.2.nip.io:32280` and the `openshorts-media` bucket for
 generated media and source-object browsing. The old Kubernetes OpenShorts
 runtime has been removed; the files under `k8s/` remain only as legacy
 deployment references.
