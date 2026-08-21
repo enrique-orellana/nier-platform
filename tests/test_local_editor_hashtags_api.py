@@ -39,6 +39,34 @@ def test_generates_normalized_hashtags_from_clip_context(monkeypatch):
     assert "Streamer" in seen["prompt"]
 
 
+def test_prompt_requests_balanced_hashtag_groups(monkeypatch):
+    seen = {}
+
+    def fake_chat_json(config, prompt, **kwargs):
+        seen["prompt"] = prompt
+        return {"hashtags": ["#specific", "#niche", "#shorts"]}
+
+    monkeypatch.setattr(app_module, "chat_json", fake_chat_json)
+    response = TestClient(app_module.app).post(
+        "/api/local-editor/hashtags",
+        headers={"X-AI-Provider": "lmstudio", "X-AI-Base-Url": "http://lmstudio.test"},
+        json={
+            "title": "Unexpected training result",
+            "caption": "A quick strength-training tip",
+            "subtitle_text": "Keep your back straight during the deadlift",
+        },
+    )
+
+    assert response.status_code == 200
+    prompt = seen["prompt"].lower()
+    assert "post-specific" in prompt
+    assert "niche-specific" in prompt
+    assert "broad" in prompt
+    assert "3 to 4" in prompt
+    assert "in that order" in prompt
+    assert '{"hashtags": ["#tag1", "#tag2"]}' in seen["prompt"]
+
+
 def test_rejects_empty_clip_context(monkeypatch):
     calls = {"count": 0}
 

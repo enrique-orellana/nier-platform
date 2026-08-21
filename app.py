@@ -1923,9 +1923,13 @@ async def generate_local_editor_hashtags(
     if config.is_gemini() and not config.api_key:
         raise HTTPException(status_code=400, detail="Missing X-Gemini-Key header")
 
-    prompt = f"""Generate 8 to 12 highly relevant social-media hashtags for this short video.
+    prompt = f"""Generate 9 to 12 highly relevant social-media hashtags for this short video.
+Build the returned flat array from these three groups, in this exact order:
+1. POST-SPECIFIC HASHTAGS: 3 to 4 tags that describe exactly what happens in this clip, using concrete subjects, actions, items, or events from the provided context.
+2. NICHE-SPECIFIC HASHTAGS: 3 to 4 tags for the broader topic, audience, industry, or channel niche.
+3. BROAD HASHTAGS: 3 to 4 general discovery tags that help identify this as a Short or reach relevant trending and For You feeds, such as #shorts, #viral, #trending, or #foryoupage when appropriate.
+Return the groups as one flat array in that order. Use the same language as the source content for descriptive tags. Do not return group labels, explanations, prose, or duplicates.
 Return JSON only with this exact shape: {{"hashtags": ["#tag1", "#tag2"]}}.
-Use the same language as the source content. Do not return explanations, prose, or duplicates.
 
 TITLE:
 {title}
