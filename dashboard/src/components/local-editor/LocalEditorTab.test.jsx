@@ -206,6 +206,8 @@ describe("LocalEditorTab", () => {
       <LocalEditorTab
         initialVideoUrl="https://minio.example/project.mp4"
         initialVideoName="project.mp4"
+        initialProjectId="job-1"
+        initialClipIndex={0}
       />,
     );
 
@@ -225,8 +227,8 @@ describe("LocalEditorTab", () => {
       screen.queryByRole("button", { name: "Redo" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Export Video" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Export Video" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Export Subtitles" }),
     ).not.toBeInTheDocument();
@@ -1027,12 +1029,7 @@ describe("LocalEditorTab", () => {
     );
   });
 
-  it("requires typing confirm before persisting subtitles on the master", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ success: true }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
+  it("does not expose master subtitle persistence controls", async () => {
     render(
       <LocalEditorTab
         initialVideoUrl="/videos/job-1/source.mp4"
@@ -1052,34 +1049,12 @@ describe("LocalEditorTab", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /toggle subtitles settings/i }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Persist on master" }));
     expect(
-      screen.getByRole("dialog", { name: /persist subtitles/i }),
-    ).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
-
-    const confirmation = screen.getByLabelText("Type confirm to continue");
-    const confirmButton = screen.getByRole("button", {
-      name: "Confirm persistence",
-    });
-    expect(confirmButton).toBeDisabled();
-    fireEvent.change(confirmation, { target: { value: "Confirm" } });
-    expect(confirmButton).toBeDisabled();
-    fireEvent.change(confirmation, { target: { value: "confirm" } });
-    fireEvent.click(confirmButton);
-
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/clip/job-1/2/persist-subtitles",
-        expect.objectContaining({ method: "POST" }),
-      ),
-    );
-    const [, request] = fetchMock.mock.calls[0];
-    expect(JSON.parse(request.body)).toMatchObject({
-      trackId: "original",
-      language: "es",
-      cues: [{ id: "cue-1", text: "sé", startMs: 0, endMs: 1000 }],
-    });
+      screen.queryByRole("button", { name: "Persist on master" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: /persist subtitles/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("translates the current subtitle track and records one undoable action", async () => {

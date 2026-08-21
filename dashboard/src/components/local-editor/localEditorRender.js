@@ -255,6 +255,9 @@ const responsePayload = async (response) => {
 
 export async function renderLocalVideoOnBackend({
   file,
+  sourceUrl = "",
+  jobId = "",
+  clipIndex = 0,
   durationSeconds,
   fps = 30,
   width,
@@ -268,33 +271,44 @@ export async function renderLocalVideoOnBackend({
   fetchImpl = fetch,
   returnMetadata = false,
 }) {
-  if (!file) throw new Error("A local video is required.");
-  const formData = new FormData();
-  formData.append("file", file, file.name);
-  formData.append(
-    "props",
-    JSON.stringify(
-      buildRemotionRenderProps({
-        durationSeconds,
-        fps,
-        width,
-        height,
-        videoFit,
-        subtitleCues,
-        subtitleStyle,
-        hook,
+  if (!file && !sourceUrl) throw new Error("A local video is required.");
+  const props = buildRemotionRenderProps({
+    durationSeconds,
+    fps,
+    width,
+    height,
+    videoFit,
+    subtitleCues,
+    subtitleStyle,
+    hook,
+  });
+  let requestUrl = getApiUrl("/api/local-editor/render");
+  let requestOptions;
+  if (file) {
+    const formData = new FormData();
+    formData.append("file", file, file.name);
+    formData.append("props", JSON.stringify(props));
+    requestOptions = { method: "POST", body: formData };
+  } else {
+    if (!jobId) throw new Error("A project video requires a project ID.");
+    requestUrl = getApiUrl("/api/render");
+    requestOptions = {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jobId,
+        clipIndex,
+        props: { ...props, videoUrl: sourceUrl },
       }),
-    ),
-  );
+    };
+  }
 
   const started = await responsePayload(
-    await fetchImpl(getApiUrl("/api/local-editor/render"), {
-      method: "POST",
-      body: formData,
-    }),
+    await fetchImpl(requestUrl, requestOptions),
   );
-  if (!started.renderId || !started.jobId)
+  if (!started.renderId || (!started.jobId && !jobId))
     throw new Error("Render service did not return a render ID.");
+  const renderJobId = started.jobId || jobId;
 
   let status = null;
   do {
@@ -314,8 +328,8 @@ export async function renderLocalVideoOnBackend({
         throw new Error("Render completed without an output file.");
       onProgress(1);
       const result = {
-        outputUrl: getApiUrl(`/output/${started.jobId}/${filename}`),
-        jobId: started.jobId,
+        outputUrl: getApiUrl(`/output/${renderJobId}/${filename}`),
+        jobId: renderJobId,
         filename,
       };
       return returnMetadata ? result : result.outputUrl;
@@ -325,6 +339,9 @@ export async function renderLocalVideoOnBackend({
 
 export async function burnLocalEditorSubtitles({
   file,
+  sourceUrl = "",
+  jobId = "",
+  clipIndex = 0,
   durationSeconds,
   fps = 30,
   width,
@@ -339,6 +356,9 @@ export async function burnLocalEditorSubtitles({
 }) {
   return renderLocalVideoOnBackend({
     file,
+    sourceUrl,
+    jobId,
+    clipIndex,
     durationSeconds,
     fps,
     width,

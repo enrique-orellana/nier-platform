@@ -266,6 +266,46 @@ describe("local editor Remotion rendering", () => {
     expect(fetchImpl.mock.calls[0][1].body).toBeInstanceOf(FormData);
   });
 
+  it("uses the project backend render path without downloading the source", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ renderId: "render-1", status: "queued" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: "done",
+          progress: 100,
+          outputUrl: "/output/job-1/render.mp4",
+        }),
+      });
+
+    const outputUrl = await renderLocalVideoOnBackend({
+      sourceUrl: "https://minio.example/openshorts-media/job-1/clips/clip.mp4",
+      jobId: "job-1",
+      clipIndex: 2,
+      durationSeconds: 2,
+      fps: 60,
+      width: 1080,
+      height: 1920,
+      pollMs: 0,
+      fetchImpl,
+    });
+
+    expect(outputUrl).toBe("/output/job-1/render.mp4");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/render");
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toMatchObject({
+      jobId: "job-1",
+      clipIndex: 2,
+      props: {
+        videoUrl: "https://minio.example/openshorts-media/job-1/clips/clip.mp4",
+        fps: 60,
+      },
+    });
+  });
+
   it("renders imported and edited cues through the native Remotion path once", async () => {
     const fetchImpl = vi
       .fn()

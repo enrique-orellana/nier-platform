@@ -256,14 +256,25 @@ func (s *Server) localRenderVideoURL(jobID, videoURL string) string {
 	}
 	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
 	for index := 0; index+3 < len(parts); index++ {
-		if parts[index] != s.s3Store.Bucket || parts[index+1] != jobID || parts[index+2] != "master" {
+		if parts[index] != s.s3Store.Bucket || parts[index+1] != jobID {
 			continue
 		}
-		filename := parts[len(parts)-1]
-		if filename == "" || filename == "." || filename == ".." || strings.Contains(filename, "\\") {
-			return videoURL
+		switch parts[index+2] {
+		case "master":
+			filename := parts[len(parts)-1]
+			if filename == "" || filename == "." || filename == ".." || strings.Contains(filename, "\\") {
+				return videoURL
+			}
+			return "/videos/" + jobID + "/" + filename
+		case "clips":
+			if index+4 >= len(parts) || parts[index+3] == "" || parts[len(parts)-1] == "" {
+				return videoURL
+			}
+			key := strings.Join(parts[index+1:], "/")
+			if directURL, err := s.s3Store.DirectObjectURL(context.Background(), key, 2*time.Hour); err == nil {
+				return directURL
+			}
 		}
-		return "/videos/" + jobID + "/" + filename
 	}
 	return videoURL
 }

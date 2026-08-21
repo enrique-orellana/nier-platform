@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/mutonby/openshorts/backend-go/internal/config"
@@ -587,6 +588,63 @@ func TestRenderRoutesProxyToRendererService(t *testing.T) {
 	server.Handler().ServeHTTP(statusRes, statusReq)
 	if statusRes.Code != http.StatusOK || !strings.Contains(statusRes.Body.String(), `"status":"done"`) {
 		t.Fatalf("unexpected render status: %d %s", statusRes.Code, statusRes.Body.String())
+	}
+}
+
+func TestRenderProxyRenewsStaleS3ClipURLBeforeForwarding(t *testing.T) {
+	var forwarded struct {
+		JobID string         `json:"jobId"`
+		Props map[string]any `json:"props"`
+	}
+	renderer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&forwarded); err != nil {
+			t.Fatalf("decode forwarded render request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"renderId":"render-renewed","status":"queued"}`))
+	}))
+	defer renderer.Close()
+
+	publicClient := s3.NewFromConfig(aws.Config{
+		Region:      "eu-west-3",
+		Credentials: credentials.NewStaticCredentialsProvider("key", "secret", ""),
+	}, func(options *s3.Options) {
+		options.BaseEndpoint = aws.String("http://minio.example")
+		options.UsePathStyle = true
+	})
+	server := NewServer(config.Config{RenderServiceURL: renderer.URL})
+	server.s3Store = &integrations.S3Store{
+		Bucket:    "openshorts-media",
+		Presigner: s3.NewPresignClient(publicClient),
+	}
+	staleURL := "http://minio.example/openshorts-media/job-1/clips/clip-1/source_clip_4.mp4?X-Amz-Date=20260821T160208Z&X-Amz-Expires=7200&X-Amz-Signature=stale"
+	request := httptest.NewRequest(http.MethodPost, "/api/render", strings.NewReader(fmt.Sprintf(
+		`{"jobId":"job-1","clipIndex":0,"props":{"videoUrl":%q}}`,
+		staleURL,
+	)))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected render proxy status 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if forwarded.JobID != "job-1" {
+		t.Fatalf("unexpected forwarded job id: %q", forwarded.JobID)
+	}
+	renewedURL, ok := forwarded.Props["videoUrl"].(string)
+	if !ok {
+		t.Fatalf("forwarded video URL is missing: %#v", forwarded.Props)
+	}
+	parsed, err := url.Parse(renewedURL)
+	if err != nil {
+		t.Fatalf("parse renewed video URL: %v", err)
+	}
+	if parsed.Query().Get("X-Amz-Date") == "20260821T160208Z" || parsed.Query().Get("X-Amz-Signature") == "stale" {
+		t.Fatalf("stale S3 signature was forwarded: %q", renewedURL)
+	}
+	if parsed.Path != "/openshorts-media/job-1/clips/clip-1/source_clip_4.mp4" {
+		t.Fatalf("renewed URL changed the clip object path: %q", renewedURL)
 	}
 }
 

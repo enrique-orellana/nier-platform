@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -87,7 +88,25 @@ func (s *Server) renderProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	var body io.Reader
 	if r.Method == http.MethodPost {
-		body = r.Body
+		contents, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Could not read render request"})
+			return
+		}
+		var payload map[string]any
+		if json.Unmarshal(contents, &payload) == nil {
+			jobID, _ := payload["jobId"].(string)
+			props, _ := payload["props"].(map[string]any)
+			videoURL, _ := props["videoUrl"].(string)
+			if jobID != "" && videoURL != "" {
+				props["videoUrl"] = s.localRenderVideoURL(jobID, videoURL)
+				payload["props"] = props
+				if renewed, marshalErr := json.Marshal(payload); marshalErr == nil {
+					contents = renewed
+				}
+			}
+		}
+		body = bytes.NewReader(contents)
 	}
 	request, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, body)
 	if err != nil {

@@ -770,12 +770,19 @@ describe("FullScreenEditor", () => {
         expect.objectContaining({
           manifest: expect.objectContaining({
             publishing_metadata: { hashtags: ["#editedclip"] },
+            subtitle_tracks: [
+              expect.objectContaining({
+                cues: [expect.objectContaining({ text: "Hola" })],
+              }),
+            ],
             layers: expect.objectContaining({
               layout: { format: "standard", facecam_size: "medium" },
             }),
           }),
           props: expect.objectContaining({
             layout: { format: "standard", facecam_size: "medium" },
+            subtitles: null,
+            hook: null,
           }),
         }),
       ),

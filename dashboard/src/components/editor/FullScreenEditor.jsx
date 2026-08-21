@@ -849,7 +849,15 @@ export default function FullScreenEditor({
     setError(null);
     const props = {
       ...(useLocalEditor
-        ? { ...projectInputProps, videoUrl: projectVideoUrl }
+        ? {
+            ...projectInputProps,
+            videoUrl: projectVideoUrl,
+            // Saving a version updates the editable cue manifest, but keeps
+            // the version's source render clean. Explicit export is the only
+            // path that burns subtitles or hooks into the video.
+            subtitles: null,
+            hook: null,
+          }
         : inputProps),
       durationInFrames: editorState.durationFrames,
       fps,
