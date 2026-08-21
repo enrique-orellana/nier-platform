@@ -953,6 +953,109 @@ describe("LocalEditorTab", () => {
     );
   });
 
+  it("cleans subtitle dots in the current editor state", async () => {
+    const onStateChange = vi.fn();
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/job-1/source.mp4"
+        initialProjectId="job-1"
+        initialClipIndex={2}
+        initialEditorState={{
+          subtitleCues: [
+            {
+              id: "cue-1",
+              text: "Lo sé.",
+              startMs: 0,
+              endMs: 1000,
+              captions: [{ text: "sé.", startMs: 500, endMs: 1000 }],
+            },
+          ],
+          subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+          subtitleLanguage: "es",
+          hook: null,
+        }}
+        initialStateKey="clean-dots"
+        onStateChange={onStateChange}
+        allowLocalUpload={false}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /toggle subtitles settings/i }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Clean subtitle dots" }),
+    );
+
+    await waitFor(() =>
+      expect(onStateChange).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          subtitleCues: [
+            expect.objectContaining({
+              text: "Lo sé",
+              captions: [{ text: "sé", startMs: 500, endMs: 1000 }],
+            }),
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("requires typing confirm before persisting subtitles on the master", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/job-1/source.mp4"
+        initialProjectId="job-1"
+        initialClipIndex={2}
+        initialEditorState={{
+          subtitleCues: [{ id: "cue-1", text: "sé", startMs: 0, endMs: 1000 }],
+          subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+          subtitleLanguage: "es",
+          hook: null,
+        }}
+        initialStateKey="persist-subtitles"
+        allowLocalUpload={false}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /toggle subtitles settings/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Persist on master" }));
+    expect(
+      screen.getByRole("dialog", { name: /persist subtitles/i }),
+    ).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const confirmation = screen.getByLabelText("Type confirm to continue");
+    const confirmButton = screen.getByRole("button", {
+      name: "Confirm persistence",
+    });
+    expect(confirmButton).toBeDisabled();
+    fireEvent.change(confirmation, { target: { value: "Confirm" } });
+    expect(confirmButton).toBeDisabled();
+    fireEvent.change(confirmation, { target: { value: "confirm" } });
+    fireEvent.click(confirmButton);
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/clip/job-1/2/persist-subtitles",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    const [, request] = fetchMock.mock.calls[0];
+    expect(JSON.parse(request.body)).toMatchObject({
+      trackId: "original",
+      language: "es",
+      cues: [{ id: "cue-1", text: "sé", startMs: 0, endMs: 1000 }],
+    });
+  });
+
   it("translates the current subtitle track and records one undoable action", async () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:demo");
     const fetchMock = vi

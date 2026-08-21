@@ -1432,6 +1432,82 @@ describe("FullScreenEditor", () => {
     ).toBeEnabled();
   });
 
+  it("loads changed master subtitles instead of a stale generated version", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        const value = String(url);
+        if (value.endsWith("/versions")) {
+          return {
+            ok: true,
+            json: async () => ({
+              current_version_id: "v1",
+              versions: [{ version_id: "v1", status: "done" }],
+            }),
+          };
+        }
+        if (value.endsWith("/manifest")) {
+          return {
+            ok: true,
+            json: async () => ({
+              master_current: false,
+              manifest: {
+                ...manifest,
+                subtitle_tracks: [
+                  {
+                    id: "original",
+                    language: "es",
+                    cues: [
+                      { text: "New master text", startMs: 0, endMs: 1000 },
+                    ],
+                  },
+                ],
+              },
+            }),
+          };
+        }
+        if (value.endsWith("/versions/v1")) {
+          return {
+            ok: true,
+            json: async () => ({
+              version: { version_id: "v1", status: "done" },
+              manifest: {
+                ...manifest,
+                subtitle_tracks: [
+                  {
+                    id: "original",
+                    language: "es",
+                    cues: [
+                      { text: "Old generated text", startMs: 0, endMs: 1000 },
+                    ],
+                  },
+                ],
+              },
+            }),
+          };
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{ output_fps: 30, video_url: "/videos/clip.mp4" }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "New master text" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Old generated text" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("falls back to the clip range when a legacy clip has no manifest", async () => {
     const onClose = vi.fn();
     vi.stubGlobal(

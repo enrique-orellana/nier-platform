@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from starlette.background import BackgroundTask
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from render_manifest import load_manifest, save_manifest_atomic, verify_manifest_assets, calculate_revision, master_is_current
 from version_store import VersionStore
 from s3_uploader import upload_job_artifacts, delete_job_artifacts, list_all_clips, upload_actor_to_s3, list_actor_gallery, upload_video_to_gallery, list_video_gallery, upload_thumbnail_project, list_thumbnail_projects, update_thumbnail_project, delete_thumbnail_project, update_thumbnail_project_file, delete_thumbnail_project_file, migrate_legacy_thumbnail_projects, get_s3_client
@@ -1126,6 +1126,13 @@ class ManifestPatchRequest(BaseModel):
     audio: Optional[dict] = None
 
 
+class PersistSubtitlesRequest(BaseModel):
+    trackId: str = "original"
+    language: str = "und"
+    style: dict = Field(default_factory=dict)
+    cues: list[dict] = Field(default_factory=list)
+
+
 class VersionBranchRequest(BaseModel):
     version_id: str
     manifest: Optional[dict] = None
@@ -2003,6 +2010,53 @@ async def patch_clip_manifest(job_id: str, clip_index: int, req: ManifestPatchRe
     if req.audio is not None:
         manifest["layers"] = dict(manifest.get("layers") or {})
         manifest["layers"]["audio"] = req.audio
+    manifest["master"] = None
+    revision = save_manifest_atomic(Path(manifest_path), manifest)
+    return {"success": True, "manifest": manifest, "revision": revision, "master_current": False}
+
+
+@app.post("/api/clip/{job_id}/{clip_index}/persist-subtitles")
+async def persist_clip_subtitles(job_id: str, clip_index: int, req: PersistSubtitlesRequest):
+    _, _, manifest_path, root = _resolve_clip_manifest(job_id, clip_index)
+    manifest = load_manifest(Path(manifest_path))
+    verify_manifest_assets(manifest, Path(root))
+    track_id = req.trackId or "original"
+    language = req.language or "und"
+    existing_tracks = manifest.get("subtitle_tracks") or []
+    next_tracks = [track for track in existing_tracks if track.get("id") != track_id]
+    captions = []
+    for cue in req.cues:
+        word_captions = cue.get("captions") or []
+        captions.extend(word_captions or [{
+            "text": cue.get("text", ""),
+            "startMs": cue.get("startMs", 0),
+            "endMs": cue.get("endMs", cue.get("startMs", 0)),
+        }])
+    if req.cues:
+        next_tracks.append({
+            "id": track_id,
+            "language": language,
+            "label": "Original",
+            "origin": "manual",
+            "cues": req.cues,
+            "captions": captions,
+            "style": req.style,
+        })
+    manifest["subtitle_tracks"] = next_tracks
+    manifest["subtitle_tracks_disabled"] = not bool(next_tracks)
+    manifest["active_subtitle_track_id"] = track_id if next_tracks else None
+    layers = dict(manifest.get("layers") or {})
+    layers["subtitles"] = (
+        {
+            "captions": captions,
+            "cues": req.cues,
+            "language": language,
+            "style": req.style,
+        }
+        if req.cues
+        else None
+    )
+    manifest["layers"] = layers
     manifest["master"] = None
     revision = save_manifest_atomic(Path(manifest_path), manifest)
     return {"success": True, "manifest": manifest, "revision": revision, "master_current": False}

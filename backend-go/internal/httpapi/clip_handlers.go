@@ -26,7 +26,7 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 		return
 	}
-	if len(segments) < 1 || (segments[0] != "versions" && segments[0] != "manifest" && segments[0] != "transcript" && segments[0] != "video-url") {
+	if len(segments) < 1 || (segments[0] != "versions" && segments[0] != "manifest" && segments[0] != "transcript" && segments[0] != "video-url" && segments[0] != "persist-subtitles") {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 		return
 	}
@@ -39,6 +39,8 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodPost && len(segments) == 1 && segments[0] == "video-url":
 		s.legacyJSONRouteWithExtras("clip_video_url", map[string]any{"job_id": jobID, "clip_index": clipIndex})(w, r)
+	case r.Method == http.MethodPost && len(segments) == 1 && segments[0] == "persist-subtitles":
+		s.persistSubtitles(w, r, jobID, clipIndex)
 	case r.Method == http.MethodPost && len(segments) == 4 && segments[0] == "versions" && segments[2] == "subtitle-tracks" && segments[3] == "translate":
 		s.legacyJSONRouteWithExtras("subtitle_track_translate", map[string]any{"job_id": jobID, "clip_index": clipIndex, "version_id": segments[1]})(w, r)
 	case r.Method == http.MethodGet && len(segments) == 1 && segments[0] == "versions":
@@ -475,6 +477,111 @@ func (s *Server) patchManifest(w http.ResponseWriter, r *http.Request, jobID str
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "manifest": manifest, "revision": revision, "master_current": false})
+}
+
+func (s *Server) persistSubtitles(w http.ResponseWriter, r *http.Request, jobID string, clipIndex int) {
+	path, err := s.manifestPath(jobID, clipIndex)
+	if errors.Is(err, os.ErrNotExist) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Clip has no render manifest"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	manifest, err := manifests.Load(path)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	var request struct {
+		TrackID  string           `json:"trackId"`
+		Language string           `json:"language"`
+		Style    map[string]any   `json:"style"`
+		Cues     []map[string]any `json:"cues"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+	if request.TrackID == "" {
+		request.TrackID = "original"
+	}
+	if request.Language == "" {
+		request.Language = "und"
+	}
+
+	existingTracks, _ := manifest["subtitle_tracks"].([]any)
+	nextTracks := make([]any, 0, len(existingTracks)+1)
+	for _, rawTrack := range existingTracks {
+		track, ok := rawTrack.(map[string]any)
+		if ok && track["id"] == request.TrackID {
+			continue
+		}
+		nextTracks = append(nextTracks, rawTrack)
+	}
+
+	captions := make([]any, 0)
+	for _, cue := range request.Cues {
+		if wordCaptions, ok := cue["captions"].([]any); ok && len(wordCaptions) > 0 {
+			captions = append(captions, wordCaptions...)
+			continue
+		}
+		captions = append(captions, map[string]any{
+			"text":    cue["text"],
+			"startMs": cue["startMs"],
+			"endMs":   cue["endMs"],
+		})
+	}
+
+	if len(request.Cues) > 0 {
+		track := map[string]any{
+			"id":       request.TrackID,
+			"language": request.Language,
+			"label":    "Original",
+			"origin":   "manual",
+			"cues":     request.Cues,
+			"captions": captions,
+		}
+		if request.Style != nil {
+			track["style"] = request.Style
+		}
+		nextTracks = append(nextTracks, track)
+	}
+	manifest["subtitle_tracks"] = nextTracks
+	manifest["subtitle_tracks_disabled"] = len(nextTracks) == 0
+	if len(nextTracks) == 0 {
+		manifest["active_subtitle_track_id"] = nil
+	} else {
+		manifest["active_subtitle_track_id"] = request.TrackID
+	}
+	layers, _ := manifest["layers"].(map[string]any)
+	if layers == nil {
+		layers = make(map[string]any)
+	}
+	if len(request.Cues) == 0 {
+		layers["subtitles"] = nil
+	} else {
+		layers["subtitles"] = map[string]any{
+			"captions": captions,
+			"cues":     request.Cues,
+			"language": request.Language,
+			"style":    request.Style,
+		}
+	}
+	manifest["layers"] = layers
+	manifest["master"] = nil
+	revision, err := manifests.SaveAtomic(path, manifest)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success":        true,
+		"manifest":       manifest,
+		"revision":       revision,
+		"master_current": false,
+	})
 }
 
 func (s *Server) clipTranscript(w http.ResponseWriter, ctx context.Context, jobID string, clipIndex int) {

@@ -378,7 +378,20 @@ export default function FullScreenEditor({
         history.current_version_id ||
         history.versions?.at(-1)?.version_id;
       let payload;
-      if (currentId) {
+      if (currentId && !initialVersionId) {
+        try {
+          const masterResponse = await fetch(
+            getApiUrl(`/api/clip/${jobId}/${clipIndex}/manifest`),
+          );
+          if (masterResponse.ok) {
+            const masterPayload = await masterResponse.json();
+            if (masterPayload.master_current === false) payload = masterPayload;
+          }
+        } catch {
+          // Fall back to the generated version when the master manifest is unavailable.
+        }
+      }
+      if (!payload && currentId) {
         const versionResponse = await fetch(
           getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions/${currentId}`),
         );

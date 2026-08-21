@@ -41,6 +41,7 @@ import { activeCueAt, formatClock } from "./localEditorExport";
 import {
   burnLocalEditorSubtitles,
   cueCaptionsForRender,
+  cleanSubtitleCue,
   renderLocalVideoOnBackend,
   syncSubtitleCue,
 } from "./localEditorRender";
@@ -925,6 +926,10 @@ export default function LocalEditorTab({
   const [projectNameDraft, setProjectNameDraft] = useState("");
   const [projectStorageWarning, setProjectStorageWarning] = useState("");
   const [projectSaveNotice, setProjectSaveNotice] = useState("");
+  const [masterPersistDialogOpen, setMasterPersistDialogOpen] = useState(false);
+  const [masterConfirmText, setMasterConfirmText] = useState("");
+  const [masterPersisting, setMasterPersisting] = useState(false);
+  const [masterPersistNotice, setMasterPersistNotice] = useState("");
 
   const playbackStartMs = Math.max(0, Number(initialPlaybackStartMs) || 0);
   const requestedPlaybackDurationMs =
@@ -1585,6 +1590,59 @@ export default function LocalEditorTab({
     setEditingSubtitle(null);
   };
 
+  const cleanSubtitleDots = () => {
+    if (!subtitleCues.length) return;
+    commitEdit((current) => ({
+      ...current,
+      subtitleCues: current.subtitleCues.map(cleanSubtitleCue),
+    }));
+    setMasterPersistNotice("");
+  };
+
+  const openMasterPersistDialog = () => {
+    setMasterConfirmText("");
+    setMasterPersistNotice("");
+    setMasterPersistDialogOpen(true);
+  };
+
+  const persistSubtitlesOnMaster = async () => {
+    if (
+      masterConfirmText !== "confirm" ||
+      masterPersisting ||
+      !hasProjectClipSource
+    )
+      return;
+    setMasterPersisting(true);
+    setError("");
+    try {
+      const response = await fetch(
+        getApiUrl(
+          `/api/clip/${encodeURIComponent(initialProjectId)}/${projectClipIndex}/persist-subtitles`,
+        ),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            trackId: "original",
+            language: subtitleLanguage || "und",
+            style: subtitleStyle,
+            cues: subtitleCues,
+          }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok)
+        throw new Error(payload.detail || "Could not persist subtitles.");
+      setMasterPersistDialogOpen(false);
+      setMasterConfirmText("");
+      setMasterPersistNotice("Subtitles persisted on master.");
+    } catch (persistError) {
+      setError(persistError.message || "Could not persist subtitles.");
+    } finally {
+      setMasterPersisting(false);
+    }
+  };
+
   const addSubtitleCue = () => {
     const nextCue = clampCue(
       createSubtitleCue({
@@ -2193,6 +2251,14 @@ export default function LocalEditorTab({
           {projectSaveNotice}
         </div>
       )}
+      {masterPersistNotice && (
+        <div
+          className="mx-6 mt-4 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-100"
+          role="status"
+        >
+          {masterPersistNotice}
+        </div>
+      )}
       {saveProjectDialogOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
@@ -2244,6 +2310,65 @@ export default function LocalEditorTab({
                 className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Save project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {masterPersistDialogOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="persist-subtitles-dialog-title"
+            className="w-full max-w-md rounded-2xl border border-red-400/20 bg-[#17171b] p-5 text-white shadow-2xl"
+          >
+            <h2
+              id="persist-subtitles-dialog-title"
+              className="text-base font-semibold"
+            >
+              Persist subtitles on master
+            </h2>
+            <p className="mt-2 text-xs leading-5 text-zinc-400">
+              This permanently replaces the master subtitle track with the
+              current editor cues. Type <strong>confirm</strong> to continue.
+            </p>
+            <label
+              htmlFor="persist-subtitles-confirmation"
+              className="mt-4 block text-xs font-medium text-zinc-300"
+            >
+              Confirmation
+            </label>
+            <input
+              id="persist-subtitles-confirmation"
+              aria-label="Type confirm to continue"
+              value={masterConfirmText}
+              onChange={(event) => setMasterConfirmText(event.target.value)}
+              autoFocus
+              className="mt-1.5 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-red-400"
+            />
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMasterPersistDialogOpen(false);
+                  setMasterConfirmText("");
+                }}
+                disabled={masterPersisting}
+                className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300 hover:bg-white/5 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void persistSubtitlesOnMaster()}
+                disabled={masterConfirmText !== "confirm" || masterPersisting}
+                className="rounded-lg bg-red-500 px-3 py-2 text-xs font-semibold text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {masterPersisting ? "Persisting…" : "Confirm persistence"}
               </button>
             </div>
           </div>
@@ -2638,6 +2763,28 @@ export default function LocalEditorTab({
                       ? "Transcribing…"
                       : "Generate subtitles"}
                   </button>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    aria-label="Clean subtitle dots"
+                    onClick={cleanSubtitleDots}
+                    disabled={busy || masterPersisting || !subtitleCues.length}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Clean subtitle dots
+                  </button>
+                  {hasProjectClipSource && (
+                    <button
+                      type="button"
+                      aria-label="Persist on master"
+                      onClick={openMasterPersistDialog}
+                      disabled={busy || masterPersisting}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Persist on master
+                    </button>
+                  )}
                 </div>
                 <p className="mt-2 text-[11px] leading-5 text-zinc-500">
                   Import timed .srt or .vtt files, then edit every cue directly

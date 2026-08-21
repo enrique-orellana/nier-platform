@@ -10,6 +10,25 @@ const cueWords = (text) =>
     .trim()
     .split(/\s+/)
     .filter(Boolean);
+
+const terminalPeriods = /\.+(?=["'’”»)\]]*\s*$)/;
+
+const cleanSubtitleText = (text) =>
+  String(text || "").replace(terminalPeriods, "");
+
+export const cleanSubtitleCue = (cue) => ({
+  ...cue,
+  text: cleanSubtitleText(cue?.text),
+  ...(Array.isArray(cue?.captions)
+    ? {
+        captions: cue.captions.map((caption) => ({
+          ...caption,
+          text: cleanSubtitleText(caption?.text),
+        })),
+      }
+    : {}),
+});
+
 const cueText = (cue) => String(cue?.text || "").trim();
 const captionText = (captions) =>
   captions

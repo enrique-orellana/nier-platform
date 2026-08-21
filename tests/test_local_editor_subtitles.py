@@ -1,3 +1,7 @@
+import json
+
+import app as app_module
+from fastapi.testclient import TestClient
 from local_editor_subtitles import (
     build_local_editor_srt,
     subtitle_style_to_ffmpeg_options,
@@ -50,3 +54,37 @@ def test_word_captions_from_transcript_matches_clip_generator_timing_contract():
         {"text": "Do", "startMs": 200, "endMs": 400},
         {"text": "I", "startMs": 400, "endMs": 550},
     ]
+
+
+def test_persist_subtitles_updates_only_subtitle_manifest_data(monkeypatch, tmp_path):
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps({
+            "schema_version": 1,
+            "layers": {"hook": {"text": "Keep me"}},
+            "subtitle_tracks": [],
+            "master": {"revision": "old"},
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "_resolve_clip_manifest",
+        lambda _job_id, _clip_index: ({}, {}, str(manifest_path), str(tmp_path)),
+    )
+
+    response = TestClient(app_module.app).post(
+        "/api/clip/job-1/0/persist-subtitles",
+        json={
+            "trackId": "original",
+            "language": "es",
+            "style": {"fontSize": 24},
+            "cues": [{"id": "cue-1", "text": "sé", "startMs": 0, "endMs": 1000}],
+        },
+    )
+
+    assert response.status_code == 200
+    saved = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert saved["layers"]["hook"] == {"text": "Keep me"}
+    assert saved["subtitle_tracks"][0]["cues"][0]["text"] == "sé"
+    assert saved["master"] is None

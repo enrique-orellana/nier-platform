@@ -3,6 +3,7 @@ import { renderInBrowser } from "../../lib/renderInBrowser";
 import {
   buildRemotionRenderProps,
   burnLocalEditorSubtitles,
+  cleanSubtitleCue,
   renderLocalVideoOnBackend,
   renderLocalVideoOnBrowser,
   syncSubtitleCue,
@@ -11,6 +12,30 @@ import {
 vi.mock("../../lib/renderInBrowser", () => ({ renderInBrowser: vi.fn() }));
 
 describe("local editor Remotion rendering", () => {
+  it("removes terminal periods without changing cue or word timings", () => {
+    expect(
+      cleanSubtitleCue({
+        id: "cue-1",
+        text: 'Lo sé..."',
+        startMs: 120,
+        endMs: 980,
+        captions: [
+          { text: "Lo", startMs: 120, endMs: 400 },
+          { text: 'sé..."', startMs: 400, endMs: 980 },
+        ],
+      }),
+    ).toEqual({
+      id: "cue-1",
+      text: 'Lo sé"',
+      startMs: 120,
+      endMs: 980,
+      captions: [
+        { text: "Lo", startMs: 120, endMs: 400 },
+        { text: 'sé"', startMs: 400, endMs: 980 },
+      ],
+    });
+  });
+
   it("converts local editor overlays to the native render contract", () => {
     const props = buildRemotionRenderProps({
       durationSeconds: 6,

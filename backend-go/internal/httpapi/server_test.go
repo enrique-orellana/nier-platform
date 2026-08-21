@@ -767,6 +767,71 @@ func TestClipVersionRoutesPersistAndBranchManifests(t *testing.T) {
 	}
 }
 
+func TestPersistSubtitlesUpdatesMasterManifestWithoutDroppingOtherLayers(t *testing.T) {
+	outputDir := t.TempDir()
+	manifestPath := filepath.Join(outputDir, "job-1", "manifests", "clip_1.json")
+	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+		t.Fatalf("create manifest directory: %v", err)
+	}
+	if err := os.WriteFile(
+		manifestPath,
+		[]byte(`{"schema_version":1,"layers":{"hook":{"text":"Keep me"},"effects":{"segments":[]}},"subtitle_tracks":[],"master":{"revision":"old"}}`),
+		0o644,
+	); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	server := NewServer(config.Config{OutputDir: outputDir})
+	persistReq := httptest.NewRequest(
+		http.MethodPost,
+		"/api/clip/job-1/0/persist-subtitles",
+		strings.NewReader(`{"trackId":"original","language":"es","style":{"fontSize":24},"cues":[{"id":"cue-1","text":"sé","startMs":0,"endMs":1000}]}`),
+	)
+	persistReq.Header.Set("Content-Type", "application/json")
+	persistRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(persistRes, persistReq)
+	if persistRes.Code != http.StatusOK {
+		t.Fatalf("expected persistence status 200, got %d: %s", persistRes.Code, persistRes.Body.String())
+	}
+
+	saved, err := manifests.Load(manifestPath)
+	if err != nil {
+		t.Fatalf("load persisted manifest: %v", err)
+	}
+	layers := saved["layers"].(map[string]any)
+	if layers["hook"].(map[string]any)["text"] != "Keep me" {
+		t.Fatalf("persistence dropped unrelated hook layer: %#v", layers)
+	}
+	tracks := saved["subtitle_tracks"].([]any)
+	if len(tracks) != 1 || tracks[0].(map[string]any)["id"] != "original" {
+		t.Fatalf("unexpected persisted subtitle tracks: %#v", tracks)
+	}
+	if saved["master"] != nil {
+		t.Fatalf("expected the old master render to be invalidated: %#v", saved["master"])
+	}
+
+	removeReq := httptest.NewRequest(
+		http.MethodPost,
+		"/api/clip/job-1/0/persist-subtitles",
+		strings.NewReader(`{"trackId":"original","language":"es","style":{"fontSize":24},"cues":[]}`),
+	)
+	removeReq.Header.Set("Content-Type", "application/json")
+	removeRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(removeRes, removeReq)
+	if removeRes.Code != http.StatusOK {
+		t.Fatalf("expected subtitle removal status 200, got %d: %s", removeRes.Code, removeRes.Body.String())
+	}
+	saved, err = manifests.Load(manifestPath)
+	if err != nil {
+		t.Fatalf("reload persisted manifest: %v", err)
+	}
+	if tracks, ok := saved["subtitle_tracks"].([]any); ok && len(tracks) != 0 {
+		t.Fatalf("expected subtitle track removal, got %#v", tracks)
+	}
+	if saved["subtitle_tracks_disabled"] != true {
+		t.Fatalf("expected subtitle track disable flag, got %#v", saved["subtitle_tracks_disabled"])
+	}
+}
+
 func TestCompleteVersionPublishesLocalMasterToS3(t *testing.T) {
 	outputDir := t.TempDir()
 	masterDir := filepath.Join(outputDir, "job-1")
