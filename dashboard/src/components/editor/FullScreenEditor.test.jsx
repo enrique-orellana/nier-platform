@@ -782,6 +782,61 @@ describe("FullScreenEditor", () => {
     );
   });
 
+  it("shows and clears the local editor render-ready badge", async () => {
+    renderVersionMocks.saveAndRenderVersion.mockResolvedValue({
+      status: "done",
+      outputUrl: "/videos/job/generated.mp4",
+      version: { version_id: "v2", status: "done" },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          blob: async () => new Blob(["video"], { type: "video/mp4" }),
+        }),
+      ),
+    );
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(() => "blob:project-video"),
+    });
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }}
+        initialManifest={manifest}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /save as new version/i }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("version-render-ready-badge"),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("button", { name: /v2 done current/i }),
+    ).toBeInTheDocument();
+    const historyToggle = screen.getByRole("button", {
+      name: /version history/i,
+    });
+    fireEvent.click(historyToggle);
+    fireEvent.click(historyToggle);
+    expect(
+      screen.queryByTestId("version-render-ready-badge"),
+    ).not.toBeInTheDocument();
+  });
+
   it("restores saved hashtags from the version manifest", async () => {
     vi.stubGlobal(
       "fetch",

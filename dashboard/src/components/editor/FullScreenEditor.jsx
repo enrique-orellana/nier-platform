@@ -296,6 +296,7 @@ export default function FullScreenEditor({
   const [versions, setVersions] = useState(
     initialVersion ? [initialVersion] : [],
   );
+  const [renderCompleteNotice, setRenderCompleteNotice] = useState(false);
   const [editorState, setEditorState] = useState(() =>
     manifestToEditorState(initialManifest || manifestFromClip(clip), {
       fps: clip.output_fps || 30,
@@ -863,7 +864,23 @@ export default function FullScreenEditor({
         ? result.outputUrl
         : getApiUrl(result.outputUrl);
       onRendered?.(outputUrl);
-      const nextVersion = result.version || version;
+      const nextVersion = result.version || {
+        version_id: result.versionId,
+        status: "done",
+        output_url: outputUrl,
+      };
+      if (!nextVersion?.version_id) {
+        setError("Render completed without a version id.");
+        setBusy(false);
+        return;
+      }
+      setVersions((current) => [
+        ...current.filter(
+          (candidate) => candidate.version_id !== nextVersion.version_id,
+        ),
+        nextVersion,
+      ]);
+      setRenderCompleteNotice(true);
       setVersion(nextVersion);
       onVersionChange?.(nextVersion.version_id);
     } else
@@ -976,9 +993,6 @@ export default function FullScreenEditor({
                 className="rounded-xl border border-white/10 bg-white/[.02] p-4"
                 aria-label="Version history"
               >
-                <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-primary">
-                  Version History
-                </h2>
                 <VersionHistory
                   versions={versions}
                   currentVersionId={version?.version_id}
@@ -986,6 +1000,8 @@ export default function FullScreenEditor({
                   onSelect={loadVersion}
                   onBranch={branchVersion}
                   onDelete={deleteVersion}
+                  renderCompleteNotice={renderCompleteNotice}
+                  onOpen={() => setRenderCompleteNotice(false)}
                 />
               </section>
             </>

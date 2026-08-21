@@ -102,7 +102,10 @@ export default function SubtitleCueTable({
   const scrollToCue = useCallback(
     (cue, select = true) => {
       if (!cue) return;
-      if (select) onSelect?.(cue, "subtitle");
+      if (select)
+        onSelect?.(cue, "subtitle", {
+          openEditor: false,
+        });
       rowRefs.current.get(cue.id)?.scrollIntoView?.({ block: "nearest" });
     },
     [onSelect],
@@ -186,7 +189,7 @@ export default function SubtitleCueTable({
         <button
           type="button"
           aria-label="Scroll to current subtitle"
-          onClick={() => scrollToCue(currentCue || sortedCues[0])}
+          onClick={() => scrollToCue(currentCue || sortedCues[0], false)}
           className="ml-auto rounded border border-white/15 bg-[#303034] px-3 py-1 text-white hover:bg-white/10"
         >
           ◉ Scroll to Current

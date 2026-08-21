@@ -1358,9 +1358,9 @@ export default function LocalEditorTab({
     commitEdit((current) => ({ ...current, subtitleLanguage: nextLanguage }));
   };
 
-  const handleTimelineSelect = (cue, type) => {
+  const handleTimelineSelect = (cue, type, { openEditor = true } = {}) => {
     setSelected({ id: cue.id, type });
-    if (type === "subtitle") setEditingSubtitle(cue);
+    if (type === "subtitle" && openEditor) setEditingSubtitle(cue);
   };
   const beginTimelineEdit = () => {
     timelineDragRef.current = { recorded: false };
