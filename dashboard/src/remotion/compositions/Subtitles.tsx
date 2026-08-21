@@ -13,6 +13,7 @@ import { getFontStack } from "../lib/fonts";
 
 interface SubtitlesProps {
   config: SubtitleConfig;
+  mediaTimeMs?: number | null;
 }
 
 const POSITION_MAP: Record<string, React.CSSProperties> = {
@@ -51,6 +52,11 @@ export const getSubtitleTimeMs = (
   fps: number,
 ) => ((blockStartFrame + relativeFrame) / fps) * 1000;
 
+export const isSubtitleBlockActiveAt = (
+  block: { startMs: number; endMs: number },
+  timeMs: number,
+) => timeMs >= block.startMs && timeMs < block.endMs;
+
 export function normalizeSubtitleConfig(
   config: Partial<SubtitleConfig> | null | undefined,
 ): SubtitleConfig {
@@ -62,7 +68,10 @@ export function normalizeSubtitleConfig(
   };
 }
 
-export const Subtitles: React.FC<SubtitlesProps> = ({ config }) => {
+export const Subtitles: React.FC<SubtitlesProps> = ({
+  config,
+  mediaTimeMs,
+}) => {
   const { fps } = useVideoConfig();
   const normalizedConfig = normalizeSubtitleConfig(config);
   const blocks = normalizedConfig.blocks?.length
@@ -77,6 +86,19 @@ export const Subtitles: React.FC<SubtitlesProps> = ({ config }) => {
           fps,
         );
 
+        const subtitleBlock = (
+          <SubtitleBlock
+            block={block}
+            config={normalizedConfig}
+            blockStartFrame={startFrame}
+            mediaTimeMs={mediaTimeMs}
+          />
+        );
+
+        if (mediaTimeMs != null) {
+          return <React.Fragment key={i}>{subtitleBlock}</React.Fragment>;
+        }
+
         return (
           <Sequence
             key={i}
@@ -84,11 +106,7 @@ export const Subtitles: React.FC<SubtitlesProps> = ({ config }) => {
             durationInFrames={durationFrames}
             layout="none"
           >
-            <SubtitleBlock
-              block={block}
-              config={normalizedConfig}
-              blockStartFrame={startFrame}
-            />
+            {subtitleBlock}
           </Sequence>
         );
       })}
@@ -100,19 +118,29 @@ interface SubtitleBlockProps {
   block: ReturnType<typeof groupCaptionsIntoBlocks>[number];
   config: SubtitleConfig;
   blockStartFrame: number;
+  mediaTimeMs?: number | null;
 }
 
 const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
   block,
   config,
   blockStartFrame,
+  mediaTimeMs,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { style, position } = config;
 
   // Current time relative to composition start (sequence-relative frame)
-  const currentTimeMs = getSubtitleTimeMs(blockStartFrame, frame, fps);
+  const currentTimeMs =
+    mediaTimeMs ?? getSubtitleTimeMs(blockStartFrame, frame, fps);
+  if (mediaTimeMs != null && !isSubtitleBlockActiveAt(block, currentTimeMs)) {
+    return null;
+  }
+  const subtitleFrame =
+    mediaTimeMs == null
+      ? frame
+      : Math.max(0, (currentTimeMs / 1000) * fps - blockStartFrame);
   const activeIndex = getActiveWordIndex(block.words, currentTimeMs);
 
   const positionStyle = POSITION_MAP[position] ?? POSITION_MAP.bottom;
@@ -159,7 +187,7 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
             style={style}
             fontStack={fontStack}
             animation={style.animation}
-            frame={frame}
+            frame={subtitleFrame}
             fps={fps}
             wordStartMs={word.startMs}
             blockStartFrame={blockStartFrame}

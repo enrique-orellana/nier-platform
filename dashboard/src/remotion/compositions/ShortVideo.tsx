@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useRef } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Video } from "@remotion/media";
 import {
   AbsoluteFill,
@@ -12,13 +12,31 @@ import { Subtitles } from "./Subtitles";
 import { HookOverlay } from "./HookOverlay";
 import { VideoEffects } from "./VideoEffects";
 
+export const getMediaTimeMs = (
+  mediaCurrentTimeSeconds: number,
+  videoStartSeconds: number,
+): number | null => {
+  const mediaTime = Number(mediaCurrentTimeSeconds);
+  const startTime = Number(videoStartSeconds);
+  if (!Number.isFinite(mediaTime) || !Number.isFinite(startTime)) return null;
+  return Math.max(0, (mediaTime - startTime) * 1000);
+};
+
 const BrowserVideo: React.FC<{
   videoUrl: string;
   videoStartSeconds: number;
   onAutoPlayError?: () => void;
+  onMediaTimeChange?: (mediaTimeMs: number | null) => void;
   fps: number;
   objectFit: string;
-}> = ({ videoUrl, videoStartSeconds, onAutoPlayError, fps, objectFit }) => {
+}> = ({
+  videoUrl,
+  videoStartSeconds,
+  onAutoPlayError,
+  onMediaTimeChange,
+  fps,
+  objectFit,
+}) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoId = useId();
   const frame = useCurrentFrame();
@@ -58,6 +76,28 @@ const BrowserVideo: React.FC<{
     }
     playVideo();
   }, [playVideo, timeline.playing]);
+
+  useEffect(() => {
+    if (!timeline.playing || !onMediaTimeChange) {
+      onMediaTimeChange?.(null);
+      return;
+    }
+
+    let animationFrameId: number | null = null;
+    const updateMediaTime = () => {
+      const video = videoRef.current;
+      onMediaTimeChange?.(
+        video ? getMediaTimeMs(video.currentTime, videoStartSeconds) : null,
+      );
+      animationFrameId = requestAnimationFrame(updateMediaTime);
+    };
+
+    updateMediaTime();
+    return () => {
+      if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
+      onMediaTimeChange?.(null);
+    };
+  }, [onMediaTimeChange, timeline.playing, videoStartSeconds]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -128,6 +168,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
   } = rawProps as unknown as ShortVideoProps & {
     onAutoPlayError?: () => void;
   };
+  const [mediaTimeMs, setMediaTimeMs] = useState<number | null>(null);
   const videoStartFrame = Math.max(
     0,
     Math.round(Number(videoStartSeconds) * Number(fps)),
@@ -184,6 +225,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             videoUrl={videoUrl}
             videoStartSeconds={videoStartSeconds}
             onAutoPlayError={onAutoPlayError}
+            onMediaTimeChange={activeSubtitles ? setMediaTimeMs : undefined}
             fps={Number(fps)}
             objectFit={usesStandardLayout ? "contain" : videoFit || "cover"}
           />
@@ -191,7 +233,9 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
       </VideoEffects>
 
       {/* Layer 2: Animated subtitles */}
-      {activeSubtitles && <Subtitles config={activeSubtitles} />}
+      {activeSubtitles && (
+        <Subtitles config={activeSubtitles} mediaTimeMs={mediaTimeMs} />
+      )}
 
       {/* Layer 3: Hook text overlay */}
       {hook && <HookOverlay config={hook} />}

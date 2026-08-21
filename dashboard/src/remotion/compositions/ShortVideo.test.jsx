@@ -1,8 +1,9 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const remotionVideoPropsMock = vi.hoisted(() => vi.fn());
+const subtitlesPropsMock = vi.hoisted(() => vi.fn());
 const remotionEnvironmentMock = vi.hoisted(() => ({ isRendering: false }));
 const timelineContextMock = vi.hoisted(() => ({
   playing: false,
@@ -32,13 +33,20 @@ vi.mock("@remotion/media", () => ({
   },
 }));
 
-vi.mock("./Subtitles", () => ({ Subtitles: () => null }));
+vi.mock("./Subtitles", () => ({
+  Subtitles: (props) => {
+    subtitlesPropsMock(props);
+    return null;
+  },
+}));
 vi.mock("./HookOverlay", () => ({ HookOverlay: () => null }));
 
 import { ShortVideo } from "./ShortVideo";
+import { getMediaTimeMs } from "./ShortVideo";
 
 describe("ShortVideo media source", () => {
   beforeEach(() => {
+    subtitlesPropsMock.mockClear();
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
   });
@@ -48,7 +56,42 @@ describe("ShortVideo media source", () => {
     timelineContextMock.playing = false;
     timelineContextMock.imperativePlaying.current = false;
     timelineContextMock.audioAndVideoTags.current = [];
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it("converts the playing media clock to composition time", () => {
+    expect(getMediaTimeMs(1043.25, 1042.5)).toBe(750);
+  });
+
+  it("passes the native media clock to live subtitles", () => {
+    const animationFrames = [];
+    vi.stubGlobal("requestAnimationFrame", (callback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    timelineContextMock.playing = true;
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        videoStartSeconds={10}
+        subtitles={{ captions: [] }}
+      />,
+    );
+
+    const video = screen.getByTestId("native-browser-video");
+    Object.defineProperty(video, "currentTime", {
+      configurable: true,
+      value: 10.75,
+      writable: true,
+    });
+    act(() => animationFrames[0]?.());
+
+    expect(subtitlesPropsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ mediaTimeMs: 750 }),
+    );
   });
 
   it("renders the standard layout with a blurred background and contained foreground", () => {

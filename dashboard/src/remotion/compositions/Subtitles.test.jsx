@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getSubtitleFrameRange,
   getSubtitleTimeMs,
+  isSubtitleBlockActiveAt,
   normalizeSubtitleConfig,
 } from "./Subtitles";
 
@@ -26,5 +27,12 @@ describe("subtitle rendering defaults", () => {
       durationFrames: 12,
     });
     expect(getSubtitleTimeMs(10, 0, 30)).toBeCloseTo(333.333, 2);
+  });
+
+  it("checks subtitle block visibility against the live media clock", () => {
+    const block = { startMs: 500, endMs: 1000 };
+
+    expect(isSubtitleBlockActiveAt(block, 750)).toBe(true);
+    expect(isSubtitleBlockActiveAt(block, 1000)).toBe(false);
   });
 });
