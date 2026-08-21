@@ -41,9 +41,20 @@ type webcamRegion struct {
 }
 
 const (
-	gameplayZoomMin = 0.6
-	gameplayZoomMax = 2.0
+	gameplayZoomMin    = 0.6
+	gameplayZoomMax    = 2.0
+	defaultFacecamSize = "medium"
 )
+
+func normalizeFacecamSize(value string) (string, error) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "small", "medium", "large":
+		return value, nil
+	default:
+		return "", fmt.Errorf("invalid facecam_size: %s", value)
+	}
+}
 
 func normalizeWebcamRegion(input *webcamRegionInput) (webcamRegion, error) {
 	if input == nil || input.X == nil || input.Y == nil || input.Width == nil || input.Height == nil {
@@ -568,6 +579,7 @@ func (s *Server) updateWebcamRegion(w http.ResponseWriter, r *http.Request, pare
 
 	var request struct {
 		WebcamRegion *webcamRegionInput `json:"webcam_region"`
+		FacecamSize  *string            `json:"facecam_size"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
@@ -583,6 +595,20 @@ func (s *Server) updateWebcamRegion(w http.ResponseWriter, r *http.Request, pare
 	if len(parent.Result) == 0 || json.Unmarshal(parent.Result, &result) != nil || clipIndex < 0 || clipIndex >= len(result.Clips) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Clip candidate not found"})
 		return
+	}
+	facecamSize := defaultFacecamSize
+	if existingSize, ok := result.Clips[clipIndex]["facecam_size"].(string); ok {
+		if normalizedExistingSize, normalizeErr := normalizeFacecamSize(existingSize); normalizeErr == nil {
+			facecamSize = normalizedExistingSize
+		}
+	}
+	if request.FacecamSize != nil {
+		normalizedFacecamSize, normalizeErr := normalizeFacecamSize(*request.FacecamSize)
+		if normalizeErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": normalizeErr.Error()})
+			return
+		}
+		facecamSize = normalizedFacecamSize
 	}
 	outputDir := parent.OutputDir
 	if strings.TrimSpace(outputDir) == "" {
@@ -619,6 +645,7 @@ func (s *Server) updateWebcamRegion(w http.ResponseWriter, r *http.Request, pare
 	}
 	regionMap := region.asMap()
 	metadataClip["webcam_region"] = regionMap
+	metadataClip["facecam_size"] = facecamSize
 	updatedMetadata, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not encode deferred job metadata"})
@@ -633,6 +660,7 @@ func (s *Server) updateWebcamRegion(w http.ResponseWriter, r *http.Request, pare
 		return
 	}
 	result.Clips[clipIndex]["webcam_region"] = regionMap
+	result.Clips[clipIndex]["facecam_size"] = facecamSize
 	updatedResult, err := json.Marshal(result)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not encode clip result"})
@@ -645,6 +673,7 @@ func (s *Server) updateWebcamRegion(w http.ResponseWriter, r *http.Request, pare
 	writeJSON(w, http.StatusOK, map[string]any{
 		"clip_index":    clipIndex,
 		"webcam_region": regionMap,
+		"facecam_size":  facecamSize,
 	})
 }
 

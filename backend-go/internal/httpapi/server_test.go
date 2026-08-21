@@ -1228,7 +1228,7 @@ func TestDeferredClipWebcamRegionPatchPersistsResultAndMetadata(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPatch,
 		fmt.Sprintf("/api/jobs/%s/clips/0/webcam-region", parent.ID),
-		strings.NewReader(`{"webcam_region":{"x":0.02,"y":0.18,"width":0.23,"height":0.43}}`),
+		strings.NewReader(`{"webcam_region":{"x":0.02,"y":0.18,"width":0.23,"height":0.43},"facecam_size":"large"}`),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	res := httptest.NewRecorder()
@@ -1239,11 +1239,12 @@ func TestDeferredClipWebcamRegionPatchPersistsResultAndMetadata(t *testing.T) {
 	var response struct {
 		ClipIndex    int            `json:"clip_index"`
 		WebcamRegion map[string]any `json:"webcam_region"`
+		FacecamSize  string         `json:"facecam_size"`
 	}
 	if err := json.Unmarshal(res.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode webcam region response: %v", err)
 	}
-	if response.ClipIndex != 0 || response.WebcamRegion["x"] != 0.02 {
+	if response.ClipIndex != 0 || response.WebcamRegion["x"] != 0.02 || response.FacecamSize != "large" {
 		t.Fatalf("unexpected webcam region response: %#v", response)
 	}
 
@@ -1259,6 +1260,9 @@ func TestDeferredClipWebcamRegionPatchPersistsResultAndMetadata(t *testing.T) {
 	}
 	if result.Clips[0]["webcam_region"].(map[string]any)["width"] != 0.23 {
 		t.Fatalf("stored result missing webcam region: %#v", result.Clips)
+	}
+	if result.Clips[0]["facecam_size"] != "large" {
+		t.Fatalf("stored result missing facecam size: %#v", result.Clips)
 	}
 	if _, exists := result.Clips[1]["webcam_region"]; exists {
 		t.Fatalf("patch changed neighboring clip: %#v", result.Clips)
@@ -1277,6 +1281,9 @@ func TestDeferredClipWebcamRegionPatchPersistsResultAndMetadata(t *testing.T) {
 	if document.Shorts[0]["webcam_region"].(map[string]any)["height"] != 0.43 {
 		t.Fatalf("metadata missing webcam region: %#v", document.Shorts)
 	}
+	if document.Shorts[0]["facecam_size"] != "large" {
+		t.Fatalf("metadata missing facecam size: %#v", document.Shorts)
+	}
 	if _, exists := document.Shorts[1]["webcam_region"]; exists {
 		t.Fatalf("metadata patch changed neighboring clip: %#v", document.Shorts)
 	}
@@ -1293,7 +1300,7 @@ func TestDeferredClipWebcamRegionPatchHydratesAndUpdatesS3Metadata(t *testing.T)
 	req := httptest.NewRequest(
 		http.MethodPatch,
 		fmt.Sprintf("/api/jobs/%s/clips/0/webcam-region", parent.ID),
-		strings.NewReader(`{"webcam_region":{"x":0.02,"y":0.18,"width":0.23,"height":0.43}}`),
+		strings.NewReader(`{"webcam_region":{"x":0.02,"y":0.18,"width":0.23,"height":0.43},"facecam_size":"small"}`),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	res := httptest.NewRecorder()
@@ -1304,7 +1311,7 @@ func TestDeferredClipWebcamRegionPatchHydratesAndUpdatesS3Metadata(t *testing.T)
 	if client.putKey != parent.ID+"/master/source_metadata.json" {
 		t.Fatalf("unexpected S3 metadata key: %q", client.putKey)
 	}
-	if !strings.Contains(client.putBody, `"webcam_region"`) {
+	if !strings.Contains(client.putBody, `"webcam_region"`) || !strings.Contains(client.putBody, `"facecam_size": "small"`) {
 		t.Fatalf("updated webcam region was not uploaded to S3: %s", client.putBody)
 	}
 }
@@ -1480,6 +1487,44 @@ func TestDeferredClipWebcamRegionPatchRejectsInvalidCoordinates(t *testing.T) {
 		if res.Code != http.StatusBadRequest {
 			t.Fatalf("expected invalid webcam region to return 400, got %d: %s", res.Code, res.Body.String())
 		}
+	}
+}
+
+func TestDeferredClipWebcamRegionPatchRejectsInvalidFacecamSize(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	outputDir := t.TempDir()
+	parent, jobDir := createDeferredRegionTestJob(t, store, outputDir, `{"clips":[{"layout_format":"streamer_stack"}]}`)
+	if err := os.WriteFile(filepath.Join(jobDir, "source_metadata.json"), []byte(`{"shorts":[{}]}`), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+
+	for _, facecamSize := range []string{"huge", "", "portrait"} {
+		req := httptest.NewRequest(
+			http.MethodPatch,
+			fmt.Sprintf("/api/jobs/%s/clips/0/webcam-region", parent.ID),
+			strings.NewReader(fmt.Sprintf(`{"webcam_region":{"x":0.1,"y":0.1,"width":0.2,"height":0.2},"facecam_size":%q}`, facecamSize)),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		res := httptest.NewRecorder()
+		server.Handler().ServeHTTP(res, req)
+		if res.Code != http.StatusBadRequest {
+			t.Fatalf("expected invalid facecam size %q to return 400, got %d: %s", facecamSize, res.Code, res.Body.String())
+		}
+	}
+
+	updated, ok := store.Get(context.Background(), parent.ID)
+	if !ok {
+		t.Fatal("parent job disappeared")
+	}
+	var result struct {
+		Clips []map[string]any `json:"clips"`
+	}
+	if err := json.Unmarshal(updated.Result, &result); err != nil {
+		t.Fatalf("decode stored result: %v", err)
+	}
+	if _, exists := result.Clips[0]["facecam_size"]; exists {
+		t.Fatalf("invalid facecam size changed the stored clip: %#v", result.Clips)
 	}
 }
 
