@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
+	"github.com/mutonby/openshorts/backend-go/internal/jobs"
 )
 
 func (s *Server) projectRoutes(w http.ResponseWriter, r *http.Request) {
@@ -30,6 +31,12 @@ func (s *Server) projectRoutes(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && len(parts) == 2 && parts[1] == "statuses":
 		s.getProjectStatuses(w, r, jobID)
+	case len(parts) == 2 && parts[1] == "audit":
+		if r.Method != http.MethodGet {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+			return
+		}
+		s.getProjectAudit(w, r, jobID)
 	case r.Method == http.MethodPost && len(parts) == 4 && parts[1] == "clips" && parts[3] == "transcribe":
 		s.transcribeProjectClip(w, r, job, parts[2])
 	case r.Method == http.MethodPatch && len(parts) == 4 && parts[1] == "clips" && parts[3] == "status":
@@ -39,6 +46,69 @@ func (s *Server) projectRoutes(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 	}
+}
+
+func (s *Server) getProjectAudit(w http.ResponseWriter, r *http.Request, jobID string) {
+	events, err := s.store.ListAuditEvents(r.Context(), jobID)
+	if err != nil {
+		if errors.Is(err, jobs.ErrJobNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": err.Error()})
+		return
+	}
+
+	allowlist := s.config.AuditBodyHostAllowlist
+	if allowlist == nil {
+		allowlist = []string{}
+	}
+	eventPayloads := make([]map[string]any, 0, len(events))
+	for _, event := range events {
+		eventPayloads = append(eventPayloads, map[string]any{
+			"id":                    event.ID,
+			"job_id":                event.JobID,
+			"sequence":              event.Sequence,
+			"category":              event.Category,
+			"name":                  event.Name,
+			"status":                event.Status,
+			"provider":              event.Provider,
+			"host":                  event.Host,
+			"path":                  event.Path,
+			"method":                event.Method,
+			"http_status":           event.HTTPStatus,
+			"request_bytes":         event.RequestBytes,
+			"response_bytes":        event.ResponseBytes,
+			"started_at":            formatAuditTime(event.StartedAt),
+			"finished_at":           formatAuditTime(event.FinishedAt),
+			"duration_ms":           event.DurationMS,
+			"detail":                event.Detail,
+			"error":                 event.Error,
+			"request_body":          event.RequestBody,
+			"response_body":         event.ResponseBody,
+			"request_content_type":  event.RequestContentType,
+			"response_content_type": event.ResponseContentType,
+			"capture_mode":          event.CaptureMode,
+			"metadata":              event.Metadata,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"job_id": jobID,
+		"policy": map[string]any{
+			"body_allowlist":       allowlist,
+			"non_allowlisted_mode": "metadata_only",
+			"binary_mode":          "metadata_only",
+			"body_truncated":       false,
+		},
+		"events": eventPayloads,
+	})
+}
+
+func formatAuditTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.Format(time.RFC3339Nano)
 }
 
 func (s *Server) projectHistory(w http.ResponseWriter, r *http.Request) {

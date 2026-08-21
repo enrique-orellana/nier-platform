@@ -95,3 +95,79 @@ func TestDeleteProjectRemovesItFromProjectHistory(t *testing.T) {
 		t.Fatalf("deleted project still appears in history: %s", historyResponse.Body.String())
 	}
 }
+
+func TestProjectAuditReturnsOrderedEventsAndEffectivePolicy(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, err := store.StartAuditEvent(context.Background(), job.ID, domain.StartAuditEventInput{
+		Category:    "external_request",
+		Name:        "ai.analysis",
+		Provider:    "openrouter",
+		Host:        "openrouter.ai",
+		Method:      "POST",
+		RequestBody: `{"prompt":"hello"}`,
+		CaptureMode: "full_redacted",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.FinishAuditEvent(context.Background(), job.ID, started.ID, domain.FinishAuditEventInput{
+		Status:       domain.AuditEventStatusCompleted,
+		HTTPStatus:   200,
+		ResponseBody: `{"result":"ok"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServerWithStore(config.Config{AuditBodyHostAllowlist: []string{"chatgpt.com", "openrouter.ai"}}, store)
+
+	request := httptest.NewRequest(http.MethodGet, "/api/projects/"+job.ID+"/audit", nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected audit request to succeed, got %d: %s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		JobID  string           `json:"job_id"`
+		Policy map[string]any   `json:"policy"`
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.JobID != job.ID || len(payload.Events) != 1 {
+		t.Fatalf("unexpected audit payload: %#v", payload)
+	}
+	if payload.Events[0]["sequence"] != float64(1) || payload.Events[0]["request_body"] != `{"prompt":"hello"}` {
+		t.Fatalf("unexpected event payload: %#v", payload.Events[0])
+	}
+	allowlisted, ok := payload.Policy["body_allowlist"].([]any)
+	if !ok || len(allowlisted) != 2 {
+		t.Fatalf("unexpected audit policy: %#v", payload.Policy)
+	}
+}
+
+func TestProjectAuditRejectsUnknownProjectsAndNonGetMethods(t *testing.T) {
+	server := NewServer(config.Config{})
+	missingRequest := httptest.NewRequest(http.MethodGet, "/api/projects/missing/audit", nil)
+	missingResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(missingResponse, missingRequest)
+	if missingResponse.Code != http.StatusNotFound {
+		t.Fatalf("expected missing project to return 404, got %d", missingResponse.Code)
+	}
+
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server = NewServerWithStore(config.Config{}, store)
+	postRequest := httptest.NewRequest(http.MethodPost, "/api/projects/"+job.ID+"/audit", nil)
+	postResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(postResponse, postRequest)
+	if postResponse.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected non-GET audit request to return 405, got %d", postResponse.Code)
+	}
+}
