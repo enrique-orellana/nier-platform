@@ -17,6 +17,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from audit_capture import get_audit_emitter
+
 
 def parse_request(line: str) -> dict[str, Any]:
     try:
@@ -192,6 +194,20 @@ def _emit(event: Mapping[str, Any]) -> None:
     sys.stdout.flush()
 
 
+def forward_child_output_line(request_id: str, line: str, emit=_emit) -> bool:
+    """Forward child audit protocol records and wrap all other output as logs."""
+    text = str(line).rstrip("\r\n")
+    try:
+        event = json.loads(text)
+    except json.JSONDecodeError:
+        event = None
+    if isinstance(event, dict) and event.get("type") == "audit" and isinstance(event.get("audit"), dict):
+        emit({"id": request_id, **event})
+        return True
+    emit({"id": request_id, "type": "log", "message": text})
+    return False
+
+
 def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any] | None]:
     output_dir = str(request.get("output_dir") or "")
     artifact_job_id = str(request.get("parent_job_id") or request["id"])
@@ -207,10 +223,12 @@ def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any
             preserve_paths.append(str(candidate))
         except ValueError:
             pass
-    if operation == "clip_render":
-        from s3_uploader import hydrate_job_artifacts
+    emitter = get_audit_emitter()
+    with emitter.stage("source.download", metadata={"operation": operation}):
+        if operation == "clip_render":
+            from s3_uploader import hydrate_job_artifacts
 
-        hydrate_job_artifacts(output_dir, artifact_job_id)
+            hydrate_job_artifacts(output_dir, artifact_job_id)
     command = (
         build_clip_render_command(request)
         if operation == "clip_render"
@@ -228,7 +246,7 @@ def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any
     )
     assert process.stdout is not None
     for line in process.stdout:
-        _emit({"id": request["id"], "type": "log", "message": line.rstrip("\r\n")})
+        forward_child_output_line(str(request["id"]), line)
     exit_code = process.wait()
     if exit_code != 0:
         return exit_code, None
@@ -242,19 +260,21 @@ def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any
         clip_filename = clip.get("video_filename") or f"source_clip_{clip_index + 1}.mp4"
         include_paths = {clip_filename}
         clip_id = str(request["id"])
-    uploaded = upload_generation_artifacts(
-        output_dir,
-        artifact_job_id,
-        excluded_paths=excluded_paths or None,
-        include_paths=include_paths,
-        clip_id=clip_id,
-    )
-    if uploaded:
-        cleanup_uploaded_clip_files(
+    with emitter.stage("artifact.upload", metadata={"job_id": artifact_job_id}):
+        uploaded = upload_generation_artifacts(
             output_dir,
             artifact_job_id,
-            preserve_paths=preserve_paths or None,
+            excluded_paths=excluded_paths or None,
+            include_paths=include_paths,
+            clip_id=clip_id,
         )
+    if uploaded:
+        with emitter.stage("scratch.cleanup", metadata={"job_id": artifact_job_id}):
+            cleanup_uploaded_clip_files(
+                output_dir,
+                artifact_job_id,
+                preserve_paths=preserve_paths or None,
+            )
     return exit_code, result
 
 

@@ -10,6 +10,7 @@ from threading import Lock
 
 from botocore.exceptions import ClientError
 
+from audit_capture import get_audit_emitter
 from s3_uploader import get_s3_client, get_s3_download_config
 
 
@@ -120,13 +121,22 @@ def download_source_object(
     destination_path = Path(destination)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     partial_path = destination_path.with_name(f"{destination_path.name}.part")
+    endpoint = os.environ.get("AWS_S3_ENDPOINT_URL", "").strip() or "https://s3.amazonaws.com"
+    audit = get_audit_emitter()
+    audit_event_id = audit.start_request(
+        name="source.download",
+        url=f"{endpoint.rstrip('/')}/{validated_bucket}/{validated_key}",
+        method="GET",
+        binary=True,
+        metadata={"bucket": validated_bucket, "key": validated_key},
+    )
+    written = 0
     try:
         response = client.head_object(Bucket=validated_bucket, Key=validated_key)
         content_length = response.get("ContentLength")
         if content_length is not None and int(content_length) > max_bytes:
             raise ValueError("Source object exceeds the configured file size limit")
 
-        written = 0
         progress_lock = Lock()
 
         def on_progress(bytes_amount):
@@ -150,12 +160,15 @@ def download_source_object(
         )
 
         os.replace(partial_path, destination_path)
+        audit.finish_request(audit_event_id, status_code=200, response_bytes=written, binary=True)
     except ClientError as error:
+        audit.finish_request(audit_event_id, status="failed", response_bytes=written, error=str(error), binary=True)
         code = str((error.response or {}).get("Error", {}).get("Code", ""))
         if code in {"404", "NoSuchKey", "NoSuchObject", "NotFound"}:
             raise FileNotFoundError(f"MinIO source object not found: {validated_key}") from error
         raise RuntimeError("MinIO source object could not be downloaded") from error
     except Exception:
+        audit.finish_request(audit_event_id, status="failed", response_bytes=written, error="source download failed", binary=True)
         if partial_path.exists():
             partial_path.unlink()
         raise

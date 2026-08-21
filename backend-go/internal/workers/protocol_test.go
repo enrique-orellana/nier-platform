@@ -174,7 +174,8 @@ func TestPythonWorkerAdapterSendsNonURLSourcesAndContext(t *testing.T) {
 func TestPythonWorkerAdapterDownloadsSourceObjectsBeforeStartingPython(t *testing.T) {
 	runner := &recordingProtocolRunner{}
 	downloader := &recordingSourceDownloader{}
-	adapter := PythonWorkerAdapter{Runner: runner, SourceDownloader: downloader}
+	sink := &recordingAuditSink{}
+	adapter := PythonWorkerAdapter{Runner: runner, SourceDownloader: downloader, AuditSink: sink}
 	job := domain.Job{ID: "job-source", Metadata: map[string]any{"source_object": map[string]any{"bucket": "youtube-downloads", "key": "folder/source.mp4"}}}
 	if err := adapter.Run(context.Background(), job, "output/job-source", nil); err != nil {
 		t.Fatal(err)
@@ -184,6 +185,9 @@ func TestPythonWorkerAdapterDownloadsSourceObjectsBeforeStartingPython(t *testin
 	}
 	if runner.request["source_path"] != filepath.Join("output/job-source", "source.mp4") || runner.request["source_object"] != nil {
 		t.Fatalf("unexpected worker request: %#v", runner.request)
+	}
+	if len(sink.started) != 1 || sink.started[0].Name != "source.download" || len(sink.finished) != 1 {
+		t.Fatalf("source download was not audited: started=%#v finished=%#v", sink.started, sink.finished)
 	}
 }
 

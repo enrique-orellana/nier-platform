@@ -1,5 +1,6 @@
 import pytest
 
+from audit_capture import AuditEmitter
 import ai_client
 
 
@@ -272,3 +273,48 @@ def test_codex_sse_parser_enforces_absolute_deadline(monkeypatch):
             ['data: {"type":"response.output_text.delta","delta":"ok"}'],
             deadline=9.0,
         )
+
+
+class FakeOpenRouterResponse:
+    status_code = 200
+    text = '{"choices":[{"message":{"content":"ok"}}]}'
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+
+class FakeOpenRouterClient:
+    def __init__(self, *args, **kwargs):
+        self.response = FakeOpenRouterResponse()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def post(self, *args, **kwargs):
+        return self.response
+
+
+def test_openrouter_request_and_response_bodies_are_audited(monkeypatch):
+    import audit_capture
+
+    events = []
+    monkeypatch.setattr(audit_capture, "_emitter", AuditEmitter(["openrouter.ai"], emit=events.append))
+    monkeypatch.setattr(ai_client.httpx, "Client", FakeOpenRouterClient)
+
+    result = ai_client.chat_completion(
+        ai_client.AIConfig(provider="openrouter", api_key="secret-key"),
+        "Return JSON",
+        json_mode=True,
+    )
+
+    assert result == "ok"
+    assert [event["audit"]["phase"] for event in events] == ["start", "finish"]
+    assert events[0]["audit"]["host"] == "openrouter.ai"
+    assert events[0]["audit"]["request_body"]
+    assert events[1]["audit"]["response_body"] == '{"choices":[{"message":{"content":"ok"}}]}'

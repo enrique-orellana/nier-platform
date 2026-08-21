@@ -12,6 +12,7 @@ from botocore.config import Config
 from boto3.s3.transfer import TransferConfig
 import logging
 from video_output_validation import validate_clip_output
+from audit_capture import get_audit_emitter
 
 # Configure silent logging for boto3 and botocore
 logging.getLogger('boto3').setLevel(logging.CRITICAL)
@@ -68,8 +69,18 @@ def upload_file_to_s3(file_path, bucket_name, s3_key):
     secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
     region = os.environ.get('AWS_REGION', 'eu-west-3')
     endpoint_url = _get_s3_endpoint_url()
+    audit_url = endpoint_url or f"https://s3.{region}.amazonaws.com/{bucket_name}/{s3_key}"
+    audit = get_audit_emitter()
+    audit_event_id = audit.start_request(
+        name="artifact.upload",
+        url=audit_url,
+        method="PUT",
+        binary=True,
+        metadata={"bucket": bucket_name, "key": s3_key},
+    )
 
     if not access_key or not secret_key:
+        audit.finish_request(audit_event_id, status="failed", error="S3 credentials are not configured", binary=True)
         return False
 
     s3_client = _make_s3_client(access_key, secret_key, region, endpoint_url)
@@ -94,10 +105,18 @@ def upload_file_to_s3(file_path, bucket_name, s3_key):
             s3_key,
             ExtraArgs=extra_args,
         )
+        audit.finish_request(
+            audit_event_id,
+            status_code=200,
+            response_bytes=os.path.getsize(file_path) if os.path.exists(file_path) else 0,
+            binary=True,
+        )
         return True
-    except ClientError:
+    except ClientError as error:
+        audit.finish_request(audit_event_id, status="failed", error=str(error), binary=True)
         return False
-    except Exception:
+    except Exception as error:
+        audit.finish_request(audit_event_id, status="failed", error=str(error), binary=True)
         return False
 
 

@@ -314,6 +314,32 @@ def _build_bearer_headers(api_key: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {api_key}"}
 
 
+def _audit_request_start(*, name: str, url: str, method: str, body: Any, provider: str, binary: bool = False):
+    from audit_capture import get_audit_emitter
+
+    emitter = get_audit_emitter()
+    event_id = emitter.start_request(
+        name=name,
+        url=url,
+        method=method,
+        request_body=body,
+        provider=provider,
+        binary=binary,
+    )
+    return emitter, event_id
+
+
+def _audit_request_finish(emitter, event_id: str, *, response_body: Any = None, status_code: int = 0, error: str = "", binary: bool = False):
+    emitter.finish_request(
+        event_id,
+        response_body=response_body,
+        status_code=status_code,
+        status="failed" if error or status_code >= 400 else "completed",
+        error=error,
+        binary=binary,
+    )
+
+
 def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: float = 300.0) -> dict[str, Any]:
     """Transcribe an extracted audio chunk through OpenRouter's audio endpoint."""
     if not config.api_key:
@@ -339,6 +365,14 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
     endpoint = f"{transcription_base_url}/audio/transcriptions"
     response_format = "verbose_json"
     for attempt in range(OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS):
+        audit_emitter, audit_event_id = _audit_request_start(
+            name="transcription.request",
+            url=endpoint,
+            method="POST",
+            body=payload,
+            provider="openrouter",
+            binary=True,
+        )
         try:
             with httpx.Client(timeout=timeout) as client:
                 response = client.post(
@@ -346,6 +380,13 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
                     headers={**_build_bearer_headers(config.api_key), "Content-Type": "application/json"},
                     json=payload,
                 )
+            _audit_request_finish(
+                audit_emitter,
+                audit_event_id,
+                response_body=getattr(response, "text", ""),
+                status_code=int(getattr(response, "status_code", 0) or 0),
+                binary=True,
+            )
             detail = str(getattr(response, "text", "") or "").strip()
             if (
                 getattr(response, "status_code", 200) == 400
@@ -359,6 +400,7 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
                 continue
             break
         except httpx.RequestError as exc:
+            _audit_request_finish(audit_emitter, audit_event_id, error=str(exc), binary=True)
             if attempt == OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS - 1:
                 raise RuntimeError(
                     f"could not connect to OpenRouter transcription endpoint at {transcription_base_url} "
@@ -454,10 +496,34 @@ def _normalize_lmstudio_model(model: Mapping[str, Any]) -> Optional[dict[str, An
 
 def discover_lmstudio_models(base_url: str, api_key: str = "", timeout: float = 10.0) -> dict[str, Any]:
     origin = AIConfig(provider="lmstudio", base_url=base_url).resolved_base_url()
-    with httpx.Client(timeout=timeout) as client:
-        response = client.get(f"{origin}/api/v1/models", headers=_build_bearer_headers(api_key))
-    response.raise_for_status()
-    payload = response.json()
+    url = f"{origin}/api/v1/models"
+    audit_emitter, audit_event_id = _audit_request_start(
+        name="ai.model_discovery",
+        url=url,
+        method="GET",
+        body=None,
+        provider="lmstudio",
+    )
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.get(url, headers=_build_bearer_headers(api_key))
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as exc:
+        _audit_request_finish(
+            audit_emitter,
+            audit_event_id,
+            response_body=getattr(locals().get("response"), "text", ""),
+            status_code=int(getattr(locals().get("response"), "status_code", 0) or 0),
+            error=str(exc),
+        )
+        raise
+    _audit_request_finish(
+        audit_emitter,
+        audit_event_id,
+        response_body=getattr(response, "text", ""),
+        status_code=int(getattr(response, "status_code", 0) or 0),
+    )
 
     models = []
     for raw_model in payload.get("models", []):
@@ -589,19 +655,53 @@ def discover_codex_models(timeout: float = 10.0) -> dict[str, Any]:
     for attempt in range(2):
         access_token = get_access_token()
         account_id = get_codex_account_id()
-        with httpx.Client(timeout=timeout) as client:
-            response = client.get(
-                CODEX_MODELS_URL,
-                headers=_codex_request_headers(access_token, account_id),
-                params={"client_version": _codex_client_version()},
-            )
+        audit_emitter, audit_event_id = _audit_request_start(
+            name="ai.model_discovery",
+            url=CODEX_MODELS_URL,
+            method="GET",
+            body={"client_version": _codex_client_version()},
+            provider="openai-codex",
+        )
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                response = client.get(
+                    CODEX_MODELS_URL,
+                    headers=_codex_request_headers(access_token, account_id),
+                    params={"client_version": _codex_client_version()},
+                )
+        except Exception as exc:
+            _audit_request_finish(audit_emitter, audit_event_id, error=str(exc))
+            raise
         if response.status_code in {401, 403}:
+            _audit_request_finish(
+                audit_emitter,
+                audit_event_id,
+                response_body=getattr(response, "text", ""),
+                status_code=response.status_code,
+                error="ChatGPT authorization was rejected",
+            )
             if attempt:
                 raise CodexReauthRequired("ChatGPT authorization was rejected. Reconnect ChatGPT.")
             refresh_credentials(default_codex_store())
             continue
-        response.raise_for_status()
-        payload = response.json()
+        try:
+            response.raise_for_status()
+            payload = response.json()
+        except Exception as exc:
+            _audit_request_finish(
+                audit_emitter,
+                audit_event_id,
+                response_body=getattr(response, "text", ""),
+                status_code=int(getattr(response, "status_code", 0) or 0),
+                error=str(exc),
+            )
+            raise
+        _audit_request_finish(
+            audit_emitter,
+            audit_event_id,
+            response_body=getattr(response, "text", ""),
+            status_code=int(getattr(response, "status_code", 0) or 0),
+        )
         raw_models = payload.get("models") if isinstance(payload, dict) else payload
         if isinstance(raw_models, dict):
             raw_models = raw_models.get("data") or raw_models.get("models") or []
@@ -696,12 +796,34 @@ def _gemini_chat(
     if json_mode:
         generate_config_kwargs["response_mime_type"] = "application/json"
 
-    response = client.models.generate_content(
-        model=model or config.text_model,
-        contents=content_items,
-        config=types.GenerateContentConfig(**generate_config_kwargs) if generate_config_kwargs else None,
+    resolved_model = model or config.text_model
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{resolved_model}:generateContent"
+    audit_emitter, audit_event_id = _audit_request_start(
+        name="ai.analysis",
+        url=endpoint,
+        method="POST",
+        body={"model": resolved_model, "contents": content_items, "config": generate_config_kwargs},
+        provider="gemini",
+        binary=False,
     )
-    return response.text or ""
+    try:
+        response = client.models.generate_content(
+            model=resolved_model,
+            contents=content_items,
+            config=types.GenerateContentConfig(**generate_config_kwargs) if generate_config_kwargs else None,
+        )
+        text = response.text or ""
+    except Exception as exc:
+        _audit_request_finish(audit_emitter, audit_event_id, error=str(exc), binary=False)
+        raise
+    _audit_request_finish(
+        audit_emitter,
+        audit_event_id,
+        response_body=text,
+        status_code=200,
+        binary=False,
+    )
+    return text
 
 
 def _build_openai_message(prompt: str, images: Optional[Sequence[Any]] = None) -> dict[str, Any]:
@@ -814,6 +936,14 @@ def _codex_chat(
             "Content-Type": "application/json",
             "Accept": "text/event-stream",
         }
+        audit_emitter, audit_event_id = _audit_request_start(
+            name="ai.analysis",
+            url="https://chatgpt.com/backend-api/codex/responses",
+            method="POST",
+            body=payload,
+            provider="openai-codex",
+            binary=bool(images),
+        )
 
         try:
             with httpx.Client(timeout=remaining) as client:
@@ -824,24 +954,60 @@ def _codex_chat(
                     json=payload,
                 ) as response:
                     if response.status_code in {401, 403}:
+                        _audit_request_finish(
+                            audit_emitter,
+                            audit_event_id,
+                            response_body=getattr(response, "text", ""),
+                            status_code=response.status_code,
+                            error="ChatGPT authorization was rejected",
+                            binary=bool(images),
+                        )
                         if auth_refreshed:
                             raise CodexReauthRequired("ChatGPT authorization was rejected. Reconnect ChatGPT.")
                         refresh_credentials(default_codex_store())
                         auth_refreshed = True
                         continue
                     response.raise_for_status()
-                    text = _extract_codex_sse_text(response.iter_lines(), deadline=deadline)
+                    captured_lines = []
+
+                    def iter_lines_with_capture():
+                        for line in response.iter_lines():
+                            captured_lines.append(line)
+                            yield line
+
+                    text = _extract_codex_sse_text(iter_lines_with_capture(), deadline=deadline)
+                    _audit_request_finish(
+                        audit_emitter,
+                        audit_event_id,
+                        response_body="\n".join(str(line) for line in captured_lines),
+                        status_code=response.status_code,
+                        binary=bool(images),
+                    )
             break
         except TimeoutError as exc:
+            _audit_request_finish(audit_emitter, audit_event_id, error=str(exc), binary=bool(images))
             raise RuntimeError(f"Codex streaming request timed out after {timeout:.0f}s") from exc
         except httpx.TimeoutException as exc:
+            _audit_request_finish(audit_emitter, audit_event_id, error=str(exc), binary=bool(images))
             raise RuntimeError(f"Codex streaming request timed out after {timeout:.0f}s") from exc
         except httpx.TransportError as exc:
+            _audit_request_finish(audit_emitter, audit_event_id, error=str(exc), binary=bool(images))
             if attempt == CODEX_STREAM_MAX_ATTEMPTS - 1:
                 raise RuntimeError(
                     f"Codex streaming request failed after {CODEX_STREAM_MAX_ATTEMPTS} attempts: {exc}"
                 ) from exc
             time.sleep(min(CODEX_STREAM_RETRY_BACKOFF_SECONDS * (2 ** attempt), max(0.0, deadline - time.monotonic())))
+        except httpx.HTTPStatusError as exc:
+            response = exc.response
+            _audit_request_finish(
+                audit_emitter,
+                audit_event_id,
+                response_body=getattr(response, "text", ""),
+                status_code=int(getattr(response, "status_code", 0) or 0),
+                error=str(exc),
+                binary=bool(images),
+            )
+            raise
 
     if not text:
         raise RuntimeError("Codex returned no text output.")
@@ -877,14 +1043,40 @@ def _lmstudio_chat(
     }
     # LM Studio requires 'json_schema' or 'text' for response_format.type.
     # Since we don't have a JSON schema, rely on system prompts and extract_json_text.
-    with httpx.Client(timeout=timeout) as client:
-        response = client.post(
-            url,
-            headers=_build_bearer_headers(config.api_key),
-            json=payload,
+    audit_emitter, audit_event_id = _audit_request_start(
+        name="ai.analysis",
+        url=url,
+        method="POST",
+        body=payload,
+        provider="lmstudio",
+        binary=bool(images),
+    )
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(
+                url,
+                headers=_build_bearer_headers(config.api_key),
+                json=payload,
+            )
+        response.raise_for_status()
+        data = response.json()
+    except Exception as exc:
+        _audit_request_finish(
+            audit_emitter,
+            audit_event_id,
+            response_body=getattr(locals().get("response"), "text", ""),
+            status_code=int(getattr(locals().get("response"), "status_code", 0) or 0),
+            error=str(exc),
+            binary=bool(images),
         )
-    response.raise_for_status()
-    data = response.json()
+        raise
+    _audit_request_finish(
+        audit_emitter,
+        audit_event_id,
+        response_body=getattr(response, "text", ""),
+        status_code=int(getattr(response, "status_code", 0) or 0),
+        binary=bool(images),
+    )
     return ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
 
 
@@ -917,14 +1109,40 @@ def _openrouter_chat(
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
 
-    with httpx.Client(timeout=timeout) as client:
-        response = client.post(
-            url,
-            headers=_build_bearer_headers(config.api_key),
-            json=payload,
+    audit_emitter, audit_event_id = _audit_request_start(
+        name="ai.analysis",
+        url=url,
+        method="POST",
+        body=payload,
+        provider="openrouter",
+        binary=bool(images),
+    )
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(
+                url,
+                headers=_build_bearer_headers(config.api_key),
+                json=payload,
+            )
+        response.raise_for_status()
+        data = response.json()
+    except Exception as exc:
+        _audit_request_finish(
+            audit_emitter,
+            audit_event_id,
+            response_body=getattr(locals().get("response"), "text", ""),
+            status_code=int(getattr(locals().get("response"), "status_code", 0) or 0),
+            error=str(exc),
+            binary=bool(images),
         )
-    response.raise_for_status()
-    data = response.json()
+        raise
+    _audit_request_finish(
+        audit_emitter,
+        audit_event_id,
+        response_body=getattr(response, "text", ""),
+        status_code=int(getattr(response, "status_code", 0) or 0),
+        binary=bool(images),
+    )
     return ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
 
 

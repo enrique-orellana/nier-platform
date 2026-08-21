@@ -10,6 +10,7 @@ import os
 import shutil
 import numpy as np
 import httpx
+from audit_capture import get_audit_emitter
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit, urlunsplit
 
@@ -1077,15 +1078,24 @@ def download_direct_video(url: str, output_dir: str = ".") -> tuple[str, str]:
     os.makedirs(output_dir, exist_ok=True)
     destination_path = os.path.join(output_dir, safe_name)
     partial_path = f"{destination_path}.part"
+    audit = get_audit_emitter()
+    audit_event_id = audit.start_request(
+        name="source.download",
+        url=resolved_url,
+        method="GET",
+        binary=True,
+    )
+    response_status = 0
+    written_bytes = 0
 
     try:
         with httpx.stream("GET", resolved_url, follow_redirects=True, timeout=300.0) as response:
+            response_status = int(getattr(response, "status_code", 0) or 0)
             response.raise_for_status()
             content_length = response.headers.get("content-length")
             if content_length and int(content_length) > DIRECT_VIDEO_MAX_BYTES:
                 raise ValueError("Direct video URL exceeds the configured file size limit")
 
-            written_bytes = 0
             with open(partial_path, "wb") as handle:
                 for chunk in response.iter_bytes(chunk_size=1024 * 1024):
                     if not chunk:
@@ -1096,10 +1106,25 @@ def download_direct_video(url: str, output_dir: str = ".") -> tuple[str, str]:
                     handle.write(chunk)
 
         os.replace(partial_path, destination_path)
-    except Exception:
+    except Exception as error:
+        audit.finish_request(
+            audit_event_id,
+            status="failed",
+            status_code=response_status,
+            response_bytes=written_bytes,
+            error=str(error),
+            binary=True,
+        )
         if os.path.exists(partial_path):
             os.remove(partial_path)
         raise
+
+    audit.finish_request(
+        audit_event_id,
+        status_code=response_status,
+        response_bytes=written_bytes,
+        binary=True,
+    )
 
     return destination_path, title
 
@@ -2543,42 +2568,46 @@ if __name__ == '__main__':
         # The parent metadata is the source of truth for the selected clip;
         # this path intentionally performs no discovery or work for siblings.
         processing_video = prepare_opencv_video(manifest_source_path)
-        render_deferred_clip(
-            input_video=processing_video,
-            output_dir=output_dir,
-            clip_index=args.render_clip,
-            metrics=job_metrics,
-        )
+        with get_audit_emitter().stage("clip.render", metadata={"clip_index": args.render_clip}):
+            render_deferred_clip(
+                input_video=processing_video,
+                output_dir=output_dir,
+                clip_index=args.render_clip,
+                metrics=job_metrics,
+            )
     elif args.skip_analysis:
         print("⏩ Skipping analysis, processing entire video...")
         output_file = args.output if args.output else os.path.join(output_dir, f"{video_title}_vertical.mp4")
-        process_video_to_vertical(
-            processing_video,
-            output_file,
-            source_analysis=source_analysis,
-            source_media=source_media,
-            metrics=job_metrics,
-            layout_format=args.layout_format,
-            facecam_size=args.facecam_size,
-        )
+        with get_audit_emitter().stage("clip.render"):
+            process_video_to_vertical(
+                processing_video,
+                output_file,
+                source_analysis=source_analysis,
+                source_media=source_media,
+                metrics=job_metrics,
+                layout_format=args.layout_format,
+                facecam_size=args.facecam_size,
+            )
     else:
         # 3. Transcribe
         duration = float(source_media.duration_seconds)
         if duration <= 0:
             duration = source_analysis.total_frames / source_analysis.source_fps
         with job_metrics.timed("transcription"):
-            transcript = transcribe_video(processing_video, duration_seconds=duration)
+            with get_audit_emitter().stage("transcription.request"):
+                transcript = transcribe_video(processing_video, duration_seconds=duration)
 
         source_context_record = prepare_source_context(args.source_url, transcript)
         
         # 4. Gemini Analysis
         with job_metrics.timed("ai_planning"):
-            clips_data = get_viral_clips(
-                transcript,
-                duration,
-                target_clips=target_clips,
-                source_context=source_context_record.get("source_context"),
-            )
+            with get_audit_emitter().stage("ai.analysis"):
+                clips_data = get_viral_clips(
+                    transcript,
+                    duration,
+                    target_clips=target_clips,
+                    source_context=source_context_record.get("source_context"),
+                )
         
         if not clips_data or 'shorts' not in clips_data:
             print("❌ Failed to identify clips. Converting whole video as fallback.")
@@ -2618,20 +2647,21 @@ if __name__ == '__main__':
                 with open(metadata_file, 'w') as f:
                     json.dump(clips_data, f, indent=2)
                 print(f"   Saved metadata to {metadata_file}")
-                clips_data["shorts"] = render_clip_plan(
-                    input_video=processing_video,
-                    output_dir=output_dir,
-                    video_title=video_title,
-                    clips=clips_data["shorts"],
-                    source_analysis=source_analysis,
-                    transcript=transcript,
-                    source_asset=source_asset,
-                    source_media=source_media,
-                    source_object=source_object,
-                    metrics=job_metrics,
-                    layout_format=args.layout_format,
-                    facecam_size=args.facecam_size,
-                )
+                with get_audit_emitter().stage("clip.render"):
+                    clips_data["shorts"] = render_clip_plan(
+                        input_video=processing_video,
+                        output_dir=output_dir,
+                        video_title=video_title,
+                        clips=clips_data["shorts"],
+                        source_analysis=source_analysis,
+                        transcript=transcript,
+                        source_asset=source_asset,
+                        source_media=source_media,
+                        source_object=source_object,
+                        metrics=job_metrics,
+                        layout_format=args.layout_format,
+                        facecam_size=args.facecam_size,
+                    )
                 with open(metadata_file, 'w', encoding='utf-8') as f:
                     json.dump(clips_data, f, indent=2)
 

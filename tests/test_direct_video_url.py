@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import main
+from audit_capture import AuditEmitter
 
 
 class DirectVideoUrlTests(unittest.TestCase):
@@ -30,6 +31,23 @@ class DirectVideoUrlTests(unittest.TestCase):
 
             self.assertEqual(title, "source-video")
             self.assertEqual(Path(path).read_bytes(), b"hello")
+
+    def test_direct_download_emits_binary_source_audit_events(self):
+        response = Mock(status_code=200, headers={"content-length": "5"}, content=b"hello")
+        response.iter_bytes.return_value = iter([b"hello"])
+        response.raise_for_status.return_value = None
+        events = []
+        emitter = AuditEmitter(["minio:9000"], emit=events.append)
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(main.httpx, "stream") as stream, patch.object(
+            main, "get_audit_emitter", return_value=emitter
+        ):
+            stream.return_value.__enter__.return_value = response
+            main.download_direct_video("http://minio:9000/media/source-video.mp4", directory)
+
+        assert [event["audit"]["phase"] for event in events] == ["start", "finish"]
+        assert events[0]["audit"]["name"] == "source.download"
+        assert events[1]["audit"]["response_body"] == ""
 
     def test_direct_download_rejects_response_over_max_size(self):
         response = Mock(status_code=200, headers={"content-length": str(main.DIRECT_VIDEO_MAX_BYTES + 1)})

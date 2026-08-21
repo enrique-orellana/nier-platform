@@ -246,9 +246,12 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 			if maxBytes <= 0 {
 				maxBytes = 16 * 1024 * 1024 * 1024
 			}
+			auditID := a.startExternalAudit(ctx, job.ID, "source.download", map[string]any{"bucket": bucket, "key": key})
 			if err := a.SourceDownloader.DownloadSourceObject(ctx, bucket, key, destination, maxBytes); err != nil {
+				a.finishExternalAudit(ctx, job.ID, auditID, domain.AuditEventStatusFailed, err.Error())
 				return nil, err
 			}
+			a.finishExternalAudit(ctx, job.ID, auditID, domain.AuditEventStatusCompleted, "")
 			request["source_path"] = destination
 		}
 	} else if sourceObject, ok := job.Metadata["source_object"].(map[string]any); ok && hasSourcePath {
@@ -263,8 +266,12 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 			restoredFromMaster := false
 			masterDestination := filepath.Join(outputDir, "source.mp4")
 			if operation == "clip_render" && a.ArtifactDownloader != nil && job.ParentJobID != "" {
+				auditID := a.startExternalAudit(ctx, job.ID, "artifact.download", map[string]any{"parent_job_id": job.ParentJobID})
 				if err := a.ArtifactDownloader.DownloadJobSourceArtifact(ctx, job.ParentJobID, masterDestination, maxBytes); err == nil {
+					a.finishExternalAudit(ctx, job.ID, auditID, domain.AuditEventStatusCompleted, "")
 					restoredFromMaster = true
+				} else {
+					a.finishExternalAudit(ctx, job.ID, auditID, domain.AuditEventStatusFailed, err.Error())
 				}
 			}
 			if restoredFromMaster {
@@ -272,9 +279,13 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 			} else if a.SourceDownloader == nil {
 				delete(request, "source_path")
 				request["source_object"] = sourceObject
-			} else if err := a.SourceDownloader.DownloadSourceObject(ctx, bucket, key, destination, maxBytes); err != nil {
-				return nil, err
 			} else {
+				auditID := a.startExternalAudit(ctx, job.ID, "source.download", map[string]any{"bucket": bucket, "key": key})
+				if err := a.SourceDownloader.DownloadSourceObject(ctx, bucket, key, destination, maxBytes); err != nil {
+					a.finishExternalAudit(ctx, job.ID, auditID, domain.AuditEventStatusFailed, err.Error())
+					return nil, err
+				}
+				a.finishExternalAudit(ctx, job.ID, auditID, domain.AuditEventStatusCompleted, "")
 				request["source_path"] = destination
 			}
 		}
@@ -287,6 +298,7 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 	auditIDs := make(map[string]string)
 	env := []string{"PYTHONUNBUFFERED=1"}
 	if len(a.AuditBodyHostAllowlist) > 0 {
+		env = append(env, "OPENSHORTS_AUDIT_ENABLED=1")
 		env = append(env, "AUDIT_BODY_HOST_ALLOWLIST="+strings.Join(a.AuditBodyHostAllowlist, ","))
 	}
 	runErr := runner.RunProtocol(ctx, CommandSpec{
@@ -369,6 +381,34 @@ func cloneHeaders(headers map[string]string) map[string]string {
 		clone[key] = value
 	}
 	return clone
+}
+
+func (a PythonWorkerAdapter) startExternalAudit(ctx context.Context, jobID, name string, metadata map[string]any) string {
+	if a.AuditSink == nil {
+		return ""
+	}
+	event, err := a.AuditSink.StartAuditEvent(ctx, jobID, domain.StartAuditEventInput{
+		Category: "external_request",
+		Name:     name,
+		Provider: "s3",
+		Host:     "s3",
+		Method:   "GET",
+		Metadata: metadata,
+	})
+	if err != nil {
+		return ""
+	}
+	return event.ID
+}
+
+func (a PythonWorkerAdapter) finishExternalAudit(ctx context.Context, jobID, eventID string, status domain.AuditEventStatus, message string) {
+	if eventID == "" || a.AuditSink == nil {
+		return
+	}
+	_, _ = a.AuditSink.FinishAuditEvent(ctx, jobID, eventID, domain.FinishAuditEventInput{
+		Status: status,
+		Error:  message,
+	})
 }
 
 var _ io.Writer = (*lineSink)(nil)
