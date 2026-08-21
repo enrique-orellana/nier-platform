@@ -218,6 +218,19 @@ func (s *Server) readPersistedProjectClips(job domain.Job) ([]map[string]any, ti
 		return nil, time.Time{}, false
 	}
 	masterDuration := sourceDurationFromMetadata(payload)
+	if masterDuration <= 0 {
+		root := s.config.OutputDir
+		if root == "" {
+			root = "output"
+		}
+		metadataPath := filepath.Join(root, job.ID, "source_metadata.json")
+		if metadataBytes, err := os.ReadFile(metadataPath); err == nil {
+			var metadata map[string]any
+			if json.Unmarshal(metadataBytes, &metadata) == nil {
+				masterDuration = sourceDurationFromMetadata(metadata)
+			}
+		}
+	}
 	for _, clip := range result.Clips {
 		clipID := clipArtifactID(job.ID, clip)
 		if filename, ok := clip["video_filename"].(string); ok && filename != "" {

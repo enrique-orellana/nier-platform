@@ -1909,6 +1909,34 @@ func TestProjectHistoryReadsPersistedJobResultWithoutLocalFiles(t *testing.T) {
 	}
 }
 
+func TestProjectClipsReadsMasterDurationFromSidecarForPersistedResult(t *testing.T) {
+	outputDir := t.TempDir()
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"source_path":"source.mp4","clips":[{"start":962,"end":1022,"video_filename":"clip.mp4"}]}`)); err != nil {
+		t.Fatalf("set result: %v", err)
+	}
+	metadataPath := filepath.Join(outputDir, job.ID, "source_metadata.json")
+	if err := os.MkdirAll(filepath.Dir(metadataPath), 0o755); err != nil {
+		t.Fatalf("create metadata directory: %v", err)
+	}
+	if err := os.WriteFile(metadataPath, []byte(`{"source_asset":{"probe":{"duration_seconds":2575.88}}}`), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+	request := httptest.NewRequest(http.MethodGet, "/api/projects/clips/"+job.ID, nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"master_duration":2575.88`) {
+		t.Fatalf("expected sidecar master duration, got %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestProjectClipsReturnsDirectS3ArtifactURLWhenConfigured(t *testing.T) {
 	store := jobs.NewMemoryStore()
 	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})

@@ -2279,7 +2279,11 @@ function App() {
                             }
                             renderStatus={clip.render_status}
                             renderError={clip.render_error}
-                            masterDuration={results.source_duration_seconds}
+                            masterDuration={
+                              results.source_duration_seconds ||
+                              clip.master_duration ||
+                              clip.source_duration_seconds
+                            }
                           />
                         ))}
                       </div>
