@@ -93,6 +93,7 @@ import {
   hexToRgba,
   normalizeSubtitleStyle,
   subtitlePositionClass,
+  toClipGeneratorSubtitleStyle,
 } from "./localEditorStyles";
 import { SUBTITLE_LANGUAGES } from "../subtitleLanguages";
 
@@ -2031,6 +2032,19 @@ export default function LocalEditorTab({
   const activeHook =
     hook && playheadMs >= hook.startMs && playheadMs < hook.endMs ? hook : null;
   const previewSubtitleStyle = normalizeSubtitleStyle(subtitleStyle);
+  const previewSubtitles = subtitleCues.length
+    ? {
+        captions: subtitleCues.flatMap((cue) => cueCaptionsForRender(cue)),
+        blocks: subtitleCues.map((cue) => ({
+          words: cueCaptionsForRender(cue),
+          startMs: Number(cue.startMs),
+          endMs: Number(cue.endMs),
+          text: String(cue.text || ""),
+        })),
+        position: previewSubtitleStyle.position || "bottom",
+        style: toClipGeneratorSubtitleStyle(previewSubtitleStyle),
+      }
+    : null;
   const hookElapsedMs = activeHook
     ? Math.max(0, playheadMs - activeHook.startMs)
     : 0;
@@ -2260,6 +2274,9 @@ export default function LocalEditorTab({
                 {remotionPreviewProps ? (
                   <RemotionPreview
                     {...remotionPreviewProps}
+                    subtitles={previewSubtitles}
+                    subtitleTracks={[]}
+                    activeSubtitleTrackId={null}
                     hook={hook}
                     playing={isPlaying}
                     loop={isLooping}

@@ -27,13 +27,22 @@ vi.mock("./AudioWaveform", () => ({
 }));
 
 vi.mock("../RemotionPreview", () => ({
-  default: ({ videoUrl, currentFrame, controls = true, hook = null }) => (
+  default: ({
+    videoUrl,
+    currentFrame,
+    controls = true,
+    hook = null,
+    subtitles = null,
+  }) => (
     <div
       data-testid="local-editor-remotion-preview"
       data-video-url={videoUrl}
       data-current-frame={currentFrame ?? "uncontrolled"}
       data-controls={String(controls)}
       data-hook-text={hook?.text || ""}
+      data-subtitle-text={
+        subtitles?.captions?.map((caption) => caption.text).join("|") || ""
+      }
     />
   ),
 }));
@@ -644,6 +653,38 @@ describe("LocalEditorTab", () => {
       expect(
         screen.getByTestId("local-editor-remotion-preview"),
       ).toHaveAttribute("data-hook-text", "Current local hook"),
+    );
+  });
+
+  it("renders the current local subtitle state in the Remotion preview", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="https://example.test/master.mp4"
+        initialExportVideoUrl="https://example.test/master.mp4"
+        initialPlaybackDurationMs={10000}
+        initialEditorState={{
+          ...controlledEditorState,
+          subtitleCues: [
+            { id: "current", text: "Current cue", startMs: 0, endMs: 1000 },
+          ],
+        }}
+        remotionPreviewProps={{
+          videoUrl: "https://example.test/master.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+          width: 1080,
+          height: 1920,
+          subtitles: {
+            captions: [{ text: "Stale cue", startMs: 0, endMs: 1000 }],
+          },
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("local-editor-remotion-preview"),
+      ).toHaveAttribute("data-subtitle-text", "Current cue"),
     );
   });
 
