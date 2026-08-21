@@ -34,5 +34,13 @@ RUN --mount=type=cache,target=/root/.npm cd /app/remotion && npm ci --no-audit -
 # Build TypeScript
 RUN npm run build
 
+# Remotion creates a runtime cache under /app/node_modules. The image build
+# runs as root, so hand that directory to the non-root runtime user.
+RUN chown node:node /app/node_modules /app/remotion/node_modules
+
+# Match the backend's UID 1000 runtime user so files written to the shared
+# output volume can be removed by the API during project cleanup.
+USER node
+
 EXPOSE 3100
 CMD ["node", "dist/server.js"]

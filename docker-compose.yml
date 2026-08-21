@@ -83,6 +83,7 @@ services:
       - "13100:3100"
     volumes:
       - ${OPENSHORTS_DATA_ROOT:-D:/openshorts-docker-data}/workdir:/output
+    user: "1000:1000"
     environment:
       - REMOTION_BUNDLE_PATH=/app/remotion
       - OUTPUT_DIR=/output
