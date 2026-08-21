@@ -118,6 +118,7 @@ const transcriptTrack = (manifest, transcript) => {
 };
 
 export function manifestWithTranscriptCaptions(manifest, transcript) {
+  if (manifest?.subtitle_tracks_disabled === true) return manifest;
   const track = transcriptTrack(manifest, transcript);
   if (!track) return manifest;
 

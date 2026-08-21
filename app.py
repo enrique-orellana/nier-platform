@@ -1128,6 +1128,7 @@ class ManifestPatchRequest(BaseModel):
 
 class VersionBranchRequest(BaseModel):
     version_id: str
+    manifest: Optional[dict] = None
 
 
 class VersionCreateRequest(BaseModel):
@@ -1769,7 +1770,7 @@ async def get_clip_version(job_id: str, clip_index: int, version_id: str):
 async def branch_clip_version(job_id: str, clip_index: int, req: VersionBranchRequest):
     store = _ensure_clip_versions(job_id, clip_index)
     try:
-        source_manifest = store.load_manifest(req.version_id)
+        source_manifest = req.manifest or store.load_manifest(req.version_id)
         version = store.create_version(source_manifest, parent_version_id=req.version_id)
         manifest = store.load_manifest(version.version_id)
     except ValueError as exc:

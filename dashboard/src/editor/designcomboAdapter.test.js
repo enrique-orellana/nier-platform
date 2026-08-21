@@ -400,6 +400,29 @@ describe("designcomboAdapter", () => {
     expect(hydrated.active_subtitle_track_id).toBe("original");
   });
 
+  it("does not recreate subtitles when the manifest explicitly disables them", () => {
+    const source = {
+      subtitle_tracks: [],
+      subtitle_tracks_disabled: true,
+      layers: { subtitles: null },
+      timeline: {
+        transcript: {
+          language: "it",
+          segments: [{ start: 10.5, end: 11.5, text: "Ciao" }],
+        },
+      },
+    };
+
+    const hydrated = manifestWithTranscriptCaptions(source, {
+      language: "it",
+      captions: [{ text: "Ciao", startMs: 500, endMs: 1500 }],
+    });
+
+    expect(hydrated).toBe(source);
+    expect(hydrated.subtitle_tracks).toEqual([]);
+    expect(hydrated.active_subtitle_track_id).toBeUndefined();
+  });
+
   it("exposes the master-video offset for a clip preview", () => {
     const props = manifestToRenderProps({
       ...manifest,

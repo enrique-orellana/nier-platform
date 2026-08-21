@@ -711,7 +711,8 @@ func TestClipVersionRoutesPersistAndBranchManifests(t *testing.T) {
 		t.Fatalf("unexpected list response: %d %s", listRes.Code, listRes.Body.String())
 	}
 
-	branchReq := httptest.NewRequest(http.MethodPost, "/api/clip/job-1/0/versions/branch", strings.NewReader(`{"version_id":"`+created.Version.VersionID+`"}`))
+	branchManifest := `{"schema_version":1,"timeline":{"source_video_url":"/videos/job-1/source.mp4"},"layers":{"subtitles":null},"subtitle_tracks":[],"subtitle_tracks_disabled":true}`
+	branchReq := httptest.NewRequest(http.MethodPost, "/api/clip/job-1/0/versions/branch", strings.NewReader(`{"version_id":"`+created.Version.VersionID+`","manifest":`+branchManifest+`}`))
 	branchReq.Header.Set("Content-Type", "application/json")
 	branchRes := httptest.NewRecorder()
 	server.Handler().ServeHTTP(branchRes, branchReq)
@@ -725,6 +726,9 @@ func TestClipVersionRoutesPersistAndBranchManifests(t *testing.T) {
 	}
 	if err := json.Unmarshal(branchRes.Body.Bytes(), &branched); err != nil {
 		t.Fatalf("decode branch response: %v", err)
+	}
+	if !strings.Contains(branchRes.Body.String(), `"subtitle_tracks_disabled":true`) {
+		t.Fatalf("branch did not preserve the edited manifest: %s", branchRes.Body.String())
 	}
 
 	completeReq := httptest.NewRequest(http.MethodPost, "/api/clip/job-1/0/versions/"+created.Version.VersionID+"/complete", strings.NewReader(`{"output_url":"/videos/job-1/rendered.mp4"}`))

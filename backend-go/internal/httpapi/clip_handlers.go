@@ -140,16 +140,21 @@ func (s *Server) createVersion(w http.ResponseWriter, r *http.Request, store *ve
 
 func (s *Server) branchVersion(w http.ResponseWriter, r *http.Request, store *versions.Store) {
 	var request struct {
-		VersionID string `json:"version_id"`
+		VersionID string         `json:"version_id"`
+		Manifest  map[string]any `json:"manifest"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
 		return
 	}
-	manifest, err := store.LoadManifest(request.VersionID)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
-		return
+	manifest := request.Manifest
+	var err error
+	if manifest == nil {
+		manifest, err = store.LoadManifest(request.VersionID)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+			return
+		}
 	}
 	version, err := store.CreateVersion(manifest, &request.VersionID)
 	if err != nil {

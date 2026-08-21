@@ -236,6 +236,7 @@ const localEditorStateToManifest = (sourceManifest, localState, trackId) => {
   source.subtitle_tracks = cues.length
     ? [...existingTracks.filter((track) => track.id !== nextTrackId), nextTrack]
     : existingTracks.filter((track) => track.id !== nextTrackId);
+  source.subtitle_tracks_disabled = !cues.length;
   source.active_subtitle_track_id = cues.length ? nextTrackId : null;
   source.layers = {
     ...(source.layers || {}),
@@ -342,7 +343,11 @@ export default function FullScreenEditor({
               transcript,
             )
           : manifestWithTranscriptCaptions(baseManifest, transcript);
-      if (!rangeChanged && hasSubtitleTrackContent(baseManifest))
+      if (
+        !rangeChanged &&
+        (baseManifest?.subtitle_tracks_disabled === true ||
+          hasSubtitleTrackContent(baseManifest))
+      )
         return baseManifest;
       try {
         const response = await fetch(
@@ -763,7 +768,10 @@ export default function FullScreenEditor({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ version_id: versionId }),
+          body: JSON.stringify({
+            version_id: versionId,
+            manifest: useLocalEditor ? projectManifest : currentManifest,
+          }),
         },
       );
       const payload = await response.json();
