@@ -18,6 +18,85 @@ describe("ProjectLibrary", () => {
     );
   });
 
+  it("opens the processing timeline drawer and renders audited request bodies", async () => {
+    const fetchMock = vi.fn((url) => {
+      const value = String(url);
+      if (value.includes("/api/projects/history")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            projects: [
+              {
+                job_id: "job-audit",
+                title: "Audited project",
+                clips: [],
+                clip_count: 0,
+              },
+            ],
+          }),
+        });
+      }
+      if (value.includes("/api/projects/clips/job-audit")) {
+        return Promise.resolve({ ok: true, json: async () => ({ clips: [] }) });
+      }
+      if (value.includes("/api/projects/job-audit/statuses")) {
+        return Promise.resolve({ ok: true, json: async () => ({ clips: {} }) });
+      }
+      if (value.includes("/api/projects/job-audit/audit")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            job_id: "job-audit",
+            policy: {
+              body_allowlist: ["openrouter.ai"],
+              non_allowlisted_mode: "metadata_only",
+              binary_mode: "metadata_only",
+              body_truncated: false,
+            },
+            events: [
+              {
+                id: "audit-1",
+                sequence: 1,
+                category: "external_request",
+                name: "ai.analysis",
+                status: "completed",
+                provider: "openrouter",
+                host: "openrouter.ai",
+                method: "POST",
+                http_status: 200,
+                duration_ms: 842,
+                request_body: '{"prompt":"hello"}',
+                response_body: '{"result":"ok"}',
+                capture_mode: "full_redacted",
+                started_at: "2026-08-21T08:40:52Z",
+                finished_at: "2026-08-21T08:40:53Z",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectLibrary projectId="job-audit" />);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /open processing timeline/i,
+      }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: /processing timeline/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ai.analysis")).toBeInTheDocument();
+    expect(screen.getByText(/POST openrouter\.ai/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Inspect captured details"));
+    expect(screen.getByText('{"prompt":"hello"}')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/job-audit/audit");
+  });
+
   it("notifies the router when opening a clip editor", async () => {
     const onOpenEditor = vi.fn();
     vi.stubGlobal(

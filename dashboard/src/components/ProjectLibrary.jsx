@@ -1,5 +1,7 @@
 import {
+  AlertCircle,
   Calendar,
+  CheckCircle2,
   ChevronLeft,
   Clock,
   Film,
@@ -13,6 +15,7 @@ import {
   Search,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getApiUrl } from "../config";
@@ -211,6 +214,11 @@ export default function ProjectLibrary({
   const [clipStatuses, setClipStatuses] = useState({});
   const [clipRenderJobs, setClipRenderJobs] = useState({});
   const [statusError, setStatusError] = useState("");
+  const [isAuditOpen, setIsAuditOpen] = useState(false);
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+  const [auditEvents, setAuditEvents] = useState([]);
+  const [auditPolicy, setAuditPolicy] = useState(null);
+  const [auditError, setAuditError] = useState("");
   const [savingStatusIndex, setSavingStatusIndex] = useState(null);
   const [webcamRegionSavingIndex, setWebcamRegionSavingIndex] = useState(null);
   const [webcamRegionErrors, setWebcamRegionErrors] = useState({});
@@ -349,6 +357,34 @@ export default function ProjectLibrary({
     }
   }, []);
 
+  const loadProjectAudit = useCallback(async (project) => {
+    const jobId = project?.job_id || project?.session_id || project?.id;
+    if (!jobId) {
+      setAuditEvents([]);
+      setAuditPolicy(null);
+      return;
+    }
+
+    setIsLoadingAudit(true);
+    setAuditError("");
+    try {
+      const res = await fetch(
+        getApiUrl(`/api/projects/${encodeURIComponent(jobId)}/audit`),
+      );
+      if (!res.ok) throw new Error(await res.text());
+      const payload = await res.json();
+      setAuditEvents(Array.isArray(payload.events) ? payload.events : []);
+      setAuditPolicy(payload.policy || null);
+    } catch (e) {
+      console.error("Error loading project audit timeline:", e);
+      setAuditEvents([]);
+      setAuditPolicy(null);
+      setAuditError(e.message || "Could not load the processing timeline.");
+    } finally {
+      setIsLoadingAudit(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!projectId) {
       setSelectedProject(null);
@@ -357,6 +393,10 @@ export default function ProjectLibrary({
       setStatusFilters([]);
       setClipRenderJobs({});
       setStatusError("");
+      setIsAuditOpen(false);
+      setAuditEvents([]);
+      setAuditPolicy(null);
+      setAuditError("");
       setWebcamRegionSavingIndex(null);
       setWebcamRegionErrors({});
       setGameplayRegionSavingIndex(null);
@@ -382,6 +422,10 @@ export default function ProjectLibrary({
     setStatusFilters(readPersistedStatusFilters(projectId));
     setClipRenderJobs({});
     setStatusError("");
+    setIsAuditOpen(false);
+    setAuditEvents([]);
+    setAuditPolicy(null);
+    setAuditError("");
     setWebcamRegionSavingIndex(null);
     setWebcamRegionErrors({});
     setGameplayRegionSavingIndex(null);
@@ -419,6 +463,10 @@ export default function ProjectLibrary({
     setStatusFilters(readPersistedStatusFilters(id));
     setClipRenderJobs({});
     setStatusError("");
+    setIsAuditOpen(false);
+    setAuditEvents([]);
+    setAuditPolicy(null);
+    setAuditError("");
     setWebcamRegionSavingIndex(null);
     setWebcamRegionErrors({});
     setGameplayRegionSavingIndex(null);
@@ -428,6 +476,11 @@ export default function ProjectLibrary({
     setTrackingSavingIndex(null);
     setTrackingErrors({});
     loadProjectClips(project);
+  };
+
+  const handleOpenAudit = () => {
+    setIsAuditOpen(true);
+    loadProjectAudit(selectedProject).catch(() => {});
   };
 
   const handleProjectCardKeyDown = (event, project) => {
@@ -1031,6 +1084,14 @@ export default function ProjectLibrary({
             </button>
             <div className="flex items-center gap-2">
               <button
+                onClick={handleOpenAudit}
+                aria-label="Open processing timeline"
+                title="Open processing timeline"
+                className="p-2 rounded-xl border border-amber-400/20 bg-amber-400/5 hover:bg-amber-400/15 text-amber-300 transition-colors"
+              >
+                <Clock size={16} />
+              </button>
+              <button
                 onClick={loadProjects}
                 className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm text-zinc-300 flex items-center gap-2 transition-colors"
               >
@@ -1320,6 +1381,219 @@ export default function ProjectLibrary({
             )}
           </div>
         </div>
+        {isAuditOpen && (
+          <div className="fixed inset-0 z-50" role="presentation">
+            <button
+              aria-label="Close processing timeline"
+              className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+              onClick={() => setIsAuditOpen(false)}
+            />
+            <aside
+              className="absolute right-0 top-0 h-full w-full max-w-xl overflow-y-auto border-l border-white/10 bg-[#101216] shadow-2xl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="processing-timeline-title"
+            >
+              <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-white/10 bg-[#101216]/95 p-5 backdrop-blur-xl">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">
+                    Run auditor
+                  </p>
+                  <h2
+                    id="processing-timeline-title"
+                    className="mt-1 text-xl font-bold text-white"
+                  >
+                    Processing timeline
+                  </h2>
+                  <p className="mt-1 max-w-sm truncate font-mono text-[11px] text-zinc-500">
+                    {selectedProjectId}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => loadProjectAudit(selectedProject)}
+                    aria-label="Refresh processing timeline"
+                    title="Refresh timeline"
+                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    <RefreshCw
+                      size={16}
+                      className={isLoadingAudit ? "animate-spin" : ""}
+                    />
+                  </button>
+                  <button
+                    onClick={() => setIsAuditOpen(false)}
+                    aria-label="Close processing timeline"
+                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-5 p-5">
+                {auditPolicy && (
+                  <div className="rounded-xl border border-amber-300/15 bg-amber-300/5 p-3 text-xs text-zinc-400">
+                    <p className="font-semibold text-amber-200">
+                      Body capture policy
+                    </p>
+                    <p className="mt-1 leading-5">
+                      Full redacted bodies are retained for allowlisted hosts;
+                      binary and other hosts remain metadata-only. No body
+                      truncation is applied.
+                    </p>
+                    <p className="mt-2 break-words font-mono text-[10px] text-zinc-500">
+                      Hosts: {auditPolicy.body_allowlist?.join(", ") || "none"}
+                    </p>
+                  </div>
+                )}
+
+                {isLoadingAudit ? (
+                  <div className="flex flex-col items-center justify-center gap-3 py-20 text-zinc-500">
+                    <Loader2
+                      size={28}
+                      className="animate-spin text-amber-300"
+                    />
+                    <p className="text-sm">Loading audit events...</p>
+                  </div>
+                ) : auditError ? (
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-red-400/20 bg-red-400/5 p-4 text-sm text-red-200"
+                  >
+                    {auditError}
+                  </div>
+                ) : auditEvents.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-zinc-500">
+                    No audit events captured yet. New processing runs will
+                    appear here.
+                  </div>
+                ) : (
+                  <div className="relative space-y-3">
+                    <div className="absolute bottom-3 left-[15px] top-3 w-px bg-white/10" />
+                    {auditEvents.map((event) => {
+                      const StatusIcon =
+                        event.status === "failed" ? AlertCircle : CheckCircle2;
+                      const hasDetails =
+                        Boolean(event.request_body) ||
+                        Boolean(event.response_body) ||
+                        (event.metadata &&
+                          Object.keys(event.metadata).length > 0);
+                      return (
+                        <div
+                          key={event.id || `${event.sequence}-${event.name}`}
+                          className="relative rounded-xl border border-white/10 bg-white/[0.03] p-3 pl-10"
+                        >
+                          <StatusIcon
+                            size={18}
+                            className={`absolute left-1.5 top-3.5 z-10 bg-[#101216] ${
+                              event.status === "failed"
+                                ? "text-red-300"
+                                : "text-emerald-300"
+                            }`}
+                          />
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="break-words text-sm font-semibold text-white">
+                                {event.name || "Unnamed step"}
+                              </p>
+                              <p className="mt-1 text-[11px] text-zinc-500">
+                                {event.category || "processing"}
+                                {event.provider ? ` · ${event.provider}` : ""}
+                                {event.started_at
+                                  ? ` · ${formatDate(event.started_at)}`
+                                  : ""}
+                              </p>
+                            </div>
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                                event.status === "failed"
+                                  ? "bg-red-400/10 text-red-200"
+                                  : "bg-emerald-400/10 text-emerald-200"
+                              }`}
+                            >
+                              {event.status || "unknown"}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-500">
+                            {event.host && (
+                              <span className="font-mono">
+                                {event.method || ""} {event.host}
+                                {event.path || ""}
+                              </span>
+                            )}
+                            {event.duration_ms > 0 && (
+                              <span>{event.duration_ms} ms</span>
+                            )}
+                            {event.http_status > 0 && (
+                              <span>HTTP {event.http_status}</span>
+                            )}
+                            {(event.request_bytes > 0 ||
+                              event.response_bytes > 0) && (
+                              <span>
+                                {event.request_bytes || 0} B in ·{" "}
+                                {event.response_bytes || 0} B out
+                              </span>
+                            )}
+                          </div>
+                          {event.error && (
+                            <p className="mt-2 break-words text-xs text-red-200">
+                              {event.error}
+                            </p>
+                          )}
+                          {hasDetails && (
+                            <details className="mt-3 border-t border-white/5 pt-2">
+                              <summary className="cursor-pointer text-xs font-semibold text-zinc-300 hover:text-white">
+                                Inspect captured details
+                              </summary>
+                              <div className="mt-3 space-y-3">
+                                {event.request_body && (
+                                  <div>
+                                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                                      Request body
+                                    </p>
+                                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-zinc-300">
+                                      {event.request_body}
+                                    </pre>
+                                  </div>
+                                )}
+                                {event.response_body && (
+                                  <div>
+                                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                                      Response body
+                                    </p>
+                                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-zinc-300">
+                                      {event.response_body}
+                                    </pre>
+                                  </div>
+                                )}
+                                {event.metadata &&
+                                  Object.keys(event.metadata).length > 0 && (
+                                    <div>
+                                      <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                                        Metadata
+                                      </p>
+                                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-zinc-300">
+                                        {JSON.stringify(
+                                          event.metadata,
+                                          null,
+                                          2,
+                                        )}
+                                      </pre>
+                                    </div>
+                                  )}
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </aside>
+          </div>
+        )}
       </div>
     );
   }
