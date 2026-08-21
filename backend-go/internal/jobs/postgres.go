@@ -26,6 +26,9 @@ var deferredClipRenderingSchema string
 //go:embed migrations/004_discarded_clip_status.sql
 var discardedClipStatusSchema string
 
+//go:embed migrations/005_job_audit_events.sql
+var auditEventsSchema string
+
 type PostgresStore struct {
 	db *sql.DB
 }
@@ -76,6 +79,9 @@ func (s *PostgresStore) Migrate(ctx context.Context) error {
 	}
 	if _, err := s.db.ExecContext(ctx, discardedClipStatusSchema); err != nil {
 		return fmt.Errorf("run discarded clip status migration: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, auditEventsSchema); err != nil {
+		return fmt.Errorf("run audit events migration: %w", err)
 	}
 	return nil
 }
@@ -680,6 +686,157 @@ func (s *PostgresStore) RequeueProcessing(ctx context.Context) error {
 	return err
 }
 
+const auditEventColumns = `id, job_id, sequence, category, name, status, provider, host, path, method,
+       http_status, request_bytes, response_bytes, started_at, finished_at, duration_ms, detail, error,
+       request_body, response_body, request_content_type, response_content_type, capture_mode, metadata`
+
+func (s *PostgresStore) StartAuditEvent(ctx context.Context, jobID string, input domain.StartAuditEventInput) (domain.JobAuditEvent, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.JobAuditEvent{}, err
+	}
+	defer tx.Rollback()
+
+	var lockedJobID string
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM jobs WHERE id = $1 FOR UPDATE`, jobID).Scan(&lockedJobID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.JobAuditEvent{}, ErrJobNotFound
+		}
+		return domain.JobAuditEvent{}, err
+	}
+
+	var sequence int
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(sequence), 0) + 1 FROM job_audit_events WHERE job_id = $1`, jobID).Scan(&sequence); err != nil {
+		return domain.JobAuditEvent{}, err
+	}
+	id, err := newID()
+	if err != nil {
+		return domain.JobAuditEvent{}, fmt.Errorf("generate audit event id: %w", err)
+	}
+	metadata, err := json.Marshal(input.Metadata)
+	if err != nil {
+		return domain.JobAuditEvent{}, fmt.Errorf("encode audit metadata: %w", err)
+	}
+	if input.Metadata == nil {
+		metadata = []byte(`{}`)
+	}
+	startedAt := time.Now().UTC()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO job_audit_events (
+			id, job_id, sequence, category, name, status, provider, host, path, method,
+			request_bytes, started_at, detail, request_body, request_content_type, capture_mode, metadata
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb)
+	`, id, jobID, sequence, input.Category, input.Name, domain.AuditEventStatusStarted, input.Provider, input.Host, input.Path, input.Method,
+		input.RequestBytes, startedAt, input.Detail, input.RequestBody, input.RequestContentType, input.CaptureMode, metadata); err != nil {
+		return domain.JobAuditEvent{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.JobAuditEvent{}, err
+	}
+	return domain.JobAuditEvent{
+		ID:                 id,
+		JobID:              jobID,
+		Sequence:           sequence,
+		Category:           input.Category,
+		Name:               input.Name,
+		Status:             domain.AuditEventStatusStarted,
+		Provider:           input.Provider,
+		Host:               input.Host,
+		Path:               input.Path,
+		Method:             input.Method,
+		RequestBytes:       input.RequestBytes,
+		StartedAt:          startedAt,
+		Detail:             input.Detail,
+		RequestBody:        input.RequestBody,
+		RequestContentType: input.RequestContentType,
+		CaptureMode:        input.CaptureMode,
+		Metadata:           decodeMetadata(metadata),
+	}, nil
+}
+
+func (s *PostgresStore) FinishAuditEvent(ctx context.Context, jobID, eventID string, input domain.FinishAuditEventInput) (domain.JobAuditEvent, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.JobAuditEvent{}, err
+	}
+	defer tx.Rollback()
+
+	var startedAt time.Time
+	if err := tx.QueryRowContext(ctx, `SELECT started_at FROM job_audit_events WHERE id = $1 AND job_id = $2 FOR UPDATE`, eventID, jobID).Scan(&startedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.JobAuditEvent{}, ErrAuditEventNotFound
+		}
+		return domain.JobAuditEvent{}, err
+	}
+	status := input.Status
+	if status == "" {
+		status = domain.AuditEventStatusUnknown
+	}
+	finishedAt := input.FinishedAt
+	if finishedAt.IsZero() {
+		finishedAt = time.Now().UTC()
+	}
+	durationMS := input.DurationMS
+	if durationMS == 0 {
+		durationMS = finishedAt.Sub(startedAt).Milliseconds()
+	}
+	metadata, err := json.Marshal(input.Metadata)
+	if err != nil {
+		return domain.JobAuditEvent{}, fmt.Errorf("encode audit metadata: %w", err)
+	}
+	var metadataArg any
+	if input.Metadata != nil {
+		metadataArg = metadata
+	}
+	row := tx.QueryRowContext(ctx, `
+		UPDATE job_audit_events
+		SET status = $1, http_status = $2, response_bytes = $3, finished_at = $4, duration_ms = $5,
+		    response_body = $6, response_content_type = $7, detail = $8, error = $9,
+		    metadata = CASE WHEN $10::jsonb IS NULL THEN metadata ELSE $10::jsonb END
+		WHERE id = $11 AND job_id = $12
+		RETURNING `+auditEventColumns,
+		status, input.HTTPStatus, input.ResponseBytes, finishedAt, durationMS, input.ResponseBody,
+		input.ResponseContentType, input.Detail, input.Error, metadataArg, eventID, jobID)
+	event, err := scanAuditEvent(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.JobAuditEvent{}, ErrAuditEventNotFound
+		}
+		return domain.JobAuditEvent{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.JobAuditEvent{}, err
+	}
+	return event, nil
+}
+
+func (s *PostgresStore) ListAuditEvents(ctx context.Context, jobID string) ([]domain.JobAuditEvent, error) {
+	var exists string
+	if err := s.db.QueryRowContext(ctx, `SELECT id FROM jobs WHERE id = $1`, jobID).Scan(&exists); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrJobNotFound
+		}
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+auditEventColumns+` FROM job_audit_events WHERE job_id = $1 ORDER BY sequence`, jobID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	events := make([]domain.JobAuditEvent, 0)
+	for rows.Next() {
+		event, err := scanAuditEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
 type sqlQueryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
@@ -724,6 +881,28 @@ func scanJob(row rowScanner) (domain.Job, error) {
 	job.Metadata = decodeMetadata(metadata)
 	job.Result = append([]byte(nil), result...)
 	return job, nil
+}
+
+func scanAuditEvent(row rowScanner) (domain.JobAuditEvent, error) {
+	var event domain.JobAuditEvent
+	var status string
+	var finishedAt sql.NullTime
+	var metadata []byte
+	if err := row.Scan(
+		&event.ID, &event.JobID, &event.Sequence, &event.Category, &event.Name, &status,
+		&event.Provider, &event.Host, &event.Path, &event.Method, &event.HTTPStatus,
+		&event.RequestBytes, &event.ResponseBytes, &event.StartedAt, &finishedAt, &event.DurationMS,
+		&event.Detail, &event.Error, &event.RequestBody, &event.ResponseBody,
+		&event.RequestContentType, &event.ResponseContentType, &event.CaptureMode, &metadata,
+	); err != nil {
+		return domain.JobAuditEvent{}, err
+	}
+	event.Status = domain.AuditEventStatus(status)
+	if finishedAt.Valid {
+		event.FinishedAt = finishedAt.Time
+	}
+	event.Metadata = decodeMetadata(metadata)
+	return event, nil
 }
 
 func scanHighlightProject(row rowScanner) (domain.HighlightProject, error) {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
 )
@@ -104,6 +105,65 @@ func TestPostgresStorePersistsClipStatusAcrossReopen(t *testing.T) {
 	status, ok := statuses[2]
 	if !ok || status.Status != "discarded" || status.UpdatedAt.IsZero() {
 		t.Fatalf("clip status did not persist across reopen: %#v", statuses)
+	}
+}
+
+func TestPostgresStorePersistsAuditEventAcrossReopen(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not configured")
+	}
+	ctx := context.Background()
+	first, err := OpenPostgresStore(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open first store: %v", err)
+	}
+	job, err := first.Create(ctx, domain.CreateJobInput{Kind: "postgres-audit-test"})
+	if err != nil {
+		_ = first.Close()
+		t.Fatalf("create job: %v", err)
+	}
+	event, err := first.StartAuditEvent(ctx, job.ID, domain.StartAuditEventInput{
+		Category:    "external_request",
+		Name:        "ai.analysis",
+		Host:        "openrouter.ai",
+		Method:      "POST",
+		RequestBody: `{"prompt":"safe"}`,
+		CaptureMode: "full_redacted",
+	})
+	if err != nil {
+		_ = first.Close()
+		t.Fatalf("start audit event: %v", err)
+	}
+	if _, err := first.FinishAuditEvent(ctx, job.ID, event.ID, domain.FinishAuditEventInput{
+		Status:       domain.AuditEventStatusCompleted,
+		HTTPStatus:   200,
+		ResponseBody: `{"ok":true}`,
+		DurationMS:   42,
+		FinishedAt:   event.StartedAt.Add(42 * time.Millisecond),
+	}); err != nil {
+		_ = first.Close()
+		t.Fatalf("finish audit event: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first store: %v", err)
+	}
+
+	second, err := OpenPostgresStore(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open second store: %v", err)
+	}
+	defer second.Close()
+	defer second.db.ExecContext(ctx, `DELETE FROM jobs WHERE id = $1`, job.ID)
+	events, err := second.ListAuditEvents(ctx, job.ID)
+	if err != nil {
+		t.Fatalf("list audit events after reopen: %v", err)
+	}
+	if len(events) != 1 || events[0].Sequence != 1 || events[0].Status != domain.AuditEventStatusCompleted || events[0].DurationMS != 42 {
+		t.Fatalf("audit event did not persist across reopen: %#v", events)
+	}
+	if events[0].RequestBody != `{"prompt":"safe"}` || events[0].ResponseBody != `{"ok":true}` {
+		t.Fatalf("audit bodies did not persist across reopen: %#v", events[0])
 	}
 }
 

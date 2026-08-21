@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
 )
@@ -161,6 +162,59 @@ func TestAppendLogPreservesOrder(t *testing.T) {
 	}
 	if len(loaded.Logs) != 3 || loaded.Logs[0].Message != "queued" || loaded.Logs[2].Message != "finished" {
 		t.Fatalf("logs were not preserved: %#v", loaded.Logs)
+	}
+}
+
+func TestMemoryStorePersistsAuditEventBodiesAndSequence(t *testing.T) {
+	store := NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "audit-test"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	event, err := store.StartAuditEvent(context.Background(), job.ID, domain.StartAuditEventInput{
+		Category:           "external_request",
+		Name:               "ai.analysis",
+		Host:               "openrouter.ai",
+		Path:               "/api/v1/chat/completions",
+		Method:             "POST",
+		RequestBody:        `{"prompt":"safe","api_key":"[REDACTED]"}`,
+		RequestContentType: "application/json",
+		CaptureMode:        "full_redacted",
+	})
+	if err != nil {
+		t.Fatalf("start audit event: %v", err)
+	}
+
+	finishedAt := event.StartedAt.Add(1250 * time.Millisecond)
+	finished, err := store.FinishAuditEvent(context.Background(), job.ID, event.ID, domain.FinishAuditEventInput{
+		Status:              domain.AuditEventStatusCompleted,
+		HTTPStatus:          200,
+		ResponseBody:        `{"choices":[{"message":{"content":"safe"}}]}`,
+		ResponseContentType: "application/json",
+		ResponseBytes:       47,
+		FinishedAt:          finishedAt,
+		DurationMS:          1250,
+	})
+	if err != nil {
+		t.Fatalf("finish audit event: %v", err)
+	}
+	if finished.Status != domain.AuditEventStatusCompleted {
+		t.Fatalf("expected completed event, got %q", finished.Status)
+	}
+
+	events, err := store.ListAuditEvents(context.Background(), job.ID)
+	if err != nil {
+		t.Fatalf("list audit events: %v", err)
+	}
+	if len(events) != 1 || events[0].Sequence != 1 {
+		t.Fatalf("unexpected audit event sequence: %#v", events)
+	}
+	if events[0].RequestBody != `{"prompt":"safe","api_key":"[REDACTED]"}` || events[0].ResponseBody == "" {
+		t.Fatalf("audit bodies were not preserved: %#v", events[0])
+	}
+	if events[0].DurationMS != 1250 || !events[0].FinishedAt.Equal(finishedAt) {
+		t.Fatalf("audit timing was not preserved: %#v", events[0])
 	}
 }
 

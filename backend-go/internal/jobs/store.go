@@ -22,6 +22,7 @@ var (
 	ErrProjectNotFound    = errors.New("highlight project not found")
 	ErrProjectActive      = errors.New("highlight project has an active job")
 	ErrProjectNotEditable = errors.New("highlight project is not editable")
+	ErrAuditEventNotFound = errors.New("audit event not found")
 )
 
 type Store interface {
@@ -46,6 +47,9 @@ type Store interface {
 	ListByStatus(context.Context, domain.JobStatus) ([]domain.Job, error)
 	ListByKind(context.Context, string) ([]domain.Job, error)
 	RequeueProcessing(context.Context) error
+	StartAuditEvent(context.Context, string, domain.StartAuditEventInput) (domain.JobAuditEvent, error)
+	FinishAuditEvent(context.Context, string, string, domain.FinishAuditEventInput) (domain.JobAuditEvent, error)
+	ListAuditEvents(context.Context, string) ([]domain.JobAuditEvent, error)
 }
 
 type ClipStatus struct {
@@ -54,17 +58,21 @@ type ClipStatus struct {
 }
 
 type MemoryStore struct {
-	mu           sync.RWMutex
-	jobs         map[string]domain.Job
-	projects     map[string]domain.HighlightProject
-	clipStatuses map[string]map[int]ClipStatus
+	mu            sync.RWMutex
+	jobs          map[string]domain.Job
+	projects      map[string]domain.HighlightProject
+	clipStatuses  map[string]map[int]ClipStatus
+	auditEventIDs map[string][]string
+	auditEvents   map[string]domain.JobAuditEvent
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		jobs:         make(map[string]domain.Job),
-		projects:     make(map[string]domain.HighlightProject),
-		clipStatuses: make(map[string]map[int]ClipStatus),
+		jobs:          make(map[string]domain.Job),
+		projects:      make(map[string]domain.HighlightProject),
+		clipStatuses:  make(map[string]map[int]ClipStatus),
+		auditEventIDs: make(map[string][]string),
+		auditEvents:   make(map[string]domain.JobAuditEvent),
 	}
 }
 
@@ -410,6 +418,91 @@ func (s *MemoryStore) RequeueProcessing(_ context.Context) error {
 	return nil
 }
 
+func (s *MemoryStore) StartAuditEvent(_ context.Context, jobID string, input domain.StartAuditEventInput) (domain.JobAuditEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.jobs[jobID]; !ok {
+		return domain.JobAuditEvent{}, ErrJobNotFound
+	}
+	id, err := newID()
+	if err != nil {
+		return domain.JobAuditEvent{}, fmt.Errorf("generate audit event id: %w", err)
+	}
+	event := domain.JobAuditEvent{
+		ID:                 id,
+		JobID:              jobID,
+		Sequence:           len(s.auditEventIDs[jobID]) + 1,
+		Category:           input.Category,
+		Name:               input.Name,
+		Status:             domain.AuditEventStatusStarted,
+		Provider:           input.Provider,
+		Host:               input.Host,
+		Path:               input.Path,
+		Method:             input.Method,
+		RequestBytes:       input.RequestBytes,
+		StartedAt:          time.Now().UTC(),
+		Detail:             input.Detail,
+		RequestBody:        input.RequestBody,
+		RequestContentType: input.RequestContentType,
+		CaptureMode:        input.CaptureMode,
+		Metadata:           cloneMetadata(input.Metadata),
+	}
+	s.auditEventIDs[jobID] = append(s.auditEventIDs[jobID], id)
+	s.auditEvents[id] = cloneAuditEvent(event)
+	return cloneAuditEvent(event), nil
+}
+
+func (s *MemoryStore) FinishAuditEvent(_ context.Context, jobID, eventID string, input domain.FinishAuditEventInput) (domain.JobAuditEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.jobs[jobID]; !ok {
+		return domain.JobAuditEvent{}, ErrJobNotFound
+	}
+	event, ok := s.auditEvents[eventID]
+	if !ok || event.JobID != jobID {
+		return domain.JobAuditEvent{}, ErrAuditEventNotFound
+	}
+	if input.Status == "" {
+		input.Status = domain.AuditEventStatusUnknown
+	}
+	event.Status = input.Status
+	event.HTTPStatus = input.HTTPStatus
+	event.ResponseBytes = input.ResponseBytes
+	event.ResponseBody = input.ResponseBody
+	event.ResponseContentType = input.ResponseContentType
+	event.Detail = input.Detail
+	event.Error = input.Error
+	event.FinishedAt = input.FinishedAt
+	if event.FinishedAt.IsZero() {
+		event.FinishedAt = time.Now().UTC()
+	}
+	event.DurationMS = input.DurationMS
+	if event.DurationMS == 0 {
+		event.DurationMS = event.FinishedAt.Sub(event.StartedAt).Milliseconds()
+	}
+	if input.Metadata != nil {
+		event.Metadata = cloneMetadata(input.Metadata)
+	}
+	s.auditEvents[eventID] = cloneAuditEvent(event)
+	return cloneAuditEvent(event), nil
+}
+
+func (s *MemoryStore) ListAuditEvents(_ context.Context, jobID string) ([]domain.JobAuditEvent, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if _, ok := s.jobs[jobID]; !ok {
+		return nil, ErrJobNotFound
+	}
+	ids := s.auditEventIDs[jobID]
+	events := make([]domain.JobAuditEvent, 0, len(ids))
+	for _, id := range ids {
+		if event, ok := s.auditEvents[id]; ok {
+			events = append(events, cloneAuditEvent(event))
+		}
+	}
+	return events, nil
+}
+
 func (s *MemoryStore) AppendLog(_ context.Context, id string, message string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -540,4 +633,9 @@ func cloneMetadata(metadata map[string]any) map[string]any {
 		clone[key] = value
 	}
 	return clone
+}
+
+func cloneAuditEvent(event domain.JobAuditEvent) domain.JobAuditEvent {
+	event.Metadata = cloneMetadata(event.Metadata)
+	return event
 }
