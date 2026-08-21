@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
 )
@@ -20,6 +21,36 @@ type ProtocolEvent struct {
 	Message string          `json:"message"`
 	Error   string          `json:"error"`
 	Result  json.RawMessage `json:"result"`
+	Audit   json.RawMessage `json:"audit"`
+}
+
+type AuditSink interface {
+	StartAuditEvent(context.Context, string, domain.StartAuditEventInput) (domain.JobAuditEvent, error)
+	FinishAuditEvent(context.Context, string, string, domain.FinishAuditEventInput) (domain.JobAuditEvent, error)
+}
+
+type protocolAuditEvent struct {
+	Phase               string                  `json:"phase"`
+	EventID             string                  `json:"event_id"`
+	Category            string                  `json:"category"`
+	Name                string                  `json:"name"`
+	Provider            string                  `json:"provider"`
+	Host                string                  `json:"host"`
+	Path                string                  `json:"path"`
+	Method              string                  `json:"method"`
+	Status              domain.AuditEventStatus `json:"status"`
+	HTTPStatus          int                     `json:"http_status"`
+	RequestBytes        int64                   `json:"request_bytes"`
+	ResponseBytes       int64                   `json:"response_bytes"`
+	DurationMS          int64                   `json:"duration_ms"`
+	RequestBody         string                  `json:"request_body"`
+	ResponseBody        string                  `json:"response_body"`
+	RequestContentType  string                  `json:"request_content_type"`
+	ResponseContentType string                  `json:"response_content_type"`
+	CaptureMode         string                  `json:"capture_mode"`
+	Detail              string                  `json:"detail"`
+	Error               string                  `json:"error"`
+	Metadata            map[string]any          `json:"metadata"`
 }
 
 type ProtocolRunner interface {
@@ -117,12 +148,14 @@ func (ExecProtocolRunner) RunProtocol(ctx context.Context, spec CommandSpec, req
 }
 
 type PythonWorkerAdapter struct {
-	PythonBinary       string
-	WorkerScript       string
-	Runner             ProtocolRunner
-	SourceDownloader   SourceDownloader
-	ArtifactDownloader ArtifactDownloader
-	SourceMaxBytes     int64
+	PythonBinary           string
+	WorkerScript           string
+	Runner                 ProtocolRunner
+	SourceDownloader       SourceDownloader
+	ArtifactDownloader     ArtifactDownloader
+	SourceMaxBytes         int64
+	AuditSink              AuditSink
+	AuditBodyHostAllowlist []string
 }
 
 func (a PythonWorkerAdapter) Run(ctx context.Context, job domain.Job, outputDir string, onLog func(string)) error {
@@ -251,10 +284,15 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 	}
 	var protocolErr error
 	var result []byte
+	auditIDs := make(map[string]string)
+	env := []string{"PYTHONUNBUFFERED=1"}
+	if len(a.AuditBodyHostAllowlist) > 0 {
+		env = append(env, "AUDIT_BODY_HOST_ALLOWLIST="+strings.Join(a.AuditBodyHostAllowlist, ","))
+	}
 	runErr := runner.RunProtocol(ctx, CommandSpec{
 		Name: pythonBinary,
 		Args: []string{"-u", workerScript},
-		Env:  []string{"PYTHONUNBUFFERED=1"},
+		Env:  env,
 	}, request, func(event ProtocolEvent) {
 		if event.Type == "error" && protocolErr == nil {
 			protocolErr = errors.New(event.Error)
@@ -265,6 +303,11 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 		if event.Type == "log" && onLog != nil {
 			onLog(event.Message)
 		}
+		if a.AuditSink != nil && len(event.Audit) > 0 && protocolErr == nil {
+			if err := handleProtocolAuditEvent(ctx, job.ID, event.Audit, a.AuditSink, auditIDs, onLog); err != nil {
+				protocolErr = err
+			}
+		}
 	})
 	if runErr != nil {
 		return nil, runErr
@@ -273,6 +316,51 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 		return nil, protocolErr
 	}
 	return result, nil
+}
+
+func handleProtocolAuditEvent(ctx context.Context, jobID string, raw json.RawMessage, sink AuditSink, auditIDs map[string]string, onLog func(string)) error {
+	var payload protocolAuditEvent
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return fmt.Errorf("decode audit event: %w", err)
+	}
+	if payload.EventID == "" {
+		return errors.New("audit event ID is required")
+	}
+	switch payload.Phase {
+	case "start":
+		event, err := sink.StartAuditEvent(ctx, jobID, domain.StartAuditEventInput{
+			Category: payload.Category, Name: payload.Name, Provider: payload.Provider,
+			Host: payload.Host, Path: payload.Path, Method: payload.Method,
+			RequestBytes: payload.RequestBytes, RequestBody: payload.RequestBody,
+			RequestContentType: payload.RequestContentType, CaptureMode: payload.CaptureMode,
+			Detail: payload.Detail, Metadata: payload.Metadata,
+		})
+		if err != nil {
+			if onLog != nil {
+				onLog(fmt.Sprintf("audit persistence failed for %s: %v", payload.Name, err))
+			}
+			return nil
+		}
+		auditIDs[payload.EventID] = event.ID
+	case "finish":
+		eventID := auditIDs[payload.EventID]
+		if eventID == "" {
+			return fmt.Errorf("audit event %q finished before start", payload.EventID)
+		}
+		if _, err := sink.FinishAuditEvent(ctx, jobID, eventID, domain.FinishAuditEventInput{
+			Status: payload.Status, HTTPStatus: payload.HTTPStatus, ResponseBytes: payload.ResponseBytes,
+			DurationMS: payload.DurationMS, ResponseBody: payload.ResponseBody,
+			ResponseContentType: payload.ResponseContentType, Detail: payload.Detail,
+			Error: payload.Error, Metadata: payload.Metadata,
+		}); err != nil {
+			if onLog != nil {
+				onLog(fmt.Sprintf("audit persistence failed for %s: %v", payload.EventID, err))
+			}
+		}
+	default:
+		return fmt.Errorf("unsupported audit phase %q", payload.Phase)
+	}
+	return nil
 }
 
 func cloneHeaders(headers map[string]string) map[string]string {

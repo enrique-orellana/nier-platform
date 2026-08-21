@@ -58,6 +58,79 @@ func TestRunnerCompletesJobAndPersistsWorkerLogs(t *testing.T) {
 	}
 }
 
+func TestRunnerPersistsLifecycleAuditEvents(t *testing.T) {
+	store := NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	if err := (Runner{Store: store, Worker: fakeWorker{}}).RunOnce(context.Background(), job.ID); err != nil {
+		t.Fatalf("run job: %v", err)
+	}
+	events, err := store.ListAuditEvents(context.Background(), job.ID)
+	if err != nil {
+		t.Fatalf("list audit events: %v", err)
+	}
+	if len(events) != 3 {
+		t.Fatalf("expected three lifecycle events, got %#v", events)
+	}
+	expected := []struct {
+		name   string
+		status domain.AuditEventStatus
+	}{
+		{"job.queued", domain.AuditEventStatusCompleted},
+		{"worker.started", domain.AuditEventStatusCompleted},
+		{"worker.completed", domain.AuditEventStatusCompleted},
+	}
+	for index, want := range expected {
+		if events[index].Sequence != index+1 || events[index].Name != want.name || events[index].Status != want.status {
+			t.Fatalf("unexpected lifecycle event %d: %#v", index, events[index])
+		}
+	}
+}
+
+func TestRunnerMarksWorkerFailureAndCancellationInAuditTimeline(t *testing.T) {
+	t.Run("failure", func(t *testing.T) {
+		store := NewMemoryStore()
+		job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+		if err != nil {
+			t.Fatalf("create job: %v", err)
+		}
+		workerErr := errors.New("python exited with status 1")
+		if err := (Runner{Store: store, Worker: fakeWorker{err: workerErr}}).RunOnce(context.Background(), job.ID); !errors.Is(err, workerErr) {
+			t.Fatalf("expected worker error, got %v", err)
+		}
+		events, err := store.ListAuditEvents(context.Background(), job.ID)
+		if err != nil {
+			t.Fatalf("list audit events: %v", err)
+		}
+		if len(events) == 0 || events[len(events)-1].Name != "worker.failed" || events[len(events)-1].Status != domain.AuditEventStatusFailed {
+			t.Fatalf("expected failed worker event, got %#v", events)
+		}
+	})
+
+	t.Run("cancellation", func(t *testing.T) {
+		store := NewMemoryStore()
+		job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "highlight-generation"})
+		if err != nil {
+			t.Fatalf("create job: %v", err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if err := (Runner{Store: store, Worker: contextAwareWorker{}}).RunOnce(ctx, job.ID); err == nil {
+			t.Fatal("expected cancellation error")
+		}
+		events, err := store.ListAuditEvents(context.Background(), job.ID)
+		if err != nil {
+			t.Fatalf("list audit events: %v", err)
+		}
+		if len(events) == 0 || events[len(events)-1].Name != "worker.started" || events[len(events)-1].Status != domain.AuditEventStatusUnknown {
+			t.Fatalf("expected unresolved worker event, got %#v", events)
+		}
+	})
+}
+
 func TestRunnerMarksDeferredClipDiscoveryAsClipsReady(t *testing.T) {
 	store := NewMemoryStore()
 	job, err := store.Create(context.Background(), domain.CreateJobInput{

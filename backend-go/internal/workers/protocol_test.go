@@ -53,6 +53,47 @@ func (errorEventRunner) RunProtocol(_ context.Context, _ CommandSpec, _ map[stri
 	return nil
 }
 
+type auditProtocolRunner struct{}
+
+func (auditProtocolRunner) RunProtocol(_ context.Context, _ CommandSpec, _ map[string]any, onEvent func(ProtocolEvent)) error {
+	onEvent(ProtocolEvent{Type: "audit", Audit: json.RawMessage(`{"phase":"start","event_id":"event-1","category":"external_request","name":"ai.analysis","host":"openrouter.ai","method":"POST"}`)})
+	onEvent(ProtocolEvent{Type: "audit", Audit: json.RawMessage(`{"phase":"finish","event_id":"event-1","status":"completed","http_status":200,"response_body":"{\"ok\":true}"}`)})
+	onEvent(ProtocolEvent{Type: "result", Result: json.RawMessage(`{"job_id":"job-1"}`)})
+	return nil
+}
+
+type recordingAuditSink struct {
+	started  []domain.StartAuditEventInput
+	finished []domain.FinishAuditEventInput
+	ids      []string
+}
+
+func (s *recordingAuditSink) StartAuditEvent(_ context.Context, _ string, input domain.StartAuditEventInput) (domain.JobAuditEvent, error) {
+	s.started = append(s.started, input)
+	return domain.JobAuditEvent{ID: "persisted-event-1"}, nil
+}
+
+func (s *recordingAuditSink) FinishAuditEvent(_ context.Context, _ string, eventID string, input domain.FinishAuditEventInput) (domain.JobAuditEvent, error) {
+	s.ids = append(s.ids, eventID)
+	s.finished = append(s.finished, input)
+	return domain.JobAuditEvent{ID: eventID}, nil
+}
+
+func TestPythonWorkerAdapterPersistsAuditProtocolEventsAndReturnsResult(t *testing.T) {
+	sink := &recordingAuditSink{}
+	adapter := PythonWorkerAdapter{Runner: auditProtocolRunner{}, AuditSink: sink}
+	result, err := adapter.RunResult(context.Background(), domain.Job{ID: "job-1"}, "output/job-1", nil)
+	if err != nil {
+		t.Fatalf("run worker: %v", err)
+	}
+	if string(result) != `{"job_id":"job-1"}` || len(sink.started) != 1 || len(sink.finished) != 1 {
+		t.Fatalf("audit protocol was not forwarded: result=%s started=%#v finished=%#v", result, sink.started, sink.finished)
+	}
+	if sink.started[0].Name != "ai.analysis" || sink.started[0].Host != "openrouter.ai" || sink.finished[0].HTTPStatus != 200 || sink.ids[0] != "persisted-event-1" {
+		t.Fatalf("unexpected forwarded audit payload: started=%#v finished=%#v ids=%#v", sink.started, sink.finished, sink.ids)
+	}
+}
+
 type recordingSourceDownloader struct{ bucket, key, destination string }
 
 func (d *recordingSourceDownloader) DownloadSourceObject(_ context.Context, bucket, key, destination string, _ int64) error {

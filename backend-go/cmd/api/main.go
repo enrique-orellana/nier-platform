@@ -53,10 +53,12 @@ func main() {
 	runner := &jobs.Runner{
 		Store: store,
 		Worker: workers.PythonWorkerAdapter{
-			PythonBinary:       os.Getenv("PYTHON_BINARY"),
-			WorkerScript:       os.Getenv("PYTHON_WORKER_SCRIPT"),
-			SourceDownloader:   sourceDownloader,
-			ArtifactDownloader: artifactDownloader,
+			PythonBinary:           os.Getenv("PYTHON_BINARY"),
+			WorkerScript:           os.Getenv("PYTHON_WORKER_SCRIPT"),
+			SourceDownloader:       sourceDownloader,
+			ArtifactDownloader:     artifactDownloader,
+			AuditSink:              store,
+			AuditBodyHostAllowlist: cfg.AuditBodyHostAllowlist,
 		},
 	}
 	runtimeContext, cancelRuntime := context.WithCancel(context.Background())

@@ -34,6 +34,10 @@ func (r Runner) RunOnce(ctx context.Context, jobID string) error {
 	if err != nil {
 		return err
 	}
+	queuedEventID := r.startLifecycleAudit(ctx, jobID, "job.queued")
+	r.finishLifecycleAudit(ctx, jobID, queuedEventID, domain.FinishAuditEventInput{
+		Status: domain.AuditEventStatusCompleted,
+	})
 	if err := r.Store.AppendLog(ctx, jobID, "Job started by worker."); err != nil {
 		return err
 	}
@@ -56,6 +60,7 @@ func (r Runner) RunOnce(ctx context.Context, jobID string) error {
 	}
 	var result []byte
 	var workerErr error
+	workerStartedEventID := r.startLifecycleAudit(ctx, jobID, "worker.started")
 	logCallback := func(message string) {
 		if logErr != nil {
 			return
@@ -82,6 +87,25 @@ func (r Runner) RunOnce(ctx context.Context, jobID string) error {
 		if status == domain.JobStatusCancelled {
 			message = "Job cancelled."
 		}
+		if status == domain.JobStatusCancelled {
+			r.finishLifecycleAudit(persistCtx, jobID, workerStartedEventID, domain.FinishAuditEventInput{
+				Status: domain.AuditEventStatusUnknown,
+				Detail: message,
+				Error:  workerErr.Error(),
+			})
+		} else {
+			r.finishLifecycleAudit(persistCtx, jobID, workerStartedEventID, domain.FinishAuditEventInput{
+				Status: domain.AuditEventStatusFailed,
+				Detail: message,
+				Error:  workerErr.Error(),
+			})
+			failedEventID := r.startLifecycleAudit(persistCtx, jobID, "worker.failed")
+			r.finishLifecycleAudit(persistCtx, jobID, failedEventID, domain.FinishAuditEventInput{
+				Status: domain.AuditEventStatusFailed,
+				Detail: message,
+				Error:  workerErr.Error(),
+			})
+		}
 		_ = r.Store.AppendLog(persistCtx, jobID, fmt.Sprintf("Execution stopped: %s", message))
 		_, transitionErr := r.Store.Transition(persistCtx, jobID, status, message)
 		if transitionErr != nil {
@@ -100,6 +124,31 @@ func (r Runner) RunOnce(ctx context.Context, jobID string) error {
 			completionStatus = domain.JobStatusClipsReady
 		}
 	}
+	r.finishLifecycleAudit(ctx, jobID, workerStartedEventID, domain.FinishAuditEventInput{
+		Status: domain.AuditEventStatusCompleted,
+	})
+	completedEventID := r.startLifecycleAudit(ctx, jobID, "worker.completed")
+	r.finishLifecycleAudit(ctx, jobID, completedEventID, domain.FinishAuditEventInput{
+		Status: domain.AuditEventStatusCompleted,
+	})
 	_, err = r.Store.Transition(ctx, jobID, completionStatus, "")
 	return err
+}
+
+func (r Runner) startLifecycleAudit(ctx context.Context, jobID, name string) string {
+	event, err := r.Store.StartAuditEvent(ctx, jobID, domain.StartAuditEventInput{
+		Category: "lifecycle",
+		Name:     name,
+	})
+	if err != nil {
+		return ""
+	}
+	return event.ID
+}
+
+func (r Runner) finishLifecycleAudit(ctx context.Context, jobID, eventID string, input domain.FinishAuditEventInput) {
+	if eventID == "" {
+		return
+	}
+	_, _ = r.Store.FinishAuditEvent(ctx, jobID, eventID, input)
 }
