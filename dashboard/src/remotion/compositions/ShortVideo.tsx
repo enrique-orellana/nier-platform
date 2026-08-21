@@ -1,10 +1,111 @@
-import React from "react";
+import React, { useCallback, useEffect, useId, useRef } from "react";
 import { Video } from "@remotion/media";
-import { AbsoluteFill, Html5Video, useRemotionEnvironment } from "remotion";
+import {
+  AbsoluteFill,
+  Internals,
+  useCurrentFrame,
+  useRemotionEnvironment,
+  useVideoConfig,
+} from "remotion";
 import type { ShortVideoProps } from "../lib/types";
 import { Subtitles } from "./Subtitles";
 import { HookOverlay } from "./HookOverlay";
 import { VideoEffects } from "./VideoEffects";
+
+const BrowserVideo: React.FC<{
+  videoUrl: string;
+  videoStartSeconds: number;
+  onAutoPlayError?: () => void;
+  fps: number;
+  objectFit: string;
+}> = ({ videoUrl, videoStartSeconds, onAutoPlayError, fps, objectFit }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoId = useId();
+  const frame = useCurrentFrame();
+  const videoConfig = useVideoConfig();
+  const timeline = Internals.Timeline.useTimelineContext();
+  const lastFrameRef = useRef(frame);
+  const lastSourceKeyRef = useRef("");
+  const sourceKey = `${videoUrl}:${videoStartSeconds}:${videoConfig.fps || fps}`;
+
+  const playVideo = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || !timeline.imperativePlaying.current) return;
+    try {
+      video.play()?.catch(() => onAutoPlayError?.());
+    } catch {
+      onAutoPlayError?.();
+    }
+  }, [onAutoPlayError, timeline.imperativePlaying]);
+
+  useEffect(() => {
+    const mediaTags = timeline.audioAndVideoTags.current;
+    const tag = { id: videoId, play: playVideo };
+    mediaTags.push(tag);
+    return () => {
+      timeline.audioAndVideoTags.current = mediaTags.filter(
+        (mediaTag) => mediaTag.id !== videoId,
+      );
+    };
+  }, [playVideo, timeline.audioAndVideoTags, videoId]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (!timeline.playing) {
+      video.pause();
+      return;
+    }
+    playVideo();
+  }, [playVideo, timeline.playing]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const frameDelta = Math.abs(frame - lastFrameRef.current);
+    const sourceChanged = sourceKey !== lastSourceKeyRef.current;
+    const shouldSync = sourceChanged || !timeline.playing || frameDelta > 3;
+    if (shouldSync) {
+      const targetTime =
+        Number(videoStartSeconds) + frame / Number(videoConfig.fps || fps);
+      if (
+        Number.isFinite(targetTime) &&
+        Math.abs(video.currentTime - targetTime) > 0.05
+      )
+        video.currentTime = Math.max(0, targetTime);
+    }
+    lastFrameRef.current = frame;
+    lastSourceKeyRef.current = sourceKey;
+  }, [
+    frame,
+    fps,
+    sourceKey,
+    timeline.playing,
+    videoConfig.fps,
+    videoStartSeconds,
+  ]);
+
+  return (
+    <video
+      ref={videoRef}
+      data-testid="native-browser-video"
+      src={videoUrl}
+      preload="auto"
+      playsInline
+      onLoadedMetadata={() => {
+        lastSourceKeyRef.current = "";
+      }}
+      onCanPlay={playVideo}
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        objectFit,
+      }}
+    />
+  );
+};
 
 /**
  * Main composition that layers all post-processing on top of the base video.
@@ -79,19 +180,12 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             }}
           />
         ) : (
-          <Html5Video
-            src={videoUrl}
-            trimBefore={videoStartFrame}
-            pauseWhenBuffering={true}
-            preload="auto"
+          <BrowserVideo
+            videoUrl={videoUrl}
+            videoStartSeconds={videoStartSeconds}
             onAutoPlayError={onAutoPlayError}
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: usesStandardLayout ? "contain" : videoFit || "cover",
-            }}
+            fps={Number(fps)}
+            objectFit={usesStandardLayout ? "contain" : videoFit || "cover"}
           />
         )}
       </VideoEffects>

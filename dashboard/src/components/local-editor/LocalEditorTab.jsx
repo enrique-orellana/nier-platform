@@ -2278,6 +2278,7 @@ export default function LocalEditorTab({
                     subtitleTracks={[]}
                     activeSubtitleTrackId={null}
                     hook={hook}
+                    currentFrame={Math.round((playheadMs / 1000) * remotionFps)}
                     playing={isPlaying}
                     loop={isLooping}
                     controls={false}

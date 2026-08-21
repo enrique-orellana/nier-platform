@@ -660,6 +660,53 @@ describe("FullScreenEditor", () => {
     );
   });
 
+  it("keeps a still-valid direct MinIO URL stable for browser caching", async () => {
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+      .toISOString()
+      .replace(/[-:]/g, "")
+      .replace(/\.\d{3}Z$/, "Z");
+    const cachedUrl = `https://minio.example/master/source.mp4?X-Amz-Date=${expiresAt}&X-Amz-Expires=7200`;
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          video_url: cachedUrl,
+          source_video_url: cachedUrl,
+        }}
+        initialManifest={{
+          timeline: {
+            source_video_url: cachedUrl,
+            trim: { start_sec: 0, end_sec: 10 },
+          },
+          layers: {},
+          subtitle_tracks: [],
+        }}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
+        "data-video-url",
+        cachedUrl,
+      ),
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/projects/clips/job?refresh=true",
+    );
+  });
+
   it("saves generated hashtags in the new version manifest", async () => {
     renderVersionMocks.saveAndRenderVersion.mockResolvedValue({
       status: "done",

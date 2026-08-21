@@ -33,6 +33,40 @@ const proxyUrl = (url) => {
   return url;
 };
 
+const PRESIGNED_URL_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+
+const parseAmzDate = (value) => {
+  const match = String(value || "").match(
+    /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/,
+  );
+  if (!match) return NaN;
+  return Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    Number(match[6]),
+  );
+};
+
+const shouldRefreshPresignedVideoUrl = (url) => {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    const signedAt = parsed.searchParams.get("X-Amz-Date");
+    const expiresInSeconds = parsed.searchParams.get("X-Amz-Expires");
+    if (!signedAt && expiresInSeconds === null && /^https?:\/\//i.test(url))
+      return false;
+
+    const expiresAt = parseAmzDate(signedAt) + Number(expiresInSeconds) * 1000;
+    if (!Number.isFinite(expiresAt)) return true;
+    return Date.now() >= expiresAt - PRESIGNED_URL_REFRESH_BUFFER_MS;
+  } catch {
+    return true;
+  }
+};
+
 const videoPath = (url) => {
   if (!url) return "";
   try {
@@ -386,8 +420,13 @@ export default function FullScreenEditor({
     jobId,
   ]);
 
+  const currentMasterVideoUrl =
+    clip?.source_video_url || clip?.original_video_url || clip?.video_url;
+
   useEffect(() => {
     if (!isOpen || !useLocalEditor || !jobId) return undefined;
+    if (!shouldRefreshPresignedVideoUrl(currentMasterVideoUrl))
+      return undefined;
     let cancelled = false;
     const refreshMasterVideoUrl = async () => {
       try {
@@ -417,7 +456,7 @@ export default function FullScreenEditor({
     return () => {
       cancelled = true;
     };
-  }, [clipIndex, isOpen, jobId, useLocalEditor]);
+  }, [clipIndex, currentMasterVideoUrl, isOpen, jobId, useLocalEditor]);
 
   const inputProps = useMemo(() => {
     const nextManifest = editorStateToManifest(

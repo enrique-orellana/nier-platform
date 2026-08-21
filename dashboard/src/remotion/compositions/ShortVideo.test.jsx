@@ -1,20 +1,25 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const remotionVideoPropsMock = vi.hoisted(() => vi.fn());
-const html5VideoPropsMock = vi.hoisted(() => vi.fn());
 const remotionEnvironmentMock = vi.hoisted(() => ({ isRendering: false }));
+const timelineContextMock = vi.hoisted(() => ({
+  playing: false,
+  imperativePlaying: { current: false },
+  audioAndVideoTags: { current: [] },
+}));
 
 vi.mock("remotion", () => ({
   AbsoluteFill: ({ children }) => <div>{children}</div>,
-  Html5Video: (props) => {
-    html5VideoPropsMock(props);
-    return <video data-testid="html5-video" {...props} />;
-  },
   useRemotionEnvironment: () => remotionEnvironmentMock,
   useCurrentFrame: () => 0,
   useVideoConfig: () => ({ fps: 30 }),
+  Internals: {
+    Timeline: {
+      useTimelineContext: () => timelineContextMock,
+    },
+  },
   interpolate: (value) => value,
   Sequence: ({ children }) => <>{children}</>,
   spring: () => 1,
@@ -33,13 +38,21 @@ vi.mock("./HookOverlay", () => ({ HookOverlay: () => null }));
 import { ShortVideo } from "./ShortVideo";
 
 describe("ShortVideo media source", () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+  });
+
   afterEach(() => {
     remotionEnvironmentMock.isRendering = false;
+    timelineContextMock.playing = false;
+    timelineContextMock.imperativePlaying.current = false;
+    timelineContextMock.audioAndVideoTags.current = [];
+    vi.restoreAllMocks();
   });
 
   it("renders the standard layout with a blurred background and contained foreground", () => {
     remotionVideoPropsMock.mockClear();
-    html5VideoPropsMock.mockClear();
 
     render(
       <ShortVideo
@@ -49,27 +62,17 @@ describe("ShortVideo media source", () => {
     );
 
     expect(screen.queryAllByTestId("remotion-video")).toHaveLength(0);
-    expect(screen.getAllByTestId("html5-video")).toHaveLength(1);
-    expect(html5VideoPropsMock.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        style: expect.objectContaining({
-          position: "absolute",
-          inset: 0,
-          objectFit: "contain",
-        }),
-      }),
-    );
-    expect(screen.getByTestId("html5-video")).toHaveStyle({
+    expect(screen.getAllByTestId("native-browser-video")).toHaveLength(1);
+    expect(screen.getByTestId("native-browser-video")).toHaveStyle({
       position: "absolute",
       inset: "0",
     });
-    expect(screen.getByTestId("html5-video")).toHaveStyle({
+    expect(screen.getByTestId("native-browser-video")).toHaveStyle({
       objectFit: "contain",
     });
   });
 
   it("uses the browser-compatible video decoder in the Player", () => {
-    html5VideoPropsMock.mockClear();
     render(
       <ShortVideo
         videoUrl="/videos/clip.mp4"
@@ -77,13 +80,20 @@ describe("ShortVideo media source", () => {
         fps={30}
       />,
     );
-    expect(screen.getByTestId("html5-video")).toHaveAttribute(
+    expect(screen.getByTestId("native-browser-video")).toHaveAttribute(
       "src",
       "/videos/clip.mp4",
     );
-    expect(html5VideoPropsMock.mock.calls[0][0]).toEqual(
-      expect.objectContaining({ trimBefore: 510 }),
+  });
+
+  it("uses a native browser video without Remotion buffering resync", () => {
+    render(<ShortVideo videoUrl="/videos/clip.mp4" />);
+
+    expect(screen.getByTestId("native-browser-video")).toHaveAttribute(
+      "preload",
+      "auto",
     );
+    expect(screen.queryByTestId("html5-video")).not.toBeInTheDocument();
   });
 
   it("keeps both media layers for the Remotion renderer", () => {
@@ -103,8 +113,7 @@ describe("ShortVideo media source", () => {
     );
   });
 
-  it("lets Remotion own the trimmed media clock during browser playback", () => {
-    html5VideoPropsMock.mockClear();
+  it("registers native playback with the Remotion player", () => {
     render(
       <ShortVideo
         videoUrl="/videos/master.mp4"
@@ -112,32 +121,18 @@ describe("ShortVideo media source", () => {
         fps={30}
       />,
     );
-    expect(html5VideoPropsMock.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        trimBefore: 510,
-        pauseWhenBuffering: true,
-        preload: "auto",
-      }),
+    expect(screen.getByTestId("native-browser-video")).toHaveAttribute(
+      "preload",
+      "auto",
     );
-    expect(
-      html5VideoPropsMock.mock.calls[0][0].onLoadedMetadata,
-    ).toBeUndefined();
-    expect(html5VideoPropsMock.mock.calls[0][0].onCanPlay).toBeUndefined();
+    expect(timelineContextMock.audioAndVideoTags.current).toHaveLength(1);
+    expect(timelineContextMock.audioAndVideoTags.current[0].play).toEqual(
+      expect.any(Function),
+    );
   });
 
-  it("forwards fallback autoplay failures to the preview controller", () => {
-    const onAutoPlayError = vi.fn();
-    html5VideoPropsMock.mockClear();
-
-    render(
-      <ShortVideo
-        videoUrl="/videos/clip.mp4"
-        onAutoPlayError={onAutoPlayError}
-      />,
-    );
-
-    expect(html5VideoPropsMock.mock.calls[0][0]).toEqual(
-      expect.objectContaining({ onAutoPlayError }),
-    );
+  it("uses the native video for autoplay recovery", () => {
+    render(<ShortVideo videoUrl="/videos/clip.mp4" />);
+    expect(screen.getByTestId("native-browser-video")).toBeInTheDocument();
   });
 });

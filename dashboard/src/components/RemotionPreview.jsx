@@ -45,6 +45,7 @@ function RemotionPreview({
   const durationInFrames = Math.max(1, Math.round(durationInSeconds * fps));
   const playerRef = useRef(null);
   const playerFrameRef = useRef(null);
+  const wasPlayingRef = useRef(playing);
   const [audioPlaybackBlocked, setAudioPlaybackBlocked] = useState(false);
 
   const handleAutoPlayError = useCallback(() => {
@@ -66,7 +67,16 @@ function RemotionPreview({
     // The editor receives frame updates from this player and publishes them
     // back on a throttled clock. Seeking from that delayed value while the
     // player is running makes every update jump the media backwards.
-    if (playing) return;
+    if (playing) {
+      wasPlayingRef.current = true;
+      return;
+    }
+    // A temporary media pause (for example while buffering) must not be
+    // treated as an external seek. Keep the current media frame intact.
+    if (wasPlayingRef.current) {
+      wasPlayingRef.current = false;
+      return;
+    }
     const targetFrame = Math.max(
       0,
       Math.min(durationInFrames - 1, Math.round(currentFrame)),

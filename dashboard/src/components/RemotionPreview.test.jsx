@@ -8,6 +8,7 @@ const pauseMock = vi.hoisted(() => vi.fn());
 const seekToMock = vi.hoisted(() => vi.fn());
 const unmuteMock = vi.hoisted(() => vi.fn());
 const playerPropsMock = vi.hoisted(() => vi.fn());
+const playerEmitMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@remotion/player", () => ({
   Player: forwardRef(({ children, ...props }, ref) => {
@@ -24,9 +25,12 @@ vi.mock("@remotion/player", () => ({
         play: playMock,
         pause: pauseMock,
         unmute: unmuteMock,
-        emit: (name, detail) => listeners[name]?.({ detail }),
+        emit: playerEmitMock,
       }),
       [listeners],
+    );
+    playerEmitMock.mockImplementation((name, detail) =>
+      listeners[name]?.({ detail }),
     );
     return (
       <button
@@ -72,7 +76,11 @@ describe("RemotionPreview", () => {
   it("does not seek backward from a delayed editor clock while playing", () => {
     seekToMock.mockClear();
     const { rerender } = render(
-      <RemotionPreview videoUrl="/video.mp4" currentFrame={0} playing={true} />,
+      <RemotionPreview
+        videoUrl="/video.mp4"
+        currentFrame={0}
+        playing={false}
+      />,
     );
 
     seekToMock.mockClear();
@@ -80,7 +88,26 @@ describe("RemotionPreview", () => {
       <RemotionPreview
         videoUrl="/video.mp4"
         currentFrame={12}
-        playing={true}
+        playing={false}
+      />,
+    );
+
+    expect(seekToMock).toHaveBeenCalledWith(12);
+  });
+
+  it("does not seek to a stale frame when playback pauses during buffering", () => {
+    seekToMock.mockClear();
+    playerEmitMock.mockClear();
+    const { rerender } = render(
+      <RemotionPreview videoUrl="/video.mp4" currentFrame={0} playing={true} />,
+    );
+
+    act(() => playerEmitMock("pause"));
+    rerender(
+      <RemotionPreview
+        videoUrl="/video.mp4"
+        currentFrame={0}
+        playing={false}
       />,
     );
 

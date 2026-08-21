@@ -658,7 +658,7 @@ describe("LocalEditorTab", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("local-editor-remotion-preview")).toHaveAttribute(
       "data-current-frame",
-      "uncontrolled",
+      "0",
     );
     expect(screen.getByTestId("local-editor-remotion-preview")).toHaveAttribute(
       "data-controls",
