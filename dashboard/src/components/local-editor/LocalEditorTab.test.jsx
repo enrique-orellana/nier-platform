@@ -261,6 +261,35 @@ describe("LocalEditorTab", () => {
     ).toHaveAttribute("src", exportUrl);
   });
 
+  it("delegates project video export and downloads the completed version URL", async () => {
+    const onExport = vi.fn().mockResolvedValue("/videos/job/exported.mp4");
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/job/source.mp4"
+        initialExportVideoUrl="/videos/job/source.mp4"
+        initialPlaybackDurationMs={10000}
+        remotionPreviewProps={{
+          videoUrl: "/videos/job/source.mp4",
+          durationInSeconds: 10,
+          width: 1080,
+          height: 1920,
+        }}
+        onExport={onExport}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Export Video" }),
+    );
+
+    await waitFor(() => expect(onExport).toHaveBeenCalledTimes(1));
+    expect(anchorClick).toHaveBeenCalled();
+  });
+
   it("does not offer local upload when a project editor has no remote video", () => {
     render(<LocalEditorTab allowLocalUpload={false} />);
 

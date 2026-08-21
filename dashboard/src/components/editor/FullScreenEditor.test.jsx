@@ -5,6 +5,7 @@ import FullScreenEditor from "./FullScreenEditor";
 import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
 
 const renderVersionMocks = vi.hoisted(() => ({
+  saveDraftVersion: vi.fn(),
   saveAndRenderVersion: vi.fn(),
 }));
 vi.mock("../../editor/renderVersion", () => renderVersionMocks);
@@ -51,6 +52,7 @@ const manifest = {
 describe("FullScreenEditor", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    renderVersionMocks.saveDraftVersion.mockReset();
     renderVersionMocks.saveAndRenderVersion.mockReset();
   });
 
@@ -729,10 +731,11 @@ describe("FullScreenEditor", () => {
   });
 
   it("saves generated hashtags in the new version manifest", async () => {
-    renderVersionMocks.saveAndRenderVersion.mockResolvedValue({
-      status: "done",
-      outputUrl: "/videos/job/generated.mp4",
-      version: { version_id: "v2", status: "done" },
+    renderVersionMocks.saveDraftVersion.mockResolvedValue({
+      status: "saved",
+      versionId: "v2",
+      version: { version_id: "v2", status: "pending" },
+      manifest,
     });
     vi.stubGlobal(
       "fetch",
@@ -787,7 +790,7 @@ describe("FullScreenEditor", () => {
     );
 
     await waitFor(() =>
-      expect(renderVersionMocks.saveAndRenderVersion).toHaveBeenCalledWith(
+      expect(renderVersionMocks.saveDraftVersion).toHaveBeenCalledWith(
         expect.objectContaining({
           manifest: expect.objectContaining({
             publishing_metadata: { hashtags: ["#editedclip"] },
@@ -800,14 +803,10 @@ describe("FullScreenEditor", () => {
               layout: { format: "standard", facecam_size: "medium" },
             }),
           }),
-          props: expect.objectContaining({
-            layout: { format: "standard", facecam_size: "medium" },
-            subtitles: null,
-            hook: null,
-          }),
         }),
       ),
     );
+    expect(renderVersionMocks.saveAndRenderVersion).not.toHaveBeenCalled();
   });
 
   it("shows and clears the local editor render-ready badge", async () => {
@@ -844,7 +843,7 @@ describe("FullScreenEditor", () => {
     );
 
     fireEvent.click(
-      await screen.findByRole("button", { name: /save as new version/i }),
+      await screen.findByRole("button", { name: "Export Video" }),
     );
 
     await waitFor(() =>

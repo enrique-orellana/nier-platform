@@ -465,7 +465,9 @@ export default function ResultCard({
 
     try {
       if (editorSessionRef.current) {
-        await editorSessionRef.current.save();
+        if (editorSessionRef.current.export)
+          await editorSessionRef.current.export();
+        else await editorSessionRef.current.save();
         return;
       }
       const renderLayers = activeLayers;

@@ -860,6 +860,7 @@ export default function LocalEditorTab({
   allowLocalUpload = true,
   clipMetadata = null,
   onHashtagsChange = null,
+  onExport = null,
 }) {
   const projectClipIndex = Number(initialClipIndex);
   const hasProjectClipSource = Boolean(
@@ -1879,7 +1880,10 @@ export default function LocalEditorTab({
           }
         : {};
       let outputUrl;
-      if (subtitleCues.length) {
+      if (onExport) {
+        outputUrl = await onExport();
+        if (!outputUrl) throw new Error("Export did not return a video URL.");
+      } else if (subtitleCues.length) {
         outputUrl = await burnLocalEditorSubtitles({
           file: videoFile,
           ...backendSourceParams,

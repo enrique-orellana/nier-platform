@@ -22,7 +22,10 @@ import DesignComboTimeline from "./DesignComboTimeline";
 import MediaPool from "./MediaPool";
 import InspectorPanel from "./InspectorPanel";
 import SubtitleTranslationPanel from "../SubtitleTranslationPanel";
-import { saveAndRenderVersion } from "../../editor/renderVersion";
+import {
+  saveDraftVersion,
+  saveAndRenderVersion,
+} from "../../editor/renderVersion";
 import EditorActionToolbar from "./EditorActionToolbar";
 import LocalEditorTab from "../local-editor/LocalEditorTab";
 import { DEFAULT_SUBTITLE_STYLE } from "../local-editor/localEditorStyles";
@@ -570,6 +573,40 @@ export default function FullScreenEditor({
     shouldRefreshPresignedVideoUrl(currentMasterVideoUrl) &&
     !refreshedMasterVideoUrl;
   const projectVideoUrl = refreshedMasterVideoUrl || projectInputProps.videoUrl;
+  const versionManifest = useMemo(
+    () => ({
+      ...projectManifest,
+      timeline: useLocalEditor
+        ? {
+            ...(projectManifest.timeline || {}),
+            source_video_url: projectVideoUrl,
+          }
+        : projectManifest.timeline,
+      active_subtitle_track_id: activeTrackId,
+    }),
+    [activeTrackId, projectManifest, projectVideoUrl, useLocalEditor],
+  );
+  const versionRenderProps = useMemo(
+    () => ({
+      ...(useLocalEditor
+        ? { ...projectInputProps, videoUrl: projectVideoUrl }
+        : inputProps),
+      durationInFrames: editorState.durationFrames,
+      fps,
+      width: clip.output_width || 1080,
+      height: clip.output_height || 1920,
+    }),
+    [
+      clip.output_height,
+      clip.output_width,
+      editorState.durationFrames,
+      fps,
+      inputProps,
+      projectInputProps,
+      projectVideoUrl,
+      useLocalEditor,
+    ],
+  );
   const generatedClipUrl = generatedClipVideoUrl(clip, projectManifest);
   const previewVideoUrl =
     generatedClipUrl || (masterVideoRefreshPending ? "" : projectVideoUrl);
@@ -865,54 +902,60 @@ export default function FullScreenEditor({
     if (busy) return;
     setBusy(true);
     setError(null);
-    const props = {
-      ...(useLocalEditor
-        ? {
-            ...projectInputProps,
-            videoUrl: projectVideoUrl,
-            // Saving a version updates the editable cue manifest, but keeps
-            // the version's source render clean. Explicit export is the only
-            // path that burns subtitles or hooks into the video.
-            subtitles: null,
-            hook: null,
-          }
-        : inputProps),
-      durationInFrames: editorState.durationFrames,
-      fps,
-      width: clip.output_width || 1080,
-      height: clip.output_height || 1920,
-    };
-    const result = await saveAndRenderVersion({
-      jobId,
-      clipIndex,
-      manifest: {
-        ...projectManifest,
-        timeline: useLocalEditor
-          ? {
-              ...(projectManifest.timeline || {}),
-              source_video_url: projectVideoUrl,
-            }
-          : projectManifest.timeline,
-        active_subtitle_track_id: activeTrackId,
-      },
-      parentVersionId: version?.version_id,
-      props,
-    });
-    if (result.status === "done") {
+    try {
+      const result = await saveDraftVersion({
+        jobId,
+        clipIndex,
+        manifest: versionManifest,
+        parentVersionId: version?.version_id,
+      });
+      const nextVersion = result.version || {
+        version_id: result.versionId,
+        status: "pending",
+      };
+      if (!nextVersion?.version_id)
+        throw new Error("Saved version did not return a version id.");
+      setVersions((current) => [
+        ...current.filter(
+          (candidate) => candidate.version_id !== nextVersion.version_id,
+        ),
+        nextVersion,
+      ]);
+      setRenderCompleteNotice(false);
+      setVersion(nextVersion);
+      setManifest(result.manifest || versionManifest);
+      onVersionChange?.(nextVersion.version_id);
+    } catch (saveError) {
+      setError(saveError.message || "Could not save the new version.");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, clipIndex, jobId, onVersionChange, versionManifest, version]);
+
+  const exportVersion = useCallback(async () => {
+    if (busy) return null;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await saveAndRenderVersion({
+        jobId,
+        clipIndex,
+        manifest: versionManifest,
+        parentVersionId: version?.version_id,
+        props: versionRenderProps,
+      });
+      if (result.status !== "done")
+        throw new Error(result.error || "Render failed.");
       const outputUrl = result.outputUrl?.startsWith("http")
         ? result.outputUrl
         : getApiUrl(result.outputUrl);
-      onRendered?.(outputUrl);
       const nextVersion = result.version || {
         version_id: result.versionId,
         status: "done",
         output_url: outputUrl,
       };
-      if (!nextVersion?.version_id) {
-        setError("Render completed without a version id.");
-        setBusy(false);
-        return;
-      }
+      if (!nextVersion?.version_id)
+        throw new Error("Render completed without a version id.");
       setVersions((current) => [
         ...current.filter(
           (candidate) => candidate.version_id !== nextVersion.version_id,
@@ -921,29 +964,25 @@ export default function FullScreenEditor({
       ]);
       setRenderCompleteNotice(true);
       setVersion(nextVersion);
+      setManifest(versionManifest);
       onVersionChange?.(nextVersion.version_id);
-    } else
-      setError(
-        result.error || "Render failed. The previous version is still active.",
-      );
-    setBusy(false);
+      onRendered?.(outputUrl);
+      return outputUrl;
+    } catch (exportError) {
+      setError(exportError.message || "Render failed.");
+      throw exportError;
+    } finally {
+      setBusy(false);
+    }
   }, [
-    activeTrackId,
     busy,
-    clip.output_height,
-    clip.output_width,
     clipIndex,
-    editorState.durationFrames,
-    fps,
-    inputProps,
     jobId,
     onRendered,
     onVersionChange,
-    projectInputProps,
-    projectManifest,
-    projectVideoUrl,
-    useLocalEditor,
     version,
+    versionManifest,
+    versionRenderProps,
   ]);
 
   const downloadVersion = async () => {
@@ -964,6 +1003,7 @@ export default function FullScreenEditor({
     onSessionReady({
       applyLayer,
       setSourceVideo,
+      export: exportVersion,
       save: saveVersion,
       getManifest: () => currentManifestRef.current,
     });
@@ -971,6 +1011,7 @@ export default function FullScreenEditor({
   }, [
     applyLayer,
     currentManifest,
+    exportVersion,
     isOpen,
     onSessionReady,
     saveVersion,
@@ -1000,6 +1041,7 @@ export default function FullScreenEditor({
           initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
           initialProjectId={jobId}
           initialClipIndex={clipIndex}
+          onExport={exportVersion}
           initialPlaybackStartMs={Math.max(
             0,
             resolvePreviewStartSeconds(clip) * 1000,
@@ -1081,7 +1123,7 @@ export default function FullScreenEditor({
                 disabled={busy}
                 className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {busy ? "Rendering…" : "Save as new version"}
+                {busy ? "Saving…" : "Save as new version"}
               </button>
             </div>
           }
@@ -1250,7 +1292,7 @@ export default function FullScreenEditor({
           disabled={busy}
           className="btn-primary flex items-center gap-2 drop-shadow-md"
         >
-          <Save size={16} /> {busy ? "Rendering…" : "Save as new version"}
+          <Save size={16} /> {busy ? "Saving…" : "Save as new version"}
         </button>
       </footer>
     </div>

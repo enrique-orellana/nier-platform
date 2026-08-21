@@ -58,6 +58,32 @@ export async function createDraftVersion({
   });
 }
 
+export async function saveDraftVersion({
+  api = defaultApi,
+  jobId,
+  clipIndex,
+  manifest,
+  parentVersionId,
+}) {
+  const created = await createDraftVersion({
+    api,
+    jobId,
+    clipIndex,
+    manifest,
+    parentVersionId,
+  });
+  const version = created?.version;
+  const versionId = version?.version_id;
+  if (!versionId) throw new Error("Version creation did not return an id.");
+  return {
+    status: "saved",
+    versionId,
+    version,
+    manifest: created?.manifest,
+    response: created,
+  };
+}
+
 export async function renderDraftVersion({
   api = defaultApi,
   jobId,

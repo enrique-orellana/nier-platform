@@ -1,8 +1,43 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   normalizeRenderedOutputUrl,
+  saveDraftVersion,
   saveAndRenderVersion,
 } from "./renderVersion";
+
+describe("saveDraftVersion", () => {
+  it("creates a saved child version without starting or completing a render", async () => {
+    const api = {
+      createVersion: vi.fn().mockResolvedValue({
+        version: { version_id: "v4", status: "pending" },
+        manifest: { version_id: "v4", layers: { hook: null } },
+      }),
+      startRender: vi.fn(),
+      getRenderStatus: vi.fn(),
+      completeVersion: vi.fn(),
+    };
+
+    const result = await saveDraftVersion({
+      api,
+      jobId: "job",
+      clipIndex: 0,
+      manifest: { layers: { hook: null } },
+      parentVersionId: "v3",
+    });
+
+    expect(result).toMatchObject({
+      status: "saved",
+      versionId: "v4",
+      version: { version_id: "v4", status: "pending" },
+    });
+    expect(api.createVersion).toHaveBeenCalledWith(
+      expect.objectContaining({ parent_version_id: "v3" }),
+    );
+    expect(api.startRender).not.toHaveBeenCalled();
+    expect(api.getRenderStatus).not.toHaveBeenCalled();
+    expect(api.completeVersion).not.toHaveBeenCalled();
+  });
+});
 
 describe("saveAndRenderVersion", () => {
   it("normalizes renderer filesystem output paths to the renderer output route", () => {
