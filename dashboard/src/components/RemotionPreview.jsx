@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { Player } from "@remotion/player";
 import { ShortVideo } from "../remotion/compositions/ShortVideo";
 
@@ -18,6 +12,7 @@ import { ShortVideo } from "../remotion/compositions/ShortVideo";
  * @param {object|null} props.subtitles - SubtitleConfig or null
  * @param {object|null} props.hook - HookConfig or null
  * @param {object|null} props.effects - EffectsConfig or null
+ * @param {(mediaTimeMs: number|null) => void} [props.onMediaTimeChange] - Native video clock callback
  * @param {string} [props.className] - Additional CSS classes
  */
 function RemotionPreview({
@@ -38,6 +33,7 @@ function RemotionPreview({
   loop = true,
   controls = true,
   onFrameChange,
+  onMediaTimeChange,
   onPlayingChange,
   onPlayerReady,
   className = "",
@@ -46,20 +42,6 @@ function RemotionPreview({
   const playerRef = useRef(null);
   const playerFrameRef = useRef(null);
   const wasPlayingRef = useRef(playing);
-  const [audioPlaybackBlocked, setAudioPlaybackBlocked] = useState(false);
-
-  const handleAutoPlayError = useCallback(() => {
-    setAudioPlaybackBlocked(true);
-  }, []);
-
-  const handlePlayWithSound = useCallback((event) => {
-    const player = playerRef.current;
-    if (!player) return;
-    player.pause?.();
-    player.unmute?.();
-    player.play?.(event);
-    setAudioPlaybackBlocked(false);
-  }, []);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -141,7 +123,7 @@ function RemotionPreview({
       layout,
       hook,
       effects,
-      onAutoPlayError: handleAutoPlayError,
+      onMediaTimeChange,
     }),
     [
       videoUrl,
@@ -156,7 +138,7 @@ function RemotionPreview({
       layout,
       hook,
       effects,
-      handleAutoPlayError,
+      onMediaTimeChange,
     ],
   );
 
@@ -179,15 +161,6 @@ function RemotionPreview({
         loop={loop}
         acknowledgeRemotionLicense={true}
       />
-      {audioPlaybackBlocked && (
-        <button
-          type="button"
-          onClick={handlePlayWithSound}
-          className="absolute inset-x-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black shadow-lg hover:bg-zinc-200"
-        >
-          Play with sound
-        </button>
-      )}
     </div>
   );
 }

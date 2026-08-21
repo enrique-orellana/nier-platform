@@ -158,6 +158,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     videoFit,
     videoStartSeconds = 0,
     onAutoPlayError,
+    onMediaTimeChange,
     fps = 30,
     subtitles,
     subtitleTracks,
@@ -185,6 +186,14 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
           style: activeTrack.style || subtitles.style,
         }
       : subtitles;
+  const hasActiveSubtitles = Boolean(activeSubtitles);
+  const handleMediaTimeChange = useCallback(
+    (nextMediaTimeMs: number | null) => {
+      if (hasActiveSubtitles) setMediaTimeMs(nextMediaTimeMs);
+      onMediaTimeChange?.(nextMediaTimeMs);
+    },
+    [hasActiveSubtitles, onMediaTimeChange],
+  );
   const usesStandardLayout = layout?.format === "standard";
   const environment = useRemotionEnvironment();
   return (
@@ -225,7 +234,11 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             videoUrl={videoUrl}
             videoStartSeconds={videoStartSeconds}
             onAutoPlayError={onAutoPlayError}
-            onMediaTimeChange={activeSubtitles ? setMediaTimeMs : undefined}
+            onMediaTimeChange={
+              hasActiveSubtitles || onMediaTimeChange
+                ? handleMediaTimeChange
+                : undefined
+            }
             fps={Number(fps)}
             objectFit={usesStandardLayout ? "contain" : videoFit || "cover"}
           />

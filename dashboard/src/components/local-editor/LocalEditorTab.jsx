@@ -873,6 +873,8 @@ export default function LocalEditorTab({
   const remotionPlayerRef = useRef(null);
   const remotionPlayheadRef = useRef(0);
   const remotionPlayheadTimerRef = useRef(null);
+  const remotionNativeClockActiveRef = useRef(false);
+  const remotionMediaPlayheadTimerRef = useRef(null);
   const objectUrlRef = useRef("");
   const previewObjectUrlRef = useRef("");
   const subtitleInputRef = useRef(null);
@@ -940,6 +942,7 @@ export default function LocalEditorTab({
 
   const handleRemotionFrameChange = useCallback(
     (frame) => {
+      if (remotionNativeClockActiveRef.current) return;
       remotionPlayheadRef.current = Math.min(
         durationMs,
         (frame / remotionFps) * 1000,
@@ -947,10 +950,39 @@ export default function LocalEditorTab({
       if (remotionPlayheadTimerRef.current) return;
       remotionPlayheadTimerRef.current = window.setTimeout(() => {
         remotionPlayheadTimerRef.current = null;
-        setPlayheadMs(remotionPlayheadRef.current);
+        if (!remotionNativeClockActiveRef.current)
+          setPlayheadMs(remotionPlayheadRef.current);
       }, 100);
     },
     [durationMs, remotionFps],
+  );
+  const handleRemotionMediaTimeChange = useCallback(
+    (mediaTimeMs) => {
+      if (!Number.isFinite(mediaTimeMs)) {
+        remotionNativeClockActiveRef.current = false;
+        if (remotionMediaPlayheadTimerRef.current) {
+          window.clearTimeout(remotionMediaPlayheadTimerRef.current);
+          remotionMediaPlayheadTimerRef.current = null;
+        }
+        setPlayheadMs(
+          Math.min(durationMs, Math.max(0, remotionPlayheadRef.current)),
+        );
+        return;
+      }
+
+      remotionNativeClockActiveRef.current = true;
+      remotionPlayheadRef.current = Math.min(
+        durationMs,
+        Math.max(0, mediaTimeMs),
+      );
+      if (remotionMediaPlayheadTimerRef.current) return;
+      remotionMediaPlayheadTimerRef.current = window.setTimeout(() => {
+        remotionMediaPlayheadTimerRef.current = null;
+        if (remotionNativeClockActiveRef.current)
+          setPlayheadMs(remotionPlayheadRef.current);
+      }, 50);
+    },
+    [durationMs],
   );
   const handleRemotionPlayerReady = useCallback((player) => {
     remotionPlayerRef.current = player;
@@ -960,6 +992,8 @@ export default function LocalEditorTab({
     () => () => {
       if (remotionPlayheadTimerRef.current)
         window.clearTimeout(remotionPlayheadTimerRef.current);
+      if (remotionMediaPlayheadTimerRef.current)
+        window.clearTimeout(remotionMediaPlayheadTimerRef.current);
     },
     [],
   );
@@ -2417,6 +2451,7 @@ export default function LocalEditorTab({
                     controls={false}
                     className="h-full w-full"
                     onFrameChange={handleRemotionFrameChange}
+                    onMediaTimeChange={handleRemotionMediaTimeChange}
                     onPlayingChange={setIsPlaying}
                     onPlayerReady={handleRemotionPlayerReady}
                   />

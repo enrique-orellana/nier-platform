@@ -73,6 +73,22 @@ describe("RemotionPreview", () => {
     );
   });
 
+  it("forwards the native media clock callback to the composition", () => {
+    playerPropsMock.mockClear();
+    const onMediaTimeChange = vi.fn();
+    render(
+      <RemotionPreview
+        videoUrl="/video.mp4"
+        onMediaTimeChange={onMediaTimeChange}
+      />,
+    );
+
+    const playerProps = playerPropsMock.mock.lastCall[0];
+    act(() => playerProps.inputProps.onMediaTimeChange(750));
+
+    expect(onMediaTimeChange).toHaveBeenCalledWith(750);
+  });
+
   it("does not seek backward from a delayed editor clock while playing", () => {
     seekToMock.mockClear();
     const { rerender } = render(
@@ -140,25 +156,15 @@ describe("RemotionPreview", () => {
     );
   });
 
-  it("offers a user-gesture recovery when autoplay audio is blocked", () => {
+  it("does not render an audio recovery overlay", () => {
     playerPropsMock.mockClear();
-    playMock.mockClear();
-    pauseMock.mockClear();
-    unmuteMock.mockClear();
     render(<RemotionPreview videoUrl="/video.mp4" />);
 
     const playerProps = playerPropsMock.mock.lastCall[0];
-    act(() => playerProps.inputProps.onAutoPlayError());
+    act(() => playerProps.inputProps.onAutoPlayError?.());
 
-    const recoveryButton = screen.getByRole("button", {
-      name: /play with sound/i,
-    });
-    fireEvent.click(recoveryButton);
-
-    expect(pauseMock).toHaveBeenCalled();
-    expect(unmuteMock).toHaveBeenCalled();
-    expect(playMock).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "click" }),
-    );
+    expect(
+      screen.queryByRole("button", { name: /play with sound/i }),
+    ).not.toBeInTheDocument();
   });
 });

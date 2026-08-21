@@ -94,6 +94,7 @@ export interface ShortVideoProps {
   videoUrl: string;
   videoStartSeconds?: number;
   onAutoPlayError?: () => void;
+  onMediaTimeChange?: (mediaTimeMs: number | null) => void;
   durationInFrames: number;
   fps: number;
   width: number;

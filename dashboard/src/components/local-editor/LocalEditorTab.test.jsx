@@ -42,6 +42,7 @@ vi.mock("../RemotionPreview", () => ({
     hook = null,
     subtitles = null,
     onPlayerReady,
+    onMediaTimeChange,
   }) {
     useEffect(() => {
       onPlayerReady?.(remotionPlayerMock);
@@ -57,7 +58,11 @@ vi.mock("../RemotionPreview", () => ({
         data-subtitle-text={
           subtitles?.captions?.map((caption) => caption.text).join("|") || ""
         }
-      />
+      >
+        <button type="button" onClick={() => onMediaTimeChange?.(2000)}>
+          Emit native media time
+        </button>
+      </div>
     );
   },
 }));
@@ -172,6 +177,27 @@ describe("LocalEditorTab", () => {
       expect(remotionPlayerMock.play).toHaveBeenCalledWith(
         expect.objectContaining({ type: "click" }),
       ),
+    );
+  });
+
+  it("uses the native media clock for the editor playhead", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        remotionPreviewProps={{
+          videoUrl: "/videos/project.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /emit native media time/i }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getAllByText(/00:00:02:00/).length).toBeGreaterThan(0),
     );
   });
 

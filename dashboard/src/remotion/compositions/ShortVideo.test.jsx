@@ -94,6 +94,35 @@ describe("ShortVideo media source", () => {
     );
   });
 
+  it("forwards the native media clock to the editor", () => {
+    const animationFrames = [];
+    const onMediaTimeChange = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", (callback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    timelineContextMock.playing = true;
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        videoStartSeconds={10}
+        onMediaTimeChange={onMediaTimeChange}
+      />,
+    );
+
+    const video = screen.getByTestId("native-browser-video");
+    Object.defineProperty(video, "currentTime", {
+      configurable: true,
+      value: 10.75,
+      writable: true,
+    });
+    act(() => animationFrames[0]?.());
+
+    expect(onMediaTimeChange).toHaveBeenCalledWith(750);
+  });
+
   it("renders the standard layout with a blurred background and contained foreground", () => {
     remotionVideoPropsMock.mockClear();
 
