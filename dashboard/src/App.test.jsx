@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
@@ -69,5 +69,37 @@ describe("App settings layout", () => {
     expect(screen.getByRole("combobox", { name: "Text Model" })).toHaveValue(
       "gpt-5.4",
     );
+  });
+
+  it("does not poll a restored clips-ready session", async () => {
+    vi.useFakeTimers();
+    const jobId = "stale-job";
+    localStorage.setItem(
+      "openshorts_session",
+      JSON.stringify({
+        jobId,
+        status: "clips-ready",
+        results: null,
+        clipRenderJobs: {},
+        timestamp: Date.now(),
+      }),
+    );
+
+    render(<App />);
+
+    await act(async () => {
+      vi.advanceTimersByTime(2500);
+      await Promise.resolve();
+    });
+
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(([url]) =>
+          String(url).includes(`/api/status/${jobId}`),
+        ),
+    ).toBe(false);
+
+    vi.useRealTimers();
   });
 });

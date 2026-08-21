@@ -1084,12 +1084,7 @@ function App() {
 
   useEffect(() => {
     let interval;
-    if (
-      (status === "processing" ||
-        status === "completed" ||
-        status === "clips-ready") &&
-      jobId
-    ) {
+    if (status === "processing" && jobId) {
       interval = setInterval(async () => {
         try {
           const data = await pollJob(jobId);
@@ -1128,7 +1123,7 @@ function App() {
       }, 2000);
     }
     return () => clearInterval(interval);
-  }, [status, jobId, clipRenderJobs]);
+  }, [status, jobId]);
 
   useEffect(() => {
     const entries = Object.entries(clipRenderJobs);
