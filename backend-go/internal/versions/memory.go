@@ -111,6 +111,44 @@ func (r *MemoryRepository) Load(_ context.Context, projectID string, clipIndex i
 	return record, cloneManifest(r.manifests[key]), nil
 }
 
+func (r *MemoryRepository) UpdateManifest(_ context.Context, projectID string, clipIndex int, versionID string, manifest map[string]any) (VersionRecord, map[string]any, error) {
+	if !validUUID(versionID) {
+		return VersionRecord{}, nil, ErrInvalidVersionID
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := versionKey{projectID: projectID, clipIndex: clipIndex, versionID: versionID}
+	record, ok := r.records[key]
+	if !ok {
+		return VersionRecord{}, nil, ErrVersionNotFound
+	}
+	if record.Status == RenderStatusRendering {
+		return VersionRecord{}, nil, ErrVersionRendering
+	}
+	versionManifest := cloneManifest(manifest)
+	versionManifest["version_id"] = versionID
+	if record.ParentVersionID == "" {
+		versionManifest["parent_version_id"] = nil
+	} else {
+		versionManifest["parent_version_id"] = record.ParentVersionID
+	}
+	versionManifest["render_status"] = string(RenderStatusPending)
+	versionManifest["master"] = nil
+	delete(versionManifest, "error")
+	revision, err := manifests.CalculateRevision(versionManifest)
+	if err != nil {
+		return VersionRecord{}, nil, fmt.Errorf("calculate manifest revision: %w", err)
+	}
+	versionManifest["manifest_revision"] = revision
+	record.ManifestRevision = revision
+	record.Status = RenderStatusPending
+	record.OutputURL = ""
+	record.Error = ""
+	r.records[key] = record
+	r.manifests[key] = cloneManifest(versionManifest)
+	return record, cloneManifest(versionManifest), nil
+}
+
 func (r *MemoryRepository) UpdateRender(_ context.Context, projectID string, clipIndex int, versionID string, status RenderStatus, message string) (VersionRecord, error) {
 	if !validRenderStatus(status) {
 		return VersionRecord{}, ErrInvalidRenderStatus

@@ -160,6 +160,69 @@ func (r *PostgresRepository) Load(ctx context.Context, projectID string, clipInd
 	return record, manifest, nil
 }
 
+func (r *PostgresRepository) UpdateManifest(ctx context.Context, projectID string, clipIndex int, versionID string, manifest map[string]any) (VersionRecord, map[string]any, error) {
+	if !validUUID(versionID) {
+		return VersionRecord{}, nil, ErrInvalidVersionID
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return VersionRecord{}, nil, fmt.Errorf("begin version update: %w", err)
+	}
+	defer tx.Rollback()
+
+	record, err := scanVersionRecord(tx.QueryRowContext(ctx, `
+		SELECT version_id::text, COALESCE(parent_version_id::text, ''), manifest_revision,
+		       status, COALESCE(output_url, ''), COALESCE(error, ''), created_at
+		FROM clip_versions
+		WHERE project_id = $1 AND clip_index = $2 AND version_id = $3
+		FOR UPDATE
+	`, projectID, clipIndex, versionID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return VersionRecord{}, nil, ErrVersionNotFound
+	}
+	if err != nil {
+		return VersionRecord{}, nil, fmt.Errorf("lock version for update: %w", err)
+	}
+	if record.Status == RenderStatusRendering {
+		return VersionRecord{}, nil, ErrVersionRendering
+	}
+
+	versionManifest := cloneManifest(manifest)
+	versionManifest["version_id"] = versionID
+	if record.ParentVersionID == "" {
+		versionManifest["parent_version_id"] = nil
+	} else {
+		versionManifest["parent_version_id"] = record.ParentVersionID
+	}
+	versionManifest["render_status"] = string(RenderStatusPending)
+	versionManifest["master"] = nil
+	delete(versionManifest, "error")
+	revision, err := manifests.CalculateRevision(versionManifest)
+	if err != nil {
+		return VersionRecord{}, nil, fmt.Errorf("calculate manifest revision: %w", err)
+	}
+	versionManifest["manifest_revision"] = revision
+	encodedManifest, err := json.Marshal(versionManifest)
+	if err != nil {
+		return VersionRecord{}, nil, fmt.Errorf("encode version manifest: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE clip_versions
+		SET manifest = $4::jsonb, manifest_revision = $5, status = 'pending', output_url = NULL, error = NULL
+		WHERE project_id = $1 AND clip_index = $2 AND version_id = $3
+	`, projectID, clipIndex, versionID, encodedManifest, revision); err != nil {
+		return VersionRecord{}, nil, fmt.Errorf("update version manifest: %w", err)
+	}
+	record.ManifestRevision = revision
+	record.Status = RenderStatusPending
+	record.OutputURL = ""
+	record.Error = ""
+	if err := tx.Commit(); err != nil {
+		return VersionRecord{}, nil, fmt.Errorf("commit version update: %w", err)
+	}
+	return record, cloneManifest(versionManifest), nil
+}
+
 func (r *PostgresRepository) UpdateRender(ctx context.Context, projectID string, clipIndex int, versionID string, status RenderStatus, message string) (VersionRecord, error) {
 	if !validRenderStatus(status) {
 		return VersionRecord{}, ErrInvalidRenderStatus

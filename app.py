@@ -1143,6 +1143,10 @@ class VersionCreateRequest(BaseModel):
     parent_version_id: Optional[str] = None
 
 
+class VersionUpdateRequest(BaseModel):
+    manifest: dict
+
+
 class VersionRenderRequest(BaseModel):
     props: dict
 
@@ -1793,6 +1797,22 @@ async def create_clip_version(job_id: str, clip_index: int, req: VersionCreateRe
         manifest = store.load_manifest(version.version_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"version": asdict(version), "manifest": manifest}
+
+
+@app.put("/api/clip/{job_id}/{clip_index}/versions/{version_id}")
+async def update_clip_version(
+    job_id: str,
+    clip_index: int,
+    version_id: str,
+    req: VersionUpdateRequest,
+):
+    store = _ensure_clip_versions(job_id, clip_index)
+    try:
+        version = store.update_manifest(version_id, req.manifest)
+        manifest = store.load_manifest(version.version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"version": asdict(version), "manifest": manifest}
 
 

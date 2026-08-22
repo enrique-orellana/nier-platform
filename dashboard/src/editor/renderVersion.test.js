@@ -41,6 +41,40 @@ describe("saveDraftVersion", () => {
 });
 
 describe("saveAndRenderVersion", () => {
+  it("updates and renders the selected version without creating a child", async () => {
+    const api = {
+      updateVersion: vi.fn().mockResolvedValue({
+        version: { version_id: "v3", status: "pending" },
+      }),
+      createVersion: vi.fn(),
+      startRender: vi.fn().mockResolvedValue({ renderId: "r1" }),
+      getRenderStatus: vi
+        .fn()
+        .mockResolvedValue({ status: "done", outputUrl: "/videos/job/v3.mp4" }),
+      completeVersion: vi
+        .fn()
+        .mockResolvedValue({ version: { version_id: "v3", status: "done" } }),
+    };
+
+    const result = await saveAndRenderVersion({
+      api,
+      jobId: "job",
+      clipIndex: 0,
+      versionId: "v3",
+      manifest: { layers: { hook: { text: "edited" } } },
+      pollMs: 0,
+    });
+
+    expect(api.updateVersion).toHaveBeenCalledWith(
+      expect.objectContaining({ versionId: "v3" }),
+    );
+    expect(api.createVersion).not.toHaveBeenCalled();
+    expect(api.startRender).toHaveBeenCalledWith(
+      expect.objectContaining({ versionId: "v3" }),
+    );
+    expect(result.versionId).toBe("v3");
+  });
+
   it("does not report 100 percent until rendering is complete", async () => {
     const api = {
       startRender: vi.fn().mockResolvedValue({ renderId: "r1" }),

@@ -19,6 +19,22 @@ def manifest(name):
 
 
 class VersionStoreTests(unittest.TestCase):
+    def test_update_manifest_keeps_version_identity_and_parent(self):
+        with tempfile.TemporaryDirectory() as root:
+            store = VersionStore(Path(root) / "clip")
+            parent = store.create_version(manifest("parent"), parent_version_id=None)
+            version = store.create_version(
+                manifest("before"), parent_version_id=parent.version_id
+            )
+
+            updated = store.update_manifest(version.version_id, manifest("after"))
+
+            self.assertEqual(updated.version_id, version.version_id)
+            self.assertEqual(updated.parent_version_id, parent.version_id)
+            self.assertEqual(updated.status, "pending")
+            self.assertEqual(store.load_manifest(version.version_id)["layers"]["hook"]["text"], "after")
+            self.assertEqual(len(store.list_versions()), 2)
+
     def test_branch_from_older_version_does_not_change_later_branch(self):
         with tempfile.TemporaryDirectory() as root:
             store = VersionStore(Path(root) / "clip")

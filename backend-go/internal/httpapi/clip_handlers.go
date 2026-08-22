@@ -43,6 +43,8 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 		s.createVersion(w, r, jobID, clipIndex)
 	case r.Method == http.MethodPost && len(segments) == 2 && segments[1] == "branch":
 		s.branchVersion(w, r, jobID, clipIndex)
+	case r.Method == http.MethodPut && len(segments) == 2:
+		s.updateVersion(w, r, jobID, clipIndex, segments[1])
 	case r.Method == http.MethodDelete && len(segments) == 2:
 		deleted, currentVersionID, err := s.versionRepository.Delete(r.Context(), jobID, clipIndex, segments[1])
 		if err != nil {
@@ -149,6 +151,26 @@ func (s *Server) getVersion(w http.ResponseWriter, ctx context.Context, jobID st
 	version, manifest, err := s.versionRepository.Load(ctx, jobID, clipIndex, versionID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"version": version, "manifest": manifest})
+}
+
+func (s *Server) updateVersion(w http.ResponseWriter, r *http.Request, jobID string, clipIndex int, versionID string) {
+	var request struct {
+		Manifest map[string]any `json:"manifest"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+	version, manifest, err := s.versionRepository.UpdateManifest(r.Context(), jobID, clipIndex, versionID, request.Manifest)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, versions.ErrVersionRendering) {
+			status = http.StatusConflict
+		}
+		writeJSON(w, status, map[string]string{"detail": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"version": version, "manifest": manifest})

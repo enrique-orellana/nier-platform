@@ -61,6 +61,34 @@ func TestMemoryRepositoryPersistsImmutableManifestAndHead(t *testing.T) {
 	}
 }
 
+func TestMemoryRepositoryUpdatesManifestWithoutCreatingVersion(t *testing.T) {
+	repo := NewMemoryRepository()
+	parent, _, err := repo.Create(context.Background(), "project-a", 4, map[string]any{"name": "parent"}, nil)
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	version, _, err := repo.Create(context.Background(), "project-a", 4, map[string]any{"name": "before"}, &parent.VersionID)
+	if err != nil {
+		t.Fatalf("create version: %v", err)
+	}
+
+	updated, manifest, err := repo.UpdateManifest(context.Background(), "project-a", 4, version.VersionID, map[string]any{"name": "after"})
+	if err != nil {
+		t.Fatalf("update manifest: %v", err)
+	}
+
+	if updated.VersionID != version.VersionID || updated.ParentVersionID != parent.VersionID || updated.Status != RenderStatusPending {
+		t.Fatalf("update changed version identity or ancestry: %#v", updated)
+	}
+	if manifest["name"] != "after" || manifest["version_id"] != version.VersionID {
+		t.Fatalf("updated manifest was not persisted: %#v", manifest)
+	}
+	_, versions, err := repo.List(context.Background(), "project-a", 4)
+	if err != nil || len(versions) != 2 {
+		t.Fatalf("update unexpectedly created a version: count=%d err=%v", len(versions), err)
+	}
+}
+
 func TestMemoryRepositoryValidatesParentScopeAndPromotesOnlyCompletedVersions(t *testing.T) {
 	repo := NewMemoryRepository()
 	first, _, err := repo.Create(context.Background(), "project-a", 4, map[string]any{"name": "first"}, nil)

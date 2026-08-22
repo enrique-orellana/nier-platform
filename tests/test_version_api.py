@@ -65,3 +65,24 @@ def test_completed_version_becomes_current_without_deleting_parent(tmp_path, mon
     assert completed.json()["current_version_id"] == created["version_id"]
     versions = client.get(f"/api/clip/{job_id}/0/versions").json()["versions"]
     assert {item["version_id"] for item in versions} == {initial["version_id"], created["version_id"]}
+
+
+def test_update_version_manifest_keeps_selected_version_id(tmp_path, monkeypatch):
+    job_id = setup_job(tmp_path, monkeypatch)
+    client = TestClient(app_module.app)
+    initial = client.get(f"/api/clip/{job_id}/0/versions").json()["versions"][0]
+    manifest = client.get(
+        f"/api/clip/{job_id}/0/versions/{initial['version_id']}"
+    ).json()["manifest"]
+    manifest["layers"] = {"hook": {"text": "edited"}}
+
+    response = client.put(
+        f"/api/clip/{job_id}/0/versions/{initial['version_id']}",
+        json={"manifest": manifest},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["version"]["version_id"] == initial["version_id"]
+    assert payload["manifest"]["layers"]["hook"]["text"] == "edited"
+    assert len(client.get(f"/api/clip/{job_id}/0/versions").json()["versions"]) == 1

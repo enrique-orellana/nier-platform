@@ -74,6 +74,31 @@ class VersionStore:
         self._write_index(index)
         return record
 
+    def update_manifest(self, version_id: str, manifest: dict[str, Any]) -> VersionRecord:
+        version_id = self._validate_id(version_id)
+        index = self._read_index()
+        record = index["versions"].get(version_id)
+        if record is None:
+            raise ValueError("version does not exist")
+        if record["status"] == "rendering":
+            raise ValueError("version is currently rendering")
+
+        version_manifest = dict(manifest)
+        version_manifest["version_id"] = version_id
+        version_manifest["parent_version_id"] = record.get("parent_version_id")
+        version_manifest["render_status"] = "pending"
+        version_manifest["master"] = None
+        revision = calculate_revision(version_manifest)
+        version_manifest["manifest_revision"] = revision
+
+        self._atomic_write(self.versions_dir / f"{version_id}.json", version_manifest)
+        record["manifest_revision"] = revision
+        record["status"] = "pending"
+        record["output_url"] = None
+        record["error"] = None
+        self._write_index(index)
+        return self._record_from_dict(record)
+
     def load_version(self, version_id: str) -> VersionRecord:
         version_id = self._validate_id(version_id)
         record = self._read_index()["versions"].get(version_id)

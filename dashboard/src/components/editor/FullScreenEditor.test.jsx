@@ -1111,7 +1111,7 @@ describe("FullScreenEditor", () => {
     await waitFor(() =>
       expect(renderVersionMocks.saveAndRenderVersion).toHaveBeenCalledWith(
         expect.objectContaining({
-          parentVersionId: "v2",
+          versionId: "v2",
           manifest: expect.objectContaining({
             subtitle_tracks: [
               expect.objectContaining({
@@ -1247,7 +1247,7 @@ describe("FullScreenEditor", () => {
     await initialSession.export();
     expect(renderVersionMocks.saveAndRenderVersion).toHaveBeenCalledWith(
       expect.objectContaining({
-        parentVersionId: "v2",
+        versionId: "v2",
         manifest: expect.objectContaining({
           subtitle_tracks: [
             expect.objectContaining({

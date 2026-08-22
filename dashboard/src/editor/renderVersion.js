@@ -27,6 +27,11 @@ const defaultApi = {
       method: "POST",
       body: JSON.stringify({ manifest, parent_version_id }),
     }),
+  updateVersion: ({ jobId, clipIndex, versionId, manifest }) =>
+    jsonRequest(`/api/clip/${jobId}/${clipIndex}/versions/${versionId}`, {
+      method: "PUT",
+      body: JSON.stringify({ manifest }),
+    }),
   startRender: ({ jobId, clipIndex, versionId }) =>
     jsonRequest(
       `/api/clip/${jobId}/${clipIndex}/versions/${versionId}/render`,
@@ -117,26 +122,39 @@ export async function saveAndRenderVersion({
   jobId,
   clipIndex,
   manifest,
+  versionId,
   parentVersionId,
   pollMs = 1200,
   onProgress = () => {},
 }) {
-  let versionId;
+  let renderVersionId = versionId;
   try {
-    const created = await createDraftVersion({
-      api,
-      jobId,
-      clipIndex,
-      manifest,
-      parentVersionId,
-    });
-    versionId = created?.version?.version_id;
-    if (!versionId) throw new Error("Version creation did not return an id.");
+    if (renderVersionId) {
+      const updated = await api.updateVersion({
+        jobId,
+        clipIndex,
+        versionId: renderVersionId,
+        manifest,
+      });
+      if (!updated?.version?.version_id)
+        throw new Error("Version update did not return an id.");
+    } else {
+      const created = await createDraftVersion({
+        api,
+        jobId,
+        clipIndex,
+        manifest,
+        parentVersionId,
+      });
+      renderVersionId = created?.version?.version_id;
+      if (!renderVersionId)
+        throw new Error("Version creation did not return an id.");
+    }
     const rendered = await renderDraftVersion({
       api,
       jobId,
       clipIndex,
-      versionId,
+      versionId: renderVersionId,
       pollMs,
       onProgress,
     });
@@ -144,29 +162,33 @@ export async function saveAndRenderVersion({
     const completed = await api.completeVersion({
       jobId,
       clipIndex,
-      versionId,
+      versionId: renderVersionId,
       output_url: outputUrl,
     });
     return {
       status: "done",
-      versionId,
+      versionId: renderVersionId,
       outputUrl,
       version: completed?.version,
       response: completed,
     };
   } catch (error) {
-    if (versionId) {
+    if (renderVersionId) {
       try {
         await api.completeVersion({
           jobId,
           clipIndex,
-          versionId,
+          versionId: renderVersionId,
           error: error.message,
         });
       } catch {
         /* preserve original render error */
       }
     }
-    return { status: "failed", versionId, error: error.message };
+    return {
+      status: "failed",
+      versionId: renderVersionId,
+      error: error.message,
+    };
   }
 }

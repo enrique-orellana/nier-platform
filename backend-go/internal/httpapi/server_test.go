@@ -1091,6 +1091,44 @@ func TestVersionDownloadRedirectsDirectlyToMinio(t *testing.T) {
 	}
 }
 
+func TestClipVersionUpdateRouteKeepsSelectedVersionID(t *testing.T) {
+	server := NewServer(config.Config{})
+	createReq := httptest.NewRequest(http.MethodPost, "/api/clip/job-1/0/versions", strings.NewReader(`{"manifest":{"layers":{"hook":{"text":"before"}}}}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(createRes, createReq)
+	if createRes.Code != http.StatusOK {
+		t.Fatalf("create failed: %d %s", createRes.Code, createRes.Body.String())
+	}
+	var created struct {
+		Version struct {
+			VersionID string `json:"version_id"`
+		} `json:"version"`
+	}
+	if err := json.Unmarshal(createRes.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	updateReq := httptest.NewRequest(
+		http.MethodPut,
+		"/api/clip/job-1/0/versions/"+created.Version.VersionID,
+		strings.NewReader(`{"manifest":{"layers":{"hook":{"text":"after"}}}}`),
+	)
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(updateRes, updateReq)
+	if updateRes.Code != http.StatusOK || !strings.Contains(updateRes.Body.String(), `"version_id":"`+created.Version.VersionID+`"`) || !strings.Contains(updateRes.Body.String(), `"text":"after"`) {
+		t.Fatalf("unexpected update response: %d %s", updateRes.Code, updateRes.Body.String())
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/clip/job-1/0/versions", nil)
+	listRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(listRes, listReq)
+	if listRes.Code != http.StatusOK || strings.Count(listRes.Body.String(), `"version_id"`) != 1 {
+		t.Fatalf("update created a child version: %d %s", listRes.Code, listRes.Body.String())
+	}
+}
+
 func TestManifestRouteFindsOneBasedManifestLayout(t *testing.T) {
 	outputDir := t.TempDir()
 	manifestDir := filepath.Join(outputDir, "job-1", "manifests")

@@ -32,6 +32,7 @@ type VersionRecord struct {
 type Repository interface {
 	List(context.Context, string, int) (string, []VersionRecord, error)
 	Create(context.Context, string, int, map[string]any, *string) (VersionRecord, map[string]any, error)
+	UpdateManifest(context.Context, string, int, string, map[string]any) (VersionRecord, map[string]any, error)
 	Load(context.Context, string, int, string) (VersionRecord, map[string]any, error)
 	UpdateRender(context.Context, string, int, string, RenderStatus, string) (VersionRecord, error)
 	Complete(context.Context, string, int, string, string) (VersionRecord, error)
@@ -47,6 +48,7 @@ var (
 	ErrVersionNotCompleted  = errors.New("only successful versions can become current")
 	ErrOutputURLRequired    = errors.New("successful version requires an output URL")
 	ErrParentVersionMissing = errors.New("parent version does not exist")
+	ErrVersionRendering     = errors.New("version is currently rendering")
 	ErrManifestRevision     = errors.New("manifest revision mismatch")
 )
 

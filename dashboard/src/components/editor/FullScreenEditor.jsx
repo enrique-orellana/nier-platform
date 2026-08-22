@@ -937,7 +937,7 @@ export default function FullScreenEditor({
           jobId,
           clipIndex,
           manifest: manifestToRender,
-          parentVersionId: versionRef.current?.version_id,
+          versionId: versionRef.current?.version_id,
           props: renderProps,
           onProgress,
         });
