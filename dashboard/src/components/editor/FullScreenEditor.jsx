@@ -883,19 +883,6 @@ export default function FullScreenEditor({
     onVersionChange,
   ]);
 
-  const downloadVersion = async () => {
-    if (!version?.output_url || version.status !== "done") return;
-    const downloadUrl = getApiUrl(
-      `/api/clip/${encodeURIComponent(jobId)}/${encodeURIComponent(clipIndex)}/versions/${encodeURIComponent(version.version_id)}/download`,
-    );
-    const anchor = document.createElement("a");
-    anchor.href = downloadUrl;
-    anchor.download = `clip-${Number(clipIndex) + 1}-${version.version_id.slice(0, 8)}.mp4`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-  };
-
   useEffect(() => {
     if (!isOpen || !onSessionReady) return undefined;
     onSessionReady({
@@ -971,7 +958,23 @@ export default function FullScreenEditor({
         persistHistory={false}
         allowLocalUpload={false}
         onClose={onClose}
-        headerActions={null}
+        headerActions={
+          <>
+            {error && (
+              <span className="text-xs text-red-300" role="alert">
+                {error}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={saveVersion}
+              disabled={busy}
+              className="rounded-md bg-primary px-2 py-1 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {busy ? "Saving…" : "Save as new version"}
+            </button>
+          </>
+        }
         sidePanel={
           <>
             {editorActions && <EditorActionToolbar {...editorActions} />}
@@ -991,38 +994,6 @@ export default function FullScreenEditor({
               />
             </section>
           </>
-        }
-        footer={
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <span className="mr-auto text-xs text-red-300" role="alert">
-              {error}
-            </span>
-            <button
-              type="button"
-              onClick={downloadVersion}
-              disabled={
-                !version?.output_url || version.status !== "done" || busy
-              }
-              className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Download version
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-3 py-2 text-xs font-semibold text-zinc-400 hover:bg-white/10 hover:text-white"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={saveVersion}
-              disabled={busy}
-              className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {busy ? "Saving…" : "Save as new version"}
-            </button>
-          </div>
         }
       />
     </div>

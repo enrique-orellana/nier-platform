@@ -1,16 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import LocalEditorFeatureRail, {
-  LOCAL_EDITOR_FEATURES,
-} from "./LocalEditorFeatureRail";
+import LocalEditorFeatureRail from "./LocalEditorFeatureRail";
+import { LOCAL_EDITOR_FEATURES } from "./localEditorFeatures";
 
 describe("LocalEditorFeatureRail", () => {
   it("renders the four local-editor feature buttons and marks Details active", () => {
     render(
-      <LocalEditorFeatureRail
-        activeFeature="details"
-        onSelect={vi.fn()}
-      />,
+      <LocalEditorFeatureRail activeFeature="details" onSelect={vi.fn()} />,
     );
 
     expect(LOCAL_EDITOR_FEATURES.map(({ label }) => label)).toEqual([

@@ -115,6 +115,119 @@ describe("LocalEditorTab", () => {
     vi.unstubAllGlobals();
   });
 
+  it("switches feature panels while keeping the player and timeline mounted", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("local-editor-player")).toBeInTheDocument(),
+    );
+
+    const player = screen.getByTestId("local-editor-player");
+    const timeline = screen.getByTestId("local-editor-timeline-scroll");
+    expect(screen.getByRole("button", { name: "Details" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Subtitles" }));
+
+    expect(screen.getByRole("button", { name: "Subtitles" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("local-editor-player")).toBe(player);
+    expect(screen.getByTestId("local-editor-timeline-scroll")).toBe(timeline);
+    expect(
+      screen.getByRole("region", { name: "Subtitles" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the editor header compact like a desktop video editor toolbar", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    const header = screen.getByTestId("local-editor-header");
+    expect(header).toHaveClass("h-11", "px-3", "py-1");
+    expect(screen.getByRole("heading", { name: "Local Editor" })).toHaveClass(
+      "text-sm",
+      "leading-4",
+    );
+    expect(screen.getByTestId("local-editor-header-actions")).toHaveClass(
+      "gap-1",
+    );
+  });
+
+  it("organizes header actions into workspace, edit, output, and utility groups", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        headerActions={
+          <button type="button" onClick={() => {}}>
+            Save as new version
+          </button>
+        }
+        onClose={() => {}}
+      />,
+    );
+
+    const actions = screen.getByTestId("local-editor-header-actions");
+    expect(
+      Array.from(actions.children).map((group) => group.dataset.testid),
+    ).toEqual([
+      "local-editor-header-workspace",
+      "local-editor-header-edit",
+      "local-editor-header-output",
+      "local-editor-header-utility",
+    ]);
+    expect(
+      within(screen.getByTestId("local-editor-header-output")).getByRole(
+        "button",
+        { name: "Save as new version" },
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("does not repeat playhead timing in the inspector sections", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    expect(screen.queryByText("Playhead")).not.toBeInTheDocument();
+  });
+
+  it("selects the Project feature and keeps supplied project actions in the context area", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        sidePanel={<div data-testid="project-side-panel">Project actions</div>}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Project" }));
+
+    expect(screen.getByTestId("project-side-panel")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Project" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      screen.getByRole("region", { name: "Project context" }),
+    ).toContainElement(screen.getByTestId("project-side-panel"));
+  });
+
   it("shows a local-only upload state", () => {
     render(<LocalEditorTab />);
     expect(
@@ -362,9 +475,9 @@ describe("LocalEditorTab", () => {
     expect(screen.getByText("39s")).toBeInTheDocument();
     const player = screen.getByTestId("local-editor-player");
     expect(player).toBeInTheDocument();
-    expect(player.parentElement).toHaveClass("lg:justify-start");
     expect(player.parentElement).toHaveClass(
-      "lg:grid-cols-[220px_minmax(0,1fr)]",
+      "xl:col-start-3",
+      "xl:row-start-1",
     );
   });
 

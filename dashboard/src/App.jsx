@@ -8,6 +8,8 @@ import {
   Share2,
   LogOut,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Check,
   Activity,
   LayoutDashboard,
@@ -1309,148 +1311,158 @@ function App() {
 
   // --- UI Components ---
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("openshorts_sidebar_collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("openshorts_sidebar_collapsed", String(next));
+      } catch (error) {
+        console.warn("Unable to persist sidebar preference", error);
+      }
+      return next;
+    });
+  };
+
+  const NavItem = ({
+    tabKey,
+    icon: Icon,
+    label,
+    activeColor = "bg-primary/10 text-primary",
+  }) => {
+    const isActive = activeTab === tabKey;
+    return (
+      <div className="relative group/nav">
+        <button
+          onClick={() => navigateToTab(tabKey)}
+          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
+            isActive
+              ? activeColor
+              : "text-zinc-400 hover:text-white hover:bg-white/5"
+          }`}
+        >
+          <Icon size={20} className="shrink-0" />
+          <span
+            className={`font-medium whitespace-nowrap overflow-hidden transition-all duration-300 ${
+              sidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
+            }`}
+          >
+            {label}
+          </span>
+        </button>
+        {sidebarCollapsed && (
+          <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 px-2.5 py-1.5 rounded-lg bg-zinc-800 text-white text-xs font-medium shadow-xl opacity-0 group-hover/nav:opacity-100 transition-opacity duration-150 whitespace-nowrap">
+            {label}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const Sidebar = () => (
-    <div className="w-20 lg:w-64 bg-surface border-r border-white/5 flex flex-col h-full shrink-0 transition-all duration-300">
-      <div className="p-6 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center shrink-0 overflow-hidden border border-white/5">
-          <img
-            src="/logo-openshorts.png"
-            alt="Logo"
-            className="w-full h-full object-cover"
-          />
+    <div
+      className="bg-surface border-r border-white/5 flex flex-col h-full shrink-0 transition-all duration-300 relative"
+      style={{ width: sidebarCollapsed ? "72px" : "256px" }}
+    >
+      {/* Logo + toggle */}
+      <div
+        className={`flex items-center transition-all duration-300 ${
+          sidebarCollapsed ? "p-4 justify-center" : "px-4 py-5"
+        }`}
+      >
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center shrink-0 overflow-hidden border border-white/5">
+            <img
+              src="/logo-openshorts.png"
+              alt="Logo"
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <span
+            className={`font-bold text-lg text-white tracking-tight whitespace-nowrap overflow-hidden transition-all duration-300 ${
+              sidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
+            }`}
+          >
+            OpenShorts
+          </span>
         </div>
-        <span className="font-bold text-lg text-white hidden lg:block tracking-tight">
-          OpenShorts
-        </span>
+        <button
+          onClick={toggleSidebar}
+          className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/8 transition-colors"
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {sidebarCollapsed ? (
+            <ChevronRight size={14} />
+          ) : (
+            <ChevronLeft size={14} />
+          )}
+        </button>
       </div>
 
-      <nav className="flex-1 px-4 py-4 space-y-2">
-        <button
-          onClick={() => navigateToTab("dashboard")}
-          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === "dashboard" ? "bg-primary/10 text-primary" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}
-        >
-          <LayoutDashboard size={20} />
-          <span className="font-medium hidden lg:block">Clip Generator</span>
-        </button>
-
-        <button
-          onClick={() => navigateToTab("editor")}
-          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === "editor" ? "bg-fuchsia-500/10 text-fuchsia-400" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}
-        >
-          <Scissors size={20} />
-          <span className="font-medium hidden lg:block">Local Editor</span>
-        </button>
-
-        <button
-          onClick={() => navigateToTab("highlights")}
-          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === "highlights" ? "bg-primary/10 text-primary" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}
-        >
-          <Sparkles size={20} />
-          <span className="font-medium hidden lg:block">Highlights</span>
-        </button>
-
-        <button
-          onClick={() => navigateToTab("saasshorts")}
-          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === "saasshorts" ? "bg-violet-500/10 text-violet-400" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}
-        >
-          <Sparkles size={20} />
-          <span className="font-medium hidden lg:block">AI Shorts</span>
-        </button>
-
-        <button
-          onClick={() => navigateToTab("ai-agent")}
-          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === "ai-agent" ? "bg-emerald-500/10 text-emerald-400" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}
-        >
-          <Bot size={20} />
-          <span className="font-medium hidden lg:block">AI Agent</span>
-        </button>
-
-        <button
-          onClick={() => navigateToTab("ugc-gallery")}
-          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === "ugc-gallery" ? "bg-violet-500/10 text-violet-400" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}
-        >
-          <LayoutGrid size={20} />
-          <span className="font-medium hidden lg:block">UGC Gallery</span>
-        </button>
-
-        <button
-          onClick={() => navigateToTab("thumbnails")}
-          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === "thumbnails" ? "bg-primary/10 text-primary" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}
-        >
-          <ImageIcon size={20} />
-          <span className="font-medium hidden lg:block">YouTube Studio</span>
-        </button>
-
-        <button
-          onClick={() => navigateToTab("projects")}
-          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === "projects" ? "bg-cyan-500/10 text-cyan-400" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}
-        >
-          <FolderOpen size={20} />
-          <span className="font-medium hidden lg:block">Projects</span>
-        </button>
-
-        <button
-          onClick={() => navigateToTab("settings")}
-          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${activeTab === "settings" ? "bg-primary/10 text-primary" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}
-        >
-          <Settings size={20} />
-          <span className="font-medium hidden lg:block">Settings</span>
-        </button>
+      {/* Nav items */}
+      <nav className="flex-1 px-3 py-4 space-y-1">
+        <NavItem
+          tabKey="dashboard"
+          icon={LayoutDashboard}
+          label="Clip Generator"
+          activeColor="bg-primary/10 text-primary"
+        />
+        <NavItem
+          tabKey="editor"
+          icon={Scissors}
+          label="Local Editor"
+          activeColor="bg-fuchsia-500/10 text-fuchsia-400"
+        />
+        <NavItem
+          tabKey="highlights"
+          icon={Sparkles}
+          label="Highlights"
+          activeColor="bg-primary/10 text-primary"
+        />
+        <NavItem
+          tabKey="saasshorts"
+          icon={Sparkles}
+          label="AI Shorts"
+          activeColor="bg-violet-500/10 text-violet-400"
+        />
+        <NavItem
+          tabKey="ai-agent"
+          icon={Bot}
+          label="AI Agent"
+          activeColor="bg-emerald-500/10 text-emerald-400"
+        />
+        <NavItem
+          tabKey="ugc-gallery"
+          icon={LayoutGrid}
+          label="UGC Gallery"
+          activeColor="bg-violet-500/10 text-violet-400"
+        />
+        <NavItem
+          tabKey="thumbnails"
+          icon={ImageIcon}
+          label="YouTube Studio"
+          activeColor="bg-primary/10 text-primary"
+        />
+        <NavItem
+          tabKey="projects"
+          icon={FolderOpen}
+          label="Projects"
+          activeColor="bg-cyan-500/10 text-cyan-400"
+        />
+        <NavItem
+          tabKey="settings"
+          icon={Settings}
+          label="Settings"
+          activeColor="bg-primary/10 text-primary"
+        />
       </nav>
-
-      <div className="p-4 border-t border-white/5 space-y-2">
-        <a
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            localStorage.removeItem("openshorts_skip_landing");
-            window.location.hash = "";
-            window.location.reload();
-          }}
-          className="flex items-center gap-2 p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-colors group"
-        >
-          <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center shrink-0">
-            <Globe size={16} />
-          </div>
-          <div className="hidden lg:block overflow-hidden">
-            <p className="text-sm font-bold text-white leading-none mb-0.5">
-              Landing Page
-            </p>
-            <p className="text-[10px] text-zinc-400 group-hover:text-zinc-300 transition-colors truncate">
-              View website
-            </p>
-          </div>
-        </a>
-        <a
-          href="https://github.com/mutonby/openshorts"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-colors group"
-        >
-          <div className="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center shrink-0">
-            <svg
-              height="20"
-              viewBox="0 0 16 16"
-              version="1.1"
-              width="20"
-              aria-hidden="true"
-            >
-              <path
-                fillRule="evenodd"
-                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
-              ></path>
-            </svg>
-          </div>
-          <div className="hidden lg:block overflow-hidden">
-            <p className="text-sm font-bold text-white leading-none mb-0.5">
-              Open Source
-            </p>
-            <p className="text-[10px] text-zinc-400 group-hover:text-zinc-300 transition-colors truncate">
-              Free & Community Driven
-            </p>
-          </div>
-        </a>
-      </div>
     </div>
   );
 

@@ -628,7 +628,7 @@ describe("FullScreenEditor", () => {
     expect(
       screen.getByRole("button", { name: /generate subtitles/i }),
     ).not.toBeDisabled();
-    expect(screen.getAllByText(/00:00:00:00/)).toHaveLength(3);
+    expect(screen.getAllByText(/00:00:00:00/)).toHaveLength(2);
   });
 
   it("refreshes the direct MinIO master URL for the project preview", async () => {
@@ -1084,75 +1084,6 @@ describe("FullScreenEditor", () => {
     });
   });
 
-  it("downloads the exact completed version output", async () => {
-    const anchorClick = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
-    const appendChild = vi.spyOn(document.body, "appendChild");
-    render(
-      <FullScreenEditor
-        jobId="job"
-        clipIndex={2}
-        clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }}
-        initialManifest={manifest}
-        initialVersion={{
-          version_id: "version-123456",
-          status: "done",
-          output_url: "/videos/job/version-123456.mp4",
-        }}
-        onClose={vi.fn()}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /download version/i }));
-    await waitFor(() => expect(anchorClick).toHaveBeenCalled());
-    expect(
-      appendChild.mock.calls.some(
-        ([node]) =>
-          node?.download === "clip-3-version-.mp4" &&
-          node?.href.endsWith(
-            "/api/clip/job/2/versions/version-123456/download",
-          ),
-      ),
-    ).toBe(true);
-    anchorClick.mockRestore();
-    appendChild.mockRestore();
-  });
-
-  it("downloads a MinIO version through a direct download URL", async () => {
-    const anchorClick = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
-    const appendChild = vi.spyOn(document.body, "appendChild");
-
-    render(
-      <FullScreenEditor
-        jobId="job"
-        clipIndex={0}
-        clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }}
-        initialManifest={manifest}
-        initialVersion={{
-          version_id: "version-123456",
-          status: "done",
-          output_url:
-            "http://192.168.50.2:32280/openshorts-media/job/master/master.mp4?X-Amz-Signature=test",
-        }}
-        onClose={vi.fn()}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /download version/i }));
-
-    await waitFor(() => expect(anchorClick).toHaveBeenCalled());
-    expect(
-      appendChild.mock.calls.some(
-        ([node]) =>
-          node?.download === "clip-1-version-.mp4" &&
-          node?.href.endsWith(
-            "/api/clip/job/0/versions/version-123456/download",
-          ),
-      ),
-    ).toBe(true);
-  });
-
   it("shows and edits subtitles from the legacy layer shape", () => {
     const legacyManifest = {
       timeline: {
@@ -1557,9 +1488,20 @@ describe("FullScreenEditor", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Ciao" })).toBeInTheDocument(),
     );
+    const saveButton = screen.getByRole("button", {
+      name: "Save as new version",
+    });
+    expect(saveButton).toBeEnabled();
+    expect(saveButton).toHaveClass("px-2", "py-1", "text-[11px]");
+    expect(screen.getByTestId("local-editor-header-actions")).toContainElement(
+      saveButton,
+    );
     expect(
-      screen.getByRole("button", { name: "Save as new version" }),
-    ).toBeEnabled();
+      screen.queryByRole("button", { name: "Download version" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Cancel" }),
+    ).not.toBeInTheDocument();
   });
 
   it("loads changed master subtitles instead of a stale generated version", async () => {
