@@ -5,6 +5,9 @@ import {
   makeEditorDraft,
   moveCue,
   resizeCue,
+  splitCue,
+  trimCueLeft,
+  trimCueRight,
 } from "./timelineModel";
 
 describe("timelineModel", () => {
@@ -50,5 +53,72 @@ describe("timelineModel", () => {
     const draft = makeEditorDraft(version);
     draft.layers.hook.text = "y";
     expect(version.manifest.layers.hook.text).toBe("x");
+  });
+  it("splits a cue at an interior playhead while preserving metadata", () => {
+    const cue = {
+      id: "cue-1",
+      type: "subtitle",
+      text: "Hello",
+      label: "Hello",
+      startMs: 1000,
+      endMs: 5000,
+      start: 1,
+      end: 5,
+      captions: [{ text: "Hello", startMs: 1000, endMs: 5000 }],
+    };
+
+    const result = splitCue(cue, 3000, ["cue-1"]);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      id: "cue-1",
+      text: "Hello",
+      startMs: 1000,
+      endMs: 3000,
+      start: 1,
+      end: 3,
+    });
+    expect(result[1]).toMatchObject({
+      id: "cue-1-split-1",
+      text: "Hello",
+      startMs: 3000,
+      endMs: 5000,
+      start: 3,
+      end: 5,
+    });
+    expect(result[0].captions[0]).toMatchObject({
+      startMs: 1000,
+      endMs: 3000,
+    });
+    expect(result[1].captions[0]).toMatchObject({
+      startMs: 3000,
+      endMs: 5000,
+    });
+  });
+  it("trims a cue on either side of an interior playhead", () => {
+    const cue = { id: "cue-1", startMs: 1000, endMs: 5000, start: 1, end: 5 };
+
+    expect(trimCueLeft(cue, 3000)).toMatchObject({
+      id: "cue-1",
+      startMs: 3000,
+      endMs: 5000,
+      start: 3,
+      end: 5,
+    });
+    expect(trimCueRight(cue, 3000)).toMatchObject({
+      id: "cue-1",
+      startMs: 1000,
+      endMs: 3000,
+      start: 1,
+      end: 3,
+    });
+  });
+  it("rejects cue transforms outside the cue bounds", () => {
+    const cue = { id: "cue-1", startMs: 1000, endMs: 5000 };
+
+    expect(splitCue(cue, 1000, ["cue-1"])).toBeNull();
+    expect(splitCue(cue, 5000, ["cue-1"])).toBeNull();
+    expect(trimCueLeft(cue, 1000)).toBeNull();
+    expect(trimCueRight(cue, 5000)).toBeNull();
   });
 });

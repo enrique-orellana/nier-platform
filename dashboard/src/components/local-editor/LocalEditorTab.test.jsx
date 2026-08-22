@@ -265,6 +265,11 @@ describe("LocalEditorTab", () => {
       <LocalEditorTab
         initialVideoUrl="/videos/project.mp4"
         initialPlaybackDurationMs={10000}
+        remotionPreviewProps={{
+          videoUrl: "/videos/project.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+        }}
         initialEditorState={{
           subtitleCues: [
             { id: "cue-1", text: "Caption", startMs: 0, endMs: 1000 },
@@ -348,6 +353,120 @@ describe("LocalEditorTab", () => {
     fireEvent.click(screen.getByRole("option", { name: "1.50x" }));
 
     expect(video.playbackRate).toBe(1.5);
+  });
+
+  it("offers cue actions only for an interior selected subtitle cue", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        remotionPreviewProps={{
+          videoUrl: "/videos/project.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+        }}
+        initialEditorState={{
+          subtitleCues: [
+            { id: "cue-1", text: "Caption", startMs: 1000, endMs: 5000 },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Emit native media time" }),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText(/00:00:02:00/).length).toBeGreaterThan(0),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Caption" }));
+
+    expect(screen.getByRole("button", { name: "Split cue" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Delete left of playhead" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Delete right of playhead" }),
+    ).toBeEnabled();
+  });
+
+  it("splits the selected cue, selects the right result, and can undo it", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        remotionPreviewProps={{
+          videoUrl: "/videos/project.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+        }}
+        initialEditorState={{
+          subtitleCues: [
+            { id: "cue-1", text: "Caption", startMs: 1000, endMs: 5000 },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Emit native media time" }),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText(/00:00:02:00/).length).toBeGreaterThan(0),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Caption" }));
+    const workspace = screen.getByTestId("local-editor-subtitle-workspace");
+    fireEvent.click(screen.getByRole("button", { name: "Split cue" }));
+
+    expect(screen.getAllByRole("button", { name: "Caption" })).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", { name: "Caption" }).at(-1),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Timeline undo" }));
+    expect(screen.getAllByRole("button", { name: "Caption" })).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Caption" }));
+    fireEvent.keyDown(workspace, { key: "b", ctrlKey: true });
+    expect(screen.getAllByRole("button", { name: "Caption" })).toHaveLength(2);
+  });
+
+  it("trims the selected cue with the Q and W shortcuts", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        remotionPreviewProps={{
+          videoUrl: "/videos/project.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+        }}
+        initialEditorState={{
+          subtitleCues: [
+            { id: "cue-1", text: "Caption", startMs: 1000, endMs: 5000 },
+          ],
+        }}
+      />,
+    );
+
+    const workspace = screen.getByTestId("local-editor-subtitle-workspace");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Emit native media time" }),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText(/00:00:02:00/).length).toBeGreaterThan(0),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Caption" }));
+    fireEvent.keyDown(workspace, { key: "q" });
+    expect(screen.getByRole("button", { name: "Caption" })).toHaveStyle({
+      left: "20%",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Timeline undo" }));
+    fireEvent.keyDown(workspace, { key: "w" });
+    expect(screen.getByRole("button", { name: "Caption" })).toHaveStyle({
+      width: "10%",
+    });
   });
 
   it("keeps the subtitle workspace visible inside the resizable editor viewport", () => {

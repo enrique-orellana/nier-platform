@@ -9,6 +9,8 @@ import {
   ChevronDown,
   Bookmark,
   Download,
+  PanelLeftClose,
+  PanelRightClose,
   FileScan,
   FastForward,
   FileText,
@@ -29,6 +31,7 @@ import {
   Save,
   SkipBack,
   SkipForward,
+  Split,
   Square,
   Trash2,
   Undo2,
@@ -66,7 +69,12 @@ import {
   sourceTimeToClipTime,
 } from "./localEditorPlayback";
 import { getApiUrl } from "../../config";
-import { createSubtitleCue } from "../../editor/timelineModel";
+import {
+  createSubtitleCue,
+  splitCue,
+  trimCueLeft,
+  trimCueRight,
+} from "../../editor/timelineModel";
 import {
   getHookAnimationStyle,
   getHookBoxStyle,
@@ -528,6 +536,13 @@ export default function LocalEditorTab({
     if (selected.type === "hook") return hook;
     return subtitleCues.find((cue) => cue.id === selected.id) || null;
   }, [hook, selected, subtitleCues]);
+
+  const selectedSubtitleCueIsEditable = Boolean(
+    selected?.type === "subtitle" &&
+    selectedCue &&
+    playheadMs > selectedCue.startMs &&
+    playheadMs < selectedCue.endMs,
+  );
 
   const loadVideo = useCallback(
     (
@@ -1171,13 +1186,29 @@ export default function LocalEditorTab({
 
   const handleTimelineKeyDown = (event) => {
     if (["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)) return;
+    const key = event.key.toLowerCase();
+    if ((event.ctrlKey || event.metaKey) && key === "b") {
+      event.preventDefault();
+      applyCueAction("split");
+      return;
+    }
+    if (!event.ctrlKey && !event.metaKey && key === "q") {
+      event.preventDefault();
+      applyCueAction("delete-left");
+      return;
+    }
+    if (!event.ctrlKey && !event.metaKey && key === "w") {
+      event.preventDefault();
+      applyCueAction("delete-right");
+      return;
+    }
     if (event.key === "Delete" || event.key === "Backspace") {
       if (!selectedMarkerId) return;
       event.preventDefault();
       removeMarker(selectedMarkerId);
       return;
     }
-    if (event.key.toLowerCase() !== "m") return;
+    if (key !== "m") return;
     event.preventDefault();
     toggleMarker();
   };
@@ -1200,6 +1231,42 @@ export default function LocalEditorTab({
       return;
     }
     if (selected?.type === "subtitle") removeSubtitleCue(selected.id);
+  };
+
+  const applyCueAction = (action) => {
+    if (!selectedSubtitleCueIsEditable) return;
+    const cueId = selected.id;
+    const currentCue = subtitleCues.find((cue) => cue.id === cueId);
+    if (!currentCue) return;
+
+    if (action === "split") {
+      const replacement = splitCue(
+        currentCue,
+        playheadMs,
+        subtitleCues.map((cue) => cue.id),
+      );
+      if (!replacement) return;
+      commitEdit((current) => ({
+        ...current,
+        subtitleCues: current.subtitleCues.flatMap((cue) =>
+          cue.id === cueId ? replacement : [cue],
+        ),
+      }));
+      setSelected({ id: replacement[1].id, type: "subtitle" });
+      return;
+    }
+
+    const nextCue =
+      action === "delete-left"
+        ? trimCueLeft(currentCue, playheadMs)
+        : trimCueRight(currentCue, playheadMs);
+    if (!nextCue) return;
+    commitEdit((current) => ({
+      ...current,
+      subtitleCues: current.subtitleCues.map((cue) =>
+        cue.id === cueId ? nextCue : cue,
+      ),
+    }));
   };
 
   const handleSeek = (nextMs) => {
@@ -2297,6 +2364,40 @@ export default function LocalEditorTab({
                     className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <Trash2 size={14} />
+                  </button>
+                  <span
+                    className="mx-1 h-5 w-px bg-white/10"
+                    aria-hidden="true"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Split cue"
+                    title="Split cue (Ctrl/Cmd+B)"
+                    onClick={() => applyCueAction("split")}
+                    disabled={busy || !selectedSubtitleCueIsEditable}
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <Split size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete left of playhead"
+                    title="Delete left of playhead (Q)"
+                    onClick={() => applyCueAction("delete-left")}
+                    disabled={busy || !selectedSubtitleCueIsEditable}
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <PanelLeftClose size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete right of playhead"
+                    title="Delete right of playhead (W)"
+                    onClick={() => applyCueAction("delete-right")}
+                    disabled={busy || !selectedSubtitleCueIsEditable}
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <PanelRightClose size={14} />
                   </button>
                 </div>
                 <div className="flex min-w-0 items-center gap-2">
