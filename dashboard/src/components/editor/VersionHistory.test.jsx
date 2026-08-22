@@ -63,4 +63,60 @@ describe("VersionHistory", () => {
 
     expect(onDelete).toHaveBeenCalledWith(versionId);
   });
+
+  it("renders child versions beneath their parent", () => {
+    render(
+      <VersionHistory
+        versions={[
+          { version_id: "root-version", status: "done" },
+          {
+            version_id: "child-version",
+            parent_version_id: "root-version",
+            status: "pending",
+          },
+        ]}
+      />,
+    );
+
+    const root = screen.getByText("vroot-v").closest("[data-version-node]");
+    const child = screen.getByText("vchild-").closest("[data-version-node]");
+
+    expect(root).toBeInTheDocument();
+    expect(child).toBeInTheDocument();
+    expect(child.parentElement).toHaveAttribute("role", "group");
+  });
+
+  it("opens a completed version's generated clip in a new tab", () => {
+    render(
+      <VersionHistory
+        versions={[
+          {
+            version_id: "ready-version",
+            status: "done",
+            output_url: "/videos/job/ready.mp4",
+          },
+        ]}
+      />,
+    );
+
+    const link = screen.getByRole("link", {
+      name: /open generated clip for version ready-version/i,
+    });
+
+    expect(link).toHaveAttribute("href", "/videos/job/ready.mp4");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noreferrer");
+  });
+
+  it("does not show a generated clip link for incomplete versions", () => {
+    render(
+      <VersionHistory
+        versions={[{ version_id: "pending-version", status: "pending" }]}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("link", { name: /open generated clip/i }),
+    ).toBeNull();
+  });
 });
