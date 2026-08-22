@@ -2851,7 +2851,7 @@ export default function LocalEditorTab({
               className={`space-y-4 ${activeFeature === "project" ? "" : "sr-only"}`}
             >
               {sidePanel || (
-                <p className="rounded-xl border border-white/10 bg-white/[.02] p-4 text-xs leading-5 text-zinc-500">
+                <p className="border-b border-white/10 pb-3 text-xs leading-5 text-zinc-500">
                   Open the editor from a project to see project actions.
                 </p>
               )}

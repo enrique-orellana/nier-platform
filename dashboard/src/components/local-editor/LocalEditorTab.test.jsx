@@ -517,6 +517,22 @@ describe("LocalEditorTab", () => {
     ).toContainElement(screen.getByTestId("project-side-panel"));
   });
 
+  it("renders the Project workspace without a redundant section header", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        sidePanel={<div data-testid="project-side-panel">Project actions</div>}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Project" }));
+
+    expect(
+      screen.queryByRole("heading", { name: "Project" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("project-side-panel")).toBeInTheDocument();
+  });
+
   it("keeps version history in its own feature context", () => {
     render(
       <LocalEditorTab
