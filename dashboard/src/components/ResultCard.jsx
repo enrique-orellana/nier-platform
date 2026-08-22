@@ -36,7 +36,7 @@ const toProxiedVideoUrl = (url) => {
   // Relative URL — browser uses same-origin and backend resolves it for the renderer
 };
 
-import { Sliders } from "lucide-react";
+import { Clock3, Sliders } from "lucide-react";
 import VideoPreview from "./ResultCard/VideoPreview";
 import WebcamRegionSelector from "./ResultCard/WebcamRegionSelector";
 import GameplayRegionSelector from "./ResultCard/GameplayRegionSelector";
@@ -775,17 +775,29 @@ export default function ResultCard({
           masterDuration={masterDuration}
         />
 
-        <button
-          type="button"
-          onClick={() => setShowControlsModal(true)}
-          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:border-cyan-400/50 transition-all active:scale-[0.98] shadow-sm group/btn cursor-pointer"
-        >
-          <Sliders
-            size={14}
-            className="group-hover/btn:rotate-12 transition-transform text-cyan-400 shrink-0"
-          />
-          <span>Clip Controls & Actions</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              onEditorOpen ? onEditorOpen() : setShowControlsModal(true)
+            }
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:border-cyan-400/50 transition-all active:scale-[0.98] shadow-sm group/btn cursor-pointer"
+          >
+            <Clock3
+              size={14}
+              className="group-hover/btn:scale-110 transition-transform text-cyan-400 shrink-0"
+            />
+            <span>Edit Timeline</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowControlsModal(true)}
+            title="Clip Controls & Actions"
+            className="flex items-center justify-center p-2.5 rounded-xl text-xs bg-white/[0.04] hover:bg-white/[0.1] text-zinc-400 hover:text-zinc-200 border border-white/10 hover:border-white/20 transition-all active:scale-[0.98] shadow-sm cursor-pointer shrink-0"
+          >
+            <Sliders size={14} className="transition-transform" />
+          </button>
+        </div>
       </div>
 
       <ClipControlsModal
