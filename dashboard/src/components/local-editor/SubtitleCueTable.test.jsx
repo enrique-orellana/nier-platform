@@ -25,6 +25,12 @@ describe("SubtitleCueTable", () => {
       />,
     );
 
+    expect(screen.getByTestId("local-editor-cue-table")).toHaveClass(
+      "rounded-none",
+    );
+    expect(screen.getByRole("table").parentElement).toHaveClass(
+      "editor-scrollbar",
+    );
     expect(scrollToCurrentRef.current).toEqual(expect.any(Function));
     expect(onSelect).not.toHaveBeenCalled();
 

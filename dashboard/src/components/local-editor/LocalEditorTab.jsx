@@ -2165,11 +2165,11 @@ export default function LocalEditorTab({
                 <div className="flex min-w-0 items-center gap-2">
                   <div
                     data-testid="local-editor-playback-controls"
-                    className="flex shrink-0 items-center gap-1"
+                    className="flex h-7 shrink-0 items-center gap-1"
                   >
                     {subtitleView === "table" && (
                       <>
-                        <label className="group inline-flex h-7 cursor-pointer items-center">
+                        <label className="group inline-flex h-7 shrink-0 cursor-pointer items-center">
                           <input
                             aria-label="Loop segment"
                             type="checkbox"
@@ -2179,11 +2179,11 @@ export default function LocalEditorTab({
                             }
                             className="peer sr-only"
                           />
-                          <span className="rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-400 transition-colors group-hover:border-white/20 group-hover:text-zinc-200 peer-checked:border-violet-400/50 peer-checked:bg-violet-500/15 peer-checked:text-violet-200">
+                          <span className="flex h-7 items-center rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors group-hover:border-white/20 group-hover:text-zinc-200 peer-checked:border-violet-400/50 peer-checked:bg-violet-500/15 peer-checked:text-violet-200">
                             Loop
                           </span>
                         </label>
-                        <label className="group inline-flex h-7 cursor-pointer items-center">
+                        <label className="group inline-flex h-7 shrink-0 cursor-pointer items-center">
                           <input
                             aria-label="Follow audio"
                             type="checkbox"
@@ -2193,7 +2193,7 @@ export default function LocalEditorTab({
                             }
                             className="peer sr-only"
                           />
-                          <span className="rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-400 transition-colors group-hover:border-white/20 group-hover:text-zinc-200 peer-checked:border-violet-400/50 peer-checked:bg-violet-500/15 peer-checked:text-violet-200">
+                          <span className="flex h-7 items-center rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors group-hover:border-white/20 group-hover:text-zinc-200 peer-checked:border-violet-400/50 peer-checked:bg-violet-500/15 peer-checked:text-violet-200">
                             Follow
                           </span>
                         </label>
@@ -2203,7 +2203,7 @@ export default function LocalEditorTab({
                           title="Scroll to current subtitle"
                           onClick={scrollToCurrentSubtitle}
                           disabled={!subtitleCues.length}
-                          className="h-7 rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="flex h-7 shrink-0 items-center rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           Current
                         </button>
@@ -2222,7 +2222,7 @@ export default function LocalEditorTab({
                           if (event.key === "Escape")
                             setPlaybackRateMenuOpen(false);
                         }}
-                        className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-white/[.02] px-2 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100"
+                        className="flex h-7 min-h-7 shrink-0 items-center gap-1 rounded-md border border-white/10 bg-white/[.02] px-2 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100"
                       >
                         <span>Speed</span>
                         <span className="font-medium text-zinc-100">

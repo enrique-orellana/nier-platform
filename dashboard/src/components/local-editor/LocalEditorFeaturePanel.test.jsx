@@ -14,5 +14,8 @@ describe("LocalEditorFeaturePanel", () => {
     expect(panel).toHaveAttribute("data-testid", "local-editor-feature-panel");
     expect(panel).toHaveClass("overflow-y-auto", "editor-scrollbar");
     expect(screen.getByTestId("subtitle-controls")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Subtitles" }),
+    ).not.toBeInTheDocument();
   });
 });
