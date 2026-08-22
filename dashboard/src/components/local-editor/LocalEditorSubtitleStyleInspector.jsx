@@ -4,6 +4,7 @@ import {
   SUBTITLE_COLOR_PRESETS,
   SUBTITLE_FONT_OPTIONS,
   SUBTITLE_HIGHLIGHT_PRESETS,
+  SUBTITLE_STYLE_TEMPLATES,
   normalizeSubtitleStyle,
 } from "./localEditorStyles";
 import { cleanChoiceClass, cleanLabelClass } from "./localEditorUtils";
@@ -16,8 +17,50 @@ export default function LocalEditorSubtitleStyleInspector({
 }) {
   const current = normalizeSubtitleStyle(style);
   const update = (key, value) => onChange({ ...current, [key]: value });
+  const applyTemplate = (template) =>
+    onChange({ ...current, ...template.style });
   return (
     <div className="space-y-5">
+      <div className="border-b border-white/10 pb-4">
+        <span className={cleanLabelClass}>Quick picks</span>
+        <div className="grid grid-cols-2 gap-2">
+          {SUBTITLE_STYLE_TEMPLATES.map((template) => {
+            const isActive = Object.entries(template.style).every(
+              ([key, value]) => current[key] === value,
+            );
+            return (
+              <button
+                key={template.id}
+                type="button"
+                aria-label={template.ariaLabel}
+                title={template.description}
+                onClick={() => applyTemplate(template)}
+                className={`flex min-h-[58px] items-center gap-2 rounded-lg border p-2 text-left transition-colors ${isActive ? "border-primary bg-primary/15" : "border-white/10 bg-white/[.02] hover:border-white/25 hover:bg-white/[.05]"}`}
+              >
+                <span
+                  className="flex h-8 w-9 shrink-0 items-center justify-center rounded-md border text-sm font-bold"
+                  style={{
+                    backgroundColor: template.preview.backgroundColor,
+                    borderColor: template.preview.accent,
+                    color: template.preview.color,
+                    fontFamily: template.style.fontFamily,
+                  }}
+                >
+                  Aa
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-xs font-semibold text-zinc-100">
+                    {template.label}
+                  </span>
+                  <span className="block truncate text-[10px] text-zinc-500">
+                    {template.description}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
       <div>
         <span className={cleanLabelClass}>Position</span>
         <div

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import FullScreenEditor from "./FullScreenEditor";
 import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
+import { SUBTITLE_STYLE_TEMPLATES } from "../local-editor/localEditorStyles";
 
 const renderVersionMocks = vi.hoisted(() => ({
   saveDraftVersion: vi.fn(),
@@ -1099,6 +1100,82 @@ describe("FullScreenEditor", () => {
                 cues: [expect.objectContaining({ startMs: 1500 })],
               }),
             ],
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("saves and renders a subtitle quick-pick style in the version manifest", async () => {
+    const selectedTemplate = SUBTITLE_STYLE_TEMPLATES[0];
+    renderVersionMocks.saveDraftVersion.mockResolvedValue({
+      status: "saved",
+      versionId: "v2",
+      version: { version_id: "v2", status: "pending" },
+      manifest,
+    });
+    renderVersionMocks.saveAndRenderVersion.mockResolvedValue({
+      status: "done",
+      outputUrl: "/videos/job/v3.mp4",
+      version: { version_id: "v3", status: "done" },
+    });
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }}
+        initialManifest={manifest}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /toggle subtitles settings/i,
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: selectedTemplate.ariaLabel }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save as new version" }),
+    );
+
+    await waitFor(() =>
+      expect(renderVersionMocks.saveDraftVersion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          manifest: expect.objectContaining({
+            subtitle_tracks: [
+              expect.objectContaining({ style: selectedTemplate.style }),
+            ],
+            layers: expect.objectContaining({
+              subtitles: expect.objectContaining({
+                style: selectedTemplate.style,
+              }),
+            }),
+          }),
+        }),
+      ),
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Export Video" }),
+    );
+    await waitFor(() =>
+      expect(renderVersionMocks.saveAndRenderVersion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          manifest: expect.objectContaining({
+            subtitle_tracks: [
+              expect.objectContaining({ style: selectedTemplate.style }),
+            ],
+          }),
+          props: expect.objectContaining({
+            subtitles: expect.objectContaining({
+              style: selectedTemplate.style,
+            }),
           }),
         }),
       ),
