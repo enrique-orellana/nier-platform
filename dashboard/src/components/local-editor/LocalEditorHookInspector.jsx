@@ -1,6 +1,10 @@
 import React from "react";
-import { HOOK_ENTRANCE_OPTIONS, HOOK_SIZE_OPTIONS } from "./localEditorStyles";
-import { cleanLabelClass, hookChoiceClass } from "./localEditorUtils";
+import {
+  HOOK_ENTRANCE_OPTIONS,
+  HOOK_SIZE_OPTIONS,
+  SUBTITLE_COLOR_PRESETS,
+} from "./localEditorStyles";
+import { cleanChoiceClass, cleanLabelClass } from "./localEditorUtils";
 
 export default function LocalEditorHookInspector({ hook, onChange, onRemove }) {
   if (!hook)
@@ -41,7 +45,7 @@ export default function LocalEditorHookInspector({ hook, onChange, onRemove }) {
               type="button"
               aria-label={position.charAt(0).toUpperCase() + position.slice(1)}
               onClick={() => onChange({ ...hook, position })}
-              className={hookChoiceClass(hook.position === position)}
+              className={cleanChoiceClass(hook.position === position)}
             >
               {position}
             </button>
@@ -56,7 +60,7 @@ export default function LocalEditorHookInspector({ hook, onChange, onRemove }) {
               key={option.value}
               type="button"
               onClick={() => onChange({ ...hook, size: option.value })}
-              className={hookChoiceClass((hook.size || "M") === option.value)}
+              className={cleanChoiceClass((hook.size || "M") === option.value)}
             >
               {option.label}
             </button>
@@ -73,7 +77,7 @@ export default function LocalEditorHookInspector({ hook, onChange, onRemove }) {
               onClick={() =>
                 onChange({ ...hook, entranceAnimation: option.value })
               }
-              className={hookChoiceClass(
+              className={cleanChoiceClass(
                 (hook.entranceAnimation || "spring") === option.value,
               )}
             >
@@ -129,19 +133,41 @@ export default function LocalEditorHookInspector({ hook, onChange, onRemove }) {
           />
         </label>
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        <label className="text-xs text-zinc-400">
-          Text color
-          <input
-            aria-label="Hook text color"
-            type="color"
-            value={hook.color}
-            onChange={(event) =>
-              onChange({ ...hook, color: event.target.value })
-            }
-            className="mt-1 h-9 w-full rounded border border-white/10 bg-black/30"
-          />
-        </label>
+      <div>
+        <span className={cleanLabelClass}>Text color</span>
+        <div
+          className="flex flex-wrap gap-2"
+          aria-label="Hook text color presets"
+        >
+          {SUBTITLE_COLOR_PRESETS.map((preset) => (
+            <button
+              key={preset.color}
+              type="button"
+              aria-label={`Use hook text color ${preset.label}`}
+              title={preset.label}
+              onClick={() => onChange({ ...hook, color: preset.color })}
+              className={`h-7 w-7 rounded-full border-2 transition-all ${String(hook.color || "").toUpperCase() === preset.color ? "scale-110 border-white" : "border-white/20 hover:border-white/50"}`}
+              style={{ backgroundColor: preset.color }}
+            />
+          ))}
+          <label
+            className="relative flex h-7 w-7 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-white/20 transition-all hover:border-white/50"
+            title="Custom color"
+          >
+            <span className="text-[10px] text-zinc-400">+</span>
+            <input
+              aria-label="Hook text color"
+              type="color"
+              value={hook.color}
+              onChange={(event) =>
+                onChange({ ...hook, color: event.target.value })
+              }
+              className="absolute inset-0 cursor-pointer opacity-0"
+            />
+          </label>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
         <label className="text-xs text-zinc-400">
           Size
           <input

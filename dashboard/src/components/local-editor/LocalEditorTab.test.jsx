@@ -1796,6 +1796,77 @@ describe("LocalEditorTab", () => {
     expect(resetButton.querySelector("svg")).toHaveClass("lucide-rotate-ccw");
   });
 
+  it("matches the subtitle color palette styling for viral hook text", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoName="project.mp4"
+        initialEditorState={{
+          subtitleCues: [],
+          subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+          subtitleLanguage: "en",
+          hook: {
+            id: "hook",
+            text: "Existing hook",
+            startMs: 0,
+            endMs: 2000,
+            color: "#FFFFFF",
+            fontSize: 30,
+            background: "#111111",
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Existing hook" }));
+    const whitePreset = await waitFor(() =>
+      screen.getByRole("button", { name: "Use hook text color White" }),
+    );
+    expect(whitePreset).toHaveClass("h-7", "w-7", "rounded-full");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use hook text color Cyan" }),
+    );
+    expect(screen.getByLabelText("Hook text color")).toHaveValue("#00ffff");
+  });
+
+  it("uses subtitle button colors for viral hook choices", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoName="project.mp4"
+        initialEditorState={{
+          subtitleCues: [],
+          subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+          subtitleLanguage: "en",
+          hook: {
+            id: "hook",
+            text: "Existing hook",
+            startMs: 0,
+            endMs: 2000,
+            position: "top",
+            size: "M",
+            entranceAnimation: "spring",
+            color: "#FFFFFF",
+            fontSize: 30,
+            background: "#111111",
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Existing hook" }));
+    const hookPanel = document.getElementById("viral-hook-settings-panel");
+    const selectedPosition = await waitFor(() =>
+      within(hookPanel).getByRole("button", { name: "Top" }),
+    );
+
+    expect(selectedPosition).toHaveClass(
+      "border-primary",
+      "bg-primary/20",
+      "text-white",
+    );
+  });
+
   it("supports standard video keyboard controls", async () => {
     const requestFullscreen = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
