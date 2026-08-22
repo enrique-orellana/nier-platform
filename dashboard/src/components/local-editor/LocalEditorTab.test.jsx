@@ -907,6 +907,20 @@ describe("LocalEditorTab", () => {
     expect(divider).toHaveClass("top-0");
   });
 
+  it("keeps horizontal overflow out of the inspector scroll area", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    expect(screen.getByTestId("local-editor-feature-panel")).toHaveClass(
+      "overflow-x-hidden",
+      "overflow-y-auto",
+    );
+  });
+
   it("accumulates pointer movement from the divider grab point", () => {
     render(
       <LocalEditorTab

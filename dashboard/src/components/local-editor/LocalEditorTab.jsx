@@ -2427,6 +2427,10 @@ export default function LocalEditorTab({
               <ClipMetadataPanel
                 clip={clipMetadata}
                 subtitleCues={subtitleCues}
+                videoName={videoFile?.name || initialVideoName}
+                fps={remotionFps}
+                width={remotionPreviewProps?.width}
+                height={remotionPreviewProps?.height}
                 hashtags={clipMetadata?.hashtags}
                 onHashtagsChange={onHashtagsChange}
               />

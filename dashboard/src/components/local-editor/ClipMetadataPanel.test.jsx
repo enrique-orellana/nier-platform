@@ -8,6 +8,9 @@ const clip = {
   video_title_for_youtube_short: "La foto que según él parece Juan Guarnizo",
   video_description_for_tiktok:
     "Una chica de Internet tiene una foto de cuerpo entero y le pide ayuda.",
+  output_width: 1080,
+  output_height: 1920,
+  output_fps: 30,
   source_context: {
     who: ["Streamer"],
     what: "Launch event",
@@ -34,6 +37,12 @@ describe("ClipMetadataPanel", () => {
     expect(
       screen.getByText(clip.video_description_for_tiktok),
     ).toBeInTheDocument();
+    expect(screen.getByText("Timeline 01")).toBeInTheDocument();
+    expect(screen.getByText("Project video")).toBeInTheDocument();
+    expect(screen.getByText("9:16")).toBeInTheDocument();
+    expect(screen.getByText("1080 × 1920")).toBeInTheDocument();
+    expect(screen.getByText("30 fps")).toBeInTheDocument();
+    expect(screen.getByText("0 cues")).toBeInTheDocument();
   });
 
   it("omits itself when no generated metadata is available", () => {
