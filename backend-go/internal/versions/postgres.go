@@ -334,12 +334,10 @@ func (r *PostgresRepository) Delete(ctx context.Context, projectID string, clipI
 	err = tx.QueryRowContext(ctx, `
 		SELECT current_version_id::text FROM clip_version_heads
 		WHERE project_id = $1 AND clip_index = $2
+		FOR UPDATE
 	`, projectID, clipIndex).Scan(&current)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return VersionRecord{}, "", fmt.Errorf("load current version head: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM clip_versions WHERE project_id = $1 AND clip_index = $2 AND version_id = $3`, projectID, clipIndex, versionID); err != nil {
-		return VersionRecord{}, "", fmt.Errorf("delete version: %w", err)
 	}
 	replacement := ""
 	if current == versionID {
@@ -347,10 +345,11 @@ func (r *PostgresRepository) Delete(ctx context.Context, projectID string, clipI
 		err := tx.QueryRowContext(ctx, `
 			SELECT version_id::text
 			FROM clip_versions
-			WHERE project_id = $1 AND clip_index = $2 AND status = 'done' AND output_url IS NOT NULL AND output_url <> ''
+			WHERE project_id = $1 AND clip_index = $2 AND version_id <> $3
+			  AND status = 'done' AND output_url IS NOT NULL AND output_url <> ''
 			ORDER BY created_at DESC, version_id DESC
 			LIMIT 1
-		`, projectID, clipIndex).Scan(&candidateID)
+		`, projectID, clipIndex, versionID).Scan(&candidateID)
 		if err == nil {
 			replacement = candidateID
 			if _, err := tx.ExecContext(ctx, `
@@ -366,6 +365,9 @@ func (r *PostgresRepository) Delete(ctx context.Context, projectID string, clipI
 		} else {
 			return VersionRecord{}, "", fmt.Errorf("find replacement version head: %w", err)
 		}
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM clip_versions WHERE project_id = $1 AND clip_index = $2 AND version_id = $3`, projectID, clipIndex, versionID); err != nil {
+		return VersionRecord{}, "", fmt.Errorf("delete version: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return VersionRecord{}, "", fmt.Errorf("commit version deletion: %w", err)
