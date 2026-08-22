@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 
 import {
   act,
+  createEvent,
   fireEvent,
   render,
   screen,
@@ -178,6 +179,9 @@ describe("LocalEditorTab", () => {
 
     expect(
       screen.queryByRole("button", { name: "Projects" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("local-editor-header-workspace"),
     ).not.toBeInTheDocument();
   });
 
@@ -529,6 +533,54 @@ describe("LocalEditorTab", () => {
 
     expect(workspace.style.gridTemplateRows).toBe("minmax(0, 1fr) 352px");
     expect(divider).toHaveAttribute("aria-valuenow", "352");
+  });
+
+  it("accumulates pointer movement from the divider grab point", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    const workspace = screen.getByTestId("local-editor-workspace");
+    vi.spyOn(workspace, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      right: 1280,
+      bottom: 800,
+      left: 0,
+      width: 1280,
+      height: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+    const divider = screen.getByRole("separator", {
+      name: "Resize preview and timeline",
+    });
+    const pointerDown = createEvent.pointerDown(divider);
+    Object.defineProperties(pointerDown, {
+      clientY: { value: 480 },
+      pointerId: { value: 1 },
+    });
+    fireEvent(divider, pointerDown);
+
+    const firstMove = createEvent.pointerMove(divider);
+    Object.defineProperties(firstMove, {
+      clientY: { value: 460 },
+      movementY: { value: -20 },
+      pointerId: { value: 1 },
+    });
+    fireEvent(divider, firstMove);
+    const secondMove = createEvent.pointerMove(divider);
+    Object.defineProperties(secondMove, {
+      clientY: { value: 440 },
+      movementY: { value: -20 },
+      pointerId: { value: 1 },
+    });
+    fireEvent(divider, secondMove);
+
+    expect(divider).toHaveAttribute("aria-valuenow", "360");
   });
 
   it("does not offer local upload when a project editor has no remote video", () => {

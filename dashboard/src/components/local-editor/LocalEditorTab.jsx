@@ -725,11 +725,10 @@ export default function LocalEditorTab({
       minHeight,
       resize.workspaceHeight - MIN_PREVIEW_HEIGHT,
     );
-    const deltaY =
-      Number.isFinite(event.movementY) && event.movementY !== 0
-        ? event.movementY
-        : (Number.isFinite(event.clientY) ? event.clientY : resize.startY) -
-          resize.startY;
+    const currentY = Number.isFinite(event.clientY)
+      ? event.clientY
+      : resize.startY;
+    const deltaY = currentY - resize.startY;
     setTimelineHeight(
       Math.round(clamp(resize.startHeight - deltaY, minHeight, maxHeight)),
     );
@@ -1513,11 +1512,11 @@ export default function LocalEditorTab({
           data-testid="local-editor-header-actions"
           className="flex flex-wrap items-center gap-1"
         >
-          <div
-            data-testid="local-editor-header-workspace"
-            className="flex items-center gap-1"
-          >
-            {!initialProjectId && (
+          {!initialProjectId && (
+            <div
+              data-testid="local-editor-header-workspace"
+              className="flex items-center gap-1"
+            >
               <button
                 type="button"
                 onClick={openProjects}
@@ -1526,8 +1525,8 @@ export default function LocalEditorTab({
                 <FolderOpen size={13} />
                 Projects
               </button>
-            )}
-          </div>
+            </div>
+          )}
           <div
             data-testid="local-editor-header-edit"
             className="flex items-center gap-1 border-l border-white/10 pl-2"
