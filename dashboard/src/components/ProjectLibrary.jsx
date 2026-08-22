@@ -1091,12 +1091,12 @@ export default function ProjectLibrary({
   if (selectedProject) {
     return (
       <div className="h-full min-h-0 overflow-y-auto custom-scrollbar">
-        <div className="max-w-[1680px] mx-auto p-6 pb-10 space-y-8">
+        <div className="max-w-[1680px] mx-auto p-4 sm:p-5 pb-8 space-y-4">
           {/* Header Navigation */}
           <div className="flex items-center justify-between">
             <button
               onClick={() => onBackToProjects?.()}
-              className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group"
+              className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group text-sm"
             >
               <ChevronLeft
                 size={16}
@@ -1109,62 +1109,60 @@ export default function ProjectLibrary({
                 onClick={handleOpenAudit}
                 aria-label="Open processing timeline"
                 title="Open processing timeline"
-                className="p-2 rounded-xl border border-amber-400/20 bg-amber-400/5 hover:bg-amber-400/15 text-amber-300 transition-colors"
+                className="p-1.5 rounded-lg border border-amber-400/20 bg-amber-400/5 hover:bg-amber-400/15 text-amber-300 transition-colors"
               >
-                <Clock size={16} />
+                <Clock size={15} />
               </button>
               <button
                 onClick={loadProjects}
-                className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm text-zinc-300 flex items-center gap-2 transition-colors"
+                className="px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-zinc-300 flex items-center gap-1.5 transition-colors"
               >
                 <RefreshCw
-                  size={14}
+                  size={13}
                   className={isLoading ? "animate-spin" : ""}
                 />
                 Refresh
               </button>
               <button
                 onClick={(e) => handleDeleteProject(e, selectedProject)}
-                className="px-3 py-2 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/20 text-sm text-red-400 flex items-center gap-2 transition-colors"
+                className="px-2.5 py-1.5 rounded-lg border border-red-500/20 bg-red-500/5 hover:bg-red-500/20 text-xs text-red-400 flex items-center gap-1.5 transition-colors"
               >
-                <Trash2 size={14} />
+                <Trash2 size={13} />
                 Delete
               </button>
             </div>
           </div>
 
           {/* Project Header Card */}
-          <div className="glass-panel p-6 sm:p-7 rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.03] via-zinc-900/60 to-black/80 backdrop-blur-xl relative overflow-hidden shadow-2xl space-y-5">
+          <div className="glass-panel p-3.5 sm:p-4 rounded-xl border border-white/[0.08] bg-gradient-to-br from-white/[0.03] via-zinc-900/60 to-black/80 backdrop-blur-xl relative overflow-hidden shadow-xl space-y-3">
             {/* Ambient background glow */}
-            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-72 h-72 bg-cyan-500/[0.07] rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-cyan-500/[0.05] rounded-full blur-3xl pointer-events-none" />
 
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 relative z-10">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 relative z-10">
               {/* Title and ID */}
-              <div className="flex items-start gap-4 min-w-0 flex-1">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/10 border border-cyan-500/30 flex items-center justify-center shrink-0 shadow-lg shadow-cyan-500/10">
-                  <FolderOpen size={24} className="text-cyan-400" />
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-600/10 border border-cyan-500/30 flex items-center justify-center shrink-0 shadow-md shadow-cyan-500/10">
+                  <FolderOpen size={18} className="text-cyan-400" />
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 flex items-center gap-2.5 flex-wrap">
                   <h1
-                    className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight line-clamp-2"
+                    className="text-lg sm:text-xl font-bold text-white tracking-tight leading-snug line-clamp-1"
                     title={selectedProject.title || "Untitled Project"}
                   >
                     {selectedProject.title || "Untitled Project"}
                   </h1>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="font-mono text-xs text-zinc-400 bg-black/50 border border-white/10 px-2.5 py-0.5 rounded-md select-all">
-                      {selectedProject.job_id}
-                    </span>
-                  </div>
+                  <span className="font-mono text-[11px] text-zinc-400 bg-black/50 border border-white/10 px-2 py-0.5 rounded-md select-all shrink-0">
+                    {selectedProject.job_id}
+                  </span>
                 </div>
               </div>
 
               {/* Metadata Badges Strip */}
-              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] shadow-sm">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] shadow-sm">
                   <Film size={14} className="text-cyan-400 shrink-0" />
                   <div className="flex flex-col">
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold">
+                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold leading-none mb-0.5">
                       Clips
                     </span>
                     <span className="text-xs font-bold text-white leading-none">
@@ -1172,10 +1170,10 @@ export default function ProjectLibrary({
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] shadow-sm">
+                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] shadow-sm">
                   <Calendar size={14} className="text-purple-400 shrink-0" />
                   <div className="flex flex-col">
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold">
+                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold leading-none mb-0.5">
                       Created
                     </span>
                     <span className="text-xs font-bold text-white leading-none">
@@ -1183,10 +1181,10 @@ export default function ProjectLibrary({
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] shadow-sm">
+                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] shadow-sm">
                   <Clock size={14} className="text-amber-400 shrink-0" />
                   <div className="flex flex-col">
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold">
+                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold leading-none mb-0.5">
                       Duration
                     </span>
                     <span className="text-xs font-bold text-white leading-none">
@@ -1197,10 +1195,10 @@ export default function ProjectLibrary({
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] shadow-sm">
+                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] shadow-sm">
                   <HardDrive size={14} className="text-blue-400 shrink-0" />
                   <div className="flex flex-col">
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold">
+                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold leading-none mb-0.5">
                       Source
                     </span>
                     <span className="text-xs font-bold text-white leading-none">
@@ -1212,8 +1210,8 @@ export default function ProjectLibrary({
             </div>
 
             {/* Workflow Pipeline Status Strip */}
-            <div className="flex items-center gap-2 pt-3 border-t border-white/[0.06] flex-wrap text-xs relative z-10">
-              <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mr-1">
+            <div className="flex items-center gap-1.5 pt-2.5 border-t border-white/[0.06] flex-wrap text-xs relative z-10">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mr-1">
                 Pipeline:
               </span>
               {CLIP_WORKFLOW_STATUSES.map(({ value, label, className }) => {
@@ -1224,7 +1222,7 @@ export default function ProjectLibrary({
                 return (
                   <span
                     key={value}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold ${className}`}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${className}`}
                   >
                     <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
                     <strong>{count}</strong>
@@ -1236,7 +1234,7 @@ export default function ProjectLibrary({
             </div>
 
             {selectedProject.description && (
-              <div className="p-3.5 rounded-xl bg-black/30 border border-white/5 text-xs text-zinc-400 leading-relaxed italic max-w-3xl">
+              <div className="p-2.5 rounded-lg bg-black/30 border border-white/5 text-xs text-zinc-400 leading-relaxed italic max-w-3xl">
                 "{selectedProject.description}"
               </div>
             )}
@@ -1244,7 +1242,7 @@ export default function ProjectLibrary({
             {statusError && (
               <div
                 role="alert"
-                className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-sm text-red-200"
+                className="rounded-lg border border-red-500/20 bg-red-500/5 p-2.5 text-xs text-red-200"
               >
                 {statusError}
               </div>
