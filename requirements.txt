@@ -6,8 +6,6 @@ google-genai==1.75.0
 python-dotenv==1.2.2
 boto3==1.43.4
 
-fastapi==0.136.1  # legacy test compatibility; HTTP production runtime is Go
-python-multipart==0.0.27
 httpx==0.28.1
 filelock==3.29.0
 Pillow==12.2.0

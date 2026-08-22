@@ -6,7 +6,6 @@ implementation.
 
 ## Retained legacy entrypoints
 
-- `app.py` — former FastAPI HTTP service. It is not the production API entrypoint.
 - `main.py` — legacy media/AI generation worker launched by the Go control plane.
 - `python_worker.py` — legacy JSON-lines worker bridge launched by the Go control plane.
 - `translation_worker.py` — legacy standalone translation worker retained for compatibility.

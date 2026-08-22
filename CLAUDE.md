@@ -14,7 +14,7 @@ OpenShorts is an AI-powered vertical video generator that transforms long YouTub
 docker compose up --build   # Build and run full stack
 ```
 
-- Backend: http://localhost:8000 (FastAPI/Uvicorn)
+- Backend: http://localhost:8000 (Go control plane; Python worker internally)
 - Frontend: http://localhost:5175 (Vite proxies API calls to backend)
 
 ### Frontend Only (Dashboard)
@@ -30,8 +30,8 @@ npm run lint      # ESLint (strict, --max-warnings 0)
 ### Backend Only
 
 ```bash
-pip install -r requirements.txt
-uvicorn app:app --host 0.0.0.0 --port 8000
+cd backend-go
+go run ./cmd/api
 ```
 
 ## Architecture
@@ -55,7 +55,8 @@ uvicorn app:app --host 0.0.0.0 --port 8000
 | File                                          | Purpose                                                                                    |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `main.py`                                     | Core video processing: transcription, scene detection, clip extraction, vertical reframing |
-| `app.py`                                      | FastAPI server with async job queue and REST endpoints                                     |
+| `backend-go/cmd/api/main.go`                 | Production HTTP control plane entrypoint                                                   |
+| `python_worker.py`                            | Internal JSON-lines worker bridge launched by the Go control plane                         |
 | `editor.py`                                   | Gemini AI integration for dynamic video effects (FFmpeg filter generation)                 |
 | `hooks.py`                                    | Hook text overlay generation with font rendering                                           |
 | `s3_uploader.py`                              | AWS S3 upload with caching                                                                 |
@@ -109,7 +110,7 @@ Async job queue with semaphore-based concurrency control. Configure via `MAX_CON
 
 ## Tech Stack
 
-- **Backend:** Python 3.11, FastAPI, google-genai, ultralytics (YOLOv8), mediapipe, opencv-python, yt-dlp, FFmpeg, httpx
+- **Backend:** Go control plane plus Python worker, google-genai, ultralytics (YOLOv8), mediapipe, opencv-python, yt-dlp, FFmpeg, httpx
 - **Frontend:** React 18, Vite 4, Tailwind CSS 3.4
 - **External APIs:** Google Gemini, ElevenLabs Dubbing, Upload-Post
 - **Infrastructure:** Docker + Docker Compose, AWS S3
@@ -117,7 +118,7 @@ Async job queue with semaphore-based concurrency control. Configure via `MAX_CON
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **openshorts** (6676 symbols, 22863 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **openshorts** (6118 symbols, 14692 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
