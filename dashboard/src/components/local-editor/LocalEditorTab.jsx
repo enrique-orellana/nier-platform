@@ -119,6 +119,9 @@ import LocalEditorSaveProjectDialog from "./LocalEditorSaveProjectDialog";
 
 const MIN_TIMELINE_HEIGHT = 220;
 const MIN_PREVIEW_HEIGHT = 260;
+const MIN_INSPECTOR_WIDTH = 220;
+const MAX_INSPECTOR_WIDTH = 520;
+const DEFAULT_INSPECTOR_WIDTH = 300;
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 export default function LocalEditorTab({
@@ -156,6 +159,7 @@ export default function LocalEditorTab({
   const playerRef = useRef(null);
   const workspaceRef = useRef(null);
   const layoutResizeRef = useRef(null);
+  const inspectorResizeRef = useRef(null);
   const remotionPlayerRef = useRef(null);
   const remotionPlayheadRef = useRef(0);
   const remotionPlayheadTimerRef = useRef(null);
@@ -216,6 +220,10 @@ export default function LocalEditorTab({
   const [timelineHeight, setTimelineHeight] = useState(() => {
     const savedHeight = readEditorLayout().timelineHeight;
     return savedHeight >= MIN_TIMELINE_HEIGHT ? savedHeight : null;
+  });
+  const [inspectorWidth, setInspectorWidth] = useState(() => {
+    const savedWidth = readEditorLayout().inspectorWidth;
+    return savedWidth >= MIN_INSPECTOR_WIDTH ? savedWidth : null;
   });
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectIdState] = useState(null);
@@ -380,6 +388,10 @@ export default function LocalEditorTab({
   useEffect(() => {
     if (timelineHeight !== null) saveEditorLayout({ timelineHeight });
   }, [timelineHeight]);
+
+  useEffect(() => {
+    if (inspectorWidth !== null) saveEditorLayout({ inspectorWidth });
+  }, [inspectorWidth]);
 
   useEffect(() => {
     const persistCurrentHistory = () => {
@@ -791,6 +803,67 @@ export default function LocalEditorTab({
           ? maxHeight
           : currentHeight + (event.key === "ArrowUp" ? 32 : -32);
     setTimelineHeight(Math.round(clamp(nextHeight, minHeight, maxHeight)));
+  };
+
+  const handleInspectorResizeStart = (event) => {
+    inspectorResizeRef.current = {
+      startX: Number.isFinite(event.clientX) ? event.clientX : 0,
+      startWidth: inspectorWidth ?? DEFAULT_INSPECTOR_WIDTH,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  };
+
+  const handleInspectorResizeMove = (event) => {
+    const resize = inspectorResizeRef.current;
+    if (!resize) return;
+    const currentX = Number.isFinite(event.clientX)
+      ? event.clientX
+      : resize.startX;
+    const workspaceWidth = workspaceRef.current?.getBoundingClientRect().width;
+    const maxWidth = Math.min(
+      MAX_INSPECTOR_WIDTH,
+      Math.max(
+        MIN_INSPECTOR_WIDTH,
+        (workspaceWidth || 1280) - MIN_PREVIEW_HEIGHT - 220,
+      ),
+    );
+    setInspectorWidth(
+      Math.round(
+        clamp(
+          resize.startWidth + currentX - resize.startX,
+          MIN_INSPECTOR_WIDTH,
+          maxWidth,
+        ),
+      ),
+    );
+  };
+
+  const handleInspectorResizeEnd = () => {
+    inspectorResizeRef.current = null;
+  };
+
+  const handleInspectorResizeKeyDown = (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const workspaceWidth = workspaceRef.current?.getBoundingClientRect().width;
+    const maxWidth = Math.min(
+      MAX_INSPECTOR_WIDTH,
+      Math.max(
+        MIN_INSPECTOR_WIDTH,
+        (workspaceWidth || 1280) - MIN_PREVIEW_HEIGHT - 220,
+      ),
+    );
+    const currentWidth = inspectorWidth ?? DEFAULT_INSPECTOR_WIDTH;
+    const nextWidth =
+      event.key === "Home"
+        ? MIN_INSPECTOR_WIDTH
+        : event.key === "End"
+          ? maxWidth
+          : currentWidth + (event.key === "ArrowRight" ? 32 : -32);
+    setInspectorWidth(
+      Math.round(clamp(nextWidth, MIN_INSPECTOR_WIDTH, maxWidth)),
+    );
   };
 
   const importSubtitleFile = async (file) => {
@@ -1782,12 +1855,15 @@ export default function LocalEditorTab({
       <div
         ref={workspaceRef}
         data-testid="local-editor-workspace"
-        className="relative grid min-h-0 flex-1 gap-2 overflow-hidden p-0 xl:grid-cols-[auto_minmax(260px,320px)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)_minmax(280px,40vh)]"
-        style={
-          timelineHeight
+        className="relative grid min-h-0 flex-1 gap-2 overflow-hidden p-0 xl:grid-cols-[auto_var(--local-editor-inspector-width)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)_minmax(280px,40vh)]"
+        style={{
+          "--local-editor-inspector-width": inspectorWidth
+            ? `${inspectorWidth}px`
+            : "minmax(260px, 320px)",
+          ...(timelineHeight
             ? { gridTemplateRows: `minmax(0, 1fr) ${timelineHeight}px` }
-            : undefined
-        }
+            : {}),
+        }}
       >
         <LocalEditorFeatureRail
           activeFeature={activeFeature}
@@ -2345,7 +2421,7 @@ export default function LocalEditorTab({
         <aside className="contents" aria-label="Inspector">
           <LocalEditorFeaturePanel
             title={activeFeatureLabel}
-            className="xl:col-start-2 xl:row-start-1"
+            className="relative xl:col-start-2 xl:row-start-1"
           >
             <div className={activeFeature === "details" ? "" : "sr-only"}>
               <ClipMetadataPanel
@@ -2645,6 +2721,26 @@ export default function LocalEditorTab({
                 </p>
               )}
             </div>
+            <button
+              type="button"
+              role="separator"
+              aria-label="Resize details panel"
+              aria-orientation="vertical"
+              aria-valuemin={MIN_INSPECTOR_WIDTH}
+              aria-valuemax={MAX_INSPECTOR_WIDTH}
+              aria-valuenow={Math.round(
+                inspectorWidth ?? DEFAULT_INSPECTOR_WIDTH,
+              )}
+              title="Resize details panel"
+              onPointerDown={handleInspectorResizeStart}
+              onPointerMove={handleInspectorResizeMove}
+              onPointerUp={handleInspectorResizeEnd}
+              onPointerCancel={handleInspectorResizeEnd}
+              onKeyDown={handleInspectorResizeKeyDown}
+              className="group absolute right-0 top-0 z-40 flex h-full w-2 translate-x-1/2 cursor-col-resize items-center justify-center border-x border-transparent bg-transparent hover:border-cyan-300/50 focus:border-cyan-300/70 focus:outline-none"
+            >
+              <span className="h-12 w-px bg-zinc-600/70 transition-colors group-hover:bg-cyan-300" />
+            </button>
           </LocalEditorFeaturePanel>
         </aside>
       </div>

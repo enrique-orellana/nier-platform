@@ -20,9 +20,12 @@ describe("local editor preferences", () => {
   });
 
   it("round trips the remembered local editor layout", () => {
-    saveEditorLayout({ timelineHeight: 352 });
+    saveEditorLayout({ timelineHeight: 352, inspectorWidth: 420 });
 
-    expect(readEditorLayout()).toEqual({ timelineHeight: 352 });
+    expect(readEditorLayout()).toEqual({
+      timelineHeight: 352,
+      inspectorWidth: 420,
+    });
   });
 
   it("ignores malformed or unusable layout data", () => {

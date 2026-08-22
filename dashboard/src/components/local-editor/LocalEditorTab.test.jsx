@@ -780,6 +780,95 @@ describe("LocalEditorTab", () => {
     );
   });
 
+  it("resizes the details panel with the vertical layout divider", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    const workspace = screen.getByTestId("local-editor-workspace");
+    const divider = screen.getByRole("separator", {
+      name: "Resize details panel",
+    });
+    expect(screen.getByTestId("local-editor-feature-panel")).toContainElement(
+      divider,
+    );
+
+    fireEvent.keyDown(divider, { key: "ArrowRight" });
+
+    expect(divider).toHaveAttribute("aria-valuenow", "332");
+    expect(
+      workspace.style.getPropertyValue("--local-editor-inspector-width"),
+    ).toBe("332px");
+    expect(localStorage.getItem(EDITOR_LAYOUT_STORAGE_KEY)).toBe(
+      JSON.stringify({ inspectorWidth: 332 }),
+    );
+  });
+
+  it("resizes the details panel while dragging the vertical divider", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    const workspace = screen.getByTestId("local-editor-workspace");
+    vi.spyOn(workspace, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      right: 1280,
+      bottom: 800,
+      left: 0,
+      width: 1280,
+      height: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+    const divider = screen.getByRole("separator", {
+      name: "Resize details panel",
+    });
+    const pointerDown = createEvent.pointerDown(divider);
+    Object.defineProperties(pointerDown, {
+      clientX: { value: 500 },
+      pointerId: { value: 1 },
+    });
+    fireEvent(divider, pointerDown);
+
+    const pointerMove = createEvent.pointerMove(divider);
+    Object.defineProperties(pointerMove, {
+      clientX: { value: 540 },
+      pointerId: { value: 1 },
+    });
+    fireEvent(divider, pointerMove);
+
+    expect(divider).toHaveAttribute("aria-valuenow", "340");
+  });
+
+  it("restores the details panel width after refresh", () => {
+    localStorage.setItem(
+      EDITOR_LAYOUT_STORAGE_KEY,
+      JSON.stringify({ inspectorWidth: 420 }),
+    );
+
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    const workspace = screen.getByTestId("local-editor-workspace");
+    expect(
+      workspace.style.getPropertyValue("--local-editor-inspector-width"),
+    ).toBe("420px");
+    expect(
+      screen.getByRole("separator", { name: "Resize details panel" }),
+    ).toHaveAttribute("aria-valuenow", "420");
+  });
+
   it("restores the timeline divider position after refresh", () => {
     localStorage.setItem(
       EDITOR_LAYOUT_STORAGE_KEY,

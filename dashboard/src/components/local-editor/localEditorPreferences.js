@@ -97,24 +97,40 @@ export const readEditorLayout = () => {
     if (!stored) return { timelineHeight: null };
     const parsed = JSON.parse(stored);
     const timelineHeight = Number(parsed?.timelineHeight);
-    return {
+    const layout = {
       timelineHeight:
         Number.isFinite(timelineHeight) && timelineHeight > 0
           ? Math.round(timelineHeight)
           : null,
     };
+    const inspectorWidth = Number(parsed?.inspectorWidth);
+    if (Number.isFinite(inspectorWidth) && inspectorWidth > 0)
+      layout.inspectorWidth = Math.round(inspectorWidth);
+    return layout;
   } catch {
     return { timelineHeight: null };
   }
 };
 
 export const saveEditorLayout = (layout) => {
+  const current = readEditorLayout();
+  const next = { ...current };
   const timelineHeight = Number(layout?.timelineHeight);
-  if (!Number.isFinite(timelineHeight) || timelineHeight <= 0) return;
+  const inspectorWidth = Number(layout?.inspectorWidth);
+  if (Number.isFinite(timelineHeight) && timelineHeight > 0)
+    next.timelineHeight = Math.round(timelineHeight);
+  if (Number.isFinite(inspectorWidth) && inspectorWidth > 0)
+    next.inspectorWidth = Math.round(inspectorWidth);
+  const storedLayout = {};
+  if (next.timelineHeight > 0)
+    storedLayout.timelineHeight = next.timelineHeight;
+  if (next.inspectorWidth > 0)
+    storedLayout.inspectorWidth = next.inspectorWidth;
+  if (!Object.keys(storedLayout).length) return;
   try {
     localStorage.setItem(
       EDITOR_LAYOUT_STORAGE_KEY,
-      JSON.stringify({ timelineHeight: Math.round(timelineHeight) }),
+      JSON.stringify(storedLayout),
     );
   } catch {
     // Browser storage can be unavailable or full; editing remains usable in memory.
