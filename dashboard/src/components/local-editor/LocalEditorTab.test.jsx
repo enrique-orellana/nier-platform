@@ -317,6 +317,21 @@ describe("LocalEditorTab", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Playback Controls:")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Timeline zoom")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Zoom to fit" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Zoom to fit timeline" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Zoom out" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("slider", { name: "Timeline zoom" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Zoom in" }),
+    ).not.toBeInTheDocument();
   });
 
   it("applies the selected playback speed to native video", async () => {
@@ -372,6 +387,19 @@ describe("LocalEditorTab", () => {
       screen.getByRole("button", { name: "Add marker (M)" }),
     ).toBeInTheDocument();
     expect(
+      screen.getByRole("button", { name: "Zoom to fit" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Zoom to fit timeline" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Zoom out" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Timeline zoom" })).toHaveValue(
+      "1",
+    );
+    expect(screen.getByRole("button", { name: "Zoom in" })).toBeInTheDocument();
+    expect(
       screen.getByRole("button", { name: "Timeline undo" }),
     ).toBeDisabled();
     expect(
@@ -379,9 +407,6 @@ describe("LocalEditorTab", () => {
     ).toBeDisabled();
     expect(
       screen.queryByTestId("local-editor-timeline-toolbar"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("slider", { name: "Timeline zoom" }),
     ).not.toBeInTheDocument();
     expect(subtitleWorkspace).toHaveClass(
       "min-h-0",
@@ -1310,11 +1335,19 @@ describe("LocalEditorTab", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Open subtitle table" }),
     );
+    const subtitlesHeader = screen.getByRole("button", {
+      name: /toggle subtitles settings/i,
+    }).parentElement;
     expect(
-      screen.getByRole("columnheader", { name: "Text" }),
+      within(subtitlesHeader).getByRole("button", {
+        name: "Export Subtitles",
+      }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Export Subtitles" }),
+      screen.getAllByRole("button", { name: "Export Subtitles" }),
+    ).toHaveLength(1);
+    expect(
+      screen.getByRole("columnheader", { name: "Text" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Subtitle table view" }));
     expect(

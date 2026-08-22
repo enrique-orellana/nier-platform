@@ -1,4 +1,4 @@
-import React from "react";
+import React, { createRef } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import LocalEditorTimeline from "./LocalEditorTimeline";
@@ -153,6 +153,29 @@ describe("LocalEditorTimeline", () => {
     expect(screen.getByTestId("local-editor-timeline-canvas")).toHaveStyle({
       width: "3344px",
     });
+  });
+
+  it("exposes a zoom-to-fit action for the visible timeline viewport", () => {
+    const timelineApiRef = createRef();
+    const onTimelineZoomChange = vi.fn();
+
+    render(
+      <LocalEditorTimeline
+        ref={timelineApiRef}
+        durationMs={10000}
+        onTimelineZoomChange={onTimelineZoomChange}
+      />,
+    );
+
+    const scroll = screen.getByTestId("local-editor-timeline-scroll");
+    Object.defineProperty(scroll, "clientWidth", {
+      configurable: true,
+      value: 1200,
+    });
+
+    timelineApiRef.current.zoomToFit();
+
+    expect(onTimelineZoomChange).toHaveBeenCalledWith(1.3);
   });
 
   it("uses a compact CapCut-style timeline toolbar", () => {

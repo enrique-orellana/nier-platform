@@ -1,4 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { moveCue, resizeCue } from "../../editor/timelineModel";
 import AudioWaveform from "./AudioWaveform";
 import { formatClock } from "./localEditorExport";
@@ -157,26 +164,30 @@ function Track({
   );
 }
 
-export default function LocalEditorTimeline({
-  videoUrl = "",
-  durationMs = 1,
-  fps = 30,
-  subtitleCues = [],
-  hook = null,
-  selectedId,
-  onSelect,
-  onDoubleClick,
-  onChange,
-  onChangeStart,
-  onChangeEnd,
-  playheadMs = 0,
-  onSeek,
-  timelineZoom = 1,
-  markers = [],
-  selectedMarkerId = null,
-  onMarkerSelect,
-  onMarkerMove,
-}) {
+const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
+  {
+    videoUrl = "",
+    durationMs = 1,
+    fps = 30,
+    subtitleCues = [],
+    hook = null,
+    selectedId,
+    onSelect,
+    onDoubleClick,
+    onChange,
+    onChangeStart,
+    onChangeEnd,
+    playheadMs = 0,
+    onSeek,
+    timelineZoom = 1,
+    onTimelineZoomChange,
+    markers = [],
+    selectedMarkerId = null,
+    onMarkerSelect,
+    onMarkerMove,
+  },
+  apiRef,
+) {
   const timelineRef = useRef(null);
   const markerDragRef = useRef(null);
   const suppressMarkerClickRef = useRef(null);
@@ -197,6 +208,26 @@ export default function LocalEditorTimeline({
     { length: tickCount },
     (_, index) => (index / (tickCount - 1)) * 100,
   );
+
+  const zoomToFit = useCallback(() => {
+    const visibleWidth = timelineRef.current?.clientWidth || 0;
+    if (!visibleWidth) return;
+    const availableTimelineWidth = Math.max(
+      1,
+      visibleWidth - TRACK_LABEL_WIDTH - 16,
+    );
+    const baseTimelineWidth = Math.max(
+      MIN_LANE_WIDTH,
+      Math.ceil(durationSeconds * BASE_PIXELS_PER_SECOND),
+    );
+    const nextZoom = Math.max(
+      0.1,
+      Math.min(4, availableTimelineWidth / baseTimelineWidth),
+    );
+    onTimelineZoomChange?.(Number(nextZoom.toFixed(2)));
+  }, [durationSeconds, onTimelineZoomChange]);
+
+  useImperativeHandle(apiRef, () => ({ zoomToFit }), [zoomToFit]);
 
   useEffect(() => {
     const container = timelineRef.current;
@@ -449,4 +480,6 @@ export default function LocalEditorTimeline({
       </div>
     </div>
   );
-}
+});
+
+export default LocalEditorTimeline;

@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Bookmark,
   Download,
+  FileScan,
   FastForward,
   FileText,
   Film,
@@ -34,6 +35,8 @@ import {
   Upload,
   Volume2,
   VolumeX,
+  ZoomIn,
+  ZoomOut,
   X,
 } from "lucide-react";
 import LocalEditorTimeline from "./LocalEditorTimeline";
@@ -123,6 +126,9 @@ const MIN_INSPECTOR_WIDTH = 220;
 const MAX_INSPECTOR_WIDTH = 520;
 const DEFAULT_INSPECTOR_WIDTH = 300;
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const MIN_TIMELINE_ZOOM = 0.1;
+const MAX_TIMELINE_ZOOM = 4;
+const TIMELINE_ZOOM_STEP = 0.1;
 
 export default function LocalEditorTab({
   initialVideoUrl = "",
@@ -169,6 +175,7 @@ export default function LocalEditorTab({
   const previewObjectUrlRef = useRef("");
   const subtitleInputRef = useRef(null);
   const timelineDragRef = useRef(null);
+  const timelineApiRef = useRef(null);
   const scrollToCurrentRef = useRef(null);
   const videoRestoreGenerationRef = useRef(0);
   const videoLoadStartedRef = useRef(false);
@@ -219,6 +226,7 @@ export default function LocalEditorTab({
   const [hookOpen, setHookOpen] = useState(false);
   const [activeFeature, setActiveFeature] = useState("details");
   const [subtitleView, setSubtitleView] = useState("timeline");
+  const [timelineZoom, setTimelineZoom] = useState(1);
   const [timelineHeight, setTimelineHeight] = useState(() => {
     const savedHeight = readEditorLayout().timelineHeight;
     return savedHeight >= MIN_TIMELINE_HEIGHT ? savedHeight : null;
@@ -2288,6 +2296,83 @@ export default function LocalEditorTab({
                   </button>
                 </div>
                 <div className="flex min-w-0 items-center gap-2">
+                  {subtitleView === "timeline" && (
+                    <div
+                      data-testid="local-editor-timeline-zoom-controls"
+                      className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-white/10 bg-black/20 px-0.5 text-zinc-400"
+                    >
+                      <button
+                        type="button"
+                        aria-label="Zoom to fit"
+                        title="Zoom to fit visible timeline"
+                        onClick={() => timelineApiRef.current?.zoomToFit()}
+                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white"
+                      >
+                        <FileScan size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Zoom to fit timeline"
+                        title="Zoom to fit timeline (Shift+Z)"
+                        onClick={() => setTimelineZoom(1)}
+                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white"
+                      >
+                        <FileScan size={14} className="opacity-70" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Zoom out"
+                        title="Zoom out"
+                        onClick={() =>
+                          setTimelineZoom((current) =>
+                            Number(
+                              clamp(
+                                current - TIMELINE_ZOOM_STEP,
+                                MIN_TIMELINE_ZOOM,
+                                MAX_TIMELINE_ZOOM,
+                              ).toFixed(2),
+                            ),
+                          )
+                        }
+                        disabled={timelineZoom <= MIN_TIMELINE_ZOOM}
+                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                      >
+                        <ZoomOut size={14} />
+                      </button>
+                      <input
+                        type="range"
+                        aria-label="Timeline zoom"
+                        min={MIN_TIMELINE_ZOOM}
+                        max={MAX_TIMELINE_ZOOM}
+                        step={TIMELINE_ZOOM_STEP}
+                        value={timelineZoom}
+                        onChange={(event) =>
+                          setTimelineZoom(Number(event.target.value))
+                        }
+                        className="h-4 w-16 accent-zinc-200"
+                      />
+                      <button
+                        type="button"
+                        aria-label="Zoom in"
+                        title="Zoom in"
+                        onClick={() =>
+                          setTimelineZoom((current) =>
+                            Number(
+                              clamp(
+                                current + TIMELINE_ZOOM_STEP,
+                                MIN_TIMELINE_ZOOM,
+                                MAX_TIMELINE_ZOOM,
+                              ).toFixed(2),
+                            ),
+                          )
+                        }
+                        disabled={timelineZoom >= MAX_TIMELINE_ZOOM}
+                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                      >
+                        <ZoomIn size={14} />
+                      </button>
+                    </div>
+                  )}
                   {subtitleView === "table" && (
                     <div
                       data-testid="local-editor-playback-controls"
@@ -2390,6 +2475,9 @@ export default function LocalEditorTab({
                     onChangeEnd={endTimelineEdit}
                     playheadMs={playheadMs}
                     onSeek={handleSeek}
+                    ref={timelineApiRef}
+                    timelineZoom={timelineZoom}
+                    onTimelineZoomChange={setTimelineZoom}
                     markers={markers}
                     selectedMarkerId={selectedMarkerId}
                     onMarkerSelect={selectMarker}
