@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { outputFileNameForVersion } from "./version-render.js";
 
 describe("version render output naming", () => {
-  it("includes the immutable version id in the output filename", () => {
+  it("uses a clip-scoped version filename instead of the master prefix", () => {
     expect(outputFileNameForVersion(2, "version-123", 1700000000000)).toBe(
-      "master_2_version-123_1700000000000.mp4"
+      "version_2_version-123_1700000000000.mp4"
     );
   });
 

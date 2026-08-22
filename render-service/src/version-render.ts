@@ -4,6 +4,6 @@ export function outputFileNameForVersion(
   timestamp: number
 ): string {
   return versionId
-    ? `master_${clipIndex}_${versionId}_${timestamp}.mp4`
+    ? `version_${clipIndex}_${versionId}_${timestamp}.mp4`
     : `remotion_${clipIndex}_${timestamp}.mp4`;
 }

@@ -1074,7 +1074,8 @@ func TestVersionDownloadRedirectsDirectlyToMinio(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create version: %v", err)
 	}
-	if _, err := server.versionRepository.Complete(context.Background(), "job-1", 0, created.VersionID, "https://minio.example/openshorts-media/job-1/master/master.mp4"); err != nil {
+	outputURL := "https://minio.example/openshorts-media/job-1/clips/0/versions/" + created.VersionID + "/version_0_" + created.VersionID + "_123.mp4"
+	if _, err := server.versionRepository.Complete(context.Background(), "job-1", 0, created.VersionID, outputURL); err != nil {
 		t.Fatalf("complete version: %v", err)
 	}
 
@@ -1085,7 +1086,7 @@ func TestVersionDownloadRedirectsDirectlyToMinio(t *testing.T) {
 	if response.Code != http.StatusTemporaryRedirect {
 		t.Fatalf("expected direct download redirect, got %d: %s", response.Code, response.Body.String())
 	}
-	if location := response.Header().Get("Location"); location != "https://minio.example/openshorts-media/job-1/master/master.mp4" {
+	if location := response.Header().Get("Location"); location != outputURL {
 		t.Fatalf("unexpected direct download location: %s", location)
 	}
 }

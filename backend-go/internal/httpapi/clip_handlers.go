@@ -265,7 +265,11 @@ func (s *Server) downloadVersion(w http.ResponseWriter, r *http.Request, jobID s
 		return
 	}
 	if s.s3Store != nil && s.s3Store.Bucket != "" {
-		key := jobID + "/master/" + filename
+		key, keyErr := versionOutputObjectKey(parsed, s.s3Store.Bucket, jobID)
+		if keyErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": keyErr.Error()})
+			return
+		}
 		downloadURL, urlErr := s.s3Store.DirectDownloadURL(r.Context(), key, filename, 2*time.Hour)
 		if urlErr != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Could not create download URL: %s", urlErr)})
@@ -275,6 +279,19 @@ func (s *Server) downloadVersion(w http.ResponseWriter, r *http.Request, jobID s
 		return
 	}
 	http.Redirect(w, r, version.OutputURL, http.StatusTemporaryRedirect)
+}
+
+func versionOutputObjectKey(parsed *url.URL, bucket, jobID string) (string, error) {
+	marker := "/" + strings.Trim(bucket, "/") + "/"
+	markerIndex := strings.Index(parsed.Path, marker)
+	if markerIndex < 0 {
+		return "", errors.New("version output URL is not a stored object URL")
+	}
+	key := strings.TrimPrefix(parsed.Path[markerIndex+len(marker):], "/")
+	if key == "" || path.Clean(key) != key || strings.Contains(key, "\\") || !strings.HasPrefix(key, jobID+"/") {
+		return "", errors.New("version output object key is invalid")
+	}
+	return key, nil
 }
 
 func (s *Server) completeVersion(w http.ResponseWriter, r *http.Request, jobID string, clipIndex int, versionID string) {
