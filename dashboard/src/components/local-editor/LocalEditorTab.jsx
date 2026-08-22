@@ -16,7 +16,6 @@ import {
   Languages,
   Loader2,
   Maximize2,
-  Minus,
   Minimize2,
   MousePointer2,
   Pause,
@@ -118,6 +117,7 @@ import LocalEditorSaveProjectDialog from "./LocalEditorSaveProjectDialog";
 
 const MIN_TIMELINE_HEIGHT = 220;
 const MIN_PREVIEW_HEIGHT = 260;
+const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 export default function LocalEditorTab({
   initialVideoUrl = "",
@@ -162,6 +162,7 @@ export default function LocalEditorTab({
   const previewObjectUrlRef = useRef("");
   const subtitleInputRef = useRef(null);
   const timelineDragRef = useRef(null);
+  const scrollToCurrentRef = useRef(null);
   const videoRestoreGenerationRef = useRef(0);
   const videoLoadStartedRef = useRef(false);
   const [videoFile, setVideoFile] = useState(null);
@@ -199,15 +200,16 @@ export default function LocalEditorTab({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLooping, setIsLooping] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [loopSegment, setLoopSegment] = useState(false);
+  const [followAudio, setFollowAudio] = useState(true);
   const [videoViewMode, setVideoViewMode] = useState("auto");
   const [autoCrop, setAutoCrop] = useState(false);
   const [subtitlesOpen, setSubtitlesOpen] = useState(false);
   const [hookOpen, setHookOpen] = useState(false);
   const [activeFeature, setActiveFeature] = useState("details");
   const [subtitleView, setSubtitleView] = useState("timeline");
-  const [timelineZoom, setTimelineZoom] = useState(1);
   const [timelineHeight, setTimelineHeight] = useState(null);
-  const [subtitleTableLoop, setSubtitleTableLoop] = useState(false);
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectIdState] = useState(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -269,6 +271,15 @@ export default function LocalEditorTab({
   );
   const handleRemotionPlayerReady = useCallback((player) => {
     remotionPlayerRef.current = player;
+  }, []);
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = playbackRate;
+  }, [playbackRate, previewVideoUrl, videoUrl]);
+
+  const scrollToCurrentSubtitle = useCallback(() => {
+    setSubtitleView("table");
+    window.setTimeout(() => scrollToCurrentRef.current?.(), 0);
   }, []);
 
   useEffect(
@@ -533,6 +544,9 @@ export default function LocalEditorTab({
       setPlayheadMs(0);
       setIsPlaying(false);
       setIsLooping(false);
+      setPlaybackRate(1);
+      setLoopSegment(false);
+      setFollowAudio(true);
       setIsMuted(false);
       setVideoViewMode("auto");
       setAutoCrop(false);
@@ -586,6 +600,9 @@ export default function LocalEditorTab({
     setDurationMs(requestedPlaybackDurationMs || DEFAULT_DURATION_MS);
     setPlayheadMs(0);
     setIsPlaying(false);
+    setPlaybackRate(1);
+    setLoopSegment(false);
+    setFollowAudio(true);
     setError("");
     const videoElement = videoRef.current;
     return () => {
@@ -1023,9 +1040,42 @@ export default function LocalEditorTab({
     setSelectedMarkerId(null);
   };
 
-  const selectMarker = (markerId) => {
+  const moveMarker = (markerId, markerTimeMs) => {
+    const nextTimeMs = clamp(markerTimeMs, 0, durationMs);
+    commitEdit((current) => {
+      const currentMarkers = Array.isArray(current.markers)
+        ? current.markers
+        : [];
+      if (!currentMarkers.some((marker) => marker.id === markerId))
+        return current;
+      return {
+        ...current,
+        markers: currentMarkers.map((marker) =>
+          marker.id === markerId ? { ...marker, timeMs: nextTimeMs } : marker,
+        ),
+      };
+    });
+    handleSeek(nextTimeMs);
+    setSelectedMarkerId(markerId);
+  };
+
+  const selectMarker = (markerId, markerTimeMs) => {
     setSelectedMarkerId(markerId);
     setSelected(null);
+    handleSeek(markerTimeMs);
+  };
+
+  const activeMarker =
+    markers.find(
+      (marker) => Math.abs(Number(marker.timeMs) - playheadMs) <= 1,
+    ) || null;
+
+  const toggleMarker = () => {
+    if (activeMarker) {
+      removeMarker(activeMarker.id);
+      return;
+    }
+    addMarker();
   };
 
   const handleTimelineKeyDown = (event) => {
@@ -1038,7 +1088,7 @@ export default function LocalEditorTab({
     }
     if (event.key.toLowerCase() !== "m") return;
     event.preventDefault();
-    addMarker();
+    toggleMarker();
   };
 
   const removeSubtitleCue = (id) => {
@@ -1055,6 +1105,10 @@ export default function LocalEditorTab({
 
   const handleSeek = (nextMs) => {
     const clampedMs = clamp(nextMs, 0, durationMs);
+    const markerAtPlayhead = markers.find(
+      (marker) => Math.abs(Number(marker.timeMs) - clampedMs) <= 1,
+    );
+    setSelectedMarkerId(markerAtPlayhead?.id || null);
     setPlayheadMs(clampedMs);
     if (remotionPlayerRef.current) {
       remotionPlayerRef.current.seekTo?.(
@@ -1088,7 +1142,7 @@ export default function LocalEditorTab({
       setIsPlaying(false);
       return;
     }
-    const loopCue = subtitleTableLoop
+    const loopCue = loopSegment
       ? selected?.type === "subtitle"
         ? subtitleCues.find((cue) => cue.id === selected.id)
         : activeCueAt(subtitleCues, playheadMs)
@@ -1326,6 +1380,9 @@ export default function LocalEditorTab({
     setProgress(0);
     setIsPlaying(false);
     setIsLooping(false);
+    setPlaybackRate(1);
+    setLoopSegment(false);
+    setFollowAudio(true);
     setError("");
   };
 
@@ -1758,6 +1815,7 @@ export default function LocalEditorTab({
                       )}
                       playing={isPlaying}
                       loop={isLooping}
+                      playbackRate={playbackRate}
                       controls={false}
                       className="h-full w-full"
                       onFrameChange={handleRemotionFrameChange}
@@ -2040,12 +2098,20 @@ export default function LocalEditorTab({
                   </button>
                   <button
                     type="button"
-                    aria-label="Add marker (M)"
-                    title="Add marker (M)"
-                    onClick={addMarker}
-                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white"
+                    aria-label={
+                      activeMarker ? "Remove marker (M)" : "Add marker (M)"
+                    }
+                    title={
+                      activeMarker ? "Remove marker (M)" : "Add marker (M)"
+                    }
+                    aria-pressed={Boolean(activeMarker)}
+                    onClick={toggleMarker}
+                    className={`flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white ${activeMarker ? "bg-amber-300/15 text-amber-200" : ""}`}
                   >
-                    <Bookmark size={14} />
+                    <Bookmark
+                      size={14}
+                      fill={activeMarker ? "currentColor" : "none"}
+                    />
                   </button>
                   <span
                     className="mx-1 h-5 w-px bg-white/10"
@@ -2086,58 +2152,65 @@ export default function LocalEditorTab({
                     <Trash2 size={14} />
                   </button>
                 </div>
-                <div className="flex items-center gap-2">
-                  {subtitleView === "timeline" && (
-                    <div
-                      data-testid="local-editor-timeline-zoom"
-                      className="flex h-6 items-center overflow-hidden rounded border border-white/10 bg-[#1b1b1f] text-zinc-400 shadow-inner"
+                <div className="flex min-w-0 items-center gap-2">
+                  <div
+                    data-testid="local-editor-playback-controls"
+                    className="flex min-w-0 items-center gap-1"
+                  >
+                    <label className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300">
+                      <input
+                        aria-label="Loop segment"
+                        type="checkbox"
+                        checked={loopSegment}
+                        onChange={(event) =>
+                          setLoopSegment(event.target.checked)
+                        }
+                        className="accent-violet-400"
+                      />
+                      <span className="hidden sm:inline">Loop Segment</span>
+                    </label>
+                    <label className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300">
+                      <input
+                        aria-label="Follow audio"
+                        type="checkbox"
+                        checked={followAudio}
+                        onChange={(event) =>
+                          setFollowAudio(event.target.checked)
+                        }
+                        className="accent-violet-400"
+                      />
+                      <span className="hidden sm:inline">Follow Audio</span>
+                    </label>
+                    <label className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300">
+                      <span className="hidden sm:inline">Speed</span>
+                      <select
+                        aria-label="Playback speed"
+                        value={playbackRate}
+                        onChange={(event) =>
+                          setPlaybackRate(Number(event.target.value))
+                        }
+                        className="bg-transparent text-white outline-none"
+                      >
+                        {PLAYBACK_RATES.map((rate) => (
+                          <option key={rate} value={rate}>
+                            {rate.toFixed(2)}x
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      aria-label="Scroll to current subtitle"
+                      onClick={scrollToCurrentSubtitle}
+                      disabled={!subtitleCues.length}
+                      className="rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <button
-                        type="button"
-                        aria-label="Zoom out timeline"
-                        title="Zoom out timeline"
-                        onClick={() =>
-                          setTimelineZoom((current) =>
-                            Math.max(0.5, Number((current - 0.5).toFixed(2))),
-                          )
-                        }
-                        className="flex h-full w-6 items-center justify-center border-r border-white/10 hover:bg-white/10 hover:text-white disabled:opacity-40"
-                        disabled={timelineZoom <= 0.5}
-                      >
-                        <Minus size={13} />
-                      </button>
-                      <label className="flex h-full w-24 items-center px-2">
-                        <span className="sr-only">Timeline zoom</span>
-                        <input
-                          type="range"
-                          aria-label="Timeline zoom"
-                          min="0.5"
-                          max="8"
-                          step="0.5"
-                          value={timelineZoom}
-                          aria-valuetext={`${Math.round(timelineZoom * 100)}%`}
-                          onChange={(event) =>
-                            setTimelineZoom(Number(event.target.value))
-                          }
-                          className="h-1.5 w-full cursor-pointer accent-zinc-300"
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        aria-label="Zoom in timeline"
-                        title="Zoom in timeline"
-                        onClick={() =>
-                          setTimelineZoom((current) =>
-                            Math.min(8, Number((current + 0.5).toFixed(2))),
-                          )
-                        }
-                        className="flex h-full w-6 items-center justify-center border-l border-white/10 hover:bg-white/10 hover:text-white disabled:opacity-40"
-                        disabled={timelineZoom >= 8}
-                      >
-                        <Plus size={13} />
-                      </button>
-                    </div>
-                  )}
+                      <span className="hidden sm:inline">
+                        Scroll to Current
+                      </span>
+                      <span className="sm:hidden">Current</span>
+                    </button>
+                  </div>
                   <div
                     role="tablist"
                     aria-label="Subtitle editing view"
@@ -2175,14 +2248,8 @@ export default function LocalEditorTab({
                     onSelect={handleTimelineSelect}
                     onChange={(cue) => updateSubtitle(cue)}
                     onDelete={removeSubtitleCue}
-                    loopSegment={subtitleTableLoop}
-                    onLoopSegmentChange={setSubtitleTableLoop}
-                    onSpeedChange={(speed) => {
-                      if (videoRef.current)
-                        videoRef.current.playbackRate = speed;
-                      if (remotionPlayerRef.current)
-                        remotionPlayerRef.current.setPlaybackRate?.(speed);
-                    }}
+                    followAudio={followAudio}
+                    scrollToCurrentRef={scrollToCurrentRef}
                   />
                 ) : (
                   <LocalEditorTimeline
@@ -2201,10 +2268,10 @@ export default function LocalEditorTab({
                     onChangeEnd={endTimelineEdit}
                     playheadMs={playheadMs}
                     onSeek={handleSeek}
-                    timelineZoom={timelineZoom}
                     markers={markers}
                     selectedMarkerId={selectedMarkerId}
                     onMarkerSelect={selectMarker}
+                    onMarkerMove={moveMarker}
                   />
                 )}
               </div>

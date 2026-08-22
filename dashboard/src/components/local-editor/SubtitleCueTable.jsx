@@ -88,13 +88,9 @@ export default function SubtitleCueTable({
   onSelect,
   onChange,
   onDelete,
-  loopSegment = false,
-  onLoopSegmentChange,
-  onSpeedChange,
+  followAudio = true,
+  scrollToCurrentRef,
 }) {
-  const [followAudio, setFollowAudio] = useState(true);
-  const [speed, setSpeed] = useState(1);
-  const [fontScale, setFontScale] = useState(1);
   const rowRefs = useRef(new Map());
   const sortedCues = useMemo(
     () => [...cues].sort((left, right) => left.startMs - right.startMs),
@@ -117,91 +113,32 @@ export default function SubtitleCueTable({
     sortedCues.find(
       (cue) => playheadMs >= cue.startMs && playheadMs < cue.endMs,
     ) || null;
+
   useEffect(() => {
     if (followAudio) scrollToCue(currentCue, false);
   }, [currentCue, followAudio, scrollToCue]);
+
+  const scrollToCurrent = useCallback(
+    () => scrollToCue(currentCue || sortedCues[0], false),
+    [currentCue, scrollToCue, sortedCues],
+  );
+
+  useEffect(() => {
+    if (!scrollToCurrentRef) return undefined;
+    scrollToCurrentRef.current = scrollToCurrent;
+    return () => {
+      if (scrollToCurrentRef.current === scrollToCurrent)
+        scrollToCurrentRef.current = null;
+    };
+  }, [scrollToCurrent, scrollToCurrentRef]);
 
   const updateCue = (cue, field, value) =>
     onChange?.({ ...cue, [field]: value });
 
   return (
     <div className="overflow-hidden rounded-xl border border-white/10 bg-[#171719]">
-      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-[#222225] px-3 py-2 text-xs text-zinc-300">
-        <span className="font-semibold text-white">Playback Controls:</span>
-        <label className="flex items-center gap-1">
-          <input
-            aria-label="Loop segment"
-            type="checkbox"
-            checked={loopSegment}
-            onChange={(event) => onLoopSegmentChange?.(event.target.checked)}
-            className="accent-violet-400"
-          />
-          Loop Segment
-        </label>
-        <label className="flex items-center gap-1">
-          <input
-            aria-label="Follow audio"
-            type="checkbox"
-            checked={followAudio}
-            onChange={(event) => setFollowAudio(event.target.checked)}
-            className="accent-violet-400"
-          />
-          Follow Audio
-        </label>
-        <span className="h-5 w-px bg-white/15" />
-        <label className="flex items-center gap-1">
-          Speed:
-          <select
-            aria-label="Subtitle table speed"
-            value={speed}
-            onChange={(event) => {
-              const nextSpeed = Number(event.target.value);
-              setSpeed(nextSpeed);
-              onSpeedChange?.(nextSpeed);
-            }}
-            className="rounded border border-white/15 bg-[#303034] px-1.5 py-1 text-xs text-white"
-          >
-            {[0.5, 0.75, 1, 1.25, 1.5, 2].map((option) => (
-              <option key={option} value={option}>
-                {option.toFixed(2)}x
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          aria-label="Decrease subtitle table size"
-          onClick={() =>
-            setFontScale((current) => Math.max(0.85, current - 0.1))
-          }
-          className="rounded border border-white/15 bg-[#303034] px-3 py-1 text-white hover:bg-white/10"
-        >
-          −
-        </button>
-        <button
-          type="button"
-          aria-label="Increase subtitle table size"
-          onClick={() =>
-            setFontScale((current) => Math.min(1.3, current + 0.1))
-          }
-          className="rounded border border-white/15 bg-[#303034] px-3 py-1 text-white hover:bg-white/10"
-        >
-          +
-        </button>
-        <button
-          type="button"
-          aria-label="Scroll to current subtitle"
-          onClick={() => scrollToCue(currentCue || sortedCues[0], false)}
-          className="ml-auto rounded border border-white/15 bg-[#303034] px-3 py-1 text-white hover:bg-white/10"
-        >
-          ◉ Scroll to Current
-        </button>
-      </div>
       <div className="max-h-[420px] overflow-auto">
-        <table
-          className="w-full min-w-[620px] border-collapse text-left"
-          style={{ fontSize: `${fontScale}rem` }}
-        >
+        <table className="w-full min-w-[620px] border-collapse text-left">
           <thead className="sticky top-0 z-10 bg-[#39393d] text-[11px] text-zinc-300">
             <tr>
               <th

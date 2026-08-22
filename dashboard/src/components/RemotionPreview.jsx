@@ -12,6 +12,7 @@ import { ShortVideo } from "../remotion/compositions/ShortVideo";
  * @param {object|null} props.subtitles - SubtitleConfig or null
  * @param {object|null} props.hook - HookConfig or null
  * @param {object|null} props.effects - EffectsConfig or null
+ * @param {number} [props.playbackRate] - Playback speed multiplier
  * @param {(mediaTimeMs: number|null) => void} [props.onMediaTimeChange] - Native video clock callback
  * @param {string} [props.className] - Additional CSS classes
  */
@@ -31,6 +32,7 @@ function RemotionPreview({
   currentFrame = 0,
   playing = true,
   loop = true,
+  playbackRate = 1,
   controls = true,
   onFrameChange,
   onMediaTimeChange,
@@ -159,6 +161,7 @@ function RemotionPreview({
         controls={controls}
         autoPlay={playing}
         loop={loop}
+        playbackRate={playbackRate}
         acknowledgeRemotionLicense={true}
       />
     </div>

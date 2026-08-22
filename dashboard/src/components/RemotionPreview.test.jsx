@@ -73,6 +73,21 @@ describe("RemotionPreview", () => {
     );
   });
 
+  it("forwards the controlled playback rate to Remotion Player", () => {
+    playerPropsMock.mockClear();
+    const { rerender } = render(
+      <RemotionPreview videoUrl="/video.mp4" playbackRate={1} />,
+    );
+    expect(playerPropsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ playbackRate: 1 }),
+    );
+
+    rerender(<RemotionPreview videoUrl="/video.mp4" playbackRate={1.5} />);
+    expect(playerPropsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ playbackRate: 1.5 }),
+    );
+  });
+
   it("forwards the native media clock callback to the composition", () => {
     playerPropsMock.mockClear();
     const onMediaTimeChange = vi.fn();

@@ -5,6 +5,7 @@ import SubtitleCueTable from "./SubtitleCueTable";
 describe("SubtitleCueTable", () => {
   it("keeps table scrolling and row selection out of the cue editor modal", () => {
     const onSelect = vi.fn();
+    const scrollToCurrentRef = { current: null };
     const cue = {
       id: "cue-1",
       text: "Current caption",
@@ -18,18 +19,44 @@ describe("SubtitleCueTable", () => {
         playheadMs={500}
         onSelect={onSelect}
         onChange={vi.fn()}
+        followAudio={true}
+        onFollowAudioChange={vi.fn()}
+        scrollToCurrentRef={scrollToCurrentRef}
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Scroll to current subtitle" }),
-    );
+    expect(scrollToCurrentRef.current).toEqual(expect.any(Function));
     expect(onSelect).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("row", { name: /Current caption/ }));
     expect(onSelect).toHaveBeenCalledWith(cue, "subtitle", {
       openEditor: false,
     });
+  });
+
+  it("does not render generic playback controls or zoom controls", () => {
+    render(
+      <SubtitleCueTable
+        cues={[{ id: "cue-1", text: "Caption", startMs: 0, endMs: 1000 }]}
+        onSelect={vi.fn()}
+        onChange={vi.fn()}
+        followAudio={true}
+        onFollowAudioChange={vi.fn()}
+        scrollToCurrentRef={{ current: null }}
+      />,
+    );
+
+    expect(screen.queryByText("Playback Controls:")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Loop segment")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Subtitle table speed"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Increase subtitle table size"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Scroll to current subtitle" }),
+    ).not.toBeInTheDocument();
   });
 
   it("clearly marks the cue at the current playhead", () => {

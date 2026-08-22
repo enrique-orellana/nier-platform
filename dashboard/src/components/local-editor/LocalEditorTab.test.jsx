@@ -256,7 +256,7 @@ describe("LocalEditorTab", () => {
     ).toBeInTheDocument();
   });
 
-  it("places playback controls in the general utility bar", async () => {
+  it("places playback controls in the general timeline controls bar", async () => {
     render(
       <LocalEditorTab
         initialVideoUrl="/videos/project.mp4"
@@ -275,17 +275,30 @@ describe("LocalEditorTab", () => {
     await waitFor(() =>
       expect(screen.getByTestId("local-editor-player")).toBeInTheDocument(),
     );
-    const utility = screen.getByTestId("local-editor-header-utility");
+    const timelineToolbar = screen.getByTestId("local-editor-subtitle-toolbar");
+    const playbackControls = screen.getByTestId(
+      "local-editor-playback-controls",
+    );
     expect(
-      within(utility).getByLabelText("Playback speed"),
+      within(playbackControls).getByLabelText("Playback speed"),
     ).toBeInTheDocument();
-    expect(within(utility).getByLabelText("Loop segment")).toBeInTheDocument();
-    expect(within(utility).getByLabelText("Follow audio")).toBeInTheDocument();
     expect(
-      within(utility).getByRole("button", {
+      within(playbackControls).getByLabelText("Loop segment"),
+    ).toBeInTheDocument();
+    expect(
+      within(playbackControls).getByLabelText("Follow audio"),
+    ).toBeInTheDocument();
+    expect(
+      within(playbackControls).getByRole("button", {
         name: "Scroll to current subtitle",
       }),
     ).toBeInTheDocument();
+    expect(timelineToolbar).toContainElement(playbackControls);
+    expect(
+      within(
+        screen.getByTestId("local-editor-header-utility"),
+      ).queryByLabelText("Playback speed"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Playback Controls:")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Timeline zoom")).not.toBeInTheDocument();
   });
@@ -352,9 +365,9 @@ describe("LocalEditorTab", () => {
     expect(
       screen.queryByTestId("local-editor-timeline-toolbar"),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("slider", { name: "Timeline zoom" })).toHaveValue(
-      "1",
-    );
+    expect(
+      screen.queryByRole("slider", { name: "Timeline zoom" }),
+    ).not.toBeInTheDocument();
     expect(subtitleWorkspace).toHaveClass(
       "min-h-0",
       "flex",
@@ -376,12 +389,60 @@ describe("LocalEditorTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add marker (M)" }));
     expect(screen.getAllByTestId("local-editor-marker")).toHaveLength(1);
 
-    fireEvent.keyDown(timeline, { key: "m" });
-    expect(screen.getAllByTestId("local-editor-marker")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Remove marker (M)" }));
+    expect(screen.queryByTestId("local-editor-marker")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByTestId("local-editor-marker")[1]);
-    fireEvent.keyDown(timeline, { key: "Delete" });
+    fireEvent.keyDown(timeline, { key: "m" });
     expect(screen.getAllByTestId("local-editor-marker")).toHaveLength(1);
+
+    fireEvent.click(screen.getByTestId("local-editor-marker"));
+    fireEvent.keyDown(timeline, { key: "Delete" });
+    expect(screen.queryByTestId("local-editor-marker")).not.toBeInTheDocument();
+  });
+
+  it("toggles the marker button when the playhead is on a marker", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add marker (M)" }));
+
+    const removeMarkerButton = screen.getByRole("button", {
+      name: "Remove marker (M)",
+    });
+    expect(removeMarkerButton).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(removeMarkerButton);
+
+    expect(screen.queryByTestId("local-editor-marker")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add marker (M)" }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("keeps marker toggling independent when multiple markers exist", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        initialEditorState={{
+          markers: [
+            { id: "marker-1", timeMs: 0, label: "" },
+            { id: "marker-2", timeMs: 5000, label: "" },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove marker (M)" }));
+    expect(screen.getAllByTestId("local-editor-marker")).toHaveLength(1);
+
+    fireEvent.click(screen.getByTestId("local-editor-marker"));
+    fireEvent.click(screen.getByRole("button", { name: "Remove marker (M)" }));
+    expect(screen.queryByTestId("local-editor-marker")).not.toBeInTheDocument();
   });
 
   it("does not repeat playhead timing in the inspector sections", () => {
