@@ -10,7 +10,6 @@ import {
   Info,
   Layers,
   Loader2,
-  Play,
   RefreshCw,
   Search,
   Sparkles,
@@ -1140,21 +1139,16 @@ export default function ProjectLibrary({
 
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 relative z-10">
               {/* Title and ID */}
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-600/10 border border-cyan-500/30 flex items-center justify-center shrink-0 shadow-md shadow-cyan-500/10">
-                  <FolderOpen size={18} className="text-cyan-400" />
-                </div>
-                <div className="min-w-0 flex-1 flex items-center gap-2.5 flex-wrap">
-                  <h1
-                    className="text-lg sm:text-xl font-bold text-white tracking-tight leading-snug line-clamp-1"
-                    title={selectedProject.title || "Untitled Project"}
-                  >
-                    {selectedProject.title || "Untitled Project"}
-                  </h1>
-                  <span className="font-mono text-[11px] text-zinc-400 bg-black/50 border border-white/10 px-2 py-0.5 rounded-md select-all shrink-0">
-                    {selectedProject.job_id}
-                  </span>
-                </div>
+              <div className="min-w-0 flex-1 flex items-center gap-2.5 flex-wrap">
+                <h1
+                  className="text-lg sm:text-xl font-bold text-white tracking-tight leading-snug line-clamp-1"
+                  title={selectedProject.title || "Untitled Project"}
+                >
+                  {selectedProject.title || "Untitled Project"}
+                </h1>
+                <span className="font-mono text-[11px] text-zinc-400 bg-black/50 border border-white/10 px-2 py-0.5 rounded-md select-all shrink-0">
+                  {selectedProject.job_id}
+                </span>
               </div>
 
               {/* Metadata Badges Strip */}
@@ -1252,12 +1246,7 @@ export default function ProjectLibrary({
           {/* Clips Gallery */}
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-white flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-cyan-400/10 flex items-center justify-center">
-                  <Play size={16} className="text-cyan-400" />
-                </div>
-                Generated Clips
-              </h3>
+              <h3 className="text-xl font-bold text-white">Generated Clips</h3>
               <span className="text-sm text-zinc-500 font-medium px-3 py-1 rounded-full bg-white/5 border border-white/5">
                 {projectClips.length} results
               </span>
