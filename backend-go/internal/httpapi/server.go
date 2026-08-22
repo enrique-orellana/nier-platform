@@ -32,8 +32,7 @@ type Server struct {
 	artifactURLOverride func(string, string) string
 	publicationMu       sync.Mutex
 	publishedOutputs    map[string]string
-	versionMu           sync.Mutex
-	versionStores       map[string]*versions.Store
+	versionRepository   versions.Repository
 	highlightMu         sync.Mutex
 	highlightRuntime    map[string]map[string]any
 }
@@ -56,7 +55,13 @@ func NewServerWithDependencies(cfg config.Config, store jobs.Store, runner *jobs
 
 func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, runner *jobs.Runner, translationRunner OperationClient, scheduler *jobs.Scheduler) *Server {
 	mux := http.NewServeMux()
-	server := &Server{config: cfg, mux: mux, store: store, runner: runner, scheduler: scheduler, translationRunner: translationRunner, publishedOutputs: make(map[string]string), versionStores: make(map[string]*versions.Store), highlightRuntime: make(map[string]map[string]any)}
+	var versionRepository versions.Repository = versions.NewMemoryRepository()
+	if provider, ok := store.(interface{ VersionRepository() versions.Repository }); ok {
+		if repository := provider.VersionRepository(); repository != nil {
+			versionRepository = repository
+		}
+	}
+	server := &Server{config: cfg, mux: mux, store: store, runner: runner, scheduler: scheduler, translationRunner: translationRunner, publishedOutputs: make(map[string]string), versionRepository: versionRepository, highlightRuntime: make(map[string]map[string]any)}
 	if runner != nil {
 		runner.RuntimeMetadata = server.highlightRuntimeMetadata
 		runner.ReleaseRuntimeMetadata = server.releaseHighlightRuntimeMetadata

@@ -26,7 +26,6 @@ import (
 	"github.com/mutonby/openshorts/backend-go/internal/integrations"
 	"github.com/mutonby/openshorts/backend-go/internal/jobs"
 	"github.com/mutonby/openshorts/backend-go/internal/manifests"
-	"github.com/mutonby/openshorts/backend-go/internal/versions"
 )
 
 func TestLegacyVideoRouteRedirectsToRendererOutput(t *testing.T) {
@@ -820,6 +819,9 @@ func TestClipVersionRoutesPersistAndBranchManifests(t *testing.T) {
 	if created.Version.VersionID == "" || created.Manifest["manifest_revision"] == nil {
 		t.Fatalf("unexpected created version: %#v", created)
 	}
+	if _, err := os.Stat(filepath.Join(outputDir, "job-1", "clip_0", "versions")); !os.IsNotExist(err) {
+		t.Fatalf("version creation unexpectedly created JSON storage: %v", err)
+	}
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/clip/job-1/0/versions", nil)
 	listRes := httptest.NewRecorder()
@@ -859,8 +861,23 @@ func TestClipVersionRoutesPersistAndBranchManifests(t *testing.T) {
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/clip/job-1/0/versions/"+created.Version.VersionID, nil)
 	deleteRes := httptest.NewRecorder()
 	server.Handler().ServeHTTP(deleteRes, deleteReq)
-	if deleteRes.Code != http.StatusOK || !strings.Contains(deleteRes.Body.String(), `"current_version_id":"`+branched.Version.VersionID+`"`) {
+	if deleteRes.Code != http.StatusConflict {
 		t.Fatalf("unexpected delete response: %d %s", deleteRes.Code, deleteRes.Body.String())
+	}
+
+	completeBranchReq := httptest.NewRequest(http.MethodPost, "/api/clip/job-1/0/versions/"+branched.Version.VersionID+"/complete", strings.NewReader(`{"output_url":"/videos/job-1/branched.mp4"}`))
+	completeBranchReq.Header.Set("Content-Type", "application/json")
+	completeBranchRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(completeBranchRes, completeBranchReq)
+	if completeBranchRes.Code != http.StatusOK || !strings.Contains(completeBranchRes.Body.String(), `"current_version_id":"`+branched.Version.VersionID+`"`) {
+		t.Fatalf("unexpected branch completion response: %d %s", completeBranchRes.Code, completeBranchRes.Body.String())
+	}
+
+	deleteReq = httptest.NewRequest(http.MethodDelete, "/api/clip/job-1/0/versions/"+branched.Version.VersionID, nil)
+	deleteRes = httptest.NewRecorder()
+	server.Handler().ServeHTTP(deleteRes, deleteReq)
+	if deleteRes.Code != http.StatusOK || !strings.Contains(deleteRes.Body.String(), `"current_version_id":"`+created.Version.VersionID+`"`) {
+		t.Fatalf("unexpected current-version deletion response: %d %s", deleteRes.Code, deleteRes.Body.String())
 	}
 	listRes = httptest.NewRecorder()
 	server.Handler().ServeHTTP(listRes, listReq)
@@ -874,13 +891,68 @@ func TestClipVersionRoutesPersistAndBranchManifests(t *testing.T) {
 	}
 	deletedStillListed := false
 	for _, version := range listed.Versions {
-		if version.VersionID == created.Version.VersionID {
+		if version.VersionID == branched.Version.VersionID {
 			deletedStillListed = true
 			break
 		}
 	}
 	if listRes.Code != http.StatusOK || deletedStillListed {
 		t.Fatalf("deleted version still appears in history: %d %s", listRes.Code, listRes.Body.String())
+	}
+}
+
+func TestClipVersionRenderForwardsDatabaseManifestInsteadOfBrowserProps(t *testing.T) {
+	var forwarded map[string]any
+	renderer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&forwarded); err != nil {
+			t.Fatalf("decode version render request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"renderId":"version-render-1","status":"queued"}`))
+	}))
+	defer renderer.Close()
+	server := NewServer(config.Config{RenderServiceURL: renderer.URL})
+	manifest := map[string]any{
+		"schema_version": 1,
+		"timeline":       map[string]any{"source_video_url": "/videos/job-1/source.mp4"},
+		"render_spec": map[string]any{
+			"video_start_seconds": 2,
+			"duration_in_frames":  150,
+			"fps":                 30,
+			"width":               1080,
+			"height":              1920,
+			"video_fit":           "cover",
+		},
+		"layers": map[string]any{
+			"hook": map[string]any{
+				"color":      "#FF00AA",
+				"fontSize":   48,
+				"background": "#111111",
+				"size":       "M",
+			},
+		},
+	}
+	created, _, err := server.versionRepository.Create(context.Background(), "job-1", 0, manifest, nil)
+	if err != nil {
+		t.Fatalf("create version: %v", err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/clip/job-1/0/versions/"+created.VersionID+"/render", strings.NewReader(`{"props":{"videoUrl":"https://attacker.example/other.mp4","durationInFrames":1}}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"renderId":"version-render-1"`) {
+		t.Fatalf("unexpected version render response: %d %s", response.Code, response.Body.String())
+	}
+	if forwarded["props"] != nil || forwarded["versionId"] != created.VersionID {
+		t.Fatalf("renderer received browser props or wrong version id: %#v", forwarded)
+	}
+	forwardedManifest, ok := forwarded["manifest"].(map[string]any)
+	if !ok {
+		t.Fatalf("renderer did not receive persisted manifest: %#v", forwarded)
+	}
+	forwardedHook := forwardedManifest["layers"].(map[string]any)["hook"].(map[string]any)
+	if forwardedHook["color"] != "#FF00AA" || forwardedHook["fontSize"] != float64(48) || forwardedHook["background"] != "#111111" || forwardedHook["size"] != "M" {
+		t.Fatalf("renderer received incomplete viral hook: %#v", forwardedHook)
 	}
 }
 
@@ -998,19 +1070,12 @@ func TestCompleteVersionPublishesLocalMasterToS3(t *testing.T) {
 func TestVersionDownloadRedirectsDirectlyToMinio(t *testing.T) {
 	server := NewServer(config.Config{OutputDir: t.TempDir()})
 	server.s3Store = &integrations.S3Store{Bucket: "openshorts-media", PublicURLBase: "https://minio.example"}
-	store, err := server.versionStore("job-1", 0)
-	if err != nil {
-		t.Fatalf("create version store: %v", err)
-	}
-	created, err := store.CreateVersion(map[string]any{"timeline": map[string]any{}, "layers": map[string]any{}}, nil)
+	created, _, err := server.versionRepository.Create(context.Background(), "job-1", 0, map[string]any{"timeline": map[string]any{}, "layers": map[string]any{}}, nil)
 	if err != nil {
 		t.Fatalf("create version: %v", err)
 	}
-	if _, err := store.UpdateRender(created.VersionID, versions.RenderStatusDone, ""); err != nil {
-		t.Fatalf("mark version done: %v", err)
-	}
-	if _, err := store.PromoteVersion(created.VersionID, "https://minio.example/openshorts-media/job-1/master/master.mp4"); err != nil {
-		t.Fatalf("promote version: %v", err)
+	if _, err := server.versionRepository.Complete(context.Background(), "job-1", 0, created.VersionID, "https://minio.example/openshorts-media/job-1/master/master.mp4"); err != nil {
+		t.Fatalf("complete version: %v", err)
 	}
 
 	response := httptest.NewRecorder()

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
+	"github.com/mutonby/openshorts/backend-go/internal/versions"
 )
 
 var (
@@ -64,6 +65,7 @@ type MemoryStore struct {
 	clipStatuses  map[string]map[int]ClipStatus
 	auditEventIDs map[string][]string
 	auditEvents   map[string]domain.JobAuditEvent
+	versionRepo   versions.Repository
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -73,8 +75,11 @@ func NewMemoryStore() *MemoryStore {
 		clipStatuses:  make(map[string]map[int]ClipStatus),
 		auditEventIDs: make(map[string][]string),
 		auditEvents:   make(map[string]domain.JobAuditEvent),
+		versionRepo:   versions.NewMemoryRepository(),
 	}
 }
+
+func (s *MemoryStore) VersionRepository() versions.Repository { return s.versionRepo }
 
 func (s *MemoryStore) Create(_ context.Context, input domain.CreateJobInput) (domain.Job, error) {
 	s.mu.Lock()

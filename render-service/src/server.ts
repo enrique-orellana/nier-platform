@@ -3,7 +3,9 @@ import { v4 as uuidv4 } from "uuid";
 import { initBundle } from "./bundle.js";
 import { executeRender } from "./render-worker.js";
 import { buildRenderProps } from "./render-props.js";
+import type { RenderRequestProps } from "./render-props.js";
 import { renderRequestSchema } from "./render-request.js";
+import { manifestToVersionRenderProps } from "./version-manifest.js";
 import { RenderQueue } from "./render-queue.js";
 
 // --- Render status types ---
@@ -73,7 +75,14 @@ app.post("/render", (req, res) => {
     return;
   }
 
-  const { jobId, clipIndex, props } = parsed.data;
+  const { jobId, clipIndex } = parsed.data;
+  const props: RenderRequestProps =
+    "manifest" in parsed.data
+      ? manifestToVersionRenderProps(parsed.data.manifest, {
+          versionId: parsed.data.versionId,
+          manifestRevision: parsed.data.manifestRevision,
+        })
+      : parsed.data.props;
   const renderId = uuidv4();
 
   const job: RenderJob = {
@@ -104,26 +113,7 @@ app.post("/render", (req, res) => {
     renderId,
     jobId,
     clipIndex,
-    props: buildRenderProps(
-      {
-        videoUrl: props.videoUrl,
-        videoStartSeconds: props.videoStartSeconds,
-        durationInFrames: props.durationInFrames,
-        fps: props.fps,
-        width: props.width,
-        height: props.height,
-        videoFit: props.videoFit,
-        subtitles: props.subtitles ?? null,
-        subtitleTracks: props.subtitleTracks,
-        activeSubtitleTrackId: props.activeSubtitleTrackId,
-        hook: props.hook ?? null,
-        effects: props.effects ?? null,
-        versionId: props.versionId,
-        manifestPath: props.manifestPath,
-        manifestRevision: props.manifestRevision,
-      },
-      resolvedVideoUrl,
-    ),
+      props: buildRenderProps(props, resolvedVideoUrl),
   }).catch((err) => {
     console.error(`[render] Unhandled error for ${renderId}:`, err);
     const existingJob = renderJobs.get(renderId);

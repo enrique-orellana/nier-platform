@@ -142,6 +142,178 @@ describe("FullScreenEditor", () => {
     expect(await screen.findByText(/v1/)).toBeInTheDocument();
   });
 
+  it("replaces the editor with every saved field when switching versions", async () => {
+    const versionOne = {
+      version_id: "version-1",
+      status: "done",
+      output_url: "/videos/job/v1.mp4",
+    };
+    const versionTwo = {
+      version_id: "version-2",
+      status: "done",
+      output_url: "/videos/job/v2.mp4",
+    };
+    const versionOneManifest = {
+      timeline: {
+        source_video_url: "/videos/job/source.mp4",
+        trim: { start_sec: 3, end_sec: 13 },
+        transcript: { segments: [{ text: "one" }] },
+      },
+      render_spec: {
+        video_start_seconds: 3,
+        duration_in_frames: 300,
+        fps: 30,
+        width: 1080,
+        height: 1920,
+        video_fit: "cover",
+      },
+      subtitle_tracks: [
+        {
+          id: "en",
+          language: "en",
+          style: { fontSize: 20 },
+          cues: [{ text: "Hello", startMs: 0, endMs: 800 }],
+        },
+      ],
+      active_subtitle_track_id: "en",
+      layers: {
+        layout: { format: "standard", facecam_size: "medium" },
+        hook: {
+          text: "Old hook",
+          color: "#FF0000",
+          fontSize: 48,
+          background: "#111111",
+          size: "M",
+        },
+        effects: { segments: [{ startSec: 0, endSec: 1 }] },
+        audio: { tracks: [{ id: "old-audio" }] },
+      },
+      publishing_metadata: { hashtags: ["#old"] },
+    };
+    const versionTwoManifest = {
+      timeline: {
+        source_video_url: "/videos/job/source.mp4",
+        trim: { start_sec: 7, end_sec: 14 },
+        transcript: { segments: [{ text: "two" }] },
+      },
+      render_spec: {
+        video_start_seconds: 7,
+        duration_in_frames: 168,
+        fps: 24,
+        width: 720,
+        height: 1280,
+        video_fit: "contain",
+      },
+      subtitle_tracks: [
+        {
+          id: "es",
+          language: "es",
+          style: { fontSize: 42 },
+          cues: [{ text: "Hola", startMs: 100, endMs: 900 }],
+        },
+      ],
+      active_subtitle_track_id: "es",
+      layers: {
+        layout: { format: "streamer_stack", facecam_size: "large" },
+        hook: {
+          text: "New hook",
+          color: "#00FFAA",
+          fontSize: 72,
+          background: "#222222",
+          size: "L",
+        },
+        effects: { segments: [{ startSec: 2, endSec: 4, zoom: 1.2 }] },
+        audio: { tracks: [{ id: "new-audio" }] },
+      },
+      publishing_metadata: { hashtags: ["#new"] },
+    };
+    const fetchMock = vi.fn(async (url) => {
+      const value = String(url);
+      if (value.endsWith("/versions") && !value.endsWith("/version-1"))
+        return {
+          ok: true,
+          json: async () => ({
+            current_version_id: versionOne.version_id,
+            versions: [versionOne, versionTwo],
+          }),
+        };
+      if (value.endsWith("/manifest"))
+        return { ok: false, status: 404, json: async () => ({}) };
+      if (value.endsWith("/version-1"))
+        return {
+          ok: true,
+          json: async () => ({
+            version: versionOne,
+            manifest: versionOneManifest,
+          }),
+        };
+      if (value.endsWith("/version-2"))
+        return {
+          ok: true,
+          json: async () => ({
+            version: versionTwo,
+            manifest: versionTwoManifest,
+          }),
+        };
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    let session;
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{ output_fps: 30, video_url: "/videos/job/source.mp4" }}
+        onSessionReady={(nextSession) => {
+          session = nextSession;
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Old hook" }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Old hook" }));
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /vversio.*done/i })[1],
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "New hook" }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "New hook" }));
+    expect(screen.getByLabelText("Hook text")).toHaveValue("New hook");
+    expect(screen.getByLabelText("Hook text color")).toHaveValue("#00ffaa");
+    expect(screen.getByLabelText("Hook font size")).toHaveValue(72);
+    expect(screen.getByLabelText("Hook background")).toHaveValue("#222222");
+    expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
+      "data-duration",
+      "7",
+    );
+    expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
+      "data-video-start-seconds",
+      "7",
+    );
+    expect(screen.getByRole("group", { name: "Hashtags" })).toHaveTextContent(
+      "#new",
+    );
+    expect(session.getManifest()).toMatchObject({
+      active_subtitle_track_id: "es",
+      layers: {
+        layout: { format: "streamer_stack", facecam_size: "large" },
+        effects: { segments: [{ startSec: 2, endSec: 4, zoom: 1.2 }] },
+        audio: { tracks: [{ id: "new-audio" }] },
+      },
+    });
+  });
+
   it.skip("renders the editor workspace and advances the preview one frame", () => {
     render(
       <FullScreenEditor

@@ -45,8 +45,9 @@ export async function executeRender(params: RenderParams): Promise<void> {
     const policy = loadMasterPolicy();
     const renderProps = {
       ...props,
-      width: policy.output_width,
-      height: policy.output_height,
+      ...(props.versionId
+        ? {}
+        : { width: policy.output_width, height: policy.output_height }),
     };
 
     const outputDir = process.env.OUTPUT_DIR

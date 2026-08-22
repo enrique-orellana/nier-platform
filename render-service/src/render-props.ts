@@ -6,11 +6,13 @@ export interface RenderRequestProps {
   width: number;
   height: number;
   videoFit?: "cover" | "contain";
-  subtitles: unknown;
+  subtitles?: unknown;
   subtitleTracks?: unknown[];
   activeSubtitleTrackId?: string | null;
-  hook: unknown;
-  effects: unknown;
+  layout?: unknown;
+  audio?: unknown;
+  hook?: unknown;
+  effects?: unknown;
   versionId?: string;
   manifestPath?: string;
   manifestRevision?: string;
@@ -23,7 +25,12 @@ export function buildRenderProps(
   return {
     ...props,
     videoUrl: resolvedVideoUrl,
+    subtitles: props.subtitles ?? null,
     subtitleTracks: props.subtitleTracks ?? [],
     activeSubtitleTrackId: props.activeSubtitleTrackId ?? null,
+    layout: props.layout ?? null,
+    audio: props.audio ?? null,
+    hook: props.hook ?? null,
+    effects: props.effects ?? null,
   };
 }

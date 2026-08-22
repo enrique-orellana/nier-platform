@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS clip_versions (
     version_id UUID PRIMARY KEY,
     project_id TEXT NOT NULL,
     clip_index INTEGER NOT NULL CHECK (clip_index >= 0),
-    parent_version_id UUID REFERENCES clip_versions(version_id),
+    parent_version_id UUID,
+    manifest JSONB NOT NULL DEFAULT '{}'::jsonb,
     manifest_revision TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('pending', 'rendering', 'done', 'failed')),
     output_url TEXT,
@@ -45,7 +46,35 @@ CREATE TABLE IF NOT EXISTS clip_versions (
     UNIQUE (project_id, clip_index, version_id)
 );
 
+ALTER TABLE clip_versions
+    ADD COLUMN IF NOT EXISTS manifest JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE clip_versions
+    DROP CONSTRAINT IF EXISTS clip_versions_parent_version_id_fkey;
+
+ALTER TABLE clip_versions
+    DROP CONSTRAINT IF EXISTS clip_versions_parent_scope_fkey;
+
+ALTER TABLE clip_versions
+    ADD CONSTRAINT clip_versions_parent_scope_fkey
+    FOREIGN KEY (project_id, clip_index, parent_version_id)
+    REFERENCES clip_versions (project_id, clip_index, version_id);
+
 CREATE INDEX IF NOT EXISTS clip_versions_project_idx ON clip_versions (project_id, clip_index, created_at);
+
+CREATE TABLE IF NOT EXISTS clip_version_heads (
+    project_id TEXT NOT NULL,
+    clip_index INTEGER NOT NULL CHECK (clip_index >= 0),
+    current_version_id UUID NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (project_id, clip_index),
+    CONSTRAINT clip_version_heads_current_scope_fkey
+        FOREIGN KEY (project_id, clip_index, current_version_id)
+        REFERENCES clip_versions (project_id, clip_index, version_id)
+);
+
+CREATE INDEX IF NOT EXISTS clip_version_heads_current_idx
+    ON clip_version_heads (current_version_id);
 
 CREATE TABLE IF NOT EXISTS clip_statuses (
     project_id TEXT NOT NULL,

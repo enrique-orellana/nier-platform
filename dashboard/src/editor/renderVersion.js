@@ -27,10 +27,10 @@ const defaultApi = {
       method: "POST",
       body: JSON.stringify({ manifest, parent_version_id }),
     }),
-  startRender: ({ jobId, clipIndex, versionId, props }) =>
+  startRender: ({ jobId, clipIndex, versionId }) =>
     jsonRequest(
       `/api/clip/${jobId}/${clipIndex}/versions/${versionId}/render`,
-      { method: "POST", body: JSON.stringify({ props }) },
+      { method: "POST", body: JSON.stringify({}) },
     ),
   getRenderStatus: ({ renderId }) => jsonRequest(`/api/render/${renderId}`),
   completeVersion: ({ jobId, clipIndex, versionId, output_url, error }) =>
@@ -89,10 +89,9 @@ export async function renderDraftVersion({
   jobId,
   clipIndex,
   versionId,
-  props,
   pollMs = 1200,
 }) {
-  const started = await api.startRender({ jobId, clipIndex, versionId, props });
+  const started = await api.startRender({ jobId, clipIndex, versionId });
   if (!started?.renderId) throw new Error("Render did not return an id.");
   let status;
   do {
@@ -112,7 +111,6 @@ export async function saveAndRenderVersion({
   clipIndex,
   manifest,
   parentVersionId,
-  props,
   pollMs = 1200,
 }) {
   let versionId;
@@ -131,7 +129,6 @@ export async function saveAndRenderVersion({
       jobId,
       clipIndex,
       versionId,
-      props,
       pollMs,
     });
     const outputUrl = normalizeRenderedOutputUrl(rendered.outputUrl, jobId);

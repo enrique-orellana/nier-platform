@@ -75,8 +75,9 @@ describe("saveAndRenderVersion", () => {
       expect.objectContaining({ parent_version_id: "v3" }),
     );
     expect(api.startRender).toHaveBeenCalledWith(
-      expect.objectContaining({ versionId: "v4", props: { fps: 30 } }),
+      expect.objectContaining({ versionId: "v4" }),
     );
+    expect(api.startRender.mock.calls[0][0]).not.toHaveProperty("props");
     expect(api.completeVersion).toHaveBeenCalledWith(
       expect.objectContaining({ output_url: "/videos/job/v4.mp4" }),
     );
