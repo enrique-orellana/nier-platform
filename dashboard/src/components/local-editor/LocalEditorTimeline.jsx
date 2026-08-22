@@ -150,6 +150,9 @@ export default function LocalEditorTimeline({
   playheadMs = 0,
   onSeek,
   timelineZoom = 1,
+  markers = [],
+  selectedMarkerId = null,
+  onMarkerSelect,
 }) {
   const timelineRef = useRef(null);
   const safeDuration = Math.max(1, durationMs);
@@ -292,6 +295,37 @@ export default function LocalEditorTimeline({
             className="pointer-events-none absolute bottom-0 top-0 ml-36"
             style={{ width: `${timelineWidth}px` }}
           >
+            {markers.map((marker, index) => {
+              const markerId = marker.id || `marker-${index}`;
+              const markerTimeMs = Math.max(
+                0,
+                Math.min(safeDuration, Number(marker.timeMs) || 0),
+              );
+              return (
+                <div
+                  key={markerId}
+                  className="absolute bottom-0 top-0 z-20 w-px bg-amber-300/90"
+                  style={{ left: `${(markerTimeMs / safeDuration) * 100}%` }}
+                >
+                  <button
+                    type="button"
+                    data-testid="local-editor-marker"
+                    aria-label={marker.label || "Timeline marker"}
+                    aria-pressed={selectedMarkerId === markerId}
+                    title={
+                      selectedMarkerId === markerId
+                        ? "Selected marker. Press Delete to remove"
+                        : "Select marker"
+                    }
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onMarkerSelect?.(markerId);
+                    }}
+                    className={`pointer-events-auto absolute -left-1.5 -top-0.5 h-3 w-3 rotate-45 bg-amber-300 ${selectedMarkerId === markerId ? "ring-2 ring-white" : ""}`}
+                  />
+                </div>
+              );
+            })}
             <div
               className="absolute bottom-0 top-0 z-10 w-px bg-cyan-300/80"
               style={{ left: `${(playheadMs / safeDuration) * 100}%` }}

@@ -134,6 +134,36 @@ describe("LocalEditorTimeline", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("renders markers at their playhead positions", () => {
+    render(
+      <LocalEditorTimeline
+        durationMs={10000}
+        markers={[{ id: "marker-1", timeMs: 2500 }]}
+      />,
+    );
+
+    expect(screen.getByTestId("local-editor-marker").parentElement).toHaveStyle(
+      {
+        left: "25%",
+      },
+    );
+  });
+
+  it("selects a marker when its pin is clicked", () => {
+    const onMarkerSelect = vi.fn();
+    render(
+      <LocalEditorTimeline
+        durationMs={10000}
+        markers={[{ id: "marker-1", timeMs: 2500 }]}
+        onMarkerSelect={onMarkerSelect}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("local-editor-marker"));
+
+    expect(onMarkerSelect).toHaveBeenCalledWith("marker-1");
+  });
+
   it("renders the audio lane after every cue lane", () => {
     render(
       <LocalEditorTimeline

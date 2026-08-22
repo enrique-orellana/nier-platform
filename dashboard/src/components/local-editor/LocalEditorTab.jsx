@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import {
   ChevronDown,
+  Bookmark,
   Download,
   FastForward,
   FileText,
@@ -185,6 +186,7 @@ export default function LocalEditorTab({
     }
   });
   const [selected, setSelected] = useState(null);
+  const [selectedMarkerId, setSelectedMarkerId] = useState(null);
   const [editingSubtitle, setEditingSubtitle] = useState(null);
   const [pendingSubtitle, setPendingSubtitle] = useState(null);
   const [error, setError] = useState("");
@@ -279,8 +281,13 @@ export default function LocalEditorTab({
     [],
   );
 
-  const { subtitleCues, subtitleStyle, subtitleLanguage, hook } =
-    editHistory.present;
+  const {
+    subtitleCues,
+    subtitleStyle,
+    subtitleLanguage,
+    hook,
+    markers = [],
+  } = editHistory.present;
   const editHistoryRef = useRef(editHistory);
   const activeProjectIdRef = useRef(null);
   const activeProjectNameRef = useRef("");
@@ -987,6 +994,51 @@ export default function LocalEditorTab({
     setSelected({ id: nextCue.id, type: "subtitle" });
     setEditingSubtitle(nextCue);
     setSubtitlesOpen(true);
+  };
+
+  const addMarker = () => {
+    const markerId = `marker-${Date.now()}-${markers.length}`;
+    commitEdit((current) => ({
+      ...current,
+      markers: [
+        ...(Array.isArray(current.markers) ? current.markers : []),
+        {
+          id: markerId,
+          timeMs: clamp(playheadMs, 0, durationMs),
+          label: "",
+        },
+      ],
+    }));
+    setSelectedMarkerId(markerId);
+  };
+
+  const removeMarker = (markerId) => {
+    if (!markerId) return;
+    commitEdit((current) => ({
+      ...current,
+      markers: (current.markers || []).filter(
+        (marker) => marker.id !== markerId,
+      ),
+    }));
+    setSelectedMarkerId(null);
+  };
+
+  const selectMarker = (markerId) => {
+    setSelectedMarkerId(markerId);
+    setSelected(null);
+  };
+
+  const handleTimelineKeyDown = (event) => {
+    if (["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)) return;
+    if (event.key === "Delete" || event.key === "Backspace") {
+      if (!selectedMarkerId) return;
+      event.preventDefault();
+      removeMarker(selectedMarkerId);
+      return;
+    }
+    if (event.key.toLowerCase() !== "m") return;
+    event.preventDefault();
+    addMarker();
   };
 
   const removeSubtitleCue = (id) => {
@@ -1957,6 +2009,8 @@ export default function LocalEditorTab({
           >
             <div
               data-testid="local-editor-subtitle-workspace"
+              tabIndex={0}
+              onKeyDown={handleTimelineKeyDown}
               className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-none border border-white/10 bg-[#101014]"
             >
               <div
@@ -1983,6 +2037,15 @@ export default function LocalEditorTab({
                     className="flex h-7 w-7 items-center justify-center rounded bg-white/10 text-zinc-200"
                   >
                     <MousePointer2 size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Add marker (M)"
+                    title="Add marker (M)"
+                    onClick={addMarker}
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white"
+                  >
+                    <Bookmark size={14} />
                   </button>
                   <span
                     className="mx-1 h-5 w-px bg-white/10"
@@ -2139,6 +2202,9 @@ export default function LocalEditorTab({
                     playheadMs={playheadMs}
                     onSeek={handleSeek}
                     timelineZoom={timelineZoom}
+                    markers={markers}
+                    selectedMarkerId={selectedMarkerId}
+                    onMarkerSelect={selectMarker}
                   />
                 )}
               </div>

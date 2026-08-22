@@ -27,6 +27,7 @@ export const createEmptyEditorHistory = (preferences = {}) => ({
       preferences?.subtitleLanguage || "en",
     ).toLowerCase(),
     hook: null,
+    markers: [],
   },
   future: [],
 });
@@ -38,6 +39,15 @@ const normalizeSnapshot = (snapshot) => ({
   subtitleStyle: normalizeSubtitleStyle(snapshot?.subtitleStyle),
   subtitleLanguage: String(snapshot?.subtitleLanguage || "en").toLowerCase(),
   hook: snapshot?.hook || null,
+  markers: Array.isArray(snapshot?.markers)
+    ? snapshot.markers
+        .map((marker, index) => ({
+          id: String(marker?.id || `marker-${index}`),
+          timeMs: Math.max(0, Number(marker?.timeMs) || 0),
+          label: marker?.label ? String(marker.label) : "",
+        }))
+        .filter((marker) => Number.isFinite(marker.timeMs))
+    : [],
 });
 
 export const normalizeEditorHistory = (history) => ({

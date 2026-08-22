@@ -256,6 +256,56 @@ describe("LocalEditorTab", () => {
     ).toBeInTheDocument();
   });
 
+  it("places playback controls in the general utility bar", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        initialEditorState={{
+          subtitleCues: [
+            { id: "cue-1", text: "Caption", startMs: 0, endMs: 1000 },
+          ],
+          subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+          subtitleLanguage: "en",
+          hook: null,
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("local-editor-player")).toBeInTheDocument(),
+    );
+    const utility = screen.getByTestId("local-editor-header-utility");
+    expect(
+      within(utility).getByLabelText("Playback speed"),
+    ).toBeInTheDocument();
+    expect(within(utility).getByLabelText("Loop segment")).toBeInTheDocument();
+    expect(within(utility).getByLabelText("Follow audio")).toBeInTheDocument();
+    expect(
+      within(utility).getByRole("button", {
+        name: "Scroll to current subtitle",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Playback Controls:")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Timeline zoom")).not.toBeInTheDocument();
+  });
+
+  it("applies the selected playback speed to native video", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    const video = await screen.findByTestId("local-editor-native-video");
+    fireEvent.change(screen.getByLabelText("Playback speed"), {
+      target: { value: "1.5" },
+    });
+
+    expect(video.playbackRate).toBe(1.5);
+  });
+
   it("keeps the subtitle workspace visible inside the resizable editor viewport", () => {
     render(
       <LocalEditorTab
@@ -291,6 +341,9 @@ describe("LocalEditorTab", () => {
       screen.getByRole("button", { name: "Add cue to timeline" }),
     ).toBeInTheDocument();
     expect(
+      screen.getByRole("button", { name: "Add marker (M)" }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("button", { name: "Timeline undo" }),
     ).toBeDisabled();
     expect(
@@ -309,6 +362,26 @@ describe("LocalEditorTab", () => {
       "overflow-hidden",
     );
     expect(screen.getByTestId("local-editor-timeline-scroll")).toBeVisible();
+  });
+
+  it("adds a timeline marker at the current playhead with the toolbar or M", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    const timeline = screen.getByTestId("local-editor-subtitle-workspace");
+    fireEvent.click(screen.getByRole("button", { name: "Add marker (M)" }));
+    expect(screen.getAllByTestId("local-editor-marker")).toHaveLength(1);
+
+    fireEvent.keyDown(timeline, { key: "m" });
+    expect(screen.getAllByTestId("local-editor-marker")).toHaveLength(2);
+
+    fireEvent.click(screen.getAllByTestId("local-editor-marker")[1]);
+    fireEvent.keyDown(timeline, { key: "Delete" });
+    expect(screen.getAllByTestId("local-editor-marker")).toHaveLength(1);
   });
 
   it("does not repeat playhead timing in the inspector sections", () => {
