@@ -14,9 +14,17 @@ describe("render props", () => {
         videoFit: "cover",
         subtitles: { captions: [] },
         subtitleTracks: [
-          { id: "original", language: "es", label: "Original", origin: "original", captions: [] },
+          {
+            id: "original",
+            language: "es",
+            label: "Original",
+            origin: "original",
+            captions: [],
+          },
         ],
         activeSubtitleTrackId: "original",
+        layout: { format: "streamer_stack", facecam_size: "large" },
+        audio: { tracks: [{ id: "music-1" }] },
         hook: { text: "Hook" },
         effects: null,
       },
@@ -28,6 +36,8 @@ describe("render props", () => {
       videoStartSeconds: 380,
       subtitleTracks: [{ id: "original" }],
       activeSubtitleTrackId: "original",
+      layout: { format: "streamer_stack", facecam_size: "large" },
+      audio: { tracks: [{ id: "music-1" }] },
       hook: { text: "Hook" },
     });
   });

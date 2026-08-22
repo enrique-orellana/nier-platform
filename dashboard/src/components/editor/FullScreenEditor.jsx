@@ -129,6 +129,42 @@ const manifestFromClip = (clip = {}) => {
   };
 };
 
+const normalizeRenderSpec = (source) => {
+  if (!source) return null;
+  const durationInFrames = Number(source.duration_in_frames);
+  const fps = Number(source.fps);
+  const width = Number(source.width);
+  const height = Number(source.height);
+  if (
+    !Number.isFinite(durationInFrames) ||
+    durationInFrames < 1 ||
+    !Number.isFinite(fps) ||
+    fps <= 0 ||
+    !Number.isFinite(width) ||
+    width < 1 ||
+    !Number.isFinite(height) ||
+    height < 1
+  )
+    return null;
+  return {
+    video_start_seconds: Math.max(0, Number(source.video_start_seconds) || 0),
+    duration_in_frames: Math.max(1, Math.round(durationInFrames)),
+    fps,
+    width: Math.round(width),
+    height: Math.round(height),
+    video_fit: source.video_fit === "contain" ? "contain" : "cover",
+  };
+};
+
+const renderSpecToProps = (renderSpec) => ({
+  videoStartSeconds: renderSpec.video_start_seconds,
+  durationInFrames: renderSpec.duration_in_frames,
+  fps: renderSpec.fps,
+  width: renderSpec.width,
+  height: renderSpec.height,
+  videoFit: renderSpec.video_fit,
+});
+
 const publishingMetadataFrom = (sourceManifest, clip) => {
   const savedHashtags = sourceManifest?.publishing_metadata?.hashtags;
   const clipHashtags = clip?.hashtags;
@@ -314,6 +350,7 @@ export default function FullScreenEditor({
     ),
   );
   const [localDraftRevision, setLocalDraftRevision] = useState(0);
+  const [renderSpecDirty, setRenderSpecDirty] = useState(false);
   const [refreshedMasterVideoUrl, setRefreshedMasterVideoUrl] = useState("");
   const localDraftRef = useRef(localDraft);
   const versionRef = useRef(version);
@@ -322,8 +359,9 @@ export default function FullScreenEditor({
   const handleLocalDraftChange = useCallback((nextDraft) => {
     localDraftRef.current = nextDraft;
     setLocalDraft(nextDraft);
+    setRenderSpecDirty(true);
   }, []);
-  const fps = clip.output_fps || 30;
+  const fallbackFps = Number(clip.output_fps) || 30;
 
   const hydrateManifest = useCallback(
     async (baseManifest) => {
@@ -532,12 +570,46 @@ export default function FullScreenEditor({
     }),
     [activeTrackId, clip.video_url, projectManifest],
   );
-  const durationSeconds = Math.max(
+  const fallbackDurationSeconds = Math.max(
     1,
     Number(projectManifest.timeline?.trim?.end_sec || 0) -
       Number(projectManifest.timeline?.trim?.start_sec || 0),
     Number(clip.duration) || 0,
   );
+  const fallbackRenderSpec = useMemo(
+    () => ({
+      video_start_seconds: Math.max(
+        0,
+        Number(projectInputProps.videoStartSeconds) || 0,
+      ),
+      duration_in_frames: Math.max(
+        1,
+        Math.round(fallbackDurationSeconds * fallbackFps),
+      ),
+      fps: fallbackFps,
+      width: Math.round(Number(clip.output_width) || 1080),
+      height: Math.round(Number(clip.output_height) || 1920),
+      video_fit:
+        projectManifest.render_spec?.video_fit === "contain"
+          ? "contain"
+          : "cover",
+    }),
+    [
+      clip.output_height,
+      clip.output_width,
+      fallbackDurationSeconds,
+      fallbackFps,
+      projectInputProps.videoStartSeconds,
+      projectManifest.render_spec?.video_fit,
+    ],
+  );
+  const selectedRenderSpec =
+    !renderSpecDirty && normalizeRenderSpec(projectManifest.render_spec)
+      ? normalizeRenderSpec(projectManifest.render_spec)
+      : fallbackRenderSpec;
+  const selectedRenderProps = renderSpecToProps(selectedRenderSpec);
+  const durationSeconds =
+    selectedRenderSpec.duration_in_frames / selectedRenderSpec.fps;
   const masterVideoRefreshPending =
     isPresignedVideoUrl(currentMasterVideoUrl) &&
     shouldRefreshPresignedVideoUrl(currentMasterVideoUrl) &&
@@ -589,15 +661,32 @@ export default function FullScreenEditor({
     const renderProps = manifestToRenderProps(latestManifest, {
       activeSubtitleTrackId: trackId,
     });
+    const latestRenderSpec =
+      !renderSpecDirty && normalizeRenderSpec(baseManifest.render_spec)
+        ? normalizeRenderSpec(baseManifest.render_spec)
+        : {
+            video_start_seconds: Math.max(
+              0,
+              Number(renderProps.videoStartSeconds) || 0,
+            ),
+            duration_in_frames: Math.max(
+              1,
+              Math.round(fallbackDurationSeconds * fallbackFps),
+            ),
+            fps: fallbackFps,
+            width: Math.round(Number(clip.output_width) || 1080),
+            height: Math.round(Number(clip.output_height) || 1920),
+            video_fit:
+              normalizeRenderSpec(baseManifest.render_spec)?.video_fit ||
+              "cover",
+          };
+    latestManifest.render_spec = latestRenderSpec;
     return {
       manifest: latestManifest,
       props: {
         ...renderProps,
         videoUrl: projectVideoUrl,
-        durationInFrames: Math.max(1, Math.round(durationSeconds * fps)),
-        fps,
-        width: clip.output_width || 1080,
-        height: clip.output_height || 1920,
+        ...renderSpecToProps(latestRenderSpec),
       },
     };
   }, [
@@ -606,9 +695,10 @@ export default function FullScreenEditor({
     clip.layout_format,
     clip.output_height,
     clip.output_width,
-    durationSeconds,
-    fps,
+    fallbackDurationSeconds,
+    fallbackFps,
     projectVideoUrl,
+    renderSpecDirty,
     versionManifest,
   ]);
   const generatedClipUrl = generatedClipVideoUrl(clip, projectManifest);
@@ -616,7 +706,7 @@ export default function FullScreenEditor({
     generatedClipUrl || (masterVideoRefreshPending ? "" : projectVideoUrl);
   const previewVideoStartSeconds = generatedClipUrl
     ? 0
-    : projectInputProps.videoStartSeconds;
+    : selectedRenderProps.videoStartSeconds;
   const localEditorPreviewUrl = useMemo(() => {
     if (masterVideoRefreshPending) return "";
     return proxyUrl(
@@ -641,17 +731,21 @@ export default function FullScreenEditor({
     activeTrackIdRef.current = activeTrackId;
   }, [activeTrackId, version]);
 
-  const replaceManifest = useCallback((nextManifest, nextTrackId) => {
-    const trackId = nextTrackId || defaultSubtitleTrackId(nextManifest);
-    const nextDraft = manifestToLocalEditorState(nextManifest, trackId);
-    currentManifestRef.current = nextManifest;
-    activeTrackIdRef.current = trackId;
-    localDraftRef.current = nextDraft;
-    setManifest(nextManifest);
-    setActiveTrackId(trackId);
-    setLocalDraft(nextDraft);
-    setLocalDraftRevision((current) => current + 1);
-  }, []);
+  const replaceManifest = useCallback(
+    (nextManifest, nextTrackId, { dirty = false } = {}) => {
+      const trackId = nextTrackId || defaultSubtitleTrackId(nextManifest);
+      const nextDraft = manifestToLocalEditorState(nextManifest, trackId);
+      currentManifestRef.current = nextManifest;
+      activeTrackIdRef.current = trackId;
+      localDraftRef.current = nextDraft;
+      setManifest(nextManifest);
+      setActiveTrackId(trackId);
+      setLocalDraft(nextDraft);
+      setLocalDraftRevision((current) => current + 1);
+      setRenderSpecDirty(dirty);
+    },
+    [],
+  );
 
   const applyLayer = useCallback(
     (type, value) => {
@@ -691,7 +785,7 @@ export default function FullScreenEditor({
         ];
         next.active_subtitle_track_id = trackId;
       }
-      replaceManifest(next, next.active_subtitle_track_id);
+      replaceManifest(next, next.active_subtitle_track_id, { dirty: true });
     },
     [replaceManifest],
   );
@@ -703,7 +797,7 @@ export default function FullScreenEditor({
         ...base,
         timeline: { ...(base.timeline || {}), source_video_url: url },
       };
-      replaceManifest(next, activeTrackIdRef.current);
+      replaceManifest(next, activeTrackIdRef.current, { dirty: true });
     },
     [replaceManifest],
   );
@@ -785,6 +879,7 @@ export default function FullScreenEditor({
       } else {
         setVersion(null);
         setManifest(null);
+        setRenderSpecDirty(false);
         setPublishingMetadata(publishingMetadataFrom(null, clip));
       }
     } catch (deleteError) {
@@ -821,6 +916,7 @@ export default function FullScreenEditor({
       versionRef.current = nextVersion;
       setVersion(nextVersion);
       setManifest(result.manifest || manifestToSave);
+      setRenderSpecDirty(false);
       onVersionChange?.(nextVersion.version_id);
     } catch (saveError) {
       setError(saveError.message || "Could not save the new version.");
@@ -865,6 +961,7 @@ export default function FullScreenEditor({
       versionRef.current = nextVersion;
       setVersion(nextVersion);
       setManifest(manifestToRender);
+      setRenderSpecDirty(false);
       onVersionChange?.(nextVersion.version_id);
       onRendered?.(outputUrl);
       return outputUrl;
@@ -928,7 +1025,10 @@ export default function FullScreenEditor({
         onExport={exportVersion}
         initialPlaybackStartMs={Math.max(
           0,
-          resolvePreviewStartSeconds(clip) * 1000,
+          (!renderSpecDirty && normalizeRenderSpec(projectManifest.render_spec)
+            ? normalizeRenderSpec(projectManifest.render_spec)
+                .video_start_seconds
+            : resolvePreviewStartSeconds(clip)) * 1000,
         )}
         initialPlaybackDurationMs={Math.max(
           1,
@@ -938,9 +1038,10 @@ export default function FullScreenEditor({
           videoUrl: previewVideoUrl,
           videoStartSeconds: previewVideoStartSeconds,
           durationInSeconds: durationSeconds,
-          fps,
-          width: clip.output_width || 1080,
-          height: clip.output_height || 1920,
+          fps: selectedRenderSpec.fps,
+          width: selectedRenderSpec.width,
+          height: selectedRenderSpec.height,
+          videoFit: selectedRenderSpec.video_fit,
           subtitles: projectInputProps.subtitles,
           subtitleTracks: projectInputProps.subtitleTracks,
           activeSubtitleTrackId: projectInputProps.activeSubtitleTrackId,

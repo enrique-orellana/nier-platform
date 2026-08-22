@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/mutonby/openshorts/backend-go/internal/domain"
+	"github.com/mutonby/openshorts/backend-go/internal/versions"
 )
 
 //go:embed migrations/001_jobs.sql
@@ -30,15 +31,22 @@ var discardedClipStatusSchema string
 var auditEventsSchema string
 
 type PostgresStore struct {
-	db *sql.DB
+	db          *sql.DB
+	versionRepo versions.Repository
 }
 
 func NewPostgresStore(db *sql.DB) (*PostgresStore, error) {
 	if db == nil {
 		return nil, errors.New("database is required")
 	}
-	return &PostgresStore{db: db}, nil
+	versionRepo, err := versions.NewPostgresRepository(db)
+	if err != nil {
+		return nil, err
+	}
+	return &PostgresStore{db: db, versionRepo: versionRepo}, nil
 }
+
+func (s *PostgresStore) VersionRepository() versions.Repository { return s.versionRepo }
 
 func OpenPostgresStore(ctx context.Context, databaseURL string) (*PostgresStore, error) {
 	if databaseURL == "" {
@@ -493,6 +501,9 @@ func (s *PostgresStore) DeleteJob(ctx context.Context, id string) error {
 	}
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx, `DELETE FROM clip_statuses WHERE project_id = $1`, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM clip_version_heads WHERE project_id = $1`, id); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM clip_versions WHERE project_id = $1`, id); err != nil {

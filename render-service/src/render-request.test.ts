@@ -19,6 +19,34 @@ describe("render request", () => {
       },
     });
 
+    if (!("props" in parsed)) throw new Error("expected generic render request");
     expect(parsed.props.videoStartSeconds).toBe(42.5);
+  });
+
+  it("accepts a persisted-manifest version request", () => {
+    const parsed = renderRequestSchema.parse({
+      jobId: "job",
+      clipIndex: 0,
+      versionId: "v4",
+      manifestRevision: "rev-4",
+      manifest: { render_spec: { duration_in_frames: 150 } },
+    });
+
+    expect(parsed).toMatchObject({
+      versionId: "v4",
+      manifestRevision: "rev-4",
+      manifest: { render_spec: { duration_in_frames: 150 } },
+    });
+  });
+
+  it("rejects a version request without a persisted manifest", () => {
+    expect(() =>
+      renderRequestSchema.parse({
+        jobId: "job",
+        clipIndex: 0,
+        versionId: "v4",
+        manifestRevision: "rev-4",
+      }),
+    ).toThrow();
   });
 });
