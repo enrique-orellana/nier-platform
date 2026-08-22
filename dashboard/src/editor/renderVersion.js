@@ -90,6 +90,7 @@ export async function renderDraftVersion({
   clipIndex,
   versionId,
   pollMs = 1200,
+  onProgress = () => {},
 }) {
   const started = await api.startRender({ jobId, clipIndex, versionId });
   if (!started?.renderId) throw new Error("Render did not return an id.");
@@ -97,6 +98,12 @@ export async function renderDraftVersion({
   do {
     if (pollMs > 0) await new Promise((resolve) => setTimeout(resolve, pollMs));
     status = await api.getRenderStatus({ renderId: started.renderId });
+    const isComplete = ["done", "completed"].includes(status.status);
+    const reportedProgress = Math.max(
+      0,
+      Math.min(1, Number(status.progress || 0) / 100),
+    );
+    onProgress(isComplete ? 1 : Math.min(reportedProgress, 0.99));
     if (status.status === "error" || status.status === "failed")
       throw new Error(status.error || "Render failed.");
   } while (!["done", "completed"].includes(status.status));
@@ -112,6 +119,7 @@ export async function saveAndRenderVersion({
   manifest,
   parentVersionId,
   pollMs = 1200,
+  onProgress = () => {},
 }) {
   let versionId;
   try {
@@ -130,6 +138,7 @@ export async function saveAndRenderVersion({
       clipIndex,
       versionId,
       pollMs,
+      onProgress,
     });
     const outputUrl = normalizeRenderedOutputUrl(rendered.outputUrl, jobId);
     const completed = await api.completeVersion({

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   normalizeRenderedOutputUrl,
+  renderDraftVersion,
   saveDraftVersion,
   saveAndRenderVersion,
 } from "./renderVersion";
@@ -40,6 +41,32 @@ describe("saveDraftVersion", () => {
 });
 
 describe("saveAndRenderVersion", () => {
+  it("does not report 100 percent until rendering is complete", async () => {
+    const api = {
+      startRender: vi.fn().mockResolvedValue({ renderId: "r1" }),
+      getRenderStatus: vi
+        .fn()
+        .mockResolvedValueOnce({ status: "rendering", progress: 100 })
+        .mockResolvedValueOnce({
+          status: "done",
+          progress: 100,
+          outputUrl: "/videos/job/v4.mp4",
+        }),
+    };
+    const progress = [];
+
+    await renderDraftVersion({
+      api,
+      jobId: "job",
+      clipIndex: 0,
+      versionId: "v4",
+      pollMs: 0,
+      onProgress: (value) => progress.push(value),
+    });
+
+    expect(progress).toEqual([0.99, 1]);
+  });
+
   it("normalizes renderer filesystem output paths to the renderer output route", () => {
     expect(
       normalizeRenderedOutputUrl("/output/job/master_0_v4_123.mp4", "job"),

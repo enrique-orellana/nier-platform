@@ -1,6 +1,6 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FullScreenEditor from "./FullScreenEditor";
 import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
 import { SUBTITLE_STYLE_TEMPLATES } from "../local-editor/localEditorStyles";
@@ -51,6 +51,13 @@ const manifest = {
 };
 
 describe("FullScreenEditor", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "open",
+      vi.fn(() => null),
+    );
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     renderVersionMocks.saveDraftVersion.mockReset();
@@ -639,6 +646,7 @@ describe("FullScreenEditor", () => {
   });
 
   it("uses the local editor workspace while retaining project actions and version history", async () => {
+    let session = null;
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
       writable: true,
@@ -670,6 +678,9 @@ describe("FullScreenEditor", () => {
             "onDownload",
           ].map((name) => [name, vi.fn()]),
         )}
+        onSessionReady={(nextSession) => {
+          if (nextSession) session = nextSession;
+        }}
         onClose={vi.fn()}
       />,
     );
@@ -692,8 +703,9 @@ describe("FullScreenEditor", () => {
       "standard",
     );
     expect(
-      screen.getByRole("button", { name: /save as new version/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /save as new version/i }),
+    ).not.toBeInTheDocument();
+    expect(session).toBeTruthy();
   });
 
   it("loads legacy project subtitles into the local editor timeline", async () => {
@@ -904,6 +916,7 @@ describe("FullScreenEditor", () => {
   });
 
   it("saves generated hashtags in the new version manifest", async () => {
+    let session = null;
     renderVersionMocks.saveDraftVersion.mockResolvedValue({
       status: "saved",
       versionId: "v2",
@@ -943,6 +956,9 @@ describe("FullScreenEditor", () => {
         }}
         initialManifest={manifest}
         initialVersion={{ version_id: "v1", status: "done" }}
+        onSessionReady={(nextSession) => {
+          if (nextSession) session = nextSession;
+        }}
         onClose={vi.fn()}
       />,
     );
@@ -958,9 +974,8 @@ describe("FullScreenEditor", () => {
         "#editedclip",
       ),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: /save as new version/i }),
-    );
+    await waitFor(() => expect(session).toBeTruthy());
+    await session.save();
 
     await waitFor(() =>
       expect(renderVersionMocks.saveDraftVersion).toHaveBeenCalledWith(
@@ -1038,6 +1053,7 @@ describe("FullScreenEditor", () => {
   });
 
   it("preserves local subtitle timeline edits when saving and exporting versions", async () => {
+    let session = null;
     renderVersionMocks.saveDraftVersion.mockResolvedValue({
       status: "saved",
       versionId: "v2",
@@ -1058,6 +1074,9 @@ describe("FullScreenEditor", () => {
         clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }}
         initialManifest={manifest}
         initialVersion={{ version_id: "v1", status: "done" }}
+        onSessionReady={(nextSession) => {
+          if (nextSession) session = nextSession;
+        }}
         onClose={vi.fn()}
       />,
     );
@@ -1068,9 +1087,8 @@ describe("FullScreenEditor", () => {
       { target: { value: "1500" } },
     );
     fireEvent.click(screen.getByRole("button", { name: "Save cue" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save as new version" }),
-    );
+    await waitFor(() => expect(session).toBeTruthy());
+    await session.save();
 
     await waitFor(() =>
       expect(renderVersionMocks.saveDraftVersion).toHaveBeenCalledWith(
@@ -1108,6 +1126,7 @@ describe("FullScreenEditor", () => {
 
   it("saves and renders a subtitle quick-pick style in the version manifest", async () => {
     const selectedTemplate = SUBTITLE_STYLE_TEMPLATES[0];
+    let session = null;
     renderVersionMocks.saveDraftVersion.mockResolvedValue({
       status: "saved",
       versionId: "v2",
@@ -1128,6 +1147,9 @@ describe("FullScreenEditor", () => {
         clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }}
         initialManifest={manifest}
         initialVersion={{ version_id: "v1", status: "done" }}
+        onSessionReady={(nextSession) => {
+          if (nextSession) session = nextSession;
+        }}
         onClose={vi.fn()}
       />,
     );
@@ -1140,9 +1162,8 @@ describe("FullScreenEditor", () => {
     fireEvent.click(
       screen.getByRole("button", { name: selectedTemplate.ariaLabel }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save as new version" }),
-    );
+    await waitFor(() => expect(session).toBeTruthy());
+    await session.save();
 
     await waitFor(() =>
       expect(renderVersionMocks.saveDraftVersion).toHaveBeenCalledWith(
@@ -1218,9 +1239,7 @@ describe("FullScreenEditor", () => {
       { target: { value: "1500" } },
     );
     fireEvent.click(screen.getByRole("button", { name: "Save cue" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save as new version" }),
-    );
+    await initialSession.save();
     await waitFor(() =>
       expect(renderVersionMocks.saveDraftVersion).toHaveBeenCalled(),
     );
@@ -1737,19 +1756,35 @@ describe("FullScreenEditor", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Ciao" })).toBeInTheDocument(),
     );
-    const saveButton = screen.getByRole("button", {
-      name: "Save as new version",
-    });
-    expect(saveButton).toBeEnabled();
-    expect(saveButton).toHaveClass("px-2", "py-1", "text-[11px]");
-    expect(screen.getByTestId("local-editor-header-actions")).toContainElement(
-      saveButton,
-    );
+    expect(
+      screen.queryByRole("button", { name: "Save as new version" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Download version" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Cancel" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the redundant save action out of the local editor header", async () => {
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }}
+        initialManifest={manifest}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Export Video" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save as new version" }),
     ).not.toBeInTheDocument();
   });
 

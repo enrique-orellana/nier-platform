@@ -121,7 +121,6 @@ import {
   normalizeGeneratedCues,
   outlineTextShadow,
   downloadBlob,
-  downloadUrl,
 } from "./localEditorUtils";
 import LocalEditorUploadState from "./LocalEditorUploadState";
 import LocalEditorSubtitleStyleInspector from "./LocalEditorSubtitleStyleInspector";
@@ -1494,7 +1493,7 @@ export default function LocalEditorTab({
         : {};
       let outputUrl;
       if (onExport) {
-        outputUrl = await onExport();
+        outputUrl = await onExport({ onProgress: setProgress });
         if (!outputUrl) throw new Error("Export did not return a video URL.");
       } else if (subtitleCues.length) {
         outputUrl = await burnLocalEditorSubtitles({
@@ -1509,7 +1508,8 @@ export default function LocalEditorTab({
           ...renderParams,
         });
       }
-      downloadUrl(outputUrl, "openshorts-local-editor.mp4");
+      setProgress(1);
+      window.open(outputUrl, "_blank", "noopener,noreferrer");
     } catch (exportError) {
       setError(exportError.message || "Could not export this video locally.");
     } finally {

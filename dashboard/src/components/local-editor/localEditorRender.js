@@ -349,7 +349,12 @@ export async function renderLocalVideoOnBackend({
     status = await responsePayload(
       await fetchImpl(getApiUrl(`/api/render/${started.renderId}`)),
     );
-    onProgress(Math.max(0, Math.min(1, Number(status.progress || 0) / 100)));
+    const isComplete = ["done", "completed"].includes(status.status);
+    const reportedProgress = Math.max(
+      0,
+      Math.min(1, Number(status.progress || 0) / 100),
+    );
+    onProgress(isComplete ? 1 : Math.min(reportedProgress, 0.99));
     if (status.status === "error" || status.status === "failed")
       throw new Error(status.error || "Native video render failed.");
     if (status.status === "done" || status.status === "completed") {
@@ -361,7 +366,6 @@ export async function renderLocalVideoOnBackend({
         ?.split("?")[0];
       if (!filename)
         throw new Error("Render completed without an output file.");
-      onProgress(1);
       const result = {
         outputUrl: /^https?:\/\//i.test(publishedOutputUrl)
           ? publishedOutputUrl

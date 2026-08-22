@@ -293,6 +293,40 @@ describe("local editor Remotion rendering", () => {
     expect(fetchImpl.mock.calls[1][0]).toBe("/api/render/render-1");
   });
 
+  it("keeps backend export progress below 100 until rendering is done", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ renderId: "render-1", jobId: "local-editor-1" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: "rendering", progress: 100 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: "done",
+          progress: 100,
+          outputUrl: "/output/local-editor-1/render.mp4",
+        }),
+      });
+    const progress = [];
+
+    await renderLocalVideoOnBackend({
+      file: new File(["video"], "source.mp4", { type: "video/mp4" }),
+      durationSeconds: 2,
+      width: 608,
+      height: 1080,
+      pollMs: 0,
+      fetchImpl,
+      onProgress: (value) => progress.push(value),
+    });
+
+    expect(progress).toEqual([0.99, 1]);
+  });
+
   it("uses the project backend render path without downloading the source", async () => {
     const fetchImpl = vi
       .fn()

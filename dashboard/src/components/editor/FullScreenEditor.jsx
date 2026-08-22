@@ -925,60 +925,64 @@ export default function FullScreenEditor({
     }
   }, [busy, clipIndex, getLatestVersionPayload, jobId, onVersionChange]);
 
-  const exportVersion = useCallback(async () => {
-    if (busy) return null;
-    setBusy(true);
-    setError(null);
-    try {
-      const { manifest: manifestToRender, props: renderProps } =
-        getLatestVersionPayload();
-      const result = await saveAndRenderVersion({
-        jobId,
-        clipIndex,
-        manifest: manifestToRender,
-        parentVersionId: versionRef.current?.version_id,
-        props: renderProps,
-      });
-      if (result.status !== "done")
-        throw new Error(result.error || "Render failed.");
-      const outputUrl = result.outputUrl?.startsWith("http")
-        ? result.outputUrl
-        : getApiUrl(result.outputUrl);
-      const nextVersion = result.version || {
-        version_id: result.versionId,
-        status: "done",
-        output_url: outputUrl,
-      };
-      if (!nextVersion?.version_id)
-        throw new Error("Render completed without a version id.");
-      setVersions((current) => [
-        ...current.filter(
-          (candidate) => candidate.version_id !== nextVersion.version_id,
-        ),
-        nextVersion,
-      ]);
-      setRenderCompleteNotice(true);
-      versionRef.current = nextVersion;
-      setVersion(nextVersion);
-      setManifest(manifestToRender);
-      setRenderSpecDirty(false);
-      onVersionChange?.(nextVersion.version_id);
-      onRendered?.(outputUrl);
-      return outputUrl;
-    } catch (exportError) {
-      setError(exportError.message || "Render failed.");
-      throw exportError;
-    } finally {
-      setBusy(false);
-    }
-  }, [
-    busy,
-    clipIndex,
-    getLatestVersionPayload,
-    jobId,
-    onRendered,
-    onVersionChange,
-  ]);
+  const exportVersion = useCallback(
+    async ({ onProgress = () => {} } = {}) => {
+      if (busy) return null;
+      setBusy(true);
+      setError(null);
+      try {
+        const { manifest: manifestToRender, props: renderProps } =
+          getLatestVersionPayload();
+        const result = await saveAndRenderVersion({
+          jobId,
+          clipIndex,
+          manifest: manifestToRender,
+          parentVersionId: versionRef.current?.version_id,
+          props: renderProps,
+          onProgress,
+        });
+        if (result.status !== "done")
+          throw new Error(result.error || "Render failed.");
+        const outputUrl = result.outputUrl?.startsWith("http")
+          ? result.outputUrl
+          : getApiUrl(result.outputUrl);
+        const nextVersion = result.version || {
+          version_id: result.versionId,
+          status: "done",
+          output_url: outputUrl,
+        };
+        if (!nextVersion?.version_id)
+          throw new Error("Render completed without a version id.");
+        setVersions((current) => [
+          ...current.filter(
+            (candidate) => candidate.version_id !== nextVersion.version_id,
+          ),
+          nextVersion,
+        ]);
+        setRenderCompleteNotice(true);
+        versionRef.current = nextVersion;
+        setVersion(nextVersion);
+        setManifest(manifestToRender);
+        setRenderSpecDirty(false);
+        onVersionChange?.(nextVersion.version_id);
+        onRendered?.(outputUrl);
+        return outputUrl;
+      } catch (exportError) {
+        setError(exportError.message || "Render failed.");
+        throw exportError;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      busy,
+      clipIndex,
+      getLatestVersionPayload,
+      jobId,
+      onRendered,
+      onVersionChange,
+    ],
+  );
 
   useEffect(() => {
     if (!isOpen || !onSessionReady) return undefined;
@@ -1060,21 +1064,11 @@ export default function FullScreenEditor({
         allowLocalUpload={false}
         onClose={onClose}
         headerActions={
-          <>
-            {error && (
-              <span className="text-xs text-red-300" role="alert">
-                {error}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={saveVersion}
-              disabled={busy}
-              className="rounded-md bg-primary px-2 py-1 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {busy ? "Saving…" : "Save as new version"}
-            </button>
-          </>
+          error ? (
+            <span className="text-xs text-red-300" role="alert">
+              {error}
+            </span>
+          ) : null
         }
         sidePanel={
           editorActions ? <EditorActionToolbar {...editorActions} /> : null

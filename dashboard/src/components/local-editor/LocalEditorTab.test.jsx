@@ -854,11 +854,9 @@ describe("LocalEditorTab", () => {
     ).toHaveAttribute("src", exportUrl);
   });
 
-  it("delegates project video export and downloads the completed version URL", async () => {
+  it("delegates project video export and opens the completed version URL", async () => {
     const onExport = vi.fn().mockResolvedValue("/videos/job/exported.mp4");
-    const anchorClick = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
+    const openWindow = vi.spyOn(window, "open").mockImplementation(() => null);
 
     render(
       <LocalEditorTab
@@ -880,7 +878,11 @@ describe("LocalEditorTab", () => {
     );
 
     await waitFor(() => expect(onExport).toHaveBeenCalledTimes(1));
-    expect(anchorClick).toHaveBeenCalled();
+    expect(openWindow).toHaveBeenCalledWith(
+      "/videos/job/exported.mp4",
+      "_blank",
+      "noopener,noreferrer",
+    );
   });
 
   it("opens the subtitle cue modal on double click instead of single click", async () => {
