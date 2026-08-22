@@ -53,6 +53,9 @@ describe("ResultCard editor lifecycle", () => {
       />,
     );
 
+    fireEvent.click(
+      screen.getByRole("button", { name: "Clip Controls & Actions" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Edit Timeline" }));
     expect(screen.getByTestId("full-screen-editor")).toBeInTheDocument();
     expect(screen.getByTestId("full-screen-editor")).toHaveAttribute(

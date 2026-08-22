@@ -36,7 +36,7 @@ const toProxiedVideoUrl = (url) => {
   // Relative URL — browser uses same-origin and backend resolves it for the renderer
 };
 
-// Sub-components
+import { Sliders } from "lucide-react";
 import VideoPreview from "./ResultCard/VideoPreview";
 import WebcamRegionSelector from "./ResultCard/WebcamRegionSelector";
 import GameplayRegionSelector from "./ResultCard/GameplayRegionSelector";
@@ -46,6 +46,7 @@ import CardActions from "./ResultCard/CardActions";
 import PostModal from "./ResultCard/PostModal";
 import ClipSourceRangeEditor from "./ResultCard/ClipSourceRangeEditor";
 import SubtitleDetailsModal from "./ResultCard/SubtitleDetailsModal";
+import ClipControlsModal from "./ResultCard/ClipControlsModal";
 
 export default function ResultCard({
   clip,
@@ -134,6 +135,7 @@ export default function ResultCard({
     useState(false);
   const [showStandard916Preview, setShowStandard916Preview] = useState(false);
   const [showClipRangeEditor, setShowClipRangeEditor] = useState(false);
+  const [showControlsModal, setShowControlsModal] = useState(false);
   const [editError, setEditError] = useState(null);
   const editorSessionRef = React.useRef(null);
 
@@ -764,7 +766,7 @@ export default function ResultCard({
         </div>
       )}
 
-      <div className="flex-1 p-3.5 sm:p-4 flex flex-col bg-[#121214] overflow-hidden min-w-0">
+      <div className="flex-1 p-3.5 sm:p-4 flex flex-col justify-between bg-[#121214] overflow-hidden min-w-0 space-y-3">
         <ClipWorkflowStatus
           status={workflowStatus}
           saving={workflowStatusSaving}
@@ -772,50 +774,60 @@ export default function ResultCard({
           clip={clip}
           masterDuration={masterDuration}
         />
-        {onRenderClip && (
-          <ClipRenderControls
-            status={effectiveRenderStatus}
-            error={renderError || clip.render_error}
-            onRender={() => onRenderClip(index)}
-            layoutFormat={clip.layout_format || "standard"}
-            webcamRegion={clip.webcam_region}
-            gameplayRegion={clip.gameplay_region}
-            streamerTrackingEnabled={clip.streamer_tracking_enabled === true}
-            onTrackingChange={handleTrackingChange}
-            onPreviewGameplayRegion={() => setShowStandard916Preview(true)}
-            onSelectWebcamRegion={() => setShowWebcamRegionSelector(true)}
-            onSelectGameplayRegion={() => setShowGameplayRegionSelector(true)}
-            isSavingWebcamRegion={webcamRegionSaving}
-            webcamRegionError={webcamRegionError}
-            isSavingGameplayRegion={gameplayRegionSaving}
-            gameplayRegionError={gameplayRegionError || trackingError}
-            trackingSaving={trackingSaving}
-          />
-        )}
-        <CardContent clip={clip} masterDuration={masterDuration} />
 
-        {hasVideo && (
-          <CardActions
-            handleAutoEdit={handleAutoEdit}
-            isEditing={isEditing}
-            handleConvertNativeShort={handleConvertNativeShort}
-            isConvertingNativeShort={isConvertingNativeShort}
-            setShowSubtitleModal={setShowSubtitleModal}
-            setShowSubtitleDetails={setShowSubtitleDetails}
-            isSubtitling={isSubtitling}
-            setShowHookModal={setShowHookModal}
-            isHooking={isHooking}
-            setShowTranslateModal={setShowTranslateModal}
-            isTranslating={isTranslating}
-            setShowModal={setShowModal}
-            editError={editError}
-            setShowClipEditor={onEditorOpen || setShowClipEditor}
-            handleDownload={handleDownload}
-            setShowClipRangeEditor={setShowClipRangeEditor}
-            hasClipRangeEditor={Boolean(onSaveClipRange)}
+        <button
+          type="button"
+          onClick={() => setShowControlsModal(true)}
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:border-cyan-400/50 transition-all active:scale-[0.98] shadow-sm group/btn cursor-pointer"
+        >
+          <Sliders
+            size={14}
+            className="group-hover/btn:rotate-12 transition-transform text-cyan-400 shrink-0"
           />
-        )}
+          <span>Clip Controls & Actions</span>
+        </button>
       </div>
+
+      <ClipControlsModal
+        isOpen={showControlsModal}
+        onClose={() => setShowControlsModal(false)}
+        clip={clip}
+        index={index}
+        jobId={jobId}
+        masterDuration={masterDuration}
+        effectiveRenderStatus={effectiveRenderStatus}
+        renderError={renderError}
+        onRenderClip={onRenderClip}
+        handleTrackingChange={handleTrackingChange}
+        setShowStandard916Preview={setShowStandard916Preview}
+        setShowWebcamRegionSelector={setShowWebcamRegionSelector}
+        setShowGameplayRegionSelector={setShowGameplayRegionSelector}
+        webcamRegionSaving={webcamRegionSaving}
+        webcamRegionError={webcamRegionError}
+        gameplayRegionSaving={gameplayRegionSaving}
+        gameplayRegionError={gameplayRegionError}
+        trackingError={trackingError}
+        trackingSaving={trackingSaving}
+        hasVideo={hasVideo}
+        handleAutoEdit={handleAutoEdit}
+        isEditing={isEditing}
+        handleConvertNativeShort={handleConvertNativeShort}
+        isConvertingNativeShort={isConvertingNativeShort}
+        setShowSubtitleModal={setShowSubtitleModal}
+        setShowSubtitleDetails={setShowSubtitleDetails}
+        isSubtitling={isSubtitling}
+        setShowHookModal={setShowHookModal}
+        isHooking={isHooking}
+        setShowTranslateModal={setShowTranslateModal}
+        isTranslating={isTranslating}
+        setShowModal={setShowModal}
+        editError={editError}
+        onEditorOpen={onEditorOpen}
+        setShowClipEditor={setShowClipEditor}
+        handleDownload={handleDownload}
+        setShowClipRangeEditor={setShowClipRangeEditor}
+        onSaveClipRange={onSaveClipRange}
+      />
 
       <PostModal
         showModal={showModal}
