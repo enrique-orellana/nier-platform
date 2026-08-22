@@ -915,7 +915,7 @@ describe("LocalEditorTab", () => {
       />,
     );
 
-    expect(screen.getByTestId("local-editor-feature-panel")).toHaveClass(
+    expect(screen.getByTestId("local-editor-feature-panel-scroll")).toHaveClass(
       "overflow-x-hidden",
       "overflow-y-auto",
     );

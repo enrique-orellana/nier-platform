@@ -2422,6 +2422,28 @@ export default function LocalEditorTab({
           <LocalEditorFeaturePanel
             title={activeFeatureLabel}
             className="relative xl:col-start-2 xl:row-start-1"
+            overlay={
+              <button
+                type="button"
+                role="separator"
+                aria-label="Resize details panel"
+                aria-orientation="vertical"
+                aria-valuemin={MIN_INSPECTOR_WIDTH}
+                aria-valuemax={MAX_INSPECTOR_WIDTH}
+                aria-valuenow={Math.round(
+                  inspectorWidth ?? DEFAULT_INSPECTOR_WIDTH,
+                )}
+                title="Resize details panel"
+                onPointerDown={handleInspectorResizeStart}
+                onPointerMove={handleInspectorResizeMove}
+                onPointerUp={handleInspectorResizeEnd}
+                onPointerCancel={handleInspectorResizeEnd}
+                onKeyDown={handleInspectorResizeKeyDown}
+                className="group absolute right-0 top-0 z-40 flex h-full w-2 translate-x-1/2 cursor-col-resize items-center justify-center border-x border-transparent bg-transparent hover:border-cyan-300/50 focus:border-cyan-300/70 focus:outline-none"
+              >
+                <span className="h-12 w-px bg-zinc-600/70 transition-colors group-hover:bg-cyan-300" />
+              </button>
+            }
           >
             <div className={activeFeature === "details" ? "" : "sr-only"}>
               <ClipMetadataPanel
@@ -2725,26 +2747,6 @@ export default function LocalEditorTab({
                 </p>
               )}
             </div>
-            <button
-              type="button"
-              role="separator"
-              aria-label="Resize details panel"
-              aria-orientation="vertical"
-              aria-valuemin={MIN_INSPECTOR_WIDTH}
-              aria-valuemax={MAX_INSPECTOR_WIDTH}
-              aria-valuenow={Math.round(
-                inspectorWidth ?? DEFAULT_INSPECTOR_WIDTH,
-              )}
-              title="Resize details panel"
-              onPointerDown={handleInspectorResizeStart}
-              onPointerMove={handleInspectorResizeMove}
-              onPointerUp={handleInspectorResizeEnd}
-              onPointerCancel={handleInspectorResizeEnd}
-              onKeyDown={handleInspectorResizeKeyDown}
-              className="group absolute right-0 top-0 z-40 flex h-full w-2 translate-x-1/2 cursor-col-resize items-center justify-center border-x border-transparent bg-transparent hover:border-cyan-300/50 focus:border-cyan-300/70 focus:outline-none"
-            >
-              <span className="h-12 w-px bg-zinc-600/70 transition-colors group-hover:bg-cyan-300" />
-            </button>
           </LocalEditorFeaturePanel>
         </aside>
       </div>
