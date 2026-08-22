@@ -4,6 +4,25 @@ import { describe, expect, it, vi } from "vitest";
 import VersionHistory from "./VersionHistory";
 
 describe("VersionHistory", () => {
+  it("uses the compact editor section shell for collapsible history", () => {
+    render(
+      <VersionHistory
+        versions={[{ version_id: "compact-version", status: "done" }]}
+        renderCompleteNotice
+        onOpen={vi.fn()}
+      />,
+    );
+
+    const section = screen.getByRole("region", { name: "Version history" });
+
+    expect(section).toHaveClass(
+      "overflow-hidden",
+      "rounded-xl",
+      "border",
+      "bg-white/[.02]",
+    );
+  });
+
   it("shows a ready badge and notifies when the history control is opened", () => {
     const onOpen = vi.fn();
 

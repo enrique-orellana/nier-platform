@@ -11,6 +11,7 @@ import {
 } from "@testing-library/react";
 import { StrictMode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import VersionHistory from "../editor/VersionHistory";
 import LocalEditorTab from "./LocalEditorTab";
 import { DEFAULT_SUBTITLE_STYLE } from "./localEditorStyles";
 import {
@@ -539,6 +540,37 @@ describe("LocalEditorTab", () => {
     expect(screen.getByRole("region", { name: "Project context" })).toHaveClass(
       "sr-only",
     );
+  });
+
+  it("opens version history expanded whenever the Versions feature is entered", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        versionHistoryPanel={
+          <VersionHistory
+            versions={[{ version_id: "version-1", status: "done" }]}
+            onOpen={vi.fn()}
+          />
+        }
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Versions" }));
+
+    const historyToggle = screen.getByRole("button", {
+      name: /Version History/,
+    });
+    expect(historyToggle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(historyToggle);
+    expect(historyToggle).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    fireEvent.click(screen.getByRole("button", { name: "Versions" }));
+
+    expect(
+      screen.getByRole("button", { name: /Version History/ }),
+    ).toHaveAttribute("aria-expanded", "true");
   });
 
   it("shows a local-only upload state", () => {

@@ -979,23 +979,16 @@ export default function FullScreenEditor({
           editorActions ? <EditorActionToolbar {...editorActions} /> : null
         }
         versionHistoryPanel={
-          <>
-            <section
-              className="rounded-xl border border-white/10 bg-white/[.02] p-4"
-              aria-label="Version history"
-            >
-              <VersionHistory
-                versions={versions}
-                currentVersionId={version?.version_id}
-                selectedVersionId={version?.version_id}
-                onSelect={loadVersion}
-                onBranch={branchVersion}
-                onDelete={deleteVersion}
-                renderCompleteNotice={renderCompleteNotice}
-                onOpen={() => setRenderCompleteNotice(false)}
-              />
-            </section>
-          </>
+          <VersionHistory
+            versions={versions}
+            currentVersionId={version?.version_id}
+            selectedVersionId={version?.version_id}
+            onSelect={loadVersion}
+            onBranch={branchVersion}
+            onDelete={deleteVersion}
+            renderCompleteNotice={renderCompleteNotice}
+            onOpen={() => setRenderCompleteNotice(false)}
+          />
         }
       />
     </div>

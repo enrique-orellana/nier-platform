@@ -1695,6 +1695,11 @@ export default function LocalEditorTab({
   const activeFeatureLabel =
     LOCAL_EDITOR_FEATURES.find(({ id }) => id === activeFeature)?.label ||
     "Details";
+  const renderedVersionHistoryPanel = React.isValidElement(versionHistoryPanel)
+    ? React.cloneElement(versionHistoryPanel, {
+        key: `version-history-${activeFeature}`,
+      })
+    : versionHistoryPanel;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0d0d0f] text-white">
@@ -2856,7 +2861,7 @@ export default function LocalEditorTab({
               aria-label="Version History context"
               className={`space-y-4 ${activeFeature === "versions" ? "" : "sr-only"}`}
             >
-              {versionHistoryPanel || (
+              {renderedVersionHistoryPanel || (
                 <p className="rounded-xl border border-white/10 bg-white/[.02] p-4 text-xs leading-5 text-zinc-500">
                   Version history is available for saved project versions.
                 </p>
