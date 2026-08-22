@@ -1793,17 +1793,6 @@ export default function LocalEditorTab({
                   : "Export Video"}
               </button>
             )}
-            {subtitleCues.length > 0 && (
-              <button
-                type="button"
-                onClick={exportSubtitles}
-                disabled={busy}
-                className="flex items-center gap-1 rounded-md bg-violet-500 px-2 py-1 text-[10px] font-semibold hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Download size={13} />
-                Export Subtitles
-              </button>
-            )}
             {headerActions}
           </div>
           <div
@@ -2565,15 +2554,29 @@ export default function LocalEditorTab({
                     {subtitleCues.length === 1 ? "cue" : "cues"}
                   </span>
                 </button>
-                <button
-                  type="button"
-                  aria-label="Open subtitle table"
-                  title="Open subtitle table"
-                  onClick={() => setSubtitleView("table")}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-violet-300 transition-colors hover:bg-violet-500/10 hover:text-violet-200"
-                >
-                  <FileText size={16} aria-hidden="true" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {subtitleCues.length > 0 && (
+                    <button
+                      type="button"
+                      aria-label="Export Subtitles"
+                      onClick={exportSubtitles}
+                      disabled={busy}
+                      className="flex h-7 items-center gap-1 rounded-md border border-violet-400/30 px-2 text-[11px] font-semibold text-violet-200 transition-colors hover:border-violet-300/60 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Download size={14} aria-hidden="true" />
+                      Export
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    aria-label="Open subtitle table"
+                    title="Open subtitle table"
+                    onClick={() => setSubtitleView("table")}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-violet-300 transition-colors hover:bg-violet-500/10 hover:text-violet-200"
+                  >
+                    <FileText size={16} aria-hidden="true" />
+                  </button>
+                </div>
               </div>
               <div
                 id="subtitle-settings-panel"
