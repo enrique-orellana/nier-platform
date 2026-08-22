@@ -393,6 +393,11 @@ export default function ClipEditor({
                 selectedVersionId={selectedVersion?.version_id}
                 onSelect={(v) => loadVersion(v.version_id)}
                 onBranch={branch}
+                getVersionDownloadUrl={(versionId) =>
+                  getApiUrl(
+                    `/api/clip/${jobId}/${clipIndex}/versions/${versionId}/download`,
+                  )
+                }
               />
             </section>
             <section className="rounded-xl border border-white/10 p-3">

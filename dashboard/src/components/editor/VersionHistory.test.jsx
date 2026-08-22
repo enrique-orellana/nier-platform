@@ -108,6 +108,32 @@ describe("VersionHistory", () => {
     expect(link).toHaveAttribute("rel", "noreferrer");
   });
 
+  it("uses the stable version download URL when one is provided", () => {
+    render(
+      <VersionHistory
+        versions={[
+          {
+            version_id: "expired-version",
+            status: "done",
+            output_url: "https://minio.example/expired.mp4?X-Amz-Expires=7200",
+          },
+        ]}
+        getVersionDownloadUrl={(versionId) =>
+          `/api/clip/job-1/0/versions/${versionId}/download`
+        }
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", {
+        name: /open generated clip for version expired-version/i,
+      }),
+    ).toHaveAttribute(
+      "href",
+      "/api/clip/job-1/0/versions/expired-version/download",
+    );
+  });
+
   it("does not show a generated clip link for incomplete versions", () => {
     render(
       <VersionHistory

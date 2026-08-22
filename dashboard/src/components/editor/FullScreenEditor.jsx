@@ -1081,6 +1081,11 @@ export default function FullScreenEditor({
             onSelect={loadVersion}
             onBranch={branchVersion}
             onDelete={deleteVersion}
+            getVersionDownloadUrl={(versionId) =>
+              getApiUrl(
+                `/api/clip/${jobId}/${clipIndex}/versions/${versionId}/download`,
+              )
+            }
             renderCompleteNotice={renderCompleteNotice}
             onOpen={() => setRenderCompleteNotice(false)}
           />

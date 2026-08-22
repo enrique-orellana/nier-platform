@@ -25,10 +25,14 @@ const VersionTreeNode = ({
   onSelect,
   onBranch,
   onDelete,
+  getVersionDownloadUrl,
 }) => {
   const { version, children } = node;
   const isSelected = selectedVersionId === version.version_id;
-  const hasGeneratedClip = version.status === "done" && version.output_url;
+  const generatedClipUrl = getVersionDownloadUrl
+    ? getVersionDownloadUrl(version.version_id)
+    : getApiUrl(version.output_url);
+  const hasGeneratedClip = version.status === "done" && generatedClipUrl;
 
   return (
     <div
@@ -69,7 +73,7 @@ const VersionTreeNode = ({
           <a
             aria-label={`Open generated clip for version ${version.version_id}`}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-emerald-300/20 bg-emerald-400/10 text-emerald-300 transition-colors hover:border-emerald-200/50 hover:bg-emerald-400/20 hover:text-white"
-            href={getApiUrl(version.output_url)}
+            href={generatedClipUrl}
             rel="noreferrer"
             target="_blank"
             title="Open generated clip"
@@ -107,6 +111,7 @@ const VersionTreeNode = ({
               onSelect={onSelect}
               onBranch={onBranch}
               onDelete={onDelete}
+              getVersionDownloadUrl={getVersionDownloadUrl}
             />
           ))}
         </div>
@@ -122,6 +127,7 @@ export default function VersionHistory({
   onSelect,
   onBranch,
   onDelete,
+  getVersionDownloadUrl,
   renderCompleteNotice = false,
   onOpen,
 }) {
@@ -188,6 +194,7 @@ export default function VersionHistory({
               onSelect={onSelect}
               onBranch={onBranch}
               onDelete={onDelete}
+              getVersionDownloadUrl={getVersionDownloadUrl}
             />
           ))}
         </div>
