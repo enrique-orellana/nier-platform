@@ -44,6 +44,17 @@ describe("App settings layout", () => {
     expect(container.querySelectorAll("p > div")).toHaveLength(0);
   });
 
+  it("uses a distinct sidebar icon for Highlights and AI Shorts", () => {
+    render(<App />);
+
+    expect(
+      screen.getByText("Highlights").closest("button").querySelector("svg"),
+    ).toHaveClass("lucide-highlighter");
+    expect(
+      screen.getByText("AI Shorts").closest("button").querySelector("svg"),
+    ).toHaveClass("lucide-sparkles");
+  });
+
   it("makes the idle clip generator content vertically scrollable", () => {
     window.history.pushState({}, "", "/");
     const { container } = render(<App />);

@@ -1527,40 +1527,46 @@ export default function LocalEditorTab({
               </button>
             </div>
           )}
-          <div
-            data-testid="local-editor-header-edit"
-            className="flex items-center gap-1 border-l border-white/10 pl-2"
-          >
-            {editHistory.past.length > 0 && (
-              <button
-                type="button"
-                onClick={undo}
-                disabled={busy}
-                aria-label="Undo"
-                title="Undo (Ctrl/Cmd+Z)"
-                className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Undo2 size={13} />
-                Undo
-              </button>
-            )}
-            {editHistory.future.length > 0 && (
-              <button
-                type="button"
-                onClick={redo}
-                disabled={busy}
-                aria-label="Redo"
-                title="Redo (Ctrl/Cmd+Shift+Z)"
-                className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Redo2 size={13} />
-                Redo
-              </button>
-            )}
-          </div>
+          {!initialProjectId && (
+            <div
+              data-testid="local-editor-header-edit"
+              className="flex items-center gap-1 border-l border-white/10 pl-2"
+            >
+              {editHistory.past.length > 0 && (
+                <button
+                  type="button"
+                  onClick={undo}
+                  disabled={busy}
+                  aria-label="Undo"
+                  title="Undo (Ctrl/Cmd+Z)"
+                  className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Undo2 size={13} />
+                  Undo
+                </button>
+              )}
+              {editHistory.future.length > 0 && (
+                <button
+                  type="button"
+                  onClick={redo}
+                  disabled={busy}
+                  aria-label="Redo"
+                  title="Redo (Ctrl/Cmd+Shift+Z)"
+                  className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Redo2 size={13} />
+                  Redo
+                </button>
+              )}
+            </div>
+          )}
           <div
             data-testid="local-editor-header-output"
-            className="flex items-center gap-1 border-l border-white/10 pl-2"
+            className={
+              initialProjectId
+                ? "flex items-center gap-1"
+                : "flex items-center gap-1 border-l border-white/10 pl-2"
+            }
           >
             {videoFile && (
               <button

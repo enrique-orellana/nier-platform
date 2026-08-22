@@ -34,6 +34,7 @@ import {
   Copy,
   CheckCircle2,
   FolderOpen,
+  Highlighter,
   Scissors,
 } from "lucide-react";
 import KeyInput from "./components/KeyInput";
@@ -1422,7 +1423,7 @@ function App() {
         />
         <NavItem
           tabKey="highlights"
-          icon={Sparkles}
+          icon={Highlighter}
           label="Highlights"
           activeColor="bg-primary/10 text-primary"
         />

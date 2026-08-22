@@ -17,6 +17,8 @@ import { EDITOR_PREFERENCES_STORAGE_KEY } from "./localEditorPreferences";
 import {
   EDITOR_PROJECT_DB_NAME,
   EDITOR_VIDEO_DB_NAME,
+  EDITOR_HISTORY_STORAGE_KEY,
+  createEmptyEditorHistory,
   createStoredProject,
   listStoredProjects,
 } from "./localEditorPersistence";
@@ -183,6 +185,44 @@ describe("LocalEditorTab", () => {
     expect(
       screen.queryByTestId("local-editor-header-workspace"),
     ).not.toBeInTheDocument();
+  });
+
+  it("hides undo and redo actions when editing a project clip", async () => {
+    const history = createEmptyEditorHistory();
+    localStorage.setItem(
+      EDITOR_HISTORY_STORAGE_KEY,
+      JSON.stringify({
+        ...history,
+        past: [history.present],
+        future: [history.present],
+      }),
+    );
+
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialProjectId="project-1"
+        initialClipIndex={0}
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("local-editor-player")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Undo" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Redo" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("local-editor-header-edit"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("local-editor-header-output")).not.toHaveClass(
+      "border-l",
+      "pl-2",
+    );
   });
 
   it("organizes header actions into workspace, edit, output, and utility groups", () => {
