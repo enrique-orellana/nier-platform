@@ -1829,6 +1829,39 @@ describe("LocalEditorTab", () => {
     expect(screen.getByLabelText("Hook text color")).toHaveValue("#00ffff");
   });
 
+  it("provides subtitle palette quick picks for viral hook background", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoName="project.mp4"
+        initialEditorState={{
+          subtitleCues: [],
+          subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+          subtitleLanguage: "en",
+          hook: {
+            id: "hook",
+            text: "Existing hook",
+            startMs: 0,
+            endMs: 2000,
+            color: "#FFFFFF",
+            fontSize: 30,
+            background: "#111111",
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Existing hook" }));
+    const whitePreset = await waitFor(() =>
+      screen.getByRole("button", { name: "Use hook background White" }),
+    );
+    expect(whitePreset).toHaveClass("h-7", "w-7", "rounded-full");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use hook background Cyan" }),
+    );
+    expect(screen.getByLabelText("Hook background")).toHaveValue("#00ffff");
+  });
+
   it("uses subtitle button colors for viral hook choices", async () => {
     render(
       <LocalEditorTab
