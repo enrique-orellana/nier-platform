@@ -769,6 +769,8 @@ export default function ResultCard({
           status={workflowStatus}
           saving={workflowStatusSaving}
           onChange={onWorkflowStatusChange}
+          clip={clip}
+          masterDuration={masterDuration}
         />
         {onRenderClip && (
           <ClipRenderControls
