@@ -318,10 +318,10 @@ describe("LocalEditorTab", () => {
     expect(screen.queryByText("Playback Controls:")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Timeline zoom")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Zoom to fit" }),
+      screen.queryByRole("button", { name: "Fit timeline to window" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Zoom to fit timeline" }),
+      screen.queryByRole("button", { name: "Reset timeline zoom" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Zoom out" }),
@@ -387,10 +387,10 @@ describe("LocalEditorTab", () => {
       screen.getByRole("button", { name: "Add marker (M)" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Zoom to fit" }),
+      screen.getByRole("button", { name: "Fit timeline to window" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Zoom to fit timeline" }),
+      screen.getByRole("button", { name: "Reset timeline zoom" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Zoom out" }),

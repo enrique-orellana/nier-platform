@@ -2292,8 +2292,8 @@ export default function LocalEditorTab({
                     >
                       <button
                         type="button"
-                        aria-label="Zoom to fit"
-                        title="Zoom to fit visible timeline"
+                        aria-label="Fit timeline to window"
+                        title="Fit timeline to window"
                         onClick={() => timelineApiRef.current?.zoomToFit()}
                         className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white"
                       >
@@ -2301,8 +2301,8 @@ export default function LocalEditorTab({
                       </button>
                       <button
                         type="button"
-                        aria-label="Zoom to fit timeline"
-                        title="Zoom to fit timeline (Shift+Z)"
+                        aria-label="Reset timeline zoom"
+                        title="Reset timeline zoom"
                         onClick={() => setTimelineZoom(1)}
                         className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white"
                       >
