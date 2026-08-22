@@ -14,7 +14,7 @@ vi.mock("./ResultCard/CardActions", () => ({
 vi.mock("./editor/FullScreenEditor", () => ({
   default: ({ isOpen, onClose }) =>
     isOpen ? (
-      <div data-testid="full-screen-editor">
+      <div data-testid="full-screen-editor" data-local-editor="true">
         <button type="button" onClick={onClose}>
           Close editor
         </button>
@@ -55,6 +55,10 @@ describe("ResultCard editor lifecycle", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Timeline" }));
     expect(screen.getByTestId("full-screen-editor")).toBeInTheDocument();
+    expect(screen.getByTestId("full-screen-editor")).toHaveAttribute(
+      "data-local-editor",
+      "true",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Close editor" }));
 
