@@ -45,4 +45,27 @@ describe("LocalEditorHookInspector", () => {
       screen.getByRole("button", { name: "Remove Hook" }),
     ).toBeInTheDocument();
   });
+
+  it("places size after text color and before background", () => {
+    render(
+      <LocalEditorHookInspector
+        hook={hook}
+        onChange={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    const textColorPresets = screen.getByLabelText("Hook text color presets");
+    const sizeInput = screen.getByLabelText("Hook font size");
+    const backgroundPresets = screen.getByLabelText(
+      "Hook background color presets",
+    );
+
+    expect(textColorPresets.compareDocumentPosition(sizeInput)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(sizeInput.compareDocumentPosition(backgroundPresets)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
 });

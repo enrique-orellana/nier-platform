@@ -173,21 +173,7 @@ export default function LocalEditorHookInspector({ hook, onChange, onRemove }) {
         <h4 id="hook-appearance-heading" className={sectionHeadingClass}>
           Appearance
         </h4>
-        <div className="grid grid-cols-[minmax(100px,0.8fr)_minmax(0,1.5fr)] items-start gap-3">
-          <label className="block text-xs text-zinc-400">
-            Size
-            <input
-              aria-label="Hook font size"
-              type="number"
-              min="12"
-              max="160"
-              value={hook.fontSize}
-              onChange={(event) =>
-                onChange({ ...hook, fontSize: Number(event.target.value) })
-              }
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white"
-            />
-          </label>
+        <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(100px,0.8fr)] items-start gap-3">
           <div>
             <span className={cleanLabelClass}>Text color</span>
             <div
@@ -222,6 +208,20 @@ export default function LocalEditorHookInspector({ hook, onChange, onRemove }) {
               </label>
             </div>
           </div>
+          <label className="block text-xs text-zinc-400">
+            Size
+            <input
+              aria-label="Hook font size"
+              type="number"
+              min="12"
+              max="160"
+              value={hook.fontSize}
+              onChange={(event) =>
+                onChange({ ...hook, fontSize: Number(event.target.value) })
+              }
+              className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white"
+            />
+          </label>
         </div>
         <div>
           <span className={cleanLabelClass}>Background</span>
