@@ -65,4 +65,31 @@ describe("SubtitleCueTable", () => {
     expect(screen.getByDisplayValue("00:00:01:29")).toBeInTheDocument();
     expect(screen.getByDisplayValue("00:00:03:00")).toBeInTheDocument();
   });
+
+  it("deletes a cue from its table row without selecting the row", () => {
+    const onDelete = vi.fn();
+    const onSelect = vi.fn();
+    const cue = {
+      id: "cue-1",
+      text: "Delete me",
+      startMs: 0,
+      endMs: 1000,
+    };
+
+    render(
+      <SubtitleCueTable
+        cues={[cue]}
+        onSelect={onSelect}
+        onChange={vi.fn()}
+        onDelete={onDelete}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete subtitle cue cue-1" }),
+    );
+
+    expect(onDelete).toHaveBeenCalledWith("cue-1");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
 });

@@ -1952,215 +1952,217 @@ export default function LocalEditorTab({
             </div>
           </div>
           <div
-            data-testid="local-editor-subtitle-workspace"
-            className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none border border-white/10 bg-[#101014] xl:col-span-3 xl:col-start-1 xl:row-start-2"
+            data-testid="local-editor-subtitle-workspace-shell"
+            className="relative min-h-0 min-w-0 xl:col-span-3 xl:col-start-1 xl:row-start-2"
           >
             <div
-              data-testid="local-editor-subtitle-toolbar"
-              className="flex h-9 flex-none items-center justify-between border-b border-white/10 px-2"
+              data-testid="local-editor-subtitle-workspace"
+              className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-none border border-white/10 bg-[#101014]"
             >
               <div
-                data-testid="local-editor-timeline-actions"
-                className="flex h-7 items-center gap-0.5 text-zinc-500"
+                data-testid="local-editor-subtitle-toolbar"
+                className="flex h-9 flex-none items-center justify-between border-b border-white/10 px-2"
               >
-                <button
-                  type="button"
-                  aria-label="Add cue to timeline"
-                  title="Add cue to timeline"
-                  onClick={addSubtitleCue}
-                  className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white"
-                >
-                  <Plus size={15} />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Select timeline tool"
-                  title="Select timeline tool"
-                  className="flex h-7 w-7 items-center justify-center rounded bg-white/10 text-zinc-200"
-                >
-                  <MousePointer2 size={14} />
-                </button>
-                <span
-                  className="mx-1 h-5 w-px bg-white/10"
-                  aria-hidden="true"
-                />
-                <button
-                  type="button"
-                  onClick={undo}
-                  disabled={busy || editHistory.past.length === 0}
-                  aria-label="Timeline undo"
-                  title="Timeline undo (Ctrl/Cmd+Z)"
-                  className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  <Undo2 size={15} />
-                </button>
-                <button
-                  type="button"
-                  onClick={redo}
-                  disabled={busy || editHistory.future.length === 0}
-                  aria-label="Timeline redo"
-                  title="Timeline redo (Ctrl/Cmd+Shift+Z)"
-                  className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  <Redo2 size={15} />
-                </button>
-                <span
-                  className="mx-1 h-5 w-px bg-white/10"
-                  aria-hidden="true"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeSubtitleCue(selected?.id)}
-                  disabled={busy || selected?.type !== "subtitle"}
-                  aria-label="Remove selected cue"
-                  title="Remove selected cue"
-                  className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-              <div className="flex items-center gap-2">
-                {subtitleView === "timeline" && (
-                  <div
-                    data-testid="local-editor-timeline-zoom"
-                    className="flex h-6 items-center overflow-hidden rounded border border-white/10 bg-[#1b1b1f] text-zinc-400 shadow-inner"
-                  >
-                    <button
-                      type="button"
-                      aria-label="Zoom out timeline"
-                      title="Zoom out timeline"
-                      onClick={() =>
-                        setTimelineZoom((current) =>
-                          Math.max(0.5, Number((current - 0.5).toFixed(2))),
-                        )
-                      }
-                      className="flex h-full w-6 items-center justify-center border-r border-white/10 hover:bg-white/10 hover:text-white disabled:opacity-40"
-                      disabled={timelineZoom <= 0.5}
-                    >
-                      <Minus size={13} />
-                    </button>
-                    <label className="flex h-full w-24 items-center px-2">
-                      <span className="sr-only">Timeline zoom</span>
-                      <input
-                        type="range"
-                        aria-label="Timeline zoom"
-                        min="0.5"
-                        max="8"
-                        step="0.5"
-                        value={timelineZoom}
-                        aria-valuetext={`${Math.round(timelineZoom * 100)}%`}
-                        onChange={(event) =>
-                          setTimelineZoom(Number(event.target.value))
-                        }
-                        className="h-1.5 w-full cursor-pointer accent-zinc-300"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      aria-label="Zoom in timeline"
-                      title="Zoom in timeline"
-                      onClick={() =>
-                        setTimelineZoom((current) =>
-                          Math.min(8, Number((current + 0.5).toFixed(2))),
-                        )
-                      }
-                      className="flex h-full w-6 items-center justify-center border-l border-white/10 hover:bg-white/10 hover:text-white disabled:opacity-40"
-                      disabled={timelineZoom >= 8}
-                    >
-                      <Plus size={13} />
-                    </button>
-                  </div>
-                )}
                 <div
-                  role="tablist"
-                  aria-label="Subtitle editing view"
-                  className="flex h-7 rounded border border-white/10 bg-black/20 p-0.5"
+                  data-testid="local-editor-timeline-actions"
+                  className="flex h-7 items-center gap-0.5 text-zinc-500"
                 >
                   <button
                     type="button"
-                    role="tab"
-                    aria-label="Timeline view"
-                    aria-selected={subtitleView === "timeline"}
-                    onClick={() => setSubtitleView("timeline")}
-                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === "timeline" ? "bg-white text-black" : "text-zinc-400 hover:bg-white/10 hover:text-white"}`}
+                    aria-label="Add cue to timeline"
+                    title="Add cue to timeline"
+                    onClick={addSubtitleCue}
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white"
                   >
-                    Timeline
+                    <Plus size={15} />
                   </button>
                   <button
                     type="button"
-                    role="tab"
-                    aria-label="Subtitle table view"
-                    aria-selected={subtitleView === "table"}
-                    onClick={() => setSubtitleView("table")}
-                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === "table" ? "bg-violet-500 text-white" : "text-zinc-400 hover:bg-white/10 hover:text-white"}`}
+                    aria-label="Select timeline tool"
+                    title="Select timeline tool"
+                    className="flex h-7 w-7 items-center justify-center rounded bg-white/10 text-zinc-200"
                   >
-                    Cue table
+                    <MousePointer2 size={14} />
+                  </button>
+                  <span
+                    className="mx-1 h-5 w-px bg-white/10"
+                    aria-hidden="true"
+                  />
+                  <button
+                    type="button"
+                    onClick={undo}
+                    disabled={busy || editHistory.past.length === 0}
+                    aria-label="Timeline undo"
+                    title="Timeline undo (Ctrl/Cmd+Z)"
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <Undo2 size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={redo}
+                    disabled={busy || editHistory.future.length === 0}
+                    aria-label="Timeline redo"
+                    title="Timeline redo (Ctrl/Cmd+Shift+Z)"
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <Redo2 size={15} />
+                  </button>
+                  <span
+                    className="mx-1 h-5 w-px bg-white/10"
+                    aria-hidden="true"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeSubtitleCue(selected?.id)}
+                    disabled={busy || selected?.type !== "subtitle"}
+                    aria-label="Remove selected cue"
+                    title="Remove selected cue"
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <Trash2 size={14} />
                   </button>
                 </div>
+                <div className="flex items-center gap-2">
+                  {subtitleView === "timeline" && (
+                    <div
+                      data-testid="local-editor-timeline-zoom"
+                      className="flex h-6 items-center overflow-hidden rounded border border-white/10 bg-[#1b1b1f] text-zinc-400 shadow-inner"
+                    >
+                      <button
+                        type="button"
+                        aria-label="Zoom out timeline"
+                        title="Zoom out timeline"
+                        onClick={() =>
+                          setTimelineZoom((current) =>
+                            Math.max(0.5, Number((current - 0.5).toFixed(2))),
+                          )
+                        }
+                        className="flex h-full w-6 items-center justify-center border-r border-white/10 hover:bg-white/10 hover:text-white disabled:opacity-40"
+                        disabled={timelineZoom <= 0.5}
+                      >
+                        <Minus size={13} />
+                      </button>
+                      <label className="flex h-full w-24 items-center px-2">
+                        <span className="sr-only">Timeline zoom</span>
+                        <input
+                          type="range"
+                          aria-label="Timeline zoom"
+                          min="0.5"
+                          max="8"
+                          step="0.5"
+                          value={timelineZoom}
+                          aria-valuetext={`${Math.round(timelineZoom * 100)}%`}
+                          onChange={(event) =>
+                            setTimelineZoom(Number(event.target.value))
+                          }
+                          className="h-1.5 w-full cursor-pointer accent-zinc-300"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        aria-label="Zoom in timeline"
+                        title="Zoom in timeline"
+                        onClick={() =>
+                          setTimelineZoom((current) =>
+                            Math.min(8, Number((current + 0.5).toFixed(2))),
+                          )
+                        }
+                        className="flex h-full w-6 items-center justify-center border-l border-white/10 hover:bg-white/10 hover:text-white disabled:opacity-40"
+                        disabled={timelineZoom >= 8}
+                      >
+                        <Plus size={13} />
+                      </button>
+                    </div>
+                  )}
+                  <div
+                    role="tablist"
+                    aria-label="Subtitle editing view"
+                    className="flex h-7 rounded border border-white/10 bg-black/20 p-0.5"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-label="Timeline view"
+                      aria-selected={subtitleView === "timeline"}
+                      onClick={() => setSubtitleView("timeline")}
+                      className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === "timeline" ? "bg-white text-black" : "text-zinc-400 hover:bg-white/10 hover:text-white"}`}
+                    >
+                      Timeline
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-label="Subtitle table view"
+                      aria-selected={subtitleView === "table"}
+                      onClick={() => setSubtitleView("table")}
+                      className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === "table" ? "bg-violet-500 text-white" : "text-zinc-400 hover:bg-white/10 hover:text-white"}`}
+                    >
+                      Cue table
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {subtitleView === "table" ? (
+                  <SubtitleCueTable
+                    cues={subtitleCues}
+                    selectedId={selected?.id}
+                    playheadMs={playheadMs}
+                    onSelect={handleTimelineSelect}
+                    onChange={(cue) => updateSubtitle(cue)}
+                    onDelete={removeSubtitleCue}
+                    loopSegment={subtitleTableLoop}
+                    onLoopSegmentChange={setSubtitleTableLoop}
+                    onSpeedChange={(speed) => {
+                      if (videoRef.current)
+                        videoRef.current.playbackRate = speed;
+                      if (remotionPlayerRef.current)
+                        remotionPlayerRef.current.setPlaybackRate?.(speed);
+                    }}
+                  />
+                ) : (
+                  <LocalEditorTimeline
+                    videoUrl={videoUrl}
+                    durationMs={durationMs}
+                    fps={remotionFps}
+                    subtitleCues={subtitleCues}
+                    hook={hook}
+                    selectedId={selected?.id}
+                    onSelect={(cue, type) =>
+                      handleTimelineSelect(cue, type, { openEditor: false })
+                    }
+                    onDoubleClick={handleTimelineSelect}
+                    onChange={handleTimelineChange}
+                    onChangeStart={beginTimelineEdit}
+                    onChangeEnd={endTimelineEdit}
+                    playheadMs={playheadMs}
+                    onSeek={handleSeek}
+                    timelineZoom={timelineZoom}
+                  />
+                )}
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-hidden">
-              {subtitleView === "table" ? (
-                <SubtitleCueTable
-                  cues={subtitleCues}
-                  selectedId={selected?.id}
-                  playheadMs={playheadMs}
-                  onSelect={handleTimelineSelect}
-                  onChange={(cue) => updateSubtitle(cue)}
-                  loopSegment={subtitleTableLoop}
-                  onLoopSegmentChange={setSubtitleTableLoop}
-                  onSpeedChange={(speed) => {
-                    if (videoRef.current) videoRef.current.playbackRate = speed;
-                    if (remotionPlayerRef.current)
-                      remotionPlayerRef.current.setPlaybackRate?.(speed);
-                  }}
-                />
-              ) : (
-                <LocalEditorTimeline
-                  videoUrl={videoUrl}
-                  durationMs={durationMs}
-                  fps={remotionFps}
-                  subtitleCues={subtitleCues}
-                  hook={hook}
-                  selectedId={selected?.id}
-                  onSelect={(cue, type) =>
-                    handleTimelineSelect(cue, type, { openEditor: false })
-                  }
-                  onDoubleClick={handleTimelineSelect}
-                  onChange={handleTimelineChange}
-                  onChangeStart={beginTimelineEdit}
-                  onChangeEnd={endTimelineEdit}
-                  playheadMs={playheadMs}
-                  onSeek={handleSeek}
-                  timelineZoom={timelineZoom}
-                />
-              )}
-            </div>
+            <button
+              type="button"
+              role="separator"
+              aria-label="Resize preview and timeline"
+              aria-orientation="horizontal"
+              aria-valuemin={MIN_TIMELINE_HEIGHT}
+              aria-valuemax={2000}
+              aria-valuenow={Math.round(timelineHeight ?? 320)}
+              title="Resize preview and timeline"
+              onPointerDown={handleLayoutResizeStart}
+              onPointerMove={handleLayoutResizeMove}
+              onPointerUp={handleLayoutResizeEnd}
+              onPointerCancel={handleLayoutResizeEnd}
+              onKeyDown={handleLayoutResizeKeyDown}
+              className="group absolute left-0 right-0 top-0 z-40 flex h-2 -translate-y-1/2 cursor-row-resize items-center justify-center border-y border-transparent bg-transparent hover:border-cyan-300/50 focus:border-cyan-300/70 focus:outline-none"
+            >
+              <span className="h-px w-12 bg-zinc-600/70 transition-colors group-hover:bg-cyan-300" />
+            </button>
           </div>
         </main>
-        <button
-          type="button"
-          role="separator"
-          aria-label="Resize preview and timeline"
-          aria-orientation="horizontal"
-          aria-valuemin={MIN_TIMELINE_HEIGHT}
-          aria-valuemax={2000}
-          aria-valuenow={Math.round(timelineHeight ?? 320)}
-          title="Resize preview and timeline"
-          onPointerDown={handleLayoutResizeStart}
-          onPointerMove={handleLayoutResizeMove}
-          onPointerUp={handleLayoutResizeEnd}
-          onPointerCancel={handleLayoutResizeEnd}
-          onKeyDown={handleLayoutResizeKeyDown}
-          className="absolute left-0 right-0 z-40 flex h-2 -translate-y-1/2 cursor-row-resize items-center justify-center border-y border-transparent bg-transparent hover:border-cyan-300/50 focus:border-cyan-300/70 focus:outline-none"
-          style={{
-            top: timelineHeight
-              ? `calc(100% - ${timelineHeight}px - 4px)`
-              : "calc(60% - 4px)",
-          }}
-        >
-          <span className="h-px w-12 bg-zinc-600/70 transition-colors group-hover:bg-cyan-300" />
-        </button>
         <aside className="contents" aria-label="Inspector">
           <LocalEditorFeaturePanel
             title={activeFeatureLabel}

@@ -545,6 +545,34 @@ describe("LocalEditorTab", () => {
     ).toBeInTheDocument();
   });
 
+  it("deletes a subtitle cue from the cue table", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        initialEditorState={{
+          subtitleCues: [
+            { id: "cue-1", text: "Caption", startMs: 1000, endMs: 2000 },
+          ],
+          subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+          subtitleLanguage: "en",
+          hook: null,
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Subtitle table view" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete subtitle cue cue-1" }),
+    );
+
+    expect(confirm).toHaveBeenCalledWith("Remove this subtitle cue?");
+    expect(
+      screen.queryByRole("row", { name: /Caption/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("resizes the preview and timeline with the layout divider", () => {
     render(
       <LocalEditorTab
@@ -573,6 +601,23 @@ describe("LocalEditorTab", () => {
 
     expect(workspace.style.gridTemplateRows).toBe("minmax(0, 1fr) 352px");
     expect(divider).toHaveAttribute("aria-valuenow", "352");
+  });
+
+  it("anchors the resize handle to the timeline section", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    const shell = screen.getByTestId("local-editor-subtitle-workspace-shell");
+    const divider = screen.getByRole("separator", {
+      name: "Resize preview and timeline",
+    });
+
+    expect(shell).toContainElement(divider);
+    expect(divider).toHaveClass("top-0");
   });
 
   it("accumulates pointer movement from the divider grab point", () => {

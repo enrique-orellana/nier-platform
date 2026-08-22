@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { Trash2 } from "lucide-react";
 import { formatClock } from "./localEditorExport";
 
 const formatTimecode = (value, fps) => formatClock(value, fps);
@@ -86,6 +87,7 @@ export default function SubtitleCueTable({
   playheadMs = 0,
   onSelect,
   onChange,
+  onDelete,
   loopSegment = false,
   onLoopSegmentChange,
   onSpeedChange,
@@ -278,6 +280,20 @@ export default function SubtitleCueTable({
                         <span className="mr-2 shrink-0 rounded border border-violet-200/50 bg-violet-200/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-100">
                           CURRENT
                         </span>
+                      )}
+                      {onDelete && (
+                        <button
+                          type="button"
+                          aria-label={`Delete subtitle cue ${cue.id}`}
+                          title="Delete subtitle cue"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onDelete(cue.id);
+                          }}
+                          className="mr-2 shrink-0 rounded p-1 text-zinc-400 hover:bg-red-500/15 hover:text-red-200"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       )}
                     </div>
                   </td>
