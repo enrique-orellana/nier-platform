@@ -59,6 +59,38 @@ describe("LocalEditorTimeline", () => {
     });
   });
 
+  it("distinguishes the current cue from the selected cue and exposes full text", () => {
+    render(
+      <LocalEditorTimeline
+        durationMs={10000}
+        playheadMs={1500}
+        selectedId="cue-2"
+        subtitleCues={[
+          {
+            id: "cue-1",
+            text: "A long caption that needs a useful hover label",
+            startMs: 1000,
+            endMs: 2000,
+          },
+          { id: "cue-2", text: "Selected", startMs: 3000, endMs: 4000 },
+        ]}
+      />,
+    );
+
+    const currentCue = screen.getByRole("button", {
+      name: "A long caption that needs a useful hover label",
+    });
+    const selectedCue = screen.getByRole("button", { name: "Selected" });
+
+    expect(currentCue).toHaveAttribute("data-current-cue", "true");
+    expect(currentCue).toHaveAttribute(
+      "title",
+      "A long caption that needs a useful hover label",
+    );
+    expect(selectedCue).toHaveAttribute("aria-pressed", "true");
+    expect(selectedCue).toHaveAttribute("data-current-cue", "false");
+  });
+
   it("opens a cue editor only on double click", () => {
     const onSelect = vi.fn();
     const onDoubleClick = vi.fn();

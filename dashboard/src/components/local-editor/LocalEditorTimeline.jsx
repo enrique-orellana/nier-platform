@@ -13,6 +13,7 @@ function CueBlock({
   cue,
   durationMs,
   color,
+  current,
   selected,
   onSelect,
   onDoubleClick,
@@ -59,11 +60,23 @@ function CueBlock({
       role="button"
       tabIndex={0}
       aria-label={cue.text || "Timeline cue"}
+      aria-pressed={selected}
+      data-current-cue={current ? "true" : "false"}
+      data-cue-state={
+        current && selected
+          ? "selected-current"
+          : current
+            ? "current"
+            : selected
+              ? "selected"
+              : "normal"
+      }
+      title={cue.text || "Untitled cue"}
       onClick={() => onSelect(cue)}
       onDoubleClick={() => onDoubleClick?.(cue)}
       onPointerDown={(event) => beginDrag(event, "move")}
       onKeyDown={(event) => event.key === "Enter" && onSelect(cue)}
-      className={`absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[10px] text-white shadow-sm transition-shadow ${selected ? "ring-2 ring-white" : ""}`}
+      className={`absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[10px] text-white opacity-95 shadow-sm transition-[filter,box-shadow,border-color] hover:border-white/80 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200 ${current ? "border-cyan-300 shadow-[inset_0_2px_0_rgba(103,232,249,0.95)]" : "border-white/25"} ${selected ? "ring-2 ring-white" : ""} ${current && selected ? "ring-cyan-300" : ""}`}
       style={{
         left: `${left}%`,
         width: `${width}%`,
@@ -71,19 +84,26 @@ function CueBlock({
         zIndex: selected ? 10 : 1,
       }}
     >
+      {current && (
+        <span
+          data-testid="cue-current-indicator"
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-cyan-200"
+        />
+      )}
       <span className="pointer-events-none block truncate">
         {cue.text || "Untitled cue"}
       </span>
       <button
         type="button"
         aria-label="Resize cue start"
-        className="absolute left-0 top-0 h-full w-2 cursor-ew-resize opacity-0 hover:opacity-100"
+        className="absolute left-0 top-0 h-full w-2 cursor-ew-resize opacity-0 hover:opacity-100 focus-visible:opacity-100"
         onPointerDown={(event) => beginDrag(event, "start")}
       />
       <button
         type="button"
         aria-label="Resize cue end"
-        className="absolute right-0 top-0 h-full w-2 cursor-ew-resize opacity-0 hover:opacity-100"
+        className="absolute right-0 top-0 h-full w-2 cursor-ew-resize opacity-0 hover:opacity-100 focus-visible:opacity-100"
         onPointerDown={(event) => beginDrag(event, "end")}
       />
     </div>
@@ -96,6 +116,7 @@ function Track({
   durationMs,
   timelineWidth,
   color,
+  playheadMs,
   selectedId,
   onSelect,
   onDoubleClick,
@@ -122,6 +143,7 @@ function Track({
             cue={cue}
             durationMs={durationMs}
             color={color}
+            current={playheadMs >= cue.startMs && playheadMs < cue.endMs}
             selected={selectedId === cue.id}
             onSelect={onSelect}
             onDoubleClick={onDoubleClick}
@@ -324,6 +346,7 @@ export default function LocalEditorTimeline({
             durationMs={safeDuration}
             timelineWidth={timelineWidth}
             color="#f59e0b"
+            playheadMs={playheadMs}
             selectedId={selectedId}
             onSelect={(cue) => onSelect?.(cue, "hook")}
             onDoubleClick={(cue) => onDoubleClick?.(cue, "hook")}
@@ -338,6 +361,7 @@ export default function LocalEditorTimeline({
             durationMs={safeDuration}
             timelineWidth={timelineWidth}
             color="#8b5cf6"
+            playheadMs={playheadMs}
             selectedId={selectedId}
             onSelect={(cue) => onSelect?.(cue, "subtitle")}
             onDoubleClick={(cue) => onDoubleClick?.(cue, "subtitle")}

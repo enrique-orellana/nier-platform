@@ -175,6 +175,14 @@ export default function SubtitleCueTable({
             {sortedCues.map((cue, index) => {
               const current = cue.id === currentCue?.id;
               const selected = cue.id === selectedId;
+              const cueState =
+                current && selected
+                  ? "selected-current"
+                  : current
+                    ? "current"
+                    : selected
+                      ? "selected"
+                      : "normal";
               return (
                 <tr
                   key={cue.id}
@@ -185,6 +193,7 @@ export default function SubtitleCueTable({
                   aria-selected={selected}
                   aria-current={current ? "time" : undefined}
                   data-current-cue={current ? "true" : "false"}
+                  data-cue-state={cueState}
                   tabIndex={0}
                   onClick={() => scrollToCue(cue)}
                   onKeyDown={(event) =>

@@ -17,10 +17,7 @@ export default function LocalEditorSubtitleStyleInspector({
   const current = normalizeSubtitleStyle(style);
   const update = (key, value) => onChange({ ...current, [key]: value });
   return (
-    <div className="mt-4 space-y-5 border-t border-white/10 pt-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-white">Subtitle Style</h3>
-      </div>
+    <div className="space-y-5">
       <div>
         <span className={cleanLabelClass}>Position</span>
         <div

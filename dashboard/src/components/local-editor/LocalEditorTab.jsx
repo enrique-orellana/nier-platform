@@ -213,7 +213,9 @@ export default function LocalEditorTab({
   const [followAudio, setFollowAudio] = useState(true);
   const [videoViewMode, setVideoViewMode] = useState("auto");
   const [autoCrop, setAutoCrop] = useState(false);
-  const [subtitlesOpen, setSubtitlesOpen] = useState(false);
+  const [subtitleTrackActionsOpen, setSubtitleTrackActionsOpen] =
+    useState(true);
+  const [subtitleCueEditingOpen, setSubtitleCueEditingOpen] = useState(true);
   const [hookOpen, setHookOpen] = useState(false);
   const [activeFeature, setActiveFeature] = useState("details");
   const [subtitleView, setSubtitleView] = useState("timeline");
@@ -939,7 +941,6 @@ export default function LocalEditorTab({
         subtitleLanguage: String(payload.language || "en").toLowerCase(),
       }));
       setSelected(null);
-      setSubtitlesOpen(true);
     } catch (generationError) {
       setError(generationError.message || "Could not generate subtitles.");
     } finally {
@@ -1025,7 +1026,6 @@ export default function LocalEditorTab({
         })),
       }));
       setSelected(null);
-      setSubtitlesOpen(true);
     } catch (translationError) {
       setError(translationError.message || "Subtitle translation failed.");
     } finally {
@@ -1094,7 +1094,6 @@ export default function LocalEditorTab({
     }));
     setSelected({ id: nextCue.id, type: "subtitle" });
     setEditingSubtitle(nextCue);
-    setSubtitlesOpen(true);
   };
 
   const addMarker = () => {
@@ -1579,6 +1578,7 @@ export default function LocalEditorTab({
   };
 
   const reset = startNewProject;
+  const cueEditingOpen = subtitleCueEditingOpen;
   const projectsDialog = (
     <LocalEditorProjects
       open={projectsOpen}
@@ -2458,227 +2458,251 @@ export default function LocalEditorTab({
               />
             </div>
             <section
-              className={`rounded-xl border border-white/10 bg-white/[.02] p-4 ${activeFeature === "subtitles" ? "" : "sr-only"}`}
+              className={`overflow-hidden rounded-xl border border-white/10 bg-white/[.02] ${activeFeature === "subtitles" ? "" : "sr-only"}`}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3 px-4 py-3.5">
                 <button
                   type="button"
                   aria-label="Toggle Subtitles settings"
-                  aria-expanded={subtitlesOpen}
+                  aria-expanded="true"
                   aria-controls="subtitle-settings-panel"
-                  onClick={() => setSubtitlesOpen((open) => !open)}
-                  className="flex items-center gap-2 text-sm font-semibold text-white"
+                  onClick={() => setSubtitleView("table")}
+                  className="flex min-w-0 items-center gap-2 text-left"
                 >
-                  <ChevronDown
-                    size={16}
-                    className={`text-violet-300 transition-transform ${subtitlesOpen ? "" : "-rotate-90"}`}
-                  />
-                  Subtitles
+                  <span className="truncate text-sm font-semibold text-white">
+                    Subtitles
+                  </span>
+                  <span className="shrink-0 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+                    {subtitleCues.length}{" "}
+                    {subtitleCues.length === 1 ? "cue" : "cues"}
+                  </span>
                 </button>
-                <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Open subtitle table"
+                  title="Open subtitle table"
+                  onClick={() => setSubtitleView("table")}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-violet-300 transition-colors hover:bg-violet-500/10 hover:text-violet-200"
+                >
+                  <FileText size={16} aria-hidden="true" />
+                </button>
+              </div>
+              <div
+                id="subtitle-settings-panel"
+                className="border-t border-white/10 px-4 pb-4"
+              >
+                <section className="border-b border-white/10 pb-3">
                   <button
                     type="button"
-                    aria-label="Add subtitle cue"
-                    title="Add subtitle cue at the current playhead"
-                    onClick={addSubtitleCue}
-                    className="flex items-center gap-1 rounded-md bg-violet-500/15 px-2 py-1 text-[11px] font-semibold text-violet-200 hover:bg-violet-500/25"
+                    aria-label="Toggle Track actions"
+                    aria-expanded={subtitleTrackActionsOpen}
+                    aria-controls="subtitle-track-actions-panel"
+                    onClick={() => setSubtitleTrackActionsOpen((open) => !open)}
+                    className="flex w-full items-center gap-2 py-2 text-left"
                   >
-                    <Plus size={12} />
-                    Add cue
+                    <ChevronDown
+                      size={15}
+                      className={`shrink-0 text-violet-300 transition-transform ${subtitleTrackActionsOpen ? "" : "-rotate-90"}`}
+                    />
+                    <span className="text-xs font-semibold text-zinc-100">
+                      Track
+                    </span>
                   </button>
-                  <FileText size={16} className="text-violet-300" />
-                </div>
-              </div>
-              {subtitlesOpen && (
-                <div id="subtitle-settings-panel" className="mt-3">
-                  <input
-                    ref={subtitleInputRef}
-                    type="file"
-                    accept=".srt,.vtt,text/vtt,application/x-subrip"
-                    aria-label="Subtitle file"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] || null;
-                      setPendingSubtitle(file);
-                      importSubtitleFile(file);
-                    }}
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={handleImport}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-200 hover:bg-violet-500/20"
-                    >
-                      <Upload size={14} />
-                      Import subtitles
-                    </button>
-                    <button
-                      type="button"
-                      onClick={generateSubtitles}
-                      disabled={
-                        generatingSubtitles ||
-                        (!videoFile && !hasProjectClipSource)
-                      }
-                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-2 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {generatingSubtitles ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <FileText size={14} />
-                      )}
-                      {generatingSubtitles
-                        ? "Transcribing…"
-                        : "Generate subtitles"}
-                    </button>
-                  </div>
-                  <div className="mt-2">
-                    <button
-                      type="button"
-                      aria-label="Clean subtitle dots"
-                      onClick={cleanSubtitleDots}
-                      disabled={busy || !subtitleCues.length}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Clean subtitle dots
-                    </button>
-                  </div>
-                  <p className="mt-2 text-[11px] leading-5 text-zinc-500">
-                    Import timed .srt or .vtt files, then edit every cue
-                    directly on the timeline.
-                  </p>
-                  {pendingSubtitle && (
-                    <p className="mt-2 truncate text-xs text-violet-300">
-                      Ready: {pendingSubtitle.name}
-                    </p>
-                  )}
-                  <div className="mt-4 overflow-hidden rounded-xl border border-cyan-300/20 bg-gradient-to-br from-[#132126] via-[#10181b] to-[#101014] shadow-[0_12px_28px_rgba(0,0,0,0.18)]">
-                    <div className="flex items-start gap-3 border-b border-white/8 px-3.5 py-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/20">
-                        <Languages size={15} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <h3 className="text-xs font-bold tracking-wide text-white">
-                            Translate subtitles
-                          </h3>
-                          <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
-                            {subtitleCues.length}{" "}
-                            {subtitleCues.length === 1 ? "cue" : "cues"}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-[11px] leading-4 text-zinc-400">
-                          Translate the text while timings stay intact.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="space-y-3 p-3.5">
+                  {subtitleTrackActionsOpen && (
+                    <div id="subtitle-track-actions-panel" className="pt-2">
+                      <input
+                        ref={subtitleInputRef}
+                        type="file"
+                        accept=".srt,.vtt,text/vtt,application/x-subrip"
+                        aria-label="Subtitle file"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] || null;
+                          setPendingSubtitle(file);
+                          importSubtitleFile(file);
+                        }}
+                      />
                       <div className="grid grid-cols-2 gap-2">
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                          Source
-                          <div className="relative mt-1.5">
-                            <select
-                              aria-label="Subtitle source language"
-                              value={subtitleLanguage}
-                              onChange={(event) =>
-                                updateSubtitleLanguage(event.target.value)
-                              }
-                              disabled={translatingSubtitles}
-                              style={{ colorScheme: "dark" }}
-                              className="w-full appearance-none rounded-lg border border-white/10 bg-white/[.06] px-3 py-2.5 pr-8 text-xs font-medium normal-case tracking-normal text-zinc-100 outline-none transition-colors hover:border-white/20 focus:border-cyan-300/50"
-                            >
-                              {Object.entries(SUBTITLE_LANGUAGES).map(
-                                ([code, name]) => (
-                                  <option
-                                    key={code}
-                                    value={code}
-                                    style={{
-                                      backgroundColor: "#171e21",
-                                      color: "#f4f4f5",
-                                    }}
-                                  >
-                                    {name}
-                                  </option>
-                                ),
-                              )}
-                            </select>
-                            <ChevronDown
-                              size={14}
-                              className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
-                            />
-                          </div>
-                        </label>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                          Target
-                          <div className="relative mt-1.5">
-                            <select
-                              aria-label="Translation target language"
-                              value={translationTarget}
-                              onChange={(event) =>
-                                setTranslationTarget(event.target.value)
-                              }
-                              disabled={translatingSubtitles}
-                              style={{ colorScheme: "dark" }}
-                              className="w-full appearance-none rounded-lg border border-white/10 bg-white/[.06] px-3 py-2.5 pr-8 text-xs font-medium normal-case tracking-normal text-zinc-100 outline-none transition-colors hover:border-white/20 focus:border-cyan-300/50"
-                            >
-                              {Object.entries(SUBTITLE_LANGUAGES).map(
-                                ([code, name]) => (
-                                  <option
-                                    key={code}
-                                    value={code}
-                                    disabled={code === subtitleLanguage}
-                                    style={{
-                                      backgroundColor: "#171e21",
-                                      color:
-                                        code === subtitleLanguage
-                                          ? "#a1a1aa"
-                                          : "#f4f4f5",
-                                    }}
-                                  >
-                                    {name}
-                                    {code === subtitleLanguage
-                                      ? " (source)"
-                                      : ""}
-                                  </option>
-                                ),
-                              )}
-                            </select>
-                            <ChevronDown
-                              size={14}
-                              className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
-                            />
-                          </div>
-                        </label>
+                        <button
+                          type="button"
+                          onClick={handleImport}
+                          className="flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-transparent px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-violet-300/30 hover:bg-white/[.04] hover:text-violet-200"
+                        >
+                          <Upload size={14} />
+                          Import subtitles
+                        </button>
+                        <button
+                          type="button"
+                          onClick={generateSubtitles}
+                          disabled={
+                            generatingSubtitles ||
+                            (!videoFile && !hasProjectClipSource)
+                          }
+                          className="flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-transparent px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-fuchsia-300/30 hover:bg-white/[.04] hover:text-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {generatingSubtitles ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <FileText size={14} />
+                          )}
+                          {generatingSubtitles
+                            ? "Transcribing…"
+                            : "Generate subtitles"}
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        aria-label="Translate subtitles"
-                        onClick={translateSubtitles}
-                        disabled={
-                          translatingSubtitles ||
-                          !subtitleCues.length ||
-                          translationTarget === subtitleLanguage
-                        }
-                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-cyan-400 to-sky-500 px-3 py-2.5 text-xs font-bold text-white shadow-[0_8px_18px_rgba(34,211,238,0.16)] transition-all hover:from-cyan-300 hover:to-sky-400 hover:shadow-[0_10px_24px_rgba(34,211,238,0.24)] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none"
-                      >
-                        {translatingSubtitles ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <Languages size={14} />
-                        )}
-                        {translatingSubtitles
-                          ? "Translating…"
-                          : "Translate subtitles"}
-                      </button>
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          aria-label="Clean subtitle dots"
+                          onClick={cleanSubtitleDots}
+                          disabled={busy || !subtitleCues.length}
+                          className="flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-transparent px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-amber-300/30 hover:bg-white/[.04] hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Clean subtitle dots
+                        </button>
+                      </div>
+                      {pendingSubtitle && (
+                        <p className="mt-2 truncate text-xs text-violet-300">
+                          Ready: {pendingSubtitle.name}
+                        </p>
+                      )}
+                      <div className="mt-3 border-t border-white/10 pt-3">
+                        <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                          <Languages size={14} className="text-cyan-300" />
+                          Translate
+                        </div>
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                              Source
+                              <div className="relative mt-1.5">
+                                <select
+                                  aria-label="Subtitle source language"
+                                  value={subtitleLanguage}
+                                  onChange={(event) =>
+                                    updateSubtitleLanguage(event.target.value)
+                                  }
+                                  disabled={translatingSubtitles}
+                                  style={{ colorScheme: "dark" }}
+                                  className="w-full appearance-none rounded-md border border-white/10 bg-transparent px-2.5 py-2 pr-8 text-xs text-zinc-200 outline-none transition-colors hover:border-white/20 focus:border-cyan-300/50"
+                                >
+                                  {Object.entries(SUBTITLE_LANGUAGES).map(
+                                    ([code, name]) => (
+                                      <option
+                                        key={code}
+                                        value={code}
+                                        style={{
+                                          backgroundColor: "#171e21",
+                                          color: "#f4f4f5",
+                                        }}
+                                      >
+                                        {name}
+                                      </option>
+                                    ),
+                                  )}
+                                </select>
+                                <ChevronDown
+                                  size={14}
+                                  className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
+                                />
+                              </div>
+                            </label>
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                              Target
+                              <div className="relative mt-1.5">
+                                <select
+                                  aria-label="Translation target language"
+                                  value={translationTarget}
+                                  onChange={(event) =>
+                                    setTranslationTarget(event.target.value)
+                                  }
+                                  disabled={translatingSubtitles}
+                                  style={{ colorScheme: "dark" }}
+                                  className="w-full appearance-none rounded-md border border-white/10 bg-transparent px-2.5 py-2 pr-8 text-xs text-zinc-200 outline-none transition-colors hover:border-white/20 focus:border-cyan-300/50"
+                                >
+                                  {Object.entries(SUBTITLE_LANGUAGES).map(
+                                    ([code, name]) => (
+                                      <option
+                                        key={code}
+                                        value={code}
+                                        disabled={code === subtitleLanguage}
+                                        style={{
+                                          backgroundColor: "#171e21",
+                                          color:
+                                            code === subtitleLanguage
+                                              ? "#a1a1aa"
+                                              : "#f4f4f5",
+                                        }}
+                                      >
+                                        {name}
+                                        {code === subtitleLanguage
+                                          ? " (source)"
+                                          : ""}
+                                      </option>
+                                    ),
+                                  )}
+                                </select>
+                                <ChevronDown
+                                  size={14}
+                                  className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
+                                />
+                              </div>
+                            </label>
+                          </div>
+                          <button
+                            type="button"
+                            aria-label="Translate subtitles"
+                            onClick={translateSubtitles}
+                            disabled={
+                              translatingSubtitles ||
+                              !subtitleCues.length ||
+                              translationTarget === subtitleLanguage
+                            }
+                            className="flex w-full items-center justify-center gap-2 rounded-md border border-cyan-300/20 bg-cyan-400/10 px-3 py-2 text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-45"
+                          >
+                            {translatingSubtitles ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <Languages size={14} />
+                            )}
+                            {translatingSubtitles
+                              ? "Translating…"
+                              : "Translate subtitles"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <LocalEditorSubtitleStyleInspector
-                    style={subtitleStyle}
-                    onChange={updateSubtitleStyle}
-                    onRemove={removeSubtitles}
-                    hasCues={subtitleCues.length > 0}
-                  />
-                </div>
-              )}
+                  )}
+                </section>
+                <section className="pt-3">
+                  <button
+                    type="button"
+                    aria-label="Toggle Cue editing"
+                    aria-expanded={cueEditingOpen}
+                    aria-controls="subtitle-cue-editing-panel"
+                    onClick={() => setSubtitleCueEditingOpen((open) => !open)}
+                    className="flex w-full items-center gap-2 py-2 text-left"
+                  >
+                    <ChevronDown
+                      size={15}
+                      className={`shrink-0 text-violet-300 transition-transform ${cueEditingOpen ? "" : "-rotate-90"}`}
+                    />
+                    <span className="text-xs font-semibold text-zinc-100">
+                      Style
+                    </span>
+                  </button>
+                  {cueEditingOpen && (
+                    <div id="subtitle-cue-editing-panel" className="pt-2">
+                      <LocalEditorSubtitleStyleInspector
+                        style={subtitleStyle}
+                        onChange={updateSubtitleStyle}
+                        onRemove={removeSubtitles}
+                        hasCues={subtitleCues.length > 0}
+                      />
+                    </div>
+                  )}
+                </section>
+              </div>
             </section>
             <section
               className={`rounded-xl border border-white/10 bg-white/[.02] p-4 ${activeFeature === "viral-hook" ? "" : "sr-only"}`}

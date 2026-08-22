@@ -1181,7 +1181,9 @@ describe("LocalEditorTab", () => {
     fireEvent.change(screen.getByLabelText("Subtitle source language"), {
       target: { value: "it" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add subtitle cue" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add cue to timeline" }),
+    );
     fireEvent.change(screen.getByLabelText("Subtitle text"), {
       target: { value: "private subtitle" },
     });
@@ -1284,18 +1286,35 @@ describe("LocalEditorTab", () => {
 
   it("switches between the subtitle timeline and cue table", async () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:demo");
-    render(<LocalEditorTab />);
+    render(
+      <LocalEditorTab
+        initialEditorState={{
+          subtitleCues: [
+            { id: "cue-1", text: "Hello", startMs: 0, endMs: 1000 },
+          ],
+        }}
+      />,
+    );
     fireEvent.change(screen.getByLabelText(/upload video/i), {
       target: { files: [makeVideoFile()] },
     });
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /add subtitle cue/i }),
+        screen.getByRole("button", { name: /add cue to timeline/i }),
       ).toBeInTheDocument(),
     );
 
     expect(
       screen.getByRole("tab", { name: "Timeline view" }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open subtitle table" }),
+    );
+    expect(
+      screen.getByRole("columnheader", { name: "Text" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Export Subtitles" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Subtitle table view" }));
     expect(
@@ -1328,10 +1347,12 @@ describe("LocalEditorTab", () => {
     });
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /add subtitle cue/i }),
+        screen.getByRole("button", { name: /add cue to timeline/i }),
       ).toBeInTheDocument(),
     );
-    fireEvent.click(screen.getByRole("button", { name: /add subtitle cue/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /add cue to timeline/i }),
+    );
     fireEvent.change(screen.getByLabelText("Subtitle text"), {
       target: { value: "One two" },
     });
@@ -1541,9 +1562,20 @@ describe("LocalEditorTab", () => {
     expect(video).toHaveClass("object-cover");
   });
 
-  it("collapses overlay settings and exposes custom video controls", async () => {
+  it("keeps subtitle settings expanded and exposes custom video controls", async () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:demo");
-    render(<LocalEditorTab />);
+    render(
+      <LocalEditorTab
+        initialEditorState={{
+          subtitleCues: [
+            { id: "existing-cue", text: "Existing", startMs: 0, endMs: 1000 },
+          ],
+          subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+          subtitleLanguage: "en",
+          hook: null,
+        }}
+      />,
+    );
     fireEvent.change(screen.getByLabelText(/upload video/i), {
       target: { files: [makeVideoFile()] },
     });
@@ -1566,19 +1598,26 @@ describe("LocalEditorTab", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /toggle subtitles settings/i }),
-    ).toHaveAttribute("aria-expanded", "false");
+    ).toHaveAttribute("aria-expanded", "true");
     expect(
       screen.getByRole("button", { name: /toggle viral hook settings/i }),
     ).toHaveAttribute("aria-expanded", "false");
     expect(
-      screen.queryByRole("button", { name: /import subtitles/i }),
-    ).not.toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: /toggle subtitles settings/i }),
-    );
+      screen.getByRole("button", { name: /import subtitles/i }),
+    ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /toggle subtitles settings/i }),
+      screen.getByRole("button", { name: /toggle track actions/i }),
     ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("button", { name: /toggle cue editing/i }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByText("1 cue")).toHaveLength(1);
+    expect(
+      screen.queryByText(/Import, generate, translate, and clean the track/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Translate the text while timings stay intact/i),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /import subtitles/i }),
     ).toBeInTheDocument();
@@ -1640,7 +1679,7 @@ describe("LocalEditorTab", () => {
     expect(screen.getByLabelText("Translation target language")).toHaveStyle({
       colorScheme: "dark",
     });
-    expect(screen.getByText(/timings stay intact/i)).toBeInTheDocument();
+    expect(screen.getByText("Translate")).toBeInTheDocument();
     const subtitleFile = new File(["subtitle"], "captions.srt", {
       type: "application/x-subrip",
     });
@@ -2221,13 +2260,13 @@ describe("LocalEditorTab", () => {
     });
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /add subtitle cue/i }),
+        screen.getByRole("button", { name: /add cue to timeline/i }),
       ).toBeInTheDocument(),
     );
 
     for (let index = 0; index < 12; index += 1)
       fireEvent.click(
-        screen.getByRole("button", { name: /add subtitle cue/i }),
+        screen.getByRole("button", { name: /add cue to timeline/i }),
       );
     for (let index = 0; index < 10; index += 1)
       fireEvent.click(
@@ -2250,11 +2289,13 @@ describe("LocalEditorTab", () => {
     });
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /add subtitle cue/i }),
+        screen.getByRole("button", { name: /add cue to timeline/i }),
       ).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /add subtitle cue/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /add cue to timeline/i }),
+    );
 
     const saved = JSON.parse(
       localStorage.getItem("openshorts_local_editor_state_v1"),
@@ -2455,9 +2496,13 @@ describe("LocalEditorTab", () => {
       "TEXTAREA",
     );
     expect(screen.getByText("Duration")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Top" })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Top" }).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Center" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Bottom" })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Bottom" }).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Small" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Bounce" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /remove hook/i }));
@@ -2477,11 +2522,13 @@ describe("LocalEditorTab", () => {
     });
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /add subtitle cue/i }),
+        screen.getByRole("button", { name: /add cue to timeline/i }),
       ).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /add subtitle cue/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /add cue to timeline/i }),
+    );
     expect(screen.getByLabelText("Subtitle text")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /delete subtitle cue/i }),
@@ -2508,11 +2555,13 @@ describe("LocalEditorTab", () => {
     });
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /add subtitle cue/i }),
+        screen.getByRole("button", { name: /add cue to timeline/i }),
       ).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /add subtitle cue/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /add cue to timeline/i }),
+    );
     expect(screen.getByLabelText("Subtitle text")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Save cue" }));
 
@@ -2529,11 +2578,13 @@ describe("LocalEditorTab", () => {
     });
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /add subtitle cue/i }),
+        screen.getByRole("button", { name: /add cue to timeline/i }),
       ).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /add subtitle cue/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /add cue to timeline/i }),
+    );
     fireEvent.change(screen.getByLabelText("Subtitle text"), {
       target: { value: "Undo me" },
     });
@@ -2564,11 +2615,13 @@ describe("LocalEditorTab", () => {
     });
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /add subtitle cue/i }),
+        screen.getByRole("button", { name: /add cue to timeline/i }),
       ).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /add subtitle cue/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /add cue to timeline/i }),
+    );
     const cue = screen.getByRole("button", { name: "Timeline cue" });
     act(() =>
       cue.dispatchEvent(
@@ -2697,7 +2750,9 @@ describe("LocalEditorTab", () => {
       ).toEqual(["Demo project"]),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /add subtitle cue/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /add cue to timeline/i }),
+    );
     await waitFor(
       async () =>
         expect(

@@ -83,6 +83,31 @@ describe("SubtitleCueTable", () => {
     expect(currentRow).toHaveAttribute("data-current-cue", "true");
   });
 
+  it("keeps selected and current rows visually distinguishable", () => {
+    render(
+      <SubtitleCueTable
+        cues={[
+          { id: "cue-1", text: "Current caption", startMs: 0, endMs: 1000 },
+          { id: "cue-2", text: "Selected caption", startMs: 1000, endMs: 2000 },
+        ]}
+        playheadMs={500}
+        selectedId="cue-2"
+        onSelect={vi.fn()}
+        onChange={vi.fn()}
+      />,
+    );
+
+    const currentRow = screen.getByRole("row", { name: /Current caption/ });
+    const selectedRow = screen.getByRole("row", { name: /Selected caption/ });
+
+    expect(currentRow).toHaveAttribute("data-current-cue", "true");
+    expect(currentRow).toHaveAttribute("aria-selected", "false");
+    expect(currentRow).toHaveAttribute("data-cue-state", "current");
+    expect(selectedRow).toHaveAttribute("data-current-cue", "false");
+    expect(selectedRow).toHaveAttribute("aria-selected", "true");
+    expect(selectedRow).toHaveAttribute("data-cue-state", "selected");
+  });
+
   it("displays cue times as frame-accurate timecode", () => {
     render(
       <SubtitleCueTable
