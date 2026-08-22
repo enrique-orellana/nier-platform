@@ -4,7 +4,7 @@ import LocalEditorFeatureRail from "./LocalEditorFeatureRail";
 import { LOCAL_EDITOR_FEATURES } from "./localEditorFeatures";
 
 describe("LocalEditorFeatureRail", () => {
-  it("renders the four local-editor feature buttons and marks Details active", () => {
+  it("renders the local-editor feature buttons and marks Details active", () => {
     render(
       <LocalEditorFeatureRail activeFeature="details" onSelect={vi.fn()} />,
     );
@@ -14,6 +14,7 @@ describe("LocalEditorFeatureRail", () => {
       "Subtitles",
       "Viral Hook",
       "Project",
+      "Versions",
     ]);
     expect(
       screen.getByRole("navigation", { name: "Editor features" }),

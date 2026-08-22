@@ -93,6 +93,7 @@ export interface LayoutConfig {
 export interface ShortVideoProps {
   videoUrl: string;
   videoStartSeconds?: number;
+  playbackRate?: number;
   onAutoPlayError?: () => void;
   onMediaTimeChange?: (mediaTimeMs: number | null) => void;
   durationInFrames: number;

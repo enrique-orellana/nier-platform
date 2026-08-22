@@ -168,6 +168,19 @@ describe("ShortVideo media source", () => {
     expect(screen.queryByTestId("html5-video")).not.toBeInTheDocument();
   });
 
+  it("applies the controlled playback rate to the browser video", () => {
+    const { rerender } = render(
+      <ShortVideo videoUrl="/videos/clip.mp4" playbackRate={1} />,
+    );
+
+    const video = screen.getByTestId("native-browser-video");
+    expect(video.playbackRate).toBe(1);
+
+    rerender(<ShortVideo videoUrl="/videos/clip.mp4" playbackRate={1.5} />);
+
+    expect(video.playbackRate).toBe(1.5);
+  });
+
   it("keeps both media layers for the Remotion renderer", () => {
     remotionVideoPropsMock.mockClear();
     remotionEnvironmentMock.isRendering = true;

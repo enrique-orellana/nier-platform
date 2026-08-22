@@ -976,8 +976,10 @@ export default function FullScreenEditor({
           </>
         }
         sidePanel={
+          editorActions ? <EditorActionToolbar {...editorActions} /> : null
+        }
+        versionHistoryPanel={
           <>
-            {editorActions && <EditorActionToolbar {...editorActions} />}
             <section
               className="rounded-xl border border-white/10 bg-white/[.02] p-4"
               aria-label="Version history"

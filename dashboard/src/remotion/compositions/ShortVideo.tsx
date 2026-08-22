@@ -25,6 +25,7 @@ export const getMediaTimeMs = (
 const BrowserVideo: React.FC<{
   videoUrl: string;
   videoStartSeconds: number;
+  playbackRate: number;
   onAutoPlayError?: () => void;
   onMediaTimeChange?: (mediaTimeMs: number | null) => void;
   fps: number;
@@ -32,6 +33,7 @@ const BrowserVideo: React.FC<{
 }> = ({
   videoUrl,
   videoStartSeconds,
+  playbackRate,
   onAutoPlayError,
   onMediaTimeChange,
   fps,
@@ -66,6 +68,12 @@ const BrowserVideo: React.FC<{
       );
     };
   }, [playVideo, timeline.audioAndVideoTags, videoId]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.playbackRate = playbackRate;
+  }, [playbackRate, videoUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -157,6 +165,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     videoUrl,
     videoFit,
     videoStartSeconds = 0,
+    playbackRate = 1,
     onAutoPlayError,
     onMediaTimeChange,
     fps = 30,
@@ -233,6 +242,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
           <BrowserVideo
             videoUrl={videoUrl}
             videoStartSeconds={videoStartSeconds}
+            playbackRate={playbackRate}
             onAutoPlayError={onAutoPlayError}
             onMediaTimeChange={
               hasActiveSubtitles || onMediaTimeChange

@@ -115,6 +115,7 @@ function RemotionPreview({
     () => ({
       videoUrl,
       videoStartSeconds,
+      playbackRate,
       durationInFrames,
       fps,
       width,
@@ -130,6 +131,7 @@ function RemotionPreview({
     [
       videoUrl,
       videoStartSeconds,
+      playbackRate,
       durationInFrames,
       fps,
       width,

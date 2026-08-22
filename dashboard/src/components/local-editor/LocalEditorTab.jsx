@@ -136,6 +136,7 @@ export default function LocalEditorTab({
   onClose = null,
   headerActions = null,
   sidePanel = null,
+  versionHistoryPanel = null,
   footer = null,
   persistHistory = true,
   allowLocalUpload = true,
@@ -2016,6 +2017,54 @@ export default function LocalEditorTab({
                   </button>
                 </div>
                 <div className="ml-auto flex items-center gap-0.5">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      aria-label="Playback speed"
+                      aria-haspopup="listbox"
+                      aria-expanded={playbackRateMenuOpen}
+                      onClick={() =>
+                        setPlaybackRateMenuOpen((current) => !current)
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape")
+                          setPlaybackRateMenuOpen(false);
+                      }}
+                      className="flex h-7 min-h-7 shrink-0 items-center gap-1 rounded-md border border-white/10 bg-white/[.02] px-2 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100"
+                    >
+                      <span>Speed</span>
+                      <span className="font-medium text-zinc-100">
+                        {playbackRate.toFixed(2)}x
+                      </span>
+                      <ChevronDown
+                        size={13}
+                        className={`transition-transform ${playbackRateMenuOpen ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                    {playbackRateMenuOpen && (
+                      <div
+                        role="listbox"
+                        aria-label="Playback speed options"
+                        className="absolute bottom-8 right-0 z-40 min-w-full overflow-hidden rounded-md border border-white/10 bg-[#1b1b20] p-1 shadow-xl"
+                      >
+                        {PLAYBACK_RATES.map((rate) => (
+                          <button
+                            key={rate}
+                            type="button"
+                            role="option"
+                            aria-selected={playbackRate === rate}
+                            onClick={() => {
+                              setPlaybackRate(rate);
+                              setPlaybackRateMenuOpen(false);
+                            }}
+                            className={`block w-full rounded px-2 py-1.5 text-left text-[11px] ${playbackRate === rate ? "bg-violet-500/20 text-violet-200" : "text-zinc-300 hover:bg-white/10 hover:text-white"}`}
+                          >
+                            {rate.toFixed(2)}x
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
                     aria-label={isMuted ? "Unmute video" : "Mute video"}
@@ -2163,101 +2212,51 @@ export default function LocalEditorTab({
                   </button>
                 </div>
                 <div className="flex min-w-0 items-center gap-2">
-                  <div
-                    data-testid="local-editor-playback-controls"
-                    className="flex h-7 shrink-0 items-center gap-1"
-                  >
-                    {subtitleView === "table" && (
-                      <>
-                        <label className="group inline-flex h-7 shrink-0 cursor-pointer items-center">
-                          <input
-                            aria-label="Loop segment"
-                            type="checkbox"
-                            checked={loopSegment}
-                            onChange={(event) =>
-                              setLoopSegment(event.target.checked)
-                            }
-                            className="peer sr-only"
-                          />
-                          <span className="flex h-7 items-center rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors group-hover:border-white/20 group-hover:text-zinc-200 peer-checked:border-violet-400/50 peer-checked:bg-violet-500/15 peer-checked:text-violet-200">
-                            Loop
-                          </span>
-                        </label>
-                        <label className="group inline-flex h-7 shrink-0 cursor-pointer items-center">
-                          <input
-                            aria-label="Follow audio"
-                            type="checkbox"
-                            checked={followAudio}
-                            onChange={(event) =>
-                              setFollowAudio(event.target.checked)
-                            }
-                            className="peer sr-only"
-                          />
-                          <span className="flex h-7 items-center rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors group-hover:border-white/20 group-hover:text-zinc-200 peer-checked:border-violet-400/50 peer-checked:bg-violet-500/15 peer-checked:text-violet-200">
-                            Follow
-                          </span>
-                        </label>
-                        <button
-                          type="button"
-                          aria-label="Scroll to current subtitle"
-                          title="Scroll to current subtitle"
-                          onClick={scrollToCurrentSubtitle}
-                          disabled={!subtitleCues.length}
-                          className="flex h-7 shrink-0 items-center rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          Current
-                        </button>
-                      </>
-                    )}
-                    <div className="relative">
+                  {subtitleView === "table" && (
+                    <div
+                      data-testid="local-editor-playback-controls"
+                      className="flex h-7 shrink-0 items-center gap-1"
+                    >
+                      <label className="group inline-flex h-7 shrink-0 cursor-pointer items-center">
+                        <input
+                          aria-label="Loop segment"
+                          type="checkbox"
+                          checked={loopSegment}
+                          onChange={(event) =>
+                            setLoopSegment(event.target.checked)
+                          }
+                          className="peer sr-only"
+                        />
+                        <span className="flex h-7 items-center rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors group-hover:border-white/20 group-hover:text-zinc-200 peer-checked:border-violet-400/50 peer-checked:bg-violet-500/15 peer-checked:text-violet-200">
+                          Loop
+                        </span>
+                      </label>
+                      <label className="group inline-flex h-7 shrink-0 cursor-pointer items-center">
+                        <input
+                          aria-label="Follow audio"
+                          type="checkbox"
+                          checked={followAudio}
+                          onChange={(event) =>
+                            setFollowAudio(event.target.checked)
+                          }
+                          className="peer sr-only"
+                        />
+                        <span className="flex h-7 items-center rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors group-hover:border-white/20 group-hover:text-zinc-200 peer-checked:border-violet-400/50 peer-checked:bg-violet-500/15 peer-checked:text-violet-200">
+                          Follow
+                        </span>
+                      </label>
                       <button
                         type="button"
-                        aria-label="Playback speed"
-                        aria-haspopup="listbox"
-                        aria-expanded={playbackRateMenuOpen}
-                        onClick={() =>
-                          setPlaybackRateMenuOpen((current) => !current)
-                        }
-                        onKeyDown={(event) => {
-                          if (event.key === "Escape")
-                            setPlaybackRateMenuOpen(false);
-                        }}
-                        className="flex h-7 min-h-7 shrink-0 items-center gap-1 rounded-md border border-white/10 bg-white/[.02] px-2 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100"
+                        aria-label="Scroll to current subtitle"
+                        title="Scroll to current subtitle"
+                        onClick={scrollToCurrentSubtitle}
+                        disabled={!subtitleCues.length}
+                        className="flex h-7 shrink-0 items-center rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        <span>Speed</span>
-                        <span className="font-medium text-zinc-100">
-                          {playbackRate.toFixed(2)}x
-                        </span>
-                        <ChevronDown
-                          size={13}
-                          className={`transition-transform ${playbackRateMenuOpen ? "rotate-180" : ""}`}
-                        />
+                        Current
                       </button>
-                      {playbackRateMenuOpen && (
-                        <div
-                          role="listbox"
-                          aria-label="Playback speed options"
-                          className="absolute right-0 top-8 z-40 min-w-full overflow-hidden rounded-md border border-white/10 bg-[#1b1b20] p-1 shadow-xl"
-                        >
-                          {PLAYBACK_RATES.map((rate) => (
-                            <button
-                              key={rate}
-                              type="button"
-                              role="option"
-                              aria-selected={playbackRate === rate}
-                              onClick={() => {
-                                setPlaybackRate(rate);
-                                setPlaybackRateMenuOpen(false);
-                              }}
-                              className={`block w-full rounded px-2 py-1.5 text-left text-[11px] ${playbackRate === rate ? "bg-violet-500/20 text-violet-200" : "text-zinc-300 hover:bg-white/10 hover:text-white"}`}
-                            >
-                              {rate.toFixed(2)}x
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
-                  </div>
+                  )}
                   <div
                     role="tablist"
                     aria-label="Subtitle editing view"
@@ -2631,8 +2630,18 @@ export default function LocalEditorTab({
             >
               {sidePanel || (
                 <p className="rounded-xl border border-white/10 bg-white/[.02] p-4 text-xs leading-5 text-zinc-500">
-                  Open the editor from a project to see project actions and
-                  version history.
+                  Open the editor from a project to see project actions.
+                </p>
+              )}
+            </div>
+            <div
+              role="region"
+              aria-label="Version History context"
+              className={`space-y-4 ${activeFeature === "versions" ? "" : "sr-only"}`}
+            >
+              {versionHistoryPanel || (
+                <p className="rounded-xl border border-white/10 bg-white/[.02] p-4 text-xs leading-5 text-zinc-500">
+                  Version history is available for saved project versions.
                 </p>
               )}
             </div>

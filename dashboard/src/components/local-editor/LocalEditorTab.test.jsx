@@ -259,7 +259,7 @@ describe("LocalEditorTab", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps speed general and shows cue-only controls in the cue table view", async () => {
+  it("keeps speed in video controls and shows cue-only controls in the cue table view", async () => {
     render(
       <LocalEditorTab
         initialVideoUrl="/videos/project.mp4"
@@ -278,34 +278,32 @@ describe("LocalEditorTab", () => {
     await waitFor(() =>
       expect(screen.getByTestId("local-editor-player")).toBeInTheDocument(),
     );
-    const playbackControls = screen.getByTestId(
-      "local-editor-playback-controls",
-    );
+    const videoControls = screen.getByTestId("local-editor-video-controls");
     expect(
-      within(playbackControls).getByRole("button", {
+      within(videoControls).getByRole("button", {
         name: "Playback speed",
       }),
     ).toBeInTheDocument();
     expect(
-      within(playbackControls).queryByLabelText("Loop segment"),
-    ).not.toBeInTheDocument();
-    expect(
-      within(playbackControls).queryByRole("button", {
-        name: "Scroll to current subtitle",
-      }),
+      screen.queryByTestId("local-editor-playback-controls"),
     ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Subtitle table view" }));
 
-    expect(screen.getByTestId("local-editor-playback-controls")).toBe(
-      playbackControls,
+    const playbackControls = screen.getByTestId(
+      "local-editor-playback-controls",
     );
     expect(
       screen.getByTestId("local-editor-subtitle-toolbar"),
     ).toContainElement(playbackControls);
     expect(
-      within(playbackControls).getByLabelText("Playback speed"),
+      within(videoControls).getByRole("button", { name: "Playback speed" }),
     ).toBeInTheDocument();
+    expect(
+      within(playbackControls).queryByRole("button", {
+        name: "Playback speed",
+      }),
+    ).not.toBeInTheDocument();
     expect(
       within(playbackControls).getByLabelText("Loop segment"),
     ).toBeInTheDocument();
@@ -317,11 +315,6 @@ describe("LocalEditorTab", () => {
         name: "Scroll to current subtitle",
       }),
     ).toBeInTheDocument();
-    expect(
-      within(
-        screen.getByTestId("local-editor-header-utility"),
-      ).queryByLabelText("Playback speed"),
-    ).not.toBeInTheDocument();
     expect(screen.queryByText("Playback Controls:")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Timeline zoom")).not.toBeInTheDocument();
   });
@@ -496,6 +489,31 @@ describe("LocalEditorTab", () => {
     expect(
       screen.getByRole("region", { name: "Project context" }),
     ).toContainElement(screen.getByTestId("project-side-panel"));
+  });
+
+  it("keeps version history in its own feature context", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        sidePanel={<div data-testid="project-side-panel">Project actions</div>}
+        versionHistoryPanel={
+          <div data-testid="version-history-panel">Version history</div>
+        }
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Versions" }));
+
+    expect(screen.getByRole("button", { name: "Versions" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      screen.getByRole("region", { name: "Version History context" }),
+    ).toContainElement(screen.getByTestId("version-history-panel"));
+    expect(screen.getByRole("region", { name: "Project context" })).toHaveClass(
+      "sr-only",
+    );
   });
 
   it("shows a local-only upload state", () => {
