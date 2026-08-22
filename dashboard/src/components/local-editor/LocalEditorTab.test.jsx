@@ -197,6 +197,38 @@ describe("LocalEditorTab", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps the subtitle workspace visible inside the resizable editor viewport", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    const workspace = screen.getByTestId("local-editor-workspace");
+    expect(workspace).toHaveClass(
+      "flex-1",
+      "min-h-0",
+      "overflow-hidden",
+      "gap-2",
+      "p-0",
+    );
+    expect(workspace).toHaveClass(
+      "xl:grid-rows-[minmax(0,1fr)_minmax(280px,40vh)]",
+    );
+
+    const subtitleWorkspace = screen.getByTestId(
+      "local-editor-subtitle-workspace",
+    );
+    expect(subtitleWorkspace).toHaveClass(
+      "min-h-0",
+      "flex",
+      "flex-col",
+      "overflow-hidden",
+    );
+    expect(screen.getByTestId("local-editor-timeline-scroll")).toBeVisible();
+  });
+
   it("does not repeat playhead timing in the inspector sections", () => {
     render(
       <LocalEditorTab
@@ -825,10 +857,66 @@ describe("LocalEditorTab", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.getByTestId("local-editor-player")).toHaveClass(
-      "max-h-[72vh]",
+      "h-full",
+      "max-h-full",
     );
     fireEvent.click(screen.getByRole("button", { name: /enter fullscreen/i }));
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the preview in a player panel while keeping controls in a dedicated strip", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("heading", { name: "Player-Timeline 01" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("local-editor-player")).toHaveClass(
+      "flex",
+      "flex-col",
+      "bg-[#242424]",
+      "rounded-none",
+    );
+    expect(screen.getByTestId("local-editor-player-stage")).toHaveClass(
+      "flex-1",
+      "items-center",
+      "justify-center",
+    );
+    expect(screen.getByTestId("local-editor-video-controls")).toHaveClass(
+      "flex-none",
+      "h-9",
+      "min-h-0",
+      "grid",
+      "grid-cols-[1fr_auto_1fr]",
+    );
+    expect(
+      screen.getByRole("button", { name: "Play video" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("local-editor-timecode")).toHaveTextContent(
+      /00:00:00:00 \/ 00:00:10:00/,
+    );
+    expect(
+      screen.getByRole("button", { name: "Mute video" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /change preview fit|fill video/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Aspect ratio 9:16" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Aspect ratio 9:16" }),
+    ).toHaveClass("border", "bg-[#2b2b2b]", "rounded-sm");
+    expect(
+      screen.queryByRole("button", { name: "Preview zoom" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Enter fullscreen" }),
+    ).toBeInTheDocument();
   });
 
   it("uses the standard Remotion preview for project clips", async () => {

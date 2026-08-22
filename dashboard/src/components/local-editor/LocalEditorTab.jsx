@@ -29,6 +29,8 @@ import {
   Square,
   Undo2,
   Upload,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import LocalEditorTimeline from "./LocalEditorTimeline";
@@ -1424,7 +1426,7 @@ export default function LocalEditorTab({
     "Details";
 
   return (
-    <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0d0d0f] text-white">
       <div
         data-testid="local-editor-header"
         className="flex h-11 flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-1"
@@ -1579,13 +1581,16 @@ export default function LocalEditorTab({
         onSave={saveProject}
         onClose={() => setSaveProjectDialogOpen(false)}
       />
-      <div className="grid min-h-0 gap-4 p-4 xl:grid-cols-[auto_minmax(260px,320px)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)_auto]">
+      <div
+        data-testid="local-editor-workspace"
+        className="grid min-h-0 flex-1 gap-2 overflow-hidden p-0 xl:grid-cols-[auto_minmax(260px,320px)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)_minmax(280px,40vh)]"
+      >
         <LocalEditorFeatureRail
           activeFeature={activeFeature}
           onSelect={setActiveFeature}
         />
         <main className="contents">
-          <div className="min-w-0 xl:col-start-3 xl:row-start-1">
+          <div className="min-h-0 min-w-0 xl:col-start-3 xl:row-start-1">
             <div
               ref={playerRef}
               data-testid="local-editor-player"
@@ -1596,208 +1601,225 @@ export default function LocalEditorTab({
               onKeyDown={handlePlayerKeyDown}
               className={
                 isFullscreen
-                  ? "fixed inset-0 z-50 flex items-center justify-center bg-black p-4"
-                  : "mx-auto flex h-[calc(100vh-180px)] max-h-[72vh] w-full max-w-[360px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl"
+                  ? "fixed inset-0 z-50 flex flex-col overflow-hidden bg-black p-4"
+                  : "mx-auto flex h-full max-h-full w-full flex-col overflow-hidden rounded-none border border-white/10 bg-[#242424] shadow-2xl"
               }
             >
-              <div className="relative h-full max-h-full w-auto max-w-full aspect-[9/16]">
-                {remotionPreviewProps ? (
-                  <RemotionPreview
-                    {...remotionPreviewProps}
-                    subtitles={previewSubtitles}
-                    subtitleTracks={[]}
-                    activeSubtitleTrackId={null}
-                    hook={hook}
-                    currentFrame={Math.round((playheadMs / 1000) * remotionFps)}
-                    playing={isPlaying}
-                    loop={isLooping}
-                    controls={false}
-                    className="h-full w-full"
-                    onFrameChange={handleRemotionFrameChange}
-                    onMediaTimeChange={handleRemotionMediaTimeChange}
-                    onPlayingChange={setIsPlaying}
-                    onPlayerReady={handleRemotionPlayerReady}
-                  />
-                ) : (
-                  <>
-                    <video
-                      ref={videoRef}
-                      data-testid="local-editor-native-video"
-                      src={previewVideoUrl || videoUrl}
+              <div
+                data-testid="local-editor-player-stage"
+                className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#242424]"
+              >
+                <div className="relative h-full max-h-full w-auto max-w-full aspect-[9/16]">
+                  {remotionPreviewProps ? (
+                    <RemotionPreview
+                      {...remotionPreviewProps}
+                      subtitles={previewSubtitles}
+                      subtitleTracks={[]}
+                      activeSubtitleTrackId={null}
+                      hook={hook}
+                      currentFrame={Math.round(
+                        (playheadMs / 1000) * remotionFps,
+                      )}
+                      playing={isPlaying}
+                      loop={isLooping}
                       controls={false}
-                      className={`h-full w-full ${shouldCropVideo ? "object-cover" : "object-contain"}`}
-                      onLoadedMetadata={handleMetadata}
-                      onLoadedData={detectVideoFraming}
-                      onError={handleVideoError}
-                      onPlay={() => setIsPlaying(true)}
-                      onPause={() => setIsPlaying(false)}
-                      onEnded={() => {
-                        setPlayheadMs(durationMs);
-                        setIsPlaying(false);
-                      }}
-                      onTimeUpdate={handleVideoTimeUpdate}
+                      className="h-full w-full"
+                      onFrameChange={handleRemotionFrameChange}
+                      onMediaTimeChange={handleRemotionMediaTimeChange}
+                      onPlayingChange={setIsPlaying}
+                      onPlayerReady={handleRemotionPlayerReady}
                     />
-                    <div className="pointer-events-none absolute inset-0">
-                      {activeHook && (
-                        <div
-                          className="absolute w-[88%]"
-                          style={{
-                            left: "50%",
-                            ...getHookPositionStyle(activeHook.position),
-                          }}
-                        >
+                  ) : (
+                    <>
+                      <video
+                        ref={videoRef}
+                        data-testid="local-editor-native-video"
+                        src={previewVideoUrl || videoUrl}
+                        controls={false}
+                        className={`h-full w-full ${shouldCropVideo ? "object-cover" : "object-contain"}`}
+                        onLoadedMetadata={handleMetadata}
+                        onLoadedData={detectVideoFraming}
+                        onError={handleVideoError}
+                        onPlay={() => setIsPlaying(true)}
+                        onPause={() => setIsPlaying(false)}
+                        onEnded={() => {
+                          setPlayheadMs(durationMs);
+                          setIsPlaying(false);
+                        }}
+                        onTimeUpdate={handleVideoTimeUpdate}
+                      />
+                      <div className="pointer-events-none absolute inset-0">
+                        {activeHook && (
                           <div
-                            className="text-center"
+                            className="absolute w-[88%]"
                             style={{
-                              ...getHookBoxStyle(activeHook),
-                              ...hookEntranceStyle,
+                              left: "50%",
+                              ...getHookPositionStyle(activeHook.position),
                             }}
                           >
-                            {activeHook.text}
+                            <div
+                              className="text-center"
+                              style={{
+                                ...getHookBoxStyle(activeHook),
+                                ...hookEntranceStyle,
+                              }}
+                            >
+                              {activeHook.text}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                      {activeSubtitle && (
-                        <div
-                          className={`absolute left-1/2 flex w-[88%] -translate-x-1/2 flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`}
-                          style={{
-                            fontFamily: previewSubtitleStyle.fontFamily,
-                            fontSize: `${Math.max(12, previewSubtitleStyle.fontSize * (20 / 24))}px`,
-                            textShadow: outlineTextShadow(
-                              previewSubtitleStyle.borderWidth,
-                              previewSubtitleStyle.borderColor,
-                            ),
-                            backgroundColor:
-                              previewSubtitleStyle.bgOpacity > 0
-                                ? hexToRgba(
-                                    previewSubtitleStyle.bgColor,
-                                    previewSubtitleStyle.bgOpacity,
-                                  )
-                                : "transparent",
-                          }}
-                        >
-                          {activeSubtitleWords.map((word, index) => {
-                            const isActive = index === activeSubtitleWordIndex;
-                            const isKaraoke =
-                              previewSubtitleStyle.animation === "karaoke" &&
-                              isActive;
-                            return (
-                              <span
-                                key={`${word.startMs}-${index}`}
-                                style={{
-                                  color: isKaraoke
-                                    ? previewSubtitleStyle.bgColor
-                                    : isActive
+                        )}
+                        {activeSubtitle && (
+                          <div
+                            className={`absolute left-1/2 flex w-[88%] -translate-x-1/2 flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`}
+                            style={{
+                              fontFamily: previewSubtitleStyle.fontFamily,
+                              fontSize: `${Math.max(12, previewSubtitleStyle.fontSize * (20 / 24))}px`,
+                              textShadow: outlineTextShadow(
+                                previewSubtitleStyle.borderWidth,
+                                previewSubtitleStyle.borderColor,
+                              ),
+                              backgroundColor:
+                                previewSubtitleStyle.bgOpacity > 0
+                                  ? hexToRgba(
+                                      previewSubtitleStyle.bgColor,
+                                      previewSubtitleStyle.bgOpacity,
+                                    )
+                                  : "transparent",
+                            }}
+                          >
+                            {activeSubtitleWords.map((word, index) => {
+                              const isActive =
+                                index === activeSubtitleWordIndex;
+                              const isKaraoke =
+                                previewSubtitleStyle.animation === "karaoke" &&
+                                isActive;
+                              return (
+                                <span
+                                  key={`${word.startMs}-${index}`}
+                                  style={{
+                                    color: isKaraoke
+                                      ? previewSubtitleStyle.bgColor
+                                      : isActive
+                                        ? previewSubtitleStyle.highlightColor
+                                        : previewSubtitleStyle.fontColor,
+                                    display: "inline-block",
+                                    transform:
+                                      isActive &&
+                                      previewSubtitleStyle.animation === "pop"
+                                        ? "scale(1.1)"
+                                        : "none",
+                                    textShadow:
+                                      previewSubtitleStyle.animation ===
+                                        "word-highlight" && isActive
+                                        ? `0 0 12px ${previewSubtitleStyle.highlightColor}, 0 0 24px ${previewSubtitleStyle.highlightColor}40`
+                                        : "inherit",
+                                    backgroundColor: isKaraoke
                                       ? previewSubtitleStyle.highlightColor
-                                      : previewSubtitleStyle.fontColor,
-                                  display: "inline-block",
-                                  transform:
-                                    isActive &&
-                                    previewSubtitleStyle.animation === "pop"
-                                      ? "scale(1.1)"
-                                      : "none",
-                                  textShadow:
-                                    previewSubtitleStyle.animation ===
-                                      "word-highlight" && isActive
-                                      ? `0 0 12px ${previewSubtitleStyle.highlightColor}, 0 0 24px ${previewSubtitleStyle.highlightColor}40`
-                                      : "inherit",
-                                  backgroundColor: isKaraoke
-                                    ? previewSubtitleStyle.highlightColor
-                                    : "transparent",
-                                  borderRadius: isKaraoke ? 4 : 0,
-                                  padding: isKaraoke ? "2px 6px" : 0,
-                                }}
-                              >
-                                {word.text}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={toggleFullscreen}
-                  aria-label={
-                    isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
-                  }
-                  title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                  className="absolute right-3 top-3 z-20 rounded-lg border border-white/20 bg-black/60 p-2 text-white shadow-lg backdrop-blur hover:bg-black/80"
-                >
-                  {isFullscreen ? (
-                    <Minimize2 size={16} />
-                  ) : (
-                    <Maximize2 size={16} />
+                                      : "transparent",
+                                    borderRadius: isKaraoke ? 4 : 0,
+                                    padding: isKaraoke ? "2px 6px" : 0,
+                                  }}
+                                >
+                                  {word.text}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
-                </button>
-                <div
-                  data-testid="local-editor-video-controls"
-                  className="absolute bottom-0 left-0 right-0 z-30 flex items-center justify-center gap-1 border-t border-white/10 bg-[#202126]/95 px-2 py-1.5 text-zinc-300 shadow-lg backdrop-blur"
-                >
+                </div>
+              </div>
+              <div
+                data-testid="local-editor-video-controls"
+                className="relative z-30 grid h-9 min-h-0 flex-none grid-cols-[1fr_auto_1fr] items-center border-t border-white/10 bg-[#202126]/95 px-2 py-0.5 text-zinc-300 shadow-lg backdrop-blur"
+              >
+                <div className="flex min-w-0 items-center gap-1">
+                  <span
+                    data-testid="local-editor-timecode"
+                    className="whitespace-nowrap font-mono text-[10px] text-zinc-400"
+                  >
+                    <span className="text-cyan-400">
+                      {formatClock(playheadMs, remotionFps)}
+                    </span>{" "}
+                    / {formatClock(durationMs, remotionFps)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-self-center gap-0.5">
                   <button
                     type="button"
                     aria-label="Go to beginning"
                     title="Go to beginning"
                     onClick={() => handleSeek(0)}
-                    className="rounded p-1.5 hover:bg-white/10 hover:text-white"
+                    className="rounded p-1 hover:bg-white/10 hover:text-white"
                   >
-                    <SkipBack size={16} />
+                    <SkipBack size={15} />
                   </button>
                   <button
                     type="button"
                     aria-label="Rewind 5 seconds"
                     title="Rewind 5 seconds"
                     onClick={() => seekBy(-5000)}
-                    className="rounded p-1.5 hover:bg-white/10 hover:text-white"
+                    className="rounded p-1 hover:bg-white/10 hover:text-white"
                   >
-                    <Rewind size={16} />
+                    <Rewind size={15} />
                   </button>
                   <button
                     type="button"
                     aria-label={isPlaying ? "Pause video" : "Play video"}
                     title={isPlaying ? "Pause video" : "Play video"}
                     onClick={togglePlayback}
-                    className="rounded p-1.5 hover:bg-white/10 hover:text-white"
+                    className="rounded p-1 hover:bg-white/10 hover:text-white"
                   >
-                    {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                    {isPlaying ? <Pause size={15} /> : <Play size={15} />}
                   </button>
                   <button
                     type="button"
                     aria-label="Stop video"
                     title="Stop video"
                     onClick={stopVideo}
-                    className="rounded p-1.5 hover:bg-white/10 hover:text-white"
+                    className="rounded p-1 hover:bg-white/10 hover:text-white"
                   >
-                    <Square size={15} />
+                    <Square size={14} />
                   </button>
                   <button
                     type="button"
                     aria-label="Fast forward 5 seconds"
                     title="Fast forward 5 seconds"
                     onClick={() => seekBy(5000)}
-                    className="rounded p-1.5 hover:bg-white/10 hover:text-white"
+                    className="rounded p-1 hover:bg-white/10 hover:text-white"
                   >
-                    <FastForward size={16} />
+                    <FastForward size={15} />
                   </button>
                   <button
                     type="button"
                     aria-label="Go to end"
                     title="Go to end"
                     onClick={() => handleSeek(durationMs)}
-                    className="rounded p-1.5 hover:bg-white/10 hover:text-white"
+                    className="rounded p-1 hover:bg-white/10 hover:text-white"
                   >
-                    <SkipForward size={16} />
+                    <SkipForward size={15} />
                   </button>
                   <button
                     type="button"
                     aria-label={isLooping ? "Disable loop" : "Enable loop"}
                     title={isLooping ? "Disable loop" : "Enable loop"}
                     onClick={toggleLoop}
-                    className={`rounded p-1.5 hover:bg-white/10 hover:text-white ${isLooping ? "text-fuchsia-300" : ""}`}
+                    className={`rounded p-1 hover:bg-white/10 hover:text-white ${isLooping ? "text-fuchsia-300" : ""}`}
                   >
-                    <Repeat size={16} />
+                    <Repeat size={15} />
+                  </button>
+                </div>
+                <div className="ml-auto flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    aria-label={isMuted ? "Unmute video" : "Mute video"}
+                    title={isMuted ? "Unmute video" : "Mute video"}
+                    onClick={toggleMute}
+                    className="rounded p-1 text-zinc-400 hover:bg-white/10 hover:text-white"
+                  >
+                    {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
                   </button>
                   <button
                     type="button"
@@ -1810,21 +1832,45 @@ export default function LocalEditorTab({
                           ? "Fit video"
                           : "Auto fit video"
                     }
-                    title="Change video fit mode"
+                    title={"Change preview fit (" + videoViewLabel + ")"}
                     onClick={cycleVideoViewMode}
                     className="rounded px-1.5 py-1 text-[10px] font-semibold hover:bg-white/10 hover:text-white"
                   >
-                    {videoViewLabel}
+                    Full
                   </button>
-                  <span className="ml-1 min-w-[74px] text-center font-mono text-[10px] text-zinc-400">
-                    {formatClock(playheadMs, remotionFps)} /{" "}
-                    {formatClock(durationMs, remotionFps)}
-                  </span>
+                  <button
+                    type="button"
+                    aria-label="Aspect ratio 9:16"
+                    title="Aspect ratio 9:16"
+                    className="rounded-sm border border-zinc-500/70 bg-[#2b2b2b] px-1 py-0.5 text-[10px] font-medium leading-none text-zinc-300 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] hover:border-zinc-300 hover:bg-[#343434] hover:text-white"
+                  >
+                    9:16
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleFullscreen}
+                    aria-label={
+                      isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
+                    }
+                    title={
+                      isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
+                    }
+                    className="rounded p-1 text-zinc-400 hover:bg-white/10 hover:text-white"
+                  >
+                    {isFullscreen ? (
+                      <Minimize2 size={14} />
+                    ) : (
+                      <Maximize2 size={14} />
+                    )}
+                  </button>
                 </div>
               </div>
             </div>
           </div>
-          <div className="min-w-0 rounded-xl border border-white/10 bg-[#101014] p-2 xl:col-span-3 xl:col-start-1 xl:row-start-2">
+          <div
+            data-testid="local-editor-subtitle-workspace"
+            className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#101014] p-2 xl:col-span-3 xl:col-start-1 xl:row-start-2"
+          >
             <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2">
               <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
                 Subtitle workspace
@@ -1856,40 +1902,42 @@ export default function LocalEditorTab({
                 </button>
               </div>
             </div>
-            {subtitleView === "table" ? (
-              <SubtitleCueTable
-                cues={subtitleCues}
-                selectedId={selected?.id}
-                playheadMs={playheadMs}
-                onSelect={handleTimelineSelect}
-                onChange={(cue) => updateSubtitle(cue)}
-                loopSegment={subtitleTableLoop}
-                onLoopSegmentChange={setSubtitleTableLoop}
-                onSpeedChange={(speed) => {
-                  if (videoRef.current) videoRef.current.playbackRate = speed;
-                  if (remotionPlayerRef.current)
-                    remotionPlayerRef.current.setPlaybackRate?.(speed);
-                }}
-              />
-            ) : (
-              <LocalEditorTimeline
-                videoUrl={videoUrl}
-                durationMs={durationMs}
-                fps={remotionFps}
-                subtitleCues={subtitleCues}
-                hook={hook}
-                selectedId={selected?.id}
-                onSelect={(cue, type) =>
-                  handleTimelineSelect(cue, type, { openEditor: false })
-                }
-                onDoubleClick={handleTimelineSelect}
-                onChange={handleTimelineChange}
-                onChangeStart={beginTimelineEdit}
-                onChangeEnd={endTimelineEdit}
-                playheadMs={playheadMs}
-                onSeek={handleSeek}
-              />
-            )}
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {subtitleView === "table" ? (
+                <SubtitleCueTable
+                  cues={subtitleCues}
+                  selectedId={selected?.id}
+                  playheadMs={playheadMs}
+                  onSelect={handleTimelineSelect}
+                  onChange={(cue) => updateSubtitle(cue)}
+                  loopSegment={subtitleTableLoop}
+                  onLoopSegmentChange={setSubtitleTableLoop}
+                  onSpeedChange={(speed) => {
+                    if (videoRef.current) videoRef.current.playbackRate = speed;
+                    if (remotionPlayerRef.current)
+                      remotionPlayerRef.current.setPlaybackRate?.(speed);
+                  }}
+                />
+              ) : (
+                <LocalEditorTimeline
+                  videoUrl={videoUrl}
+                  durationMs={durationMs}
+                  fps={remotionFps}
+                  subtitleCues={subtitleCues}
+                  hook={hook}
+                  selectedId={selected?.id}
+                  onSelect={(cue, type) =>
+                    handleTimelineSelect(cue, type, { openEditor: false })
+                  }
+                  onDoubleClick={handleTimelineSelect}
+                  onChange={handleTimelineChange}
+                  onChangeStart={beginTimelineEdit}
+                  onChangeEnd={endTimelineEdit}
+                  playheadMs={playheadMs}
+                  onSeek={handleSeek}
+                />
+              )}
+            </div>
           </div>
         </main>
         <aside className="contents" aria-label="Inspector">
