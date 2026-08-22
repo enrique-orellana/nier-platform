@@ -820,6 +820,37 @@ describe("LocalEditorTab", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("deletes a selected viral hook with the timeline delete action", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        initialEditorState={{
+          subtitleCues: [],
+          subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+          subtitleLanguage: "en",
+          hook: {
+            id: "hook",
+            text: "Existing hook",
+            startMs: 0,
+            endMs: 2000,
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Existing hook" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove selected cue" }),
+    );
+
+    expect(window.confirm).toHaveBeenCalledWith("Remove viral hook?");
+    expect(
+      screen.queryByRole("button", { name: "Existing hook" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("resizes the preview and timeline with the layout divider", () => {
     render(
       <LocalEditorTab
@@ -1361,6 +1392,8 @@ describe("LocalEditorTab", () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:demo");
     render(
       <LocalEditorTab
+        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoName="project.mp4"
         initialEditorState={{
           subtitleCues: [
             { id: "cue-1", text: "Hello", startMs: 0, endMs: 1000 },
@@ -1682,7 +1715,7 @@ describe("LocalEditorTab", () => {
     ).toHaveAttribute("aria-expanded", "true");
     expect(
       screen.getByRole("button", { name: /toggle viral hook settings/i }),
-    ).toHaveAttribute("aria-expanded", "false");
+    ).toHaveAttribute("aria-expanded", "true");
     expect(
       screen.getByRole("button", { name: /import subtitles/i }),
     ).toBeInTheDocument();
@@ -1707,7 +1740,60 @@ describe("LocalEditorTab", () => {
     );
     expect(
       screen.getByRole("button", { name: /toggle viral hook settings/i }),
-    ).toHaveAttribute("aria-expanded", "true");
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("uses the compact panel treatment for viral hook settings", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoName="project.mp4"
+        initialEditorState={{
+          subtitleCues: [],
+          subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+          subtitleLanguage: "en",
+          hook: null,
+        }}
+      />,
+    );
+
+    const hookToggle = await waitFor(() =>
+      screen.getByRole("button", { name: /toggle viral hook settings/i }),
+    );
+    const hookPanel = hookToggle.closest("section");
+
+    expect(hookToggle).toHaveAttribute("aria-expanded", "true");
+    expect(hookPanel).toHaveClass("overflow-hidden", "rounded-xl");
+    expect(within(hookPanel).getByText("Not set")).toBeInTheDocument();
+    expect(
+      within(hookPanel).getByRole("button", { name: "Add Viral Hook" }),
+    ).toBeInTheDocument();
+  });
+
+  it("uses a reset icon when a viral hook already exists", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoName="project.mp4"
+        initialEditorState={{
+          subtitleCues: [],
+          subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+          subtitleLanguage: "en",
+          hook: {
+            id: "hook",
+            text: "Existing hook",
+            startMs: 0,
+            endMs: 2000,
+          },
+        }}
+      />,
+    );
+
+    const resetButton = await waitFor(() =>
+      screen.getByRole("button", { name: "Reset hook" }),
+    );
+
+    expect(resetButton.querySelector("svg")).toHaveClass("lucide-rotate-ccw");
   });
 
   it("supports standard video keyboard controls", async () => {

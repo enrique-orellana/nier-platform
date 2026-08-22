@@ -223,7 +223,7 @@ export default function LocalEditorTab({
   const [subtitleTrackActionsOpen, setSubtitleTrackActionsOpen] =
     useState(true);
   const [subtitleCueEditingOpen, setSubtitleCueEditingOpen] = useState(true);
-  const [hookOpen, setHookOpen] = useState(false);
+  const [hookOpen, setHookOpen] = useState(true);
   const [activeFeature, setActiveFeature] = useState("details");
   const [subtitleView, setSubtitleView] = useState("timeline");
   const [timelineZoom, setTimelineZoom] = useState(1);
@@ -1192,6 +1192,14 @@ export default function LocalEditorTab({
       current?.id === id && current.type === "subtitle" ? null : current,
     );
     setEditingSubtitle((current) => (current?.id === id ? null : current));
+  };
+
+  const removeSelectedTimelineItem = () => {
+    if (selected?.type === "hook") {
+      removeHook();
+      return;
+    }
+    if (selected?.type === "subtitle") removeSubtitleCue(selected.id);
   };
 
   const handleSeek = (nextMs) => {
@@ -2280,8 +2288,10 @@ export default function LocalEditorTab({
                   />
                   <button
                     type="button"
-                    onClick={() => removeSubtitleCue(selected?.id)}
-                    disabled={busy || selected?.type !== "subtitle"}
+                    onClick={removeSelectedTimelineItem}
+                    disabled={
+                      busy || !["hook", "subtitle"].includes(selected?.type)
+                    }
                     aria-label="Remove selected cue"
                     title="Remove selected cue"
                     className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
@@ -2801,47 +2811,47 @@ export default function LocalEditorTab({
               </div>
             </section>
             <section
-              className={`rounded-xl border border-white/10 bg-white/[.02] p-4 ${activeFeature === "viral-hook" ? "" : "sr-only"}`}
+              className={`overflow-hidden rounded-xl border border-white/10 bg-white/[.02] ${activeFeature === "viral-hook" ? "" : "sr-only"}`}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3 px-4 py-3.5">
                 <button
                   type="button"
                   aria-label="Toggle Viral Hook settings"
                   aria-expanded={hookOpen}
                   aria-controls="viral-hook-settings-panel"
                   onClick={() => setHookOpen((open) => !open)}
-                  className="flex items-center gap-2 text-sm font-semibold text-white"
+                  className="flex min-w-0 items-center gap-2 text-left"
                 >
                   <ChevronDown
-                    size={16}
+                    size={15}
                     className={`text-amber-300 transition-transform ${hookOpen ? "" : "-rotate-90"}`}
                   />
-                  Viral Hook
+                  <span className="truncate text-sm font-semibold text-white">
+                    Viral Hook
+                  </span>
+                  <span className="shrink-0 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+                    {hook ? "Set" : "Not set"}
+                  </span>
                 </button>
                 <button
                   type="button"
                   onClick={addHook}
-                  className="flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-1 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/25"
+                  className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-amber-400/30 px-2 text-[11px] font-semibold text-amber-200 transition-colors hover:border-amber-300/60 hover:bg-amber-500/10"
                 >
-                  <Plus size={12} />
+                  {hook ? <RotateCcw size={12} /> : <Plus size={12} />}
                   {hook ? "Reset hook" : "Add Viral Hook"}
                 </button>
               </div>
               {hookOpen && (
-                <div id="viral-hook-settings-panel" className="mt-3">
-                  {selected?.type === "hook" ? (
-                    <LocalEditorHookInspector
-                      hook={selectedCue}
-                      onChange={updateHook}
-                      onRemove={removeHook}
-                    />
-                  ) : (
-                    <LocalEditorHookInspector
-                      hook={null}
-                      onChange={updateHook}
-                      onRemove={removeHook}
-                    />
-                  )}
+                <div
+                  id="viral-hook-settings-panel"
+                  className="border-t border-white/10 px-4 pb-4 pt-3"
+                >
+                  <LocalEditorHookInspector
+                    hook={selected?.type === "hook" ? selectedCue : null}
+                    onChange={updateHook}
+                    onRemove={removeHook}
+                  />
                 </div>
               )}
             </section>
