@@ -115,6 +115,9 @@ import LocalEditorSubtitleStyleInspector from "./LocalEditorSubtitleStyleInspect
 import LocalEditorHookInspector from "./LocalEditorHookInspector";
 import LocalEditorSaveProjectDialog from "./LocalEditorSaveProjectDialog";
 
+const MIN_TIMELINE_HEIGHT = 220;
+const MIN_PREVIEW_HEIGHT = 260;
+
 export default function LocalEditorTab({
   initialVideoUrl = "",
   initialExportVideoUrl = "",
@@ -147,6 +150,8 @@ export default function LocalEditorTab({
   );
   const videoRef = useRef(null);
   const playerRef = useRef(null);
+  const workspaceRef = useRef(null);
+  const layoutResizeRef = useRef(null);
   const remotionPlayerRef = useRef(null);
   const remotionPlayheadRef = useRef(0);
   const remotionPlayheadTimerRef = useRef(null);
@@ -199,6 +204,7 @@ export default function LocalEditorTab({
   const [activeFeature, setActiveFeature] = useState("details");
   const [subtitleView, setSubtitleView] = useState("timeline");
   const [timelineZoom, setTimelineZoom] = useState(1);
+  const [timelineHeight, setTimelineHeight] = useState(null);
   const [subtitleTableLoop, setSubtitleTableLoop] = useState(false);
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectIdState] = useState(null);
@@ -692,6 +698,65 @@ export default function LocalEditorTab({
     return type === "hook"
       ? updateHook(cue, options)
       : updateSubtitle(cue, options);
+  };
+
+  const handleLayoutResizeStart = (event) => {
+    const workspace = workspaceRef.current;
+    const bounds = workspace?.getBoundingClientRect();
+    if (!bounds) return;
+    const workspaceHeight = bounds.height || 800;
+    layoutResizeRef.current = {
+      startY: Number.isFinite(event.clientY) ? event.clientY : 0,
+      startHeight: timelineHeight ?? workspaceHeight * 0.4,
+      workspaceHeight,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  };
+
+  const handleLayoutResizeMove = (event) => {
+    const resize = layoutResizeRef.current;
+    if (!resize) return;
+    const minHeight = Math.min(
+      MIN_TIMELINE_HEIGHT,
+      Math.max(160, resize.workspaceHeight * 0.45),
+    );
+    const maxHeight = Math.max(
+      minHeight,
+      resize.workspaceHeight - MIN_PREVIEW_HEIGHT,
+    );
+    const deltaY =
+      Number.isFinite(event.movementY) && event.movementY !== 0
+        ? event.movementY
+        : (Number.isFinite(event.clientY) ? event.clientY : resize.startY) -
+          resize.startY;
+    setTimelineHeight(
+      Math.round(clamp(resize.startHeight - deltaY, minHeight, maxHeight)),
+    );
+  };
+
+  const handleLayoutResizeEnd = () => {
+    layoutResizeRef.current = null;
+  };
+
+  const handleLayoutResizeKeyDown = (event) => {
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const bounds = workspaceRef.current?.getBoundingClientRect();
+    const workspaceHeight = bounds?.height || 800;
+    const minHeight = Math.min(
+      MIN_TIMELINE_HEIGHT,
+      Math.max(160, workspaceHeight * 0.45),
+    );
+    const maxHeight = Math.max(minHeight, workspaceHeight - MIN_PREVIEW_HEIGHT);
+    const currentHeight = timelineHeight ?? workspaceHeight * 0.4;
+    const nextHeight =
+      event.key === "Home"
+        ? minHeight
+        : event.key === "End"
+          ? maxHeight
+          : currentHeight + (event.key === "ArrowUp" ? 32 : -32);
+    setTimelineHeight(Math.round(clamp(nextHeight, minHeight, maxHeight)));
   };
 
   const importSubtitleFile = async (file) => {
@@ -1349,14 +1414,16 @@ export default function LocalEditorTab({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={openProjects}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5"
-            >
-              <FolderOpen size={13} />
-              Projects
-            </button>
+            {!initialProjectId && (
+              <button
+                type="button"
+                onClick={openProjects}
+                className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5"
+              >
+                <FolderOpen size={13} />
+                Projects
+              </button>
+            )}
             {onClose && (
               <button
                 type="button"
@@ -1450,14 +1517,16 @@ export default function LocalEditorTab({
             data-testid="local-editor-header-workspace"
             className="flex items-center gap-1"
           >
-            <button
-              type="button"
-              onClick={openProjects}
-              className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5"
-            >
-              <FolderOpen size={13} />
-              Projects
-            </button>
+            {!initialProjectId && (
+              <button
+                type="button"
+                onClick={openProjects}
+                className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5"
+              >
+                <FolderOpen size={13} />
+                Projects
+              </button>
+            )}
           </div>
           <div
             data-testid="local-editor-header-edit"
@@ -1586,8 +1655,14 @@ export default function LocalEditorTab({
         onClose={() => setSaveProjectDialogOpen(false)}
       />
       <div
+        ref={workspaceRef}
         data-testid="local-editor-workspace"
-        className="grid min-h-0 flex-1 gap-2 overflow-hidden p-0 xl:grid-cols-[auto_minmax(260px,320px)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)_minmax(280px,40vh)]"
+        className="relative grid min-h-0 flex-1 gap-2 overflow-hidden p-0 xl:grid-cols-[auto_minmax(260px,320px)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)_minmax(280px,40vh)]"
+        style={
+          timelineHeight
+            ? { gridTemplateRows: `minmax(0, 1fr) ${timelineHeight}px` }
+            : undefined
+        }
       >
         <LocalEditorFeatureRail
           activeFeature={activeFeature}
@@ -2058,6 +2133,29 @@ export default function LocalEditorTab({
             </div>
           </div>
         </main>
+        <button
+          type="button"
+          role="separator"
+          aria-label="Resize preview and timeline"
+          aria-orientation="horizontal"
+          aria-valuemin={MIN_TIMELINE_HEIGHT}
+          aria-valuemax={2000}
+          aria-valuenow={Math.round(timelineHeight ?? 320)}
+          title="Resize preview and timeline"
+          onPointerDown={handleLayoutResizeStart}
+          onPointerMove={handleLayoutResizeMove}
+          onPointerUp={handleLayoutResizeEnd}
+          onPointerCancel={handleLayoutResizeEnd}
+          onKeyDown={handleLayoutResizeKeyDown}
+          className="absolute left-0 right-0 z-40 flex h-2 -translate-y-1/2 cursor-row-resize items-center justify-center border-y border-transparent bg-transparent hover:border-cyan-300/50 focus:border-cyan-300/70 focus:outline-none"
+          style={{
+            top: timelineHeight
+              ? `calc(100% - ${timelineHeight}px - 4px)`
+              : "calc(60% - 4px)",
+          }}
+        >
+          <span className="h-px w-12 bg-zinc-600/70 transition-colors group-hover:bg-cyan-300" />
+        </button>
         <aside className="contents" aria-label="Inspector">
           <LocalEditorFeaturePanel
             title={activeFeatureLabel}

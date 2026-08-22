@@ -166,6 +166,21 @@ describe("LocalEditorTab", () => {
     );
   });
 
+  it("hides the Projects action when editing a project clip", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialProjectId="project-1"
+        initialClipIndex={0}
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Projects" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("organizes header actions into workspace, edit, output, and utility groups", () => {
     render(
       <LocalEditorTab
@@ -484,6 +499,36 @@ describe("LocalEditorTab", () => {
     expect(
       await screen.findByRole("dialog", { name: /subtitle cue/i }),
     ).toBeInTheDocument();
+  });
+
+  it("resizes the preview and timeline with the layout divider", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    const workspace = screen.getByTestId("local-editor-workspace");
+    vi.spyOn(workspace, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      right: 1280,
+      bottom: 800,
+      left: 0,
+      width: 1280,
+      height: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+    const divider = screen.getByRole("separator", {
+      name: "Resize preview and timeline",
+    });
+
+    fireEvent.keyDown(divider, { key: "ArrowUp" });
+
+    expect(workspace.style.gridTemplateRows).toBe("minmax(0, 1fr) 352px");
+    expect(divider).toHaveAttribute("aria-valuenow", "352");
   });
 
   it("does not offer local upload when a project editor has no remote video", () => {
