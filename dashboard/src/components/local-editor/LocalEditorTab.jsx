@@ -17,6 +17,7 @@ import {
   Maximize2,
   Minus,
   Minimize2,
+  MousePointer2,
   Pause,
   Play,
   Plus,
@@ -28,6 +29,7 @@ import {
   SkipBack,
   SkipForward,
   Square,
+  Trash2,
   Undo2,
   Upload,
   Volume2,
@@ -1875,8 +1877,68 @@ export default function LocalEditorTab({
           >
             <div
               data-testid="local-editor-subtitle-toolbar"
-              className="flex h-9 flex-none items-center justify-end border-b border-white/10 px-2"
+              className="flex h-9 flex-none items-center justify-between border-b border-white/10 px-2"
             >
+              <div
+                data-testid="local-editor-timeline-actions"
+                className="flex h-7 items-center gap-0.5 text-zinc-500"
+              >
+                <button
+                  type="button"
+                  aria-label="Add cue to timeline"
+                  title="Add cue to timeline"
+                  onClick={addSubtitleCue}
+                  className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white"
+                >
+                  <Plus size={15} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Select timeline tool"
+                  title="Select timeline tool"
+                  className="flex h-7 w-7 items-center justify-center rounded bg-white/10 text-zinc-200"
+                >
+                  <MousePointer2 size={14} />
+                </button>
+                <span
+                  className="mx-1 h-5 w-px bg-white/10"
+                  aria-hidden="true"
+                />
+                <button
+                  type="button"
+                  onClick={undo}
+                  disabled={busy || editHistory.past.length === 0}
+                  aria-label="Timeline undo"
+                  title="Timeline undo (Ctrl/Cmd+Z)"
+                  className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <Undo2 size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={redo}
+                  disabled={busy || editHistory.future.length === 0}
+                  aria-label="Timeline redo"
+                  title="Timeline redo (Ctrl/Cmd+Shift+Z)"
+                  className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <Redo2 size={15} />
+                </button>
+                <span
+                  className="mx-1 h-5 w-px bg-white/10"
+                  aria-hidden="true"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeSubtitleCue(selected?.id)}
+                  disabled={busy || selected?.type !== "subtitle"}
+                  aria-label="Remove selected cue"
+                  title="Remove selected cue"
+                  className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
               <div className="flex items-center gap-2">
                 {subtitleView === "timeline" && (
                   <div

@@ -10,6 +10,7 @@ import {
   Info,
   Layers,
   Loader2,
+  Play,
   RefreshCw,
   Search,
   Sparkles,

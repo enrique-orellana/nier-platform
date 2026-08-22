@@ -56,6 +56,33 @@ select.input-field option {
   background: rgba(255, 255, 255, 0.2);
 }
 
+.editor-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #66666d transparent;
+}
+
+.editor-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.editor-scrollbar::-webkit-scrollbar-track {
+  background: #17171b;
+}
+
+.editor-scrollbar::-webkit-scrollbar-thumb {
+  min-height: 36px;
+  border: 2px solid #17171b;
+  border-radius: 999px;
+  background: #66666d;
+  background-clip: padding-box;
+}
+
+.editor-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #85858d;
+  background-clip: padding-box;
+}
+
 /* The timeline remains scrollable, but scrollbar chrome is hidden to keep the editor clean. */
 .timeline-scroll {
   scrollbar-width: none;

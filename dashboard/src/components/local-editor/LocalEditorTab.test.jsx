@@ -226,6 +226,18 @@ describe("LocalEditorTab", () => {
       "border-b",
     );
     expect(
+      screen.getByTestId("local-editor-timeline-actions"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add cue to timeline" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Timeline undo" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Timeline redo" }),
+    ).toBeDisabled();
+    expect(
       screen.queryByTestId("local-editor-timeline-toolbar"),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("slider", { name: "Timeline zoom" })).toHaveValue(

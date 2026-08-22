@@ -207,7 +207,7 @@ export default function LocalEditorTimeline({
       <div
         ref={timelineRef}
         data-testid="local-editor-timeline-scroll"
-        className="min-h-0 flex-1 max-w-full overflow-x-auto overflow-y-hidden"
+        className="editor-scrollbar min-h-0 flex-1 max-w-full overflow-x-auto overflow-y-hidden"
       >
         <div
           data-testid="local-editor-timeline-canvas"

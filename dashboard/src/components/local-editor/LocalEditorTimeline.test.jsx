@@ -32,6 +32,7 @@ describe("LocalEditorTimeline", () => {
     expect(screen.getByTestId("local-editor-timeline-scroll")).toHaveClass(
       "min-h-0",
       "flex-1",
+      "editor-scrollbar",
       "overflow-x-auto",
     );
     expect(screen.getByTestId("local-editor-timeline-canvas")).toHaveStyle({
