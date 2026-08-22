@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_EDITOR_PREFERENCES,
+  EDITOR_LAYOUT_STORAGE_KEY,
   EDITOR_PREFERENCES_STORAGE_KEY,
+  readEditorLayout,
   readEditorPreferences,
+  saveEditorLayout,
   saveEditorPreferences,
   updateEditorPreferencesFromState,
 } from "./localEditorPreferences";
@@ -14,6 +17,23 @@ describe("local editor preferences", () => {
 
   it("returns built-in defaults when no preferences have been saved", () => {
     expect(readEditorPreferences()).toEqual(DEFAULT_EDITOR_PREFERENCES);
+  });
+
+  it("round trips the remembered local editor layout", () => {
+    saveEditorLayout({ timelineHeight: 352 });
+
+    expect(readEditorLayout()).toEqual({ timelineHeight: 352 });
+  });
+
+  it("ignores malformed or unusable layout data", () => {
+    localStorage.setItem(EDITOR_LAYOUT_STORAGE_KEY, "{bad json");
+    expect(readEditorLayout()).toEqual({ timelineHeight: null });
+
+    localStorage.setItem(
+      EDITOR_LAYOUT_STORAGE_KEY,
+      JSON.stringify({ timelineHeight: -10 }),
+    );
+    expect(readEditorLayout()).toEqual({ timelineHeight: null });
   });
 
   it("round trips remembered settings and fills omitted values from defaults", () => {

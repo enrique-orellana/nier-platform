@@ -13,7 +13,10 @@ import { StrictMode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LocalEditorTab from "./LocalEditorTab";
 import { DEFAULT_SUBTITLE_STYLE } from "./localEditorStyles";
-import { EDITOR_PREFERENCES_STORAGE_KEY } from "./localEditorPreferences";
+import {
+  EDITOR_LAYOUT_STORAGE_KEY,
+  EDITOR_PREFERENCES_STORAGE_KEY,
+} from "./localEditorPreferences";
 import {
   EDITOR_PROJECT_DB_NAME,
   EDITOR_VIDEO_DB_NAME,
@@ -256,7 +259,7 @@ describe("LocalEditorTab", () => {
     ).toBeInTheDocument();
   });
 
-  it("places playback controls in the general timeline controls bar", async () => {
+  it("keeps speed general and shows cue-only controls in the cue table view", async () => {
     render(
       <LocalEditorTab
         initialVideoUrl="/videos/project.mp4"
@@ -275,10 +278,31 @@ describe("LocalEditorTab", () => {
     await waitFor(() =>
       expect(screen.getByTestId("local-editor-player")).toBeInTheDocument(),
     );
-    const timelineToolbar = screen.getByTestId("local-editor-subtitle-toolbar");
     const playbackControls = screen.getByTestId(
       "local-editor-playback-controls",
     );
+    expect(
+      within(playbackControls).getByRole("button", {
+        name: "Playback speed",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(playbackControls).queryByLabelText("Loop segment"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(playbackControls).queryByRole("button", {
+        name: "Scroll to current subtitle",
+      }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Subtitle table view" }));
+
+    expect(screen.getByTestId("local-editor-playback-controls")).toBe(
+      playbackControls,
+    );
+    expect(
+      screen.getByTestId("local-editor-subtitle-toolbar"),
+    ).toContainElement(playbackControls);
     expect(
       within(playbackControls).getByLabelText("Playback speed"),
     ).toBeInTheDocument();
@@ -293,7 +317,6 @@ describe("LocalEditorTab", () => {
         name: "Scroll to current subtitle",
       }),
     ).toBeInTheDocument();
-    expect(timelineToolbar).toContainElement(playbackControls);
     expect(
       within(
         screen.getByTestId("local-editor-header-utility"),
@@ -312,9 +335,8 @@ describe("LocalEditorTab", () => {
     );
 
     const video = await screen.findByTestId("local-editor-native-video");
-    fireEvent.change(screen.getByLabelText("Playback speed"), {
-      target: { value: "1.5" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Playback speed" }));
+    fireEvent.click(screen.getByRole("option", { name: "1.50x" }));
 
     expect(video.playbackRate).toBe(1.5);
   });
@@ -735,6 +757,30 @@ describe("LocalEditorTab", () => {
 
     expect(workspace.style.gridTemplateRows).toBe("minmax(0, 1fr) 352px");
     expect(divider).toHaveAttribute("aria-valuenow", "352");
+    expect(localStorage.getItem(EDITOR_LAYOUT_STORAGE_KEY)).toBe(
+      JSON.stringify({ timelineHeight: 352 }),
+    );
+  });
+
+  it("restores the timeline divider position after refresh", () => {
+    localStorage.setItem(
+      EDITOR_LAYOUT_STORAGE_KEY,
+      JSON.stringify({ timelineHeight: 352 }),
+    );
+
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    expect(screen.getByTestId("local-editor-workspace")).toHaveStyle(
+      "grid-template-rows: minmax(0, 1fr) 352px",
+    );
+    expect(
+      screen.getByRole("separator", { name: "Resize preview and timeline" }),
+    ).toHaveAttribute("aria-valuenow", "352");
   });
 
   it("anchors the resize handle to the timeline section", () => {

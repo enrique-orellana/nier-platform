@@ -161,7 +161,38 @@ describe("LocalEditorTimeline", () => {
 
     fireEvent.click(screen.getByTestId("local-editor-marker"));
 
-    expect(onMarkerSelect).toHaveBeenCalledWith("marker-1");
+    expect(onMarkerSelect).toHaveBeenCalledWith("marker-1", 2500);
+  });
+
+  it("moves a marker while dragging and commits its new time on release", () => {
+    const onMarkerMove = vi.fn();
+    render(
+      <LocalEditorTimeline
+        durationMs={10000}
+        markers={[{ id: "marker-1", timeMs: 2500 }]}
+        onMarkerMove={onMarkerMove}
+      />,
+    );
+
+    const marker = screen.getByTestId("local-editor-marker");
+    const canvas = screen.getByTestId("local-editor-timeline-canvas");
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 944,
+      bottom: 200,
+      width: 944,
+      height: 200,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+
+    fireEvent.mouseDown(marker, { clientX: 344 });
+    fireEvent.mouseMove(window, { clientX: 544 });
+    fireEvent.mouseUp(window, { clientX: 544 });
+
+    expect(onMarkerMove).toHaveBeenCalledWith("marker-1", 5000);
   });
 
   it("renders the audio lane after every cue lane", () => {

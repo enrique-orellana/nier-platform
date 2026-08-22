@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { moveCue, resizeCue } from "../../editor/timelineModel";
 import AudioWaveform from "./AudioWaveform";
 import { formatClock } from "./localEditorExport";
@@ -153,8 +153,12 @@ export default function LocalEditorTimeline({
   markers = [],
   selectedMarkerId = null,
   onMarkerSelect,
+  onMarkerMove,
 }) {
   const timelineRef = useRef(null);
+  const markerDragRef = useRef(null);
+  const suppressMarkerClickRef = useRef(null);
+  const [draggedMarker, setDraggedMarker] = useState(null);
   const safeDuration = Math.max(1, durationMs);
   const timelineWidth = Math.max(
     MIN_LANE_WIDTH,
@@ -200,6 +204,77 @@ export default function LocalEditorTimeline({
         ),
       ),
     );
+  };
+
+  const markerTimeFromClientX = (clientX) => {
+    const canvas = timelineRef.current?.querySelector(
+      '[data-testid="local-editor-timeline-canvas"]',
+    );
+    if (!canvas) return 0;
+    const rect = canvas.getBoundingClientRect();
+    return Math.max(
+      0,
+      Math.min(
+        safeDuration,
+        ((clientX - rect.left - TRACK_LABEL_WIDTH) / timelineWidth) *
+          safeDuration,
+      ),
+    );
+  };
+
+  const beginMarkerDrag = (event, markerId, markerTimeMs) => {
+    if (markerDragRef.current) return;
+    event.stopPropagation();
+    const drag = {
+      markerId,
+      originTimeMs: markerTimeMs,
+      moved: false,
+      eventPrefix: event.type.startsWith("pointer") ? "pointer" : "mouse",
+    };
+    markerDragRef.current = drag;
+    setDraggedMarker({ id: markerId, timeMs: markerTimeMs });
+
+    const update = (moveEvent) => {
+      if (markerDragRef.current !== drag) return;
+      const nextTimeMs = markerTimeFromClientX(moveEvent.clientX);
+      if (Math.abs(nextTimeMs - drag.originTimeMs) > 1) {
+        drag.moved = true;
+        moveEvent.preventDefault();
+      }
+      setDraggedMarker({ id: markerId, timeMs: nextTimeMs });
+    };
+    const stop = (upEvent) => {
+      if (markerDragRef.current !== drag) return;
+      const nextTimeMs = markerTimeFromClientX(upEvent.clientX);
+      if (Math.abs(nextTimeMs - drag.originTimeMs) > 1) drag.moved = true;
+      if (drag.moved) {
+        suppressMarkerClickRef.current = markerId;
+        onMarkerMove?.(markerId, nextTimeMs);
+        window.setTimeout(() => {
+          if (suppressMarkerClickRef.current === markerId)
+            suppressMarkerClickRef.current = null;
+        }, 0);
+      }
+      markerDragRef.current = null;
+      setDraggedMarker(null);
+      window.removeEventListener(`${drag.eventPrefix}move`, update);
+      window.removeEventListener(`${drag.eventPrefix}up`, stop);
+      if (drag.eventPrefix === "pointer")
+        window.removeEventListener("pointercancel", cancel);
+    };
+    const cancel = () => {
+      if (markerDragRef.current !== drag) return;
+      markerDragRef.current = null;
+      setDraggedMarker(null);
+      window.removeEventListener(`${drag.eventPrefix}move`, update);
+      window.removeEventListener(`${drag.eventPrefix}up`, stop);
+      if (drag.eventPrefix === "pointer")
+        window.removeEventListener("pointercancel", cancel);
+    };
+    window.addEventListener(`${drag.eventPrefix}move`, update);
+    window.addEventListener(`${drag.eventPrefix}up`, stop);
+    if (drag.eventPrefix === "pointer")
+      window.addEventListener("pointercancel", cancel);
   };
 
   return (
@@ -301,27 +376,42 @@ export default function LocalEditorTimeline({
                 0,
                 Math.min(safeDuration, Number(marker.timeMs) || 0),
               );
+              const displayTimeMs =
+                draggedMarker?.id === markerId
+                  ? draggedMarker.timeMs
+                  : markerTimeMs;
               return (
                 <div
                   key={markerId}
                   className="absolute bottom-0 top-0 z-20 w-px bg-amber-300/90"
-                  style={{ left: `${(markerTimeMs / safeDuration) * 100}%` }}
+                  style={{ left: `${(displayTimeMs / safeDuration) * 100}%` }}
                 >
                   <button
                     type="button"
                     data-testid="local-editor-marker"
                     aria-label={marker.label || "Timeline marker"}
                     aria-pressed={selectedMarkerId === markerId}
+                    aria-grabbed={draggedMarker?.id === markerId}
                     title={
                       selectedMarkerId === markerId
-                        ? "Selected marker. Press Delete to remove"
-                        : "Select marker"
+                        ? "Selected marker. Drag to move or press Delete to remove"
+                        : "Select or drag marker"
+                    }
+                    onMouseDown={(event) =>
+                      beginMarkerDrag(event, markerId, markerTimeMs)
+                    }
+                    onPointerDown={(event) =>
+                      beginMarkerDrag(event, markerId, markerTimeMs)
                     }
                     onClick={(event) => {
                       event.stopPropagation();
-                      onMarkerSelect?.(markerId);
+                      if (suppressMarkerClickRef.current === markerId) {
+                        suppressMarkerClickRef.current = null;
+                        return;
+                      }
+                      onMarkerSelect?.(markerId, markerTimeMs);
                     }}
-                    className={`pointer-events-auto absolute -left-1.5 -top-0.5 h-3 w-3 rotate-45 bg-amber-300 ${selectedMarkerId === markerId ? "ring-2 ring-white" : ""}`}
+                    className={`pointer-events-auto absolute -left-1.5 -top-0.5 h-3 w-3 rotate-45 cursor-grab bg-amber-300 ${selectedMarkerId === markerId ? "ring-2 ring-white" : ""} ${draggedMarker?.id === markerId ? "cursor-grabbing" : ""}`}
                   />
                 </div>
               );

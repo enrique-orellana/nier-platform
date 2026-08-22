@@ -136,7 +136,10 @@ export default function SubtitleCueTable({
     onChange?.({ ...cue, [field]: value });
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/10 bg-[#171719]">
+    <div
+      data-testid="local-editor-cue-table"
+      className="overflow-hidden rounded-xl border border-white/10 bg-[#171719]"
+    >
       <div className="max-h-[420px] overflow-auto">
         <table className="w-full min-w-[620px] border-collapse text-left">
           <thead className="sticky top-0 z-10 bg-[#39393d] text-[11px] text-zinc-300">

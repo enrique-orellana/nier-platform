@@ -34,7 +34,7 @@ describe("SubtitleCueTable", () => {
     });
   });
 
-  it("does not render generic playback controls or zoom controls", () => {
+  it("does not render general timeline controls inside the cue table", () => {
     render(
       <SubtitleCueTable
         cues={[{ id: "cue-1", text: "Caption", startMs: 0, endMs: 1000 }]}
@@ -46,17 +46,16 @@ describe("SubtitleCueTable", () => {
       />,
     );
 
-    expect(screen.queryByText("Playback Controls:")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("local-editor-playback-controls"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Loop segment")).not.toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Subtitle table speed"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Increase subtitle table size"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Follow audio")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Playback speed")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Scroll to current subtitle" }),
     ).not.toBeInTheDocument();
+    expect(screen.queryByText("Playback Controls:")).not.toBeInTheDocument();
   });
 
   it("clearly marks the cue at the current playhead", () => {

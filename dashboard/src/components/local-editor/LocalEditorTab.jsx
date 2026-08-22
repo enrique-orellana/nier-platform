@@ -88,7 +88,9 @@ import {
   setActiveProjectId,
 } from "./localEditorPersistence";
 import {
+  readEditorLayout,
   readEditorPreferences,
+  saveEditorLayout,
   saveEditorPreferences,
   updateEditorPreferencesFromState,
 } from "./localEditorPreferences";
@@ -201,6 +203,7 @@ export default function LocalEditorTab({
   const [isLooping, setIsLooping] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [playbackRateMenuOpen, setPlaybackRateMenuOpen] = useState(false);
   const [loopSegment, setLoopSegment] = useState(false);
   const [followAudio, setFollowAudio] = useState(true);
   const [videoViewMode, setVideoViewMode] = useState("auto");
@@ -209,7 +212,10 @@ export default function LocalEditorTab({
   const [hookOpen, setHookOpen] = useState(false);
   const [activeFeature, setActiveFeature] = useState("details");
   const [subtitleView, setSubtitleView] = useState("timeline");
-  const [timelineHeight, setTimelineHeight] = useState(null);
+  const [timelineHeight, setTimelineHeight] = useState(() => {
+    const savedHeight = readEditorLayout().timelineHeight;
+    return savedHeight >= MIN_TIMELINE_HEIGHT ? savedHeight : null;
+  });
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectIdState] = useState(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -369,6 +375,10 @@ export default function LocalEditorTab({
     }));
     setSelected(null);
   }, [initialEditorState, initialStateKey]);
+
+  useEffect(() => {
+    if (timelineHeight !== null) saveEditorLayout({ timelineHeight });
+  }, [timelineHeight]);
 
   useEffect(() => {
     const persistCurrentHistory = () => {
@@ -2155,66 +2165,103 @@ export default function LocalEditorTab({
                 <div className="flex min-w-0 items-center gap-2">
                   <div
                     data-testid="local-editor-playback-controls"
-                    className="flex min-w-0 items-center gap-1"
+                    className="flex shrink-0 items-center gap-1"
                   >
-                    <label className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300">
-                      <input
-                        aria-label="Loop segment"
-                        type="checkbox"
-                        checked={loopSegment}
-                        onChange={(event) =>
-                          setLoopSegment(event.target.checked)
-                        }
-                        className="accent-violet-400"
-                      />
-                      <span className="hidden sm:inline">Loop Segment</span>
-                    </label>
-                    <label className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300">
-                      <input
-                        aria-label="Follow audio"
-                        type="checkbox"
-                        checked={followAudio}
-                        onChange={(event) =>
-                          setFollowAudio(event.target.checked)
-                        }
-                        className="accent-violet-400"
-                      />
-                      <span className="hidden sm:inline">Follow Audio</span>
-                    </label>
-                    <label className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300">
-                      <span className="hidden sm:inline">Speed</span>
-                      <select
+                    {subtitleView === "table" && (
+                      <>
+                        <label className="group inline-flex h-7 cursor-pointer items-center">
+                          <input
+                            aria-label="Loop segment"
+                            type="checkbox"
+                            checked={loopSegment}
+                            onChange={(event) =>
+                              setLoopSegment(event.target.checked)
+                            }
+                            className="peer sr-only"
+                          />
+                          <span className="rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-400 transition-colors group-hover:border-white/20 group-hover:text-zinc-200 peer-checked:border-violet-400/50 peer-checked:bg-violet-500/15 peer-checked:text-violet-200">
+                            Loop
+                          </span>
+                        </label>
+                        <label className="group inline-flex h-7 cursor-pointer items-center">
+                          <input
+                            aria-label="Follow audio"
+                            type="checkbox"
+                            checked={followAudio}
+                            onChange={(event) =>
+                              setFollowAudio(event.target.checked)
+                            }
+                            className="peer sr-only"
+                          />
+                          <span className="rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-400 transition-colors group-hover:border-white/20 group-hover:text-zinc-200 peer-checked:border-violet-400/50 peer-checked:bg-violet-500/15 peer-checked:text-violet-200">
+                            Follow
+                          </span>
+                        </label>
+                        <button
+                          type="button"
+                          aria-label="Scroll to current subtitle"
+                          title="Scroll to current subtitle"
+                          onClick={scrollToCurrentSubtitle}
+                          disabled={!subtitleCues.length}
+                          className="h-7 rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Current
+                        </button>
+                      </>
+                    )}
+                    <div className="relative">
+                      <button
+                        type="button"
                         aria-label="Playback speed"
-                        value={playbackRate}
-                        onChange={(event) =>
-                          setPlaybackRate(Number(event.target.value))
+                        aria-haspopup="listbox"
+                        aria-expanded={playbackRateMenuOpen}
+                        onClick={() =>
+                          setPlaybackRateMenuOpen((current) => !current)
                         }
-                        className="bg-transparent text-white outline-none"
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape")
+                            setPlaybackRateMenuOpen(false);
+                        }}
+                        className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-white/[.02] px-2 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100"
                       >
-                        {PLAYBACK_RATES.map((rate) => (
-                          <option key={rate} value={rate}>
-                            {rate.toFixed(2)}x
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <button
-                      type="button"
-                      aria-label="Scroll to current subtitle"
-                      onClick={scrollToCurrentSubtitle}
-                      disabled={!subtitleCues.length}
-                      className="rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <span className="hidden sm:inline">
-                        Scroll to Current
-                      </span>
-                      <span className="sm:hidden">Current</span>
-                    </button>
+                        <span>Speed</span>
+                        <span className="font-medium text-zinc-100">
+                          {playbackRate.toFixed(2)}x
+                        </span>
+                        <ChevronDown
+                          size={13}
+                          className={`transition-transform ${playbackRateMenuOpen ? "rotate-180" : ""}`}
+                        />
+                      </button>
+                      {playbackRateMenuOpen && (
+                        <div
+                          role="listbox"
+                          aria-label="Playback speed options"
+                          className="absolute right-0 top-8 z-40 min-w-full overflow-hidden rounded-md border border-white/10 bg-[#1b1b20] p-1 shadow-xl"
+                        >
+                          {PLAYBACK_RATES.map((rate) => (
+                            <button
+                              key={rate}
+                              type="button"
+                              role="option"
+                              aria-selected={playbackRate === rate}
+                              onClick={() => {
+                                setPlaybackRate(rate);
+                                setPlaybackRateMenuOpen(false);
+                              }}
+                              className={`block w-full rounded px-2 py-1.5 text-left text-[11px] ${playbackRate === rate ? "bg-violet-500/20 text-violet-200" : "text-zinc-300 hover:bg-white/10 hover:text-white"}`}
+                            >
+                              {rate.toFixed(2)}x
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div
                     role="tablist"
                     aria-label="Subtitle editing view"
-                    className="flex h-7 rounded border border-white/10 bg-black/20 p-0.5"
+                    className="flex h-7 shrink-0 rounded border border-white/10 bg-black/20 p-0.5"
                   >
                     <button
                       type="button"

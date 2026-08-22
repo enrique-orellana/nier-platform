@@ -6,6 +6,7 @@ import {
 
 export const EDITOR_PREFERENCES_STORAGE_KEY =
   "openshorts_local_editor_preferences_v1";
+export const EDITOR_LAYOUT_STORAGE_KEY = "openshorts_local_editor_layout_v1";
 export const EDITOR_PREFERENCES_VERSION = 1;
 
 export const DEFAULT_HOOK_DEFAULTS = {
@@ -84,6 +85,36 @@ export const saveEditorPreferences = (preferences) => {
     localStorage.setItem(
       EDITOR_PREFERENCES_STORAGE_KEY,
       JSON.stringify(normalizeEditorPreferences(preferences)),
+    );
+  } catch {
+    // Browser storage can be unavailable or full; editing remains usable in memory.
+  }
+};
+
+export const readEditorLayout = () => {
+  try {
+    const stored = localStorage.getItem(EDITOR_LAYOUT_STORAGE_KEY);
+    if (!stored) return { timelineHeight: null };
+    const parsed = JSON.parse(stored);
+    const timelineHeight = Number(parsed?.timelineHeight);
+    return {
+      timelineHeight:
+        Number.isFinite(timelineHeight) && timelineHeight > 0
+          ? Math.round(timelineHeight)
+          : null,
+    };
+  } catch {
+    return { timelineHeight: null };
+  }
+};
+
+export const saveEditorLayout = (layout) => {
+  const timelineHeight = Number(layout?.timelineHeight);
+  if (!Number.isFinite(timelineHeight) || timelineHeight <= 0) return;
+  try {
+    localStorage.setItem(
+      EDITOR_LAYOUT_STORAGE_KEY,
+      JSON.stringify({ timelineHeight: Math.round(timelineHeight) }),
     );
   } catch {
     // Browser storage can be unavailable or full; editing remains usable in memory.
