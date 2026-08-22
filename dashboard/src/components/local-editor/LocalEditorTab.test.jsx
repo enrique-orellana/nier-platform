@@ -853,6 +853,9 @@ describe("LocalEditorTab", () => {
       target: { value: "One two" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save cue" }));
+    fireEvent.doubleClick(
+      screen.getAllByRole("button", { name: "One two" })[0],
+    );
 
     await waitFor(() =>
       expect(screen.getByLabelText("Word 1 text")).toHaveValue("One"),
@@ -1682,6 +1685,7 @@ describe("LocalEditorTab", () => {
       key: "z",
       ctrlKey: true,
     });
+    fireEvent.doubleClick(screen.getAllByRole("button", { name: "Hello" })[0]);
 
     expect(screen.getByLabelText("Subtitle text")).toHaveValue("Hello");
     expect(screen.getAllByText("Hello").length).toBeGreaterThan(0);
@@ -1717,10 +1721,11 @@ describe("LocalEditorTab", () => {
       target: { value: "Changed" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save cue" }));
-    fireEvent.keyDown(screen.getByLabelText("Subtitle text"), {
+    fireEvent.keyDown(screen.getByTestId("local-editor-player"), {
       key: "z",
       ctrlKey: true,
     });
+    fireEvent.doubleClick(screen.getAllByRole("button", { name: "Hello" })[0]);
 
     expect(screen.getByLabelText("Subtitle text")).toHaveValue("Hello");
   });
@@ -1996,20 +2001,41 @@ describe("LocalEditorTab", () => {
     fireEvent.click(screen.getByRole("button", { name: /add subtitle cue/i }));
     expect(screen.getByLabelText("Subtitle text")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /delete subtitle cue/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /delete subtitle cue/i }),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /delete subtitle cue/i }),
+      screen.getByRole("button", { name: "Remove selected cue" }),
     );
     expect(confirm).toHaveBeenCalledWith("Remove this subtitle cue?");
     expect(screen.getByLabelText("Subtitle text")).toBeInTheDocument();
 
     confirm.mockReturnValue(true);
     fireEvent.click(
-      screen.getByRole("button", { name: /delete subtitle cue/i }),
+      screen.getByRole("button", { name: "Remove selected cue" }),
     );
     expect(screen.queryByLabelText("Subtitle text")).not.toBeInTheDocument();
+  });
+
+  it("closes the subtitle cue modal after saving", async () => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:demo");
+    render(<LocalEditorTab />);
+    fireEvent.change(screen.getByLabelText(/upload video/i), {
+      target: { files: [makeVideoFile()] },
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /add subtitle cue/i }),
+      ).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /add subtitle cue/i }));
+    expect(screen.getByLabelText("Subtitle text")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save cue" }));
+
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Subtitle text")).not.toBeInTheDocument(),
+    );
   });
 
   it("undoes and redoes subtitle edits", async () => {
@@ -2030,8 +2056,10 @@ describe("LocalEditorTab", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save cue" }));
     fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Timeline cue" }));
     expect(screen.getByLabelText("Subtitle text")).toHaveValue("");
     fireEvent.click(screen.getByRole("button", { name: "Redo", exact: true }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Undo me" }));
     expect(screen.getByLabelText("Subtitle text")).toHaveValue("Undo me");
   });
 

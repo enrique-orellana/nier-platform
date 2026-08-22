@@ -2369,6 +2369,7 @@ export default function LocalEditorTab({
           onDelete={removeSubtitleCue}
           onSave={(cue) => {
             updateSubtitle(cue);
+            setEditingSubtitle(null);
           }}
         />
       )}

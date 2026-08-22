@@ -48,4 +48,24 @@ describe("SubtitleCueModal", () => {
     expect(onSave).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps the cue editor focused and does not render a delete action", () => {
+    render(
+      <SubtitleCueModal
+        cue={cue}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("dialog")).toHaveClass(
+      "max-w-2xl",
+      "rounded-xl",
+      "p-5",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Delete subtitle cue" }),
+    ).not.toBeInTheDocument();
+  });
 });
