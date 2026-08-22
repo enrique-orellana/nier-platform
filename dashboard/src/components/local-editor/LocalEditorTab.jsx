@@ -15,6 +15,7 @@ import {
   Languages,
   Loader2,
   Maximize2,
+  Minus,
   Minimize2,
   Pause,
   Play,
@@ -195,6 +196,7 @@ export default function LocalEditorTab({
   const [hookOpen, setHookOpen] = useState(false);
   const [activeFeature, setActiveFeature] = useState("details");
   const [subtitleView, setSubtitleView] = useState("timeline");
+  const [timelineZoom, setTimelineZoom] = useState(1);
   const [subtitleTableLoop, setSubtitleTableLoop] = useState(false);
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectIdState] = useState(null);
@@ -1869,37 +1871,90 @@ export default function LocalEditorTab({
           </div>
           <div
             data-testid="local-editor-subtitle-workspace"
-            className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#101014] p-2 xl:col-span-3 xl:col-start-1 xl:row-start-2"
+            className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none border border-white/10 bg-[#101014] xl:col-span-3 xl:col-start-1 xl:row-start-2"
           >
-            <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                Subtitle workspace
-              </span>
-              <div
-                role="tablist"
-                aria-label="Subtitle editing view"
-                className="flex rounded-lg border border-white/10 bg-black/20 p-0.5"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-label="Timeline view"
-                  aria-selected={subtitleView === "timeline"}
-                  onClick={() => setSubtitleView("timeline")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === "timeline" ? "bg-white text-black" : "text-zinc-400 hover:bg-white/10 hover:text-white"}`}
+            <div
+              data-testid="local-editor-subtitle-toolbar"
+              className="flex h-9 flex-none items-center justify-end border-b border-white/10 px-2"
+            >
+              <div className="flex items-center gap-2">
+                {subtitleView === "timeline" && (
+                  <div
+                    data-testid="local-editor-timeline-zoom"
+                    className="flex h-6 items-center overflow-hidden rounded border border-white/10 bg-[#1b1b1f] text-zinc-400 shadow-inner"
+                  >
+                    <button
+                      type="button"
+                      aria-label="Zoom out timeline"
+                      title="Zoom out timeline"
+                      onClick={() =>
+                        setTimelineZoom((current) =>
+                          Math.max(0.5, Number((current - 0.5).toFixed(2))),
+                        )
+                      }
+                      className="flex h-full w-6 items-center justify-center border-r border-white/10 hover:bg-white/10 hover:text-white disabled:opacity-40"
+                      disabled={timelineZoom <= 0.5}
+                    >
+                      <Minus size={13} />
+                    </button>
+                    <label className="flex h-full w-24 items-center px-2">
+                      <span className="sr-only">Timeline zoom</span>
+                      <input
+                        type="range"
+                        aria-label="Timeline zoom"
+                        min="0.5"
+                        max="8"
+                        step="0.5"
+                        value={timelineZoom}
+                        aria-valuetext={`${Math.round(timelineZoom * 100)}%`}
+                        onChange={(event) =>
+                          setTimelineZoom(Number(event.target.value))
+                        }
+                        className="h-1.5 w-full cursor-pointer accent-zinc-300"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      aria-label="Zoom in timeline"
+                      title="Zoom in timeline"
+                      onClick={() =>
+                        setTimelineZoom((current) =>
+                          Math.min(8, Number((current + 0.5).toFixed(2))),
+                        )
+                      }
+                      className="flex h-full w-6 items-center justify-center border-l border-white/10 hover:bg-white/10 hover:text-white disabled:opacity-40"
+                      disabled={timelineZoom >= 8}
+                    >
+                      <Plus size={13} />
+                    </button>
+                  </div>
+                )}
+                <div
+                  role="tablist"
+                  aria-label="Subtitle editing view"
+                  className="flex h-7 rounded border border-white/10 bg-black/20 p-0.5"
                 >
-                  Timeline
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-label="Subtitle table view"
-                  aria-selected={subtitleView === "table"}
-                  onClick={() => setSubtitleView("table")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === "table" ? "bg-violet-500 text-white" : "text-zinc-400 hover:bg-white/10 hover:text-white"}`}
-                >
-                  Cue table
-                </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-label="Timeline view"
+                    aria-selected={subtitleView === "timeline"}
+                    onClick={() => setSubtitleView("timeline")}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === "timeline" ? "bg-white text-black" : "text-zinc-400 hover:bg-white/10 hover:text-white"}`}
+                  >
+                    Timeline
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-label="Subtitle table view"
+                    aria-selected={subtitleView === "table"}
+                    onClick={() => setSubtitleView("table")}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === "table" ? "bg-violet-500 text-white" : "text-zinc-400 hover:bg-white/10 hover:text-white"}`}
+                  >
+                    Cue table
+                  </button>
+                </div>
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden">
@@ -1935,6 +1990,7 @@ export default function LocalEditorTab({
                   onChangeEnd={endTimelineEdit}
                   playheadMs={playheadMs}
                   onSeek={handleSeek}
+                  timelineZoom={timelineZoom}
                 />
               )}
             </div>

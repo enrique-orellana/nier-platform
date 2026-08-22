@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { moveCue, resizeCue } from "../../editor/timelineModel";
 import AudioWaveform from "./AudioWaveform";
 import { formatClock } from "./localEditorExport";
@@ -149,9 +149,9 @@ export default function LocalEditorTimeline({
   onChangeEnd,
   playheadMs = 0,
   onSeek,
+  timelineZoom = 1,
 }) {
   const timelineRef = useRef(null);
-  const [timelineZoom, setTimelineZoom] = useState(1);
   const safeDuration = Math.max(1, durationMs);
   const timelineWidth = Math.max(
     MIN_LANE_WIDTH,
@@ -198,33 +198,16 @@ export default function LocalEditorTimeline({
       ),
     );
   };
+
   return (
-    <div className="rounded-xl border border-white/10 bg-[#101014]">
-      <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-[10px] text-zinc-500">
-        <span>Timeline</span>
-        <div className="flex items-center gap-2">
-          <span>Scroll horizontally for precise subtitle timing</span>
-          <label className="flex items-center gap-1 text-zinc-400">
-            <span className="sr-only">Timeline zoom</span>
-            <select
-              aria-label="Timeline zoom"
-              value={timelineZoom}
-              onChange={(event) => setTimelineZoom(Number(event.target.value))}
-              className="rounded bg-black/30 px-1.5 py-1 text-[10px] text-zinc-300"
-            >
-              <option value="0.5">50%</option>
-              <option value="1">100%</option>
-              <option value="2">200%</option>
-              <option value="4">400%</option>
-              <option value="8">800%</option>
-            </select>
-          </label>
-        </div>
-      </div>
+    <div
+      data-testid="local-editor-timeline"
+      className="flex h-full min-h-0 flex-col rounded-none border-0 bg-[#101014]"
+    >
       <div
         ref={timelineRef}
         data-testid="local-editor-timeline-scroll"
-        className="max-w-full overflow-x-auto overflow-y-hidden"
+        className="min-h-0 flex-1 max-w-full overflow-x-auto overflow-y-hidden"
       >
         <div
           data-testid="local-editor-timeline-canvas"

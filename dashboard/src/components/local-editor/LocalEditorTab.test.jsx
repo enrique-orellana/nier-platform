@@ -220,6 +220,17 @@ describe("LocalEditorTab", () => {
     const subtitleWorkspace = screen.getByTestId(
       "local-editor-subtitle-workspace",
     );
+    expect(screen.queryByText("Subtitle workspace")).not.toBeInTheDocument();
+    expect(screen.getByTestId("local-editor-subtitle-toolbar")).toHaveClass(
+      "h-9",
+      "border-b",
+    );
+    expect(
+      screen.queryByTestId("local-editor-timeline-toolbar"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Timeline zoom" })).toHaveValue(
+      "1",
+    );
     expect(subtitleWorkspace).toHaveClass(
       "min-h-0",
       "flex",

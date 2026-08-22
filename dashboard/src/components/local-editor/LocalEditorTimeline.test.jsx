@@ -23,7 +23,15 @@ describe("LocalEditorTimeline", () => {
       />,
     );
 
+    expect(screen.getByTestId("local-editor-timeline")).toHaveClass(
+      "flex",
+      "h-full",
+      "min-h-0",
+      "flex-col",
+    );
     expect(screen.getByTestId("local-editor-timeline-scroll")).toHaveClass(
+      "min-h-0",
+      "flex-1",
       "overflow-x-auto",
     );
     expect(screen.getByTestId("local-editor-timeline-canvas")).toHaveStyle({
@@ -107,16 +115,22 @@ describe("LocalEditorTimeline", () => {
   });
 
   it("allows high zoom levels for uninterrupted cue inspection", () => {
-    render(<LocalEditorTimeline durationMs={10000} />);
-
-    const zoom = screen.getByRole("combobox", { name: "Timeline zoom" });
-    expect(screen.getByRole("option", { name: "400%" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "800%" })).toBeInTheDocument();
-    fireEvent.change(zoom, { target: { value: "4" } });
+    render(<LocalEditorTimeline durationMs={10000} timelineZoom={4} />);
 
     expect(screen.getByTestId("local-editor-timeline-canvas")).toHaveStyle({
       width: "3344px",
     });
+  });
+
+  it("uses a compact CapCut-style timeline toolbar", () => {
+    render(<LocalEditorTimeline durationMs={10000} />);
+
+    expect(
+      screen.queryByTestId("local-editor-timeline-toolbar"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Scroll horizontally for precise subtitle timing"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders the audio lane after every cue lane", () => {
