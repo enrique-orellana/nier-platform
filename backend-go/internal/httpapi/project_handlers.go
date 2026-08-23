@@ -41,6 +41,8 @@ func (s *Server) projectRoutes(w http.ResponseWriter, r *http.Request) {
 		s.transcribeProjectClip(w, r, job, parts[2])
 	case r.Method == http.MethodPatch && len(parts) == 4 && parts[1] == "clips" && parts[3] == "status":
 		s.updateProjectStatus(w, r, job, parts[2])
+	case r.Method == http.MethodPatch && len(parts) == 4 && parts[1] == "clips" && parts[3] == "metadata":
+		s.updateProjectClipMetadata(w, r, job, parts[2])
 	case r.Method == http.MethodDelete && len(parts) == 1:
 		s.deleteProject(w, r, jobID)
 	default:
@@ -420,6 +422,65 @@ func (s *Server) updateProjectStatus(w http.ResponseWriter, r *http.Request, job
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": job.ID, "clip_index": clipIndex, "status": status.Status, "updated_at": status.UpdatedAt.Format(time.RFC3339Nano)})
+}
+
+func (s *Server) updateProjectClipMetadata(w http.ResponseWriter, r *http.Request, job domain.Job, rawIndex string) {
+	clipIndex, err := strconv.Atoi(rawIndex)
+	if err != nil || clipIndex < 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Clip not found"})
+		return
+	}
+	var request struct {
+		Hashtags []string `json:"hashtags"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+	if request.Hashtags == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "hashtags must be an array"})
+		return
+	}
+	hashtags := make([]string, 0, len(request.Hashtags))
+	for _, hashtag := range request.Hashtags {
+		if value := strings.TrimSpace(hashtag); value != "" {
+			hashtags = append(hashtags, value)
+		}
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(job.Result, &payload); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Clip not found"})
+		return
+	}
+	clips, ok := payload["clips"].([]any)
+	if !ok || clipIndex >= len(clips) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Clip not found"})
+		return
+	}
+	clip, ok := clips[clipIndex].(map[string]any)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Clip not found"})
+		return
+	}
+	clip["hashtags"] = hashtags
+	updatedResult, err := json.Marshal(payload)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not encode clip metadata"})
+		return
+	}
+	if err := s.store.SetResult(r.Context(), job.ID, updatedResult); err != nil {
+		if errors.Is(err, jobs.ErrJobNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not persist clip metadata"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"job_id":     job.ID,
+		"clip_index": clipIndex,
+		"hashtags":   hashtags,
+	})
 }
 
 func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request, jobID string) {

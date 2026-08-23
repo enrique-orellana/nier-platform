@@ -969,7 +969,7 @@ func TestLocalRenderVideoURLRenewsPersistedS3ClipURL(t *testing.T) {
 	expected := "https://storage.example/openshorts-media/job-1/clips/render-1/source_clip_14.mp4"
 	if resolved != expected {
 		t.Fatalf("expected persisted media URL to resolve to %q, got %q", expected, resolved)
-}
+	}
 }
 
 func TestPersistSubtitlesUpdatesMasterManifestWithoutDroppingOtherLayers(t *testing.T) {
@@ -2222,6 +2222,54 @@ func TestProjectClipStatusesPersistInStoreInsteadOfSidecar(t *testing.T) {
 	server.Handler().ServeHTTP(getRes, getReq)
 	if getRes.Code != http.StatusOK || !strings.Contains(getRes.Body.String(), `"0"`) || !strings.Contains(getRes.Body.String(), `"discarded"`) {
 		t.Fatalf("unexpected statuses response: %d %s", getRes.Code, getRes.Body.String())
+	}
+}
+
+func TestProjectClipHashtagsPersistInJobResult(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"clips":[{"title":"First","caption":"Keep this","hashtags":["#old"]}],"source":"preserve"}`)); err != nil {
+		t.Fatalf("set result: %v", err)
+	}
+	server := NewServerWithStore(config.Config{OutputDir: t.TempDir()}, store)
+
+	request := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/projects/"+job.ID+"/clips/0/metadata",
+		strings.NewReader(`{"hashtags":["#new","#viral"]}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected metadata update to succeed, got %d: %s", response.Code, response.Body.String())
+	}
+
+	updated, ok := store.Get(context.Background(), job.ID)
+	if !ok {
+		t.Fatalf("load updated job")
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(updated.Result, &payload); err != nil {
+		t.Fatalf("decode stored result: %v", err)
+	}
+	clips, ok := payload["clips"].([]any)
+	if !ok || len(clips) != 1 {
+		t.Fatalf("unexpected stored clips: %#v", payload["clips"])
+	}
+	clip, ok := clips[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected stored clip: %#v", clips[0])
+	}
+	encodedHashtags, err := json.Marshal(clip["hashtags"])
+	if err != nil || string(encodedHashtags) != `["#new","#viral"]` {
+		t.Fatalf("expected hashtags in stored result, got %#v", clip["hashtags"])
+	}
+	if clip["title"] != "First" || clip["caption"] != "Keep this" || payload["source"] != "preserve" {
+		t.Fatalf("metadata update dropped existing result fields: %#v", payload)
 	}
 }
 

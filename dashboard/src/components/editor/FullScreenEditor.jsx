@@ -867,6 +867,26 @@ export default function FullScreenEditor({
     void saveVersion(pendingMetadata);
   }, [busy, saveVersion]);
 
+  const persistProjectClipHashtags = useCallback(
+    async (hashtags) => {
+      const response = await fetch(
+        getApiUrl(
+          `/api/projects/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipIndex)}/metadata`,
+        ),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hashtags }),
+        },
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.detail || "Could not save hashtags.");
+      }
+    },
+    [clipIndex, jobId],
+  );
+
   const saveGeneratedHashtags = useCallback(
     async (hashtags) => {
       const nextMetadata = { ...publishingMetadataRef.current, hashtags };
@@ -884,13 +904,18 @@ export default function FullScreenEditor({
           publishing_metadata: nextMetadata,
         };
       }
-      if (busy) {
-        pendingHashtagMetadataRef.current = nextMetadata;
-        return;
+      try {
+        await persistProjectClipHashtags(hashtags);
+        if (busy) {
+          pendingHashtagMetadataRef.current = nextMetadata;
+          return;
+        }
+        await saveVersion(nextMetadata);
+      } catch (saveError) {
+        setError(saveError.message || "Could not save hashtags.");
       }
-      await saveVersion(nextMetadata);
     },
-    [busy, saveVersion],
+    [busy, persistProjectClipHashtags, saveVersion],
   );
 
   const exportVersion = useCallback(

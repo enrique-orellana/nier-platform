@@ -1023,20 +1023,18 @@ describe("FullScreenEditor", () => {
       version: { version_id: "v2", status: "pending" },
       manifest,
     });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((url) =>
-        String(url).includes("/api/local-editor/hashtags")
-          ? Promise.resolve({
-              ok: true,
-              json: async () => ({ hashtags: ["#editedclip"] }),
-            })
-          : Promise.resolve({
-              ok: true,
-              blob: async () => new Blob(["video"], { type: "video/mp4" }),
-            }),
-      ),
+    const fetchMock = vi.fn((url) =>
+      String(url).includes("/api/local-editor/hashtags")
+        ? Promise.resolve({
+            ok: true,
+            json: async () => ({ hashtags: ["#editedclip"] }),
+          })
+        : Promise.resolve({
+            ok: true,
+            blob: async () => new Blob(["video"], { type: "video/mp4" }),
+          }),
     );
+    vi.stubGlobal("fetch", fetchMock);
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
       writable: true,
@@ -1089,6 +1087,15 @@ describe("FullScreenEditor", () => {
       ),
     );
     expect(renderVersionMocks.saveAndRenderVersion).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/projects/job/clips/0/metadata",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ hashtags: ["#editedclip"] }),
+        }),
+      ),
+    );
   });
 
   it("persists generated hashtags after an earlier save finishes", async () => {
