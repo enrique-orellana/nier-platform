@@ -499,6 +499,25 @@ export default function FullScreenEditor({
     localDraft,
   ]);
   const generatedClipUrl = generatedClipVideoUrl(clip, projectManifest);
+  const versionSourceVideoUrl = version?.version_id
+    ? projectManifest.timeline?.source_video_url || ""
+    : "";
+  const { url: refreshedVersionSourceVideoUrl } = useRenewableMediaUrl(
+    versionSourceVideoUrl,
+  );
+  const selectedVersionSourceVideoUrl =
+    refreshedVersionSourceVideoUrl || versionSourceVideoUrl;
+  const masterSourceVideoUrl =
+    clip.source_video_url ||
+    clip.original_video_url ||
+    clip.source_url ||
+    clip.video_url ||
+    "";
+  const hasIndependentVersionSource = Boolean(
+    selectedVersionSourceVideoUrl &&
+    videoPath(selectedVersionSourceVideoUrl) !==
+      videoPath(masterSourceVideoUrl),
+  );
   const projectInputProps = useMemo(
     () => ({
       ...manifestToRenderProps(projectManifest, {
@@ -552,7 +571,10 @@ export default function FullScreenEditor({
   const durationSeconds =
     selectedRenderSpec.duration_in_frames / selectedRenderSpec.fps;
   const projectVideoUrl =
-    generatedClipUrl || refreshedMasterVideoUrl || projectInputProps.videoUrl;
+    selectedVersionSourceVideoUrl ||
+    generatedClipUrl ||
+    refreshedMasterVideoUrl ||
+    projectInputProps.videoUrl;
   const versionManifest = useMemo(
     () => ({
       ...projectManifest,
@@ -639,19 +661,30 @@ export default function FullScreenEditor({
     renderSpecDirty,
     versionManifest,
   ]);
-  const previewVideoUrl = generatedClipUrl || projectVideoUrl;
-  const previewVideoStartSeconds = generatedClipUrl
-    ? 0
-    : selectedRenderProps.videoStartSeconds;
+  const previewVideoUrl = projectVideoUrl;
+  const previewVideoStartSeconds =
+    hasIndependentVersionSource || generatedClipUrl
+      ? 0
+      : selectedRenderProps.videoStartSeconds;
   const localEditorPreviewUrl = useMemo(() => {
     return (
       resolveLocalEditorSourceUrl({
         refreshedMasterVideoUrl,
         clip,
         projectManifest,
-      }) || projectVideoUrl
+        preferVersionSource: Boolean(version?.version_id),
+      }) ||
+      selectedVersionSourceVideoUrl ||
+      projectVideoUrl
     );
-  }, [clip, projectManifest, projectVideoUrl, refreshedMasterVideoUrl]);
+  }, [
+    clip,
+    projectManifest,
+    projectVideoUrl,
+    refreshedMasterVideoUrl,
+    selectedVersionSourceVideoUrl,
+    version?.version_id,
+  ]);
   const currentManifestRef = useRef(currentManifest);
   useEffect(() => {
     currentManifestRef.current = projectManifest;
@@ -1029,7 +1062,10 @@ export default function FullScreenEditor({
             refreshedMasterVideoUrl,
             clip,
             projectManifest,
-          }) || projectInputProps.videoUrl
+            preferVersionSource: Boolean(version?.version_id),
+          }) ||
+          selectedVersionSourceVideoUrl ||
+          projectInputProps.videoUrl
         }
         initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
         initialProjectId={jobId}

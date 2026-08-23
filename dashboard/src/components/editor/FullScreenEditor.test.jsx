@@ -139,6 +139,60 @@ describe("FullScreenEditor", () => {
     ).toBe("https://minio.example/master/source.mp4?X-Amz-Date=fresh");
   });
 
+  it("uses a saved version source URL for local editor media", () => {
+    const generatedVersionUrl =
+      "https://minio.example/openshorts-media/job/clips/clip-1/source_clip_7.mp4?X-Amz-Date=version";
+
+    expect(
+      resolveLocalEditorSourceUrl({
+        refreshedMasterVideoUrl:
+          "https://minio.example/master/source.mp4?X-Amz-Date=fresh",
+        preferVersionSource: true,
+        clip: {
+          video_url: generatedVersionUrl,
+          source_video_url:
+            "https://minio.example/master/source.mp4?X-Amz-Date=stale",
+        },
+        projectManifest: {
+          timeline: { source_video_url: generatedVersionUrl },
+        },
+      }),
+    ).toBe(generatedVersionUrl);
+  });
+
+  it("previews a saved version from its source video instead of the master", () => {
+    const versionSourceUrl =
+      "https://minio.example/openshorts-media/job/clips/clip-1/source_clip_7.mp4";
+    const masterUrl =
+      "https://minio.example/openshorts-media/job/master/source.mp4";
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        initialManifest={{
+          ...manifest,
+          timeline: {
+            ...manifest.timeline,
+            source_video_url: versionSourceUrl,
+          },
+        }}
+        clip={{
+          output_fps: 30,
+          source_video_url: masterUrl,
+          video_url: masterUrl,
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
+      "data-video-url",
+      versionSourceUrl,
+    );
+  });
+
   it("exports the generated clip source used by the preview", async () => {
     const generatedClipUrl =
       "https://minio.example/openshorts-media/job/clips/clip-1/source_clip_14.mp4";
@@ -163,7 +217,10 @@ describe("FullScreenEditor", () => {
         }}
         initialManifest={{
           ...manifest,
-          timeline: { ...manifest.timeline, source_video_url: masterUrl },
+          timeline: {
+            ...manifest.timeline,
+            source_video_url: generatedClipUrl,
+          },
         }}
         initialVersion={{ version_id: "v1", status: "done" }}
         onSessionReady={(nextSession) => {
