@@ -7,11 +7,17 @@ const trackItems = (track) => {
 };
 
 const trackCaptions = (track) =>
-  trackItems(track).map((cue) => ({
-    text: cue.text || cue.word || "",
-    startMs: Number(cue.startMs || 0),
-    endMs: Number(cue.endMs || cue.startMs || 0),
-  }));
+  trackItems(track).flatMap((cue) => {
+    const captions =
+      Array.isArray(cue?.captions) && cue.captions.length
+        ? cue.captions
+        : [cue];
+    return captions.map((caption) => ({
+      text: caption.text || caption.word || "",
+      startMs: Number(caption.startMs || 0),
+      endMs: Number(caption.endMs ?? caption.startMs ?? 0),
+    }));
+  });
 
 const isGeneratedSourceClip = (url) => {
   if (!url) return false;

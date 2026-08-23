@@ -331,6 +331,35 @@ describe("designcomboAdapter", () => {
     ]);
   });
 
+  it("preserves nested word timings when building render props", () => {
+    const props = manifestToRenderProps({
+      timeline: { source_video_url: "/videos/source.mp4" },
+      layers: {},
+      subtitle_tracks: [
+        {
+          id: "original",
+          cues: [
+            {
+              text: "Hola mundo",
+              startMs: 500,
+              endMs: 1500,
+              captions: [
+                { text: "Hola", startMs: 500, endMs: 900 },
+                { text: "mundo", startMs: 900, endMs: 1500 },
+              ],
+            },
+          ],
+        },
+      ],
+      active_subtitle_track_id: "original",
+    });
+
+    expect(props.subtitles.captions).toEqual([
+      { text: "Hola", startMs: 500, endMs: 900 },
+      { text: "mundo", startMs: 900, endMs: 1500 },
+    ]);
+  });
+
   it("does not emit subtitles for an empty active track", () => {
     const props = manifestToRenderProps({
       timeline: { source_video_url: "/videos/source.mp4" },

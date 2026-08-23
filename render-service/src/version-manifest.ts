@@ -21,11 +21,17 @@ const trackItems = (track: Record<string, any> | undefined) => {
 };
 
 const trackCaptions = (track: Record<string, any> | undefined) =>
-  trackItems(track).map((cue: Record<string, any>) => ({
-    text: cue.text || cue.word || "",
-    startMs: Number(cue.startMs || 0),
-    endMs: Number(cue.endMs ?? cue.startMs ?? 0),
-  }));
+  trackItems(track).flatMap((cue: Record<string, any>) => {
+    const captions =
+      Array.isArray(cue?.captions) && cue.captions.length
+        ? cue.captions
+        : [cue];
+    return captions.map((caption: Record<string, any>) => ({
+      text: caption.text || caption.word || "",
+      startMs: Number(caption.startMs || 0),
+      endMs: Number(caption.endMs ?? caption.startMs ?? 0),
+    }));
+  });
 
 const requireRenderSpec = (manifest: VersionManifest) => {
   const source = manifest.render_spec;
