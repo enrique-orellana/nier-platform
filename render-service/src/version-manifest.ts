@@ -14,23 +14,6 @@ const isGeneratedSourceClip = (url: string) => {
   }
 };
 
-const normalizeSubtitleStyleForRender = (
-  style: Record<string, any> | null,
-): Record<string, any> | null => {
-  if (!style) return style;
-  const fontSize = Number(style.fontSize);
-  const borderWidth = Number(style.borderWidth);
-  return {
-    ...style,
-    ...(Number.isFinite(fontSize)
-      ? { fontSize: Number((fontSize * 2.2).toFixed(1)) }
-      : {}),
-    ...(Number.isFinite(borderWidth)
-      ? { borderWidth: borderWidth * 1.5 }
-      : {}),
-  };
-};
-
 const trackItems = (track: Record<string, any> | undefined) => {
   const cues = Array.isArray(track?.cues) ? track.cues : [];
   const captions = Array.isArray(track?.captions) ? track.captions : [];
@@ -82,12 +65,7 @@ export function manifestToVersionRenderProps(
     ? 0
     : renderSpec.videoStartSeconds;
   const subtitleTracks = Array.isArray(manifest.subtitle_tracks)
-    ? clone(manifest.subtitle_tracks).map((track: Record<string, any>) => ({
-        ...track,
-        ...(track.style
-          ? { style: normalizeSubtitleStyleForRender(track.style) }
-          : {}),
-      }))
+    ? clone(manifest.subtitle_tracks)
     : [];
   const activeSubtitleTrackId = manifest.active_subtitle_track_id || null;
   const activeTrack = subtitleTracks.find(
@@ -96,7 +74,8 @@ export function manifestToVersionRenderProps(
   const activeCaptions = trackCaptions(activeTrack);
   const subtitleStyle =
     activeTrack?.style ||
-    normalizeSubtitleStyleForRender(manifest.layers?.subtitles?.style || null);
+    manifest.layers?.subtitles?.style ||
+    null;
   const subtitles =
     activeTrack && activeCaptions.length
       ? {
