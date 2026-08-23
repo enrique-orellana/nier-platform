@@ -25,12 +25,12 @@ const VersionTreeNode = ({
   onSelect,
   onBranch,
   onDelete,
-  getVersionDownloadUrl,
+  getVersionPreviewUrl,
 }) => {
   const { version, children } = node;
   const isSelected = selectedVersionId === version.version_id;
-  const generatedClipUrl = getVersionDownloadUrl
-    ? getVersionDownloadUrl(version.version_id)
+  const generatedClipUrl = getVersionPreviewUrl
+    ? getVersionPreviewUrl(version.version_id)
     : getApiUrl(version.output_url);
   const hasGeneratedClip = version.status === "done" && generatedClipUrl;
 
@@ -111,7 +111,7 @@ const VersionTreeNode = ({
               onSelect={onSelect}
               onBranch={onBranch}
               onDelete={onDelete}
-              getVersionDownloadUrl={getVersionDownloadUrl}
+              getVersionPreviewUrl={getVersionPreviewUrl}
             />
           ))}
         </div>
@@ -127,7 +127,7 @@ export default function VersionHistory({
   onSelect,
   onBranch,
   onDelete,
-  getVersionDownloadUrl,
+  getVersionPreviewUrl,
   renderCompleteNotice = false,
   onOpen,
 }) {
@@ -194,7 +194,7 @@ export default function VersionHistory({
               onSelect={onSelect}
               onBranch={onBranch}
               onDelete={onDelete}
-              getVersionDownloadUrl={getVersionDownloadUrl}
+              getVersionPreviewUrl={getVersionPreviewUrl}
             />
           ))}
         </div>

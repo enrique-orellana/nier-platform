@@ -108,7 +108,7 @@ describe("VersionHistory", () => {
     expect(link).toHaveAttribute("rel", "noreferrer");
   });
 
-  it("uses the stable version download URL when one is provided", () => {
+  it("uses the stable version preview URL when one is provided", () => {
     render(
       <VersionHistory
         versions={[
@@ -118,8 +118,8 @@ describe("VersionHistory", () => {
             output_url: "https://minio.example/expired.mp4?X-Amz-Expires=7200",
           },
         ]}
-        getVersionDownloadUrl={(versionId) =>
-          `/api/clip/job-1/0/versions/${versionId}/download`
+        getVersionPreviewUrl={(versionId) =>
+          `/api/clip/job-1/0/versions/${versionId}/preview`
         }
       />,
     );
@@ -130,7 +130,7 @@ describe("VersionHistory", () => {
       }),
     ).toHaveAttribute(
       "href",
-      "/api/clip/job-1/0/versions/expired-version/download",
+      "/api/clip/job-1/0/versions/expired-version/preview",
     );
   });
 

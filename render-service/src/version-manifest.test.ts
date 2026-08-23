@@ -19,7 +19,18 @@ describe("manifestToVersionRenderProps", () => {
           { id: "en", style: { fontSize: 20 }, cues: [{ text: "English" }] },
           {
             id: "es",
-            style: { fontSize: 42 },
+            style: {
+              position: "top",
+              fontFamily: "Impact",
+              fontSize: 24,
+              fontColor: "#00FF00",
+              highlightColor: "#FF0000",
+              borderColor: "#0000FF",
+              borderWidth: 2,
+              bgColor: "#111111",
+              bgOpacity: 0.5,
+              animation: "pop",
+            },
             cues: [{ text: "Hola", startMs: 100, endMs: 900 }],
           },
         ],
@@ -52,7 +63,14 @@ describe("manifestToVersionRenderProps", () => {
       manifestRevision: "rev-4",
       subtitleTracks: expect.arrayContaining([
         expect.objectContaining({ id: "en" }),
-        expect.objectContaining({ id: "es" }),
+        expect.objectContaining({
+          id: "es",
+          style: expect.objectContaining({
+            position: "top",
+            fontSize: 52.8,
+            borderWidth: 3,
+          }),
+        }),
       ]),
       activeSubtitleTrackId: "es",
       layout: { format: "streamer_stack", facecam_size: "large" },
@@ -68,8 +86,20 @@ describe("manifestToVersionRenderProps", () => {
     });
     expect(props.subtitles).toEqual({
       animation: "pop",
+      position: "top",
       captions: [{ text: "Hola", startMs: 100, endMs: 900 }],
-      style: { fontSize: 42 },
+      style: {
+        position: "top",
+        fontFamily: "Impact",
+        fontSize: 52.8,
+        fontColor: "#00FF00",
+        highlightColor: "#FF0000",
+        borderColor: "#0000FF",
+        borderWidth: 3,
+        bgColor: "#111111",
+        bgOpacity: 0.5,
+        animation: "pop",
+      },
     });
   });
 

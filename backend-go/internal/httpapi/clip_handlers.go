@@ -63,6 +63,8 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 		s.getVersion(w, r.Context(), jobID, clipIndex, segments[1])
 	case r.Method == http.MethodGet && len(segments) == 3 && segments[0] == "versions" && segments[2] == "download":
 		s.downloadVersion(w, r, jobID, clipIndex, segments[1])
+	case r.Method == http.MethodGet && len(segments) == 3 && segments[0] == "versions" && segments[2] == "preview":
+		s.previewVersion(w, r, jobID, clipIndex, segments[1])
 	case r.Method == http.MethodPost && len(segments) == 3 && segments[2] == "render":
 		s.renderVersion(w, r, jobID, clipIndex, segments[1])
 	case r.Method == http.MethodPost && len(segments) == 3 && segments[2] == "complete":
@@ -267,6 +269,14 @@ func (s *Server) localRenderVideoURL(jobID, videoURL string) string {
 }
 
 func (s *Server) downloadVersion(w http.ResponseWriter, r *http.Request, jobID string, clipIndex int, versionID string) {
+	s.redirectVersionOutput(w, r, jobID, clipIndex, versionID, true)
+}
+
+func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request, jobID string, clipIndex int, versionID string) {
+	s.redirectVersionOutput(w, r, jobID, clipIndex, versionID, false)
+}
+
+func (s *Server) redirectVersionOutput(w http.ResponseWriter, r *http.Request, jobID string, clipIndex int, versionID string, forceDownload bool) {
 	version, _, err := s.versionRepository.Load(r.Context(), jobID, clipIndex, versionID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": err.Error()})
@@ -292,12 +302,18 @@ func (s *Server) downloadVersion(w http.ResponseWriter, r *http.Request, jobID s
 			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": keyErr.Error()})
 			return
 		}
-		downloadURL, urlErr := s.s3Store.DirectDownloadURL(r.Context(), key, filename, 2*time.Hour)
+		var objectURL string
+		var urlErr error
+		if forceDownload {
+			objectURL, urlErr = s.s3Store.DirectDownloadURL(r.Context(), key, filename, 2*time.Hour)
+		} else {
+			objectURL, urlErr = s.s3Store.DirectObjectURL(r.Context(), key, 2*time.Hour)
+		}
 		if urlErr != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Could not create download URL: %s", urlErr)})
+			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Could not create version output URL: %s", urlErr)})
 			return
 		}
-		http.Redirect(w, r, downloadURL, http.StatusTemporaryRedirect)
+		http.Redirect(w, r, objectURL, http.StatusTemporaryRedirect)
 		return
 	}
 	http.Redirect(w, r, version.OutputURL, http.StatusTemporaryRedirect)

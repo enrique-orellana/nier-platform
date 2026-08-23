@@ -393,9 +393,9 @@ export default function ClipEditor({
                 selectedVersionId={selectedVersion?.version_id}
                 onSelect={(v) => loadVersion(v.version_id)}
                 onBranch={branch}
-                getVersionDownloadUrl={(versionId) =>
+                getVersionPreviewUrl={(versionId) =>
                   getApiUrl(
-                    `/api/clip/${jobId}/${clipIndex}/versions/${versionId}/download`,
+                    `/api/clip/${jobId}/${clipIndex}/versions/${versionId}/preview`,
                   )
                 }
               />

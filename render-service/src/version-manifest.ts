@@ -4,6 +4,23 @@ type VersionManifest = Record<string, any>;
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value ?? null));
 
+const normalizeSubtitleStyleForRender = (
+  style: Record<string, any> | null,
+): Record<string, any> | null => {
+  if (!style) return style;
+  const fontSize = Number(style.fontSize);
+  const borderWidth = Number(style.borderWidth);
+  return {
+    ...style,
+    ...(Number.isFinite(fontSize)
+      ? { fontSize: Number((fontSize * 2.2).toFixed(1)) }
+      : {}),
+    ...(Number.isFinite(borderWidth)
+      ? { borderWidth: borderWidth * 1.5 }
+      : {}),
+  };
+};
+
 const trackItems = (track: Record<string, any> | undefined) => {
   const cues = Array.isArray(track?.cues) ? track.cues : [];
   const captions = Array.isArray(track?.captions) ? track.captions : [];
@@ -51,20 +68,31 @@ export function manifestToVersionRenderProps(
 ): RenderRequestProps {
   const renderSpec = requireRenderSpec(manifest);
   const subtitleTracks = Array.isArray(manifest.subtitle_tracks)
-    ? clone(manifest.subtitle_tracks)
+    ? clone(manifest.subtitle_tracks).map((track: Record<string, any>) => ({
+        ...track,
+        ...(track.style
+          ? { style: normalizeSubtitleStyleForRender(track.style) }
+          : {}),
+      }))
     : [];
   const activeSubtitleTrackId = manifest.active_subtitle_track_id || null;
   const activeTrack = subtitleTracks.find(
     (track: Record<string, any>) => track.id === activeSubtitleTrackId,
   );
   const activeCaptions = trackCaptions(activeTrack);
+  const subtitleStyle =
+    activeTrack?.style ||
+    normalizeSubtitleStyleForRender(manifest.layers?.subtitles?.style || null);
   const subtitles =
     activeTrack && activeCaptions.length
       ? {
           ...(clone(manifest.layers?.subtitles) || {}),
           captions: activeCaptions,
-          style:
-            activeTrack.style || manifest.layers?.subtitles?.style || undefined,
+          position:
+            subtitleStyle?.position ||
+            manifest.layers?.subtitles?.position ||
+            "bottom",
+          style: subtitleStyle || undefined,
         }
       : null;
 

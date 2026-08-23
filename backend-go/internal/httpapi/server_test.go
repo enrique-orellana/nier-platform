@@ -1091,6 +1091,30 @@ func TestVersionDownloadRedirectsDirectlyToMinio(t *testing.T) {
 	}
 }
 
+func TestVersionPreviewRedirectsDirectlyToMinio(t *testing.T) {
+	server := NewServer(config.Config{OutputDir: t.TempDir()})
+	server.s3Store = &integrations.S3Store{Bucket: "openshorts-media", PublicURLBase: "https://minio.example"}
+	created, _, err := server.versionRepository.Create(context.Background(), "job-1", 0, map[string]any{"timeline": map[string]any{}, "layers": map[string]any{}}, nil)
+	if err != nil {
+		t.Fatalf("create version: %v", err)
+	}
+	outputURL := "https://minio.example/openshorts-media/job-1/clips/0/versions/" + created.VersionID + "/version_0_" + created.VersionID + "_123.mp4"
+	if _, err := server.versionRepository.Complete(context.Background(), "job-1", 0, created.VersionID, outputURL); err != nil {
+		t.Fatalf("complete version: %v", err)
+	}
+
+	response := httptest.NewRecorder()
+	path := "/api/clip/job-1/0/versions/" + created.VersionID + "/preview"
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+
+	if response.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("expected direct preview redirect, got %d: %s", response.Code, response.Body.String())
+	}
+	if location := response.Header().Get("Location"); location != outputURL {
+		t.Fatalf("unexpected direct preview location: %s", location)
+	}
+}
+
 func TestClipVersionUpdateRouteKeepsSelectedVersionID(t *testing.T) {
 	server := NewServer(config.Config{})
 	createReq := httptest.NewRequest(http.MethodPost, "/api/clip/job-1/0/versions", strings.NewReader(`{"manifest":{"layers":{"hook":{"text":"before"}}}}`))
