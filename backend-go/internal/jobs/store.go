@@ -51,6 +51,8 @@ type Store interface {
 	StartAuditEvent(context.Context, string, domain.StartAuditEventInput) (domain.JobAuditEvent, error)
 	FinishAuditEvent(context.Context, string, string, domain.FinishAuditEventInput) (domain.JobAuditEvent, error)
 	ListAuditEvents(context.Context, string) ([]domain.JobAuditEvent, error)
+	UpsertRenderPerformanceMetric(context.Context, RenderPerformanceMetric) error
+	GetRenderPerformanceMetric(context.Context, string) (RenderPerformanceMetric, bool, error)
 }
 
 type ClipStatus struct {
@@ -65,6 +67,7 @@ type MemoryStore struct {
 	clipStatuses  map[string]map[int]ClipStatus
 	auditEventIDs map[string][]string
 	auditEvents   map[string]domain.JobAuditEvent
+	renderMetrics map[string]RenderPerformanceMetric
 	versionRepo   versions.Repository
 }
 
@@ -75,6 +78,7 @@ func NewMemoryStore() *MemoryStore {
 		clipStatuses:  make(map[string]map[int]ClipStatus),
 		auditEventIDs: make(map[string][]string),
 		auditEvents:   make(map[string]domain.JobAuditEvent),
+		renderMetrics: make(map[string]RenderPerformanceMetric),
 		versionRepo:   versions.NewMemoryRepository(),
 	}
 }

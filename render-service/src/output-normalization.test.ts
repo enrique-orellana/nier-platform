@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { loadMasterPolicy, parseMasterPolicy } from "./master-policy.js";
 import { buildNormalizationArgs, outputNeedsNormalization } from "./output-normalization.js";
+import { isFastStart } from "./output-validation.js";
 
 describe("publishable MP4 normalization", () => {
   it("builds a canonical social-video FFmpeg command", () => {
@@ -146,5 +150,26 @@ describe("publishable MP4 normalization", () => {
 
     expect(outputNeedsNormalization(probe, expected, policy, true)).toBe(false);
     expect(outputNeedsNormalization(probe, expected, policy, false)).toBe(true);
+  });
+
+  it("checks fast-start metadata with a bounded file read", () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "openshorts-faststart-"));
+    const filePath = path.join(directory, "rendered.mp4");
+    const ftyp = Buffer.from([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const moov = Buffer.from([0, 0, 0, 16, 0x6d, 0x6f, 0x6f, 0x76, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const mdat = Buffer.alloc(2 * 1024 * 1024 + 8);
+    mdat.writeUInt32BE(0, 0);
+    mdat.write("mdat", 4, "ascii");
+    fs.writeFileSync(filePath, Buffer.concat([ftyp, moov, mdat]));
+
+    const readSync = vi.spyOn(fs, "readSync");
+    try {
+      expect(isFastStart(filePath)).toBe(true);
+      expect(readSync).toHaveBeenCalled();
+      expect(readSync.mock.calls[0]?.[3]).toBeLessThan(fs.statSync(filePath).size);
+    } finally {
+      readSync.mockRestore();
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 });

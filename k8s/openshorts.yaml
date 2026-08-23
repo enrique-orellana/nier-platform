@@ -227,6 +227,12 @@ spec:
               value: "3100"
             - name: OUTPUT_DIR
               value: /output
+            - name: RENDER_MAX_CONCURRENCY
+              value: "1"
+            - name: RENDER_CONCURRENCY
+              value: "4"
+            - name: RENDER_METRICS_URL
+              value: http://openshorts-backend:8000/api/render-metrics
           volumeMounts:
             - name: workdir
               mountPath: /output

@@ -16,9 +16,9 @@
 - Modify: `render-service/src/render-worker.ts`
 - Test: `render-service/src/render-worker.test.ts`
 
-- [ ] Add timings for bundle preparation, composition selection, source preparation, `renderMedia`, normalization, and validation.
-- [ ] Log one structured summary per render containing the job ID and each duration.
-- [ ] Verify the existing output bytes and media metadata are unchanged by the instrumentation.
+- [x] Add timings for bundle preparation, composition selection, source preparation, `renderMedia`, normalization, and validation.
+- [x] Log one structured summary per render containing the job ID and each duration.
+- [x] Verify the existing output bytes and media metadata are unchanged by the instrumentation.
 
 ### Task 2: Reuse the Remotion browser
 
@@ -27,10 +27,10 @@
 - Modify: `render-service/src/server.ts`
 - Test: `render-service/src/render-worker.test.ts`
 
-- [ ] Open one reusable Puppeteer browser for the renderer process.
-- [ ] Pass the browser instance to both `selectComposition` and `renderMedia`.
-- [ ] Close the browser during graceful server shutdown.
-- [ ] Keep the existing rendering options and export policy unchanged.
+- [x] Open one reusable Puppeteer browser for the renderer process.
+- [x] Pass the browser instance to both `selectComposition` and `renderMedia`.
+- [x] Close the browser during graceful server shutdown.
+- [x] Keep the existing rendering options and export policy unchanged.
 
 ### Task 3: Remove redundant output re-encoding
 
@@ -39,10 +39,10 @@
 - Modify: `render-service/src/output-validation.ts`
 - Test: `render-service/src/output-normalization.test.ts`
 
-- [ ] Normalize only when codec, dimensions, FPS, pixel format, color metadata, audio format, or fast-start requirements fail.
-- [ ] Replace the full-file fast-start read with a bounded metadata check.
-- [ ] Do not re-encode a file that already satisfies the export policy.
-- [ ] Retain full decode validation only for files that were normalized or fail lightweight checks.
+- [x] Normalize only when codec, dimensions, FPS, pixel format, color metadata, audio format, or fast-start requirements fail.
+- [x] Replace the full-file fast-start read with a bounded metadata check.
+- [x] Do not re-encode a file that already satisfies the export policy.
+- [x] Retain full decode validation only for files that were normalized or fail lightweight checks.
 
 ### Task 4: Tune concurrency without changing output
 
@@ -52,10 +52,10 @@
 - Modify: `k8s/openshorts.yaml`
 - Test: `render-service/src/server.test.ts`
 
-- [ ] Benchmark `RENDER_CONCURRENCY=2`, `4`, `6`, and `8` with the same clip.
-- [ ] Select the fastest stable value that does not cause memory pressure or failed renders.
-- [ ] Keep `RENDER_MAX_CONCURRENCY` at one until the benchmark confirms safe parallel jobs.
-- [ ] Set explicit CPU and memory limits for the selected production values.
+- [x] Benchmark `RENDER_CONCURRENCY=2`, `4`, `6`, and `8` with the same clip.
+- [x] Select the fastest stable value that does not cause memory pressure or failed renders.
+- [x] Keep `RENDER_MAX_CONCURRENCY` at one until the benchmark confirms safe parallel jobs.
+- [x] Set explicit CPU and memory limits for the selected production values.
 
 ### Task 5: Persist render-performance metrics
 
@@ -74,14 +74,14 @@
 - Test: `backend-go/internal/httpapi/render_metrics_handlers_test.go`
 - Test: `render-service/src/render-worker.test.ts`
 
-- [ ] Create a PostgreSQL table with one row per render containing `render_id`, `job_id`, optional `version_id`, `clip_index`, status, start/end timestamps, total duration, stage durations as JSONB, render concurrency, worker count, output bytes, and error text.
-- [ ] Add indexes on `created_at`, `job_id`, `status`, and `version_id`.
-- [ ] Add a backend repository method that upserts by `render_id`, so retries or duplicate callbacks cannot create duplicate metric rows.
-- [ ] Add `POST /api/render-metrics` to validate and persist completed and failed render metrics.
-- [ ] Include the render ID, job ID, clip index, and optional version ID in the renderer job state.
-- [ ] Send metrics to the backend when a render completes or fails; keep rendering successful if metrics persistence is temporarily unavailable, but log the persistence error.
-- [ ] Configure the renderer metrics URL in Docker Compose and Kubernetes.
-- [ ] Test PostgreSQL persistence across close and reopen, duplicate callbacks, completed renders, failed renders, and unavailable metrics storage.
+- [x] Create a PostgreSQL table with one row per render containing `render_id`, `job_id`, optional `version_id`, `clip_index`, status, start/end timestamps, total duration, stage durations as JSONB, render concurrency, worker count, output bytes, and error text.
+- [x] Add indexes on `created_at`, `job_id`, `status`, and `version_id`.
+- [x] Add a backend repository method that upserts by `render_id`, so retries or duplicate callbacks cannot create duplicate metric rows.
+- [x] Add `POST /api/render-metrics` to validate and persist completed and failed render metrics.
+- [x] Include the render ID, job ID, clip index, and optional version ID in the renderer job state.
+- [x] Send metrics to the backend when a render completes or fails; keep rendering successful if metrics persistence is temporarily unavailable, but log the persistence error.
+- [x] Configure the renderer metrics URL in Docker Compose and Kubernetes.
+- [x] Test PostgreSQL persistence across close and reopen, duplicate callbacks, completed renders, failed renders, and unavailable metrics storage.
 
 ### Task 6: Gate GPU rendering with a real canary export
 
@@ -99,9 +99,13 @@
 - [ ] Add opt-in GPU mode using `RENDER_HARDWARE_ACCELERATION=if-possible`; keep CPU rendering as the automatic fallback.
 - [x] Run a real reference export through the GPU path before enabling it for production jobs.
 - [x] Reject the GPU path when device access, hardware encoding, or export completion fails.
-- [ ] Compare GPU and CPU outputs for dimensions, FPS, duration, codecs, audio format, color metadata, sampled frames, and perceptual quality.
+- [x] Compare GPU and CPU outputs for dimensions, FPS, duration, codecs, audio format, color metadata, sampled frames, and perceptual quality.
 - [ ] Enable GPU rendering only when the canary passes all checks and improves render time or resource usage without a quality regression.
 - [ ] Add a repeatable command that records GPU/CPU timings, peak memory, failure reason, and comparison results.
+
+Benchmark result: CPU was faster than GPU on the 1-second canary (2.389s vs 3.411s end-to-end) with matching export metadata and SSIM 0.993833. GPU remains opt-in with CPU fallback and is not enabled as the default path.
+
+Concurrency benchmark on the same 1-second clip: `2=2.932s`, `4=2.945s`, `6=3.128s`, `8=3.223s`. Three-run stability checks selected `4` (`2.570s` average) over `2` (`2.774s` average); `RENDER_MAX_CONCURRENCY` remains `1`.
 
 ### Task 7: Verify quality and performance
 

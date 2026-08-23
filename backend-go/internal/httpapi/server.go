@@ -87,6 +87,7 @@ func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, 
 	mux.HandleFunc("/api/highlights/", server.highlightRoute)
 	mux.HandleFunc("/api/render", server.renderProxy)
 	mux.HandleFunc("/api/render/", server.renderProxy)
+	mux.HandleFunc("/api/render-metrics", server.renderMetrics)
 	mux.HandleFunc("/api/media-url", server.mediaURL)
 	mux.HandleFunc("/api/translate/languages", server.translationLanguages)
 	mux.HandleFunc("/api/ai/lmstudio/discover", server.discoverLMStudio)

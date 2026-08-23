@@ -23,11 +23,14 @@ Target one or more components with `-Component`:
 
 `renderer` manages the native AMD renderer. The Docker renderer service is intentionally commented out in Compose. Available Docker components are `db`, `backend`, and `frontend`.
 
-To start only the worker manually:
+To start only the worker manually (GPU is preferred with CPU fallback):
 
 ```powershell
 .\scripts\start-native-renderer.ps1 -FfmpegPath C:\path\to\ffmpeg.exe
 ```
+
+GPU acceleration is enabled by default with CPU fallback when AMF is unavailable. Use
+`-HardwareAcceleration disabled` to force CPU rendering.
 
 The host FFmpeg must expose `h264_amf`. The script builds the small FFmpeg dispatcher, copies the Remotion helper binaries, and starts the worker on port `13101`. It does not cache or transcode source media.
 

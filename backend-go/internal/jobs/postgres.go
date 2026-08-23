@@ -30,6 +30,12 @@ var discardedClipStatusSchema string
 //go:embed migrations/005_job_audit_events.sql
 var auditEventsSchema string
 
+//go:embed migrations/006_render_performance_metrics.sql
+var renderPerformanceMetricsSchema string
+
+//go:embed migrations/007_render_metric_acceleration_mode.sql
+var renderMetricAccelerationModeSchema string
+
 type PostgresStore struct {
 	db          *sql.DB
 	versionRepo versions.Repository
@@ -90,6 +96,12 @@ func (s *PostgresStore) Migrate(ctx context.Context) error {
 	}
 	if _, err := s.db.ExecContext(ctx, auditEventsSchema); err != nil {
 		return fmt.Errorf("run audit events migration: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, renderPerformanceMetricsSchema); err != nil {
+		return fmt.Errorf("run render performance metrics migration: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, renderMetricAccelerationModeSchema); err != nil {
+		return fmt.Errorf("run render metric acceleration mode migration: %w", err)
 	}
 	return nil
 }
@@ -846,6 +858,76 @@ func (s *PostgresStore) ListAuditEvents(ctx context.Context, jobID string) ([]do
 		return nil, err
 	}
 	return events, nil
+}
+
+func (s *PostgresStore) UpsertRenderPerformanceMetric(ctx context.Context, metric RenderPerformanceMetric) error {
+	if err := validateRenderPerformanceMetric(metric); err != nil {
+		return err
+	}
+	stageDurations, err := json.Marshal(metric.StageDurationsMS)
+	if err != nil {
+		return fmt.Errorf("encode render stage durations: %w", err)
+	}
+	if metric.StageDurationsMS == nil {
+		stageDurations = []byte(`{}`)
+	}
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO render_performance_metrics (
+			render_id, job_id, version_id, clip_index, status, started_at, finished_at,
+			total_duration_ms, stage_durations_ms, render_concurrency, worker_count,
+			output_bytes, acceleration_mode, error
+		) VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14)
+		ON CONFLICT (render_id) DO UPDATE SET
+			job_id = EXCLUDED.job_id,
+			version_id = EXCLUDED.version_id,
+			clip_index = EXCLUDED.clip_index,
+			status = EXCLUDED.status,
+			started_at = EXCLUDED.started_at,
+			finished_at = EXCLUDED.finished_at,
+			total_duration_ms = EXCLUDED.total_duration_ms,
+			stage_durations_ms = EXCLUDED.stage_durations_ms,
+			render_concurrency = EXCLUDED.render_concurrency,
+			worker_count = EXCLUDED.worker_count,
+			output_bytes = EXCLUDED.output_bytes,
+			acceleration_mode = EXCLUDED.acceleration_mode,
+			error = EXCLUDED.error,
+			updated_at = now()
+	`, metric.RenderID, metric.JobID, metric.VersionID, metric.ClipIndex, metric.Status,
+		metric.StartedAt, metric.FinishedAt, metric.TotalDurationMS, stageDurations,
+		metric.RenderConcurrency, metric.WorkerCount, metric.OutputBytes,
+		metric.AccelerationMode, metric.Error)
+	return err
+}
+
+func (s *PostgresStore) GetRenderPerformanceMetric(ctx context.Context, renderID string) (RenderPerformanceMetric, bool, error) {
+	var metric RenderPerformanceMetric
+	var stageDurations []byte
+	err := s.db.QueryRowContext(ctx, `
+		SELECT render_id, job_id, COALESCE(version_id, ''), clip_index, status,
+		       started_at, finished_at, total_duration_ms, stage_durations_ms,
+		       render_concurrency, worker_count, output_bytes, acceleration_mode,
+		       error, created_at, updated_at
+		FROM render_performance_metrics WHERE render_id = $1
+	`, renderID).Scan(
+		&metric.RenderID, &metric.JobID, &metric.VersionID, &metric.ClipIndex, &metric.Status,
+		&metric.StartedAt, &metric.FinishedAt, &metric.TotalDurationMS, &stageDurations,
+		&metric.RenderConcurrency, &metric.WorkerCount, &metric.OutputBytes,
+		&metric.AccelerationMode, &metric.Error,
+		&metric.CreatedAt, &metric.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return RenderPerformanceMetric{}, false, nil
+	}
+	if err != nil {
+		return RenderPerformanceMetric{}, false, err
+	}
+	metric.StageDurationsMS = map[string]int64{}
+	if len(stageDurations) > 0 {
+		if err := json.Unmarshal(stageDurations, &metric.StageDurationsMS); err != nil {
+			return RenderPerformanceMetric{}, false, fmt.Errorf("decode render stage durations: %w", err)
+		}
+	}
+	return metric, true, nil
 }
 
 type sqlQueryer interface {

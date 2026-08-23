@@ -5,7 +5,12 @@ param(
     [string]$FfmpegPath = "",
     [string]$OutputDir = "D:\openshorts-docker-data\workdir",
     [int]$NativeRendererPort = 13101,
-    [string]$HardwareVideoBitrate = "40M"
+    [string]$HardwareVideoBitrate = "40M",
+    [string]$MetricsUrl = "http://localhost:18000/api/render-metrics",
+    [int]$RenderConcurrency = 4,
+    [int]$RenderMaxConcurrency = 1,
+    [ValidateSet("if-possible", "disabled")]
+    [string]$HardwareAcceleration = "if-possible"
 )
 
 $ErrorActionPreference = "Stop"
@@ -97,7 +102,11 @@ function Start-NativeRenderer {
         "-File", $nativeRendererScript,
         "-OutputDir", $OutputDir,
         "-Port", [string]$NativeRendererPort,
-        "-HardwareVideoBitrate", $HardwareVideoBitrate
+        "-HardwareVideoBitrate", $HardwareVideoBitrate,
+        "-MetricsUrl", $MetricsUrl,
+        "-RenderConcurrency", [string]$RenderConcurrency,
+        "-RenderMaxConcurrency", [string]$RenderMaxConcurrency,
+        "-HardwareAcceleration", $HardwareAcceleration
     )
     if ($FfmpegPath) {
         $arguments += @("-FfmpegPath", $FfmpegPath)

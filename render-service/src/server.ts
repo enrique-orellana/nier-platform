@@ -1,7 +1,8 @@
 import express from "express";
 import { v4 as uuidv4 } from "uuid";
+import { openBrowser } from "@remotion/renderer";
 import { initBundle } from "./bundle.js";
-import { executeRender } from "./render-worker.js";
+import { closeRenderBrowser, executeRender, setRenderBrowser } from "./render-worker.js";
 import { buildRenderProps } from "./render-props.js";
 import type { RenderRequestProps } from "./render-props.js";
 import { renderRequestSchema } from "./render-request.js";
@@ -34,6 +35,8 @@ const PORT = parseInt(process.env.PORT || "3100", 10);
 const OUTPUT_DIR = process.env.OUTPUT_DIR || "/output";
 const RENDER_MAX_CONCURRENCY = Math.max(1, parseInt(process.env.RENDER_MAX_CONCURRENCY || "1", 10));
 const renderQueue = new RenderQueue(RENDER_MAX_CONCURRENCY);
+let httpServer: ReturnType<typeof app.listen> | null = null;
+let isShuttingDown = false;
 
 // Serve video files from the shared output volume so Remotion can access them via HTTP.
 // The Remotion bundle runs from a different origin (localhost:3000), so media
@@ -157,12 +160,36 @@ app.get("/render/:renderId", (req, res) => {
 
 // --- Start server ---
 
+async function shutdown(signal: string): Promise<void> {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`[render-service] Received ${signal}; waiting for queued renders.`);
+
+  await renderQueue.onIdle();
+  await closeRenderBrowser();
+
+  if (httpServer) {
+    await new Promise<void>((resolve) => httpServer?.close(() => resolve()));
+  }
+}
+
+process.once("SIGTERM", () => {
+  void shutdown("SIGTERM").finally(() => process.exit(0));
+});
+process.once("SIGINT", () => {
+  void shutdown("SIGINT").finally(() => process.exit(0));
+});
+
 async function main() {
   console.log("[render-service] Initializing Remotion bundle...");
   await initBundle();
   console.log("[render-service] Bundle ready.");
 
-  app.listen(PORT, () => {
+  console.log("[render-service] Opening reusable Remotion browser...");
+  setRenderBrowser(await openBrowser("chrome"));
+  console.log("[render-service] Reusable Remotion browser ready.");
+
+  httpServer = app.listen(PORT, () => {
     console.log(`[render-service] Listening on port ${PORT}`);
   });
 }

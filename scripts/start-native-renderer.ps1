@@ -2,7 +2,12 @@ param(
     [string]$FfmpegPath = "",
     [string]$OutputDir = "D:\openshorts-docker-data\workdir",
     [int]$Port = 13101,
-    [string]$HardwareVideoBitrate = "40M"
+    [string]$HardwareVideoBitrate = "40M",
+    [string]$MetricsUrl = "http://localhost:18000/api/render-metrics",
+    [int]$RenderConcurrency = 4,
+    [int]$RenderMaxConcurrency = 1,
+    [ValidateSet("if-possible", "disabled")]
+    [string]$HardwareAcceleration = "if-possible"
 )
 
 $ErrorActionPreference = "Stop"
@@ -65,14 +70,19 @@ $env:PORT = [string]$Port
 $env:OUTPUT_DIR = (Resolve-Path -LiteralPath $OutputDir).Path
 $env:PATH = "$(Split-Path -Parent $FfmpegPath);$env:PATH"
 $env:REMOTION_BUNDLE_PATH = $bundlePath
-$env:RENDER_HARDWARE_ACCELERATION = "if-possible"
+$env:RENDER_HARDWARE_ACCELERATION = $HardwareAcceleration
 $env:RENDER_FFMPEG_PATH = $FfmpegPath
 $env:RENDER_FFMPEG_DIRECTORY = $nativeBinaryRoot
 $env:RENDER_HARDWARE_VIDEO_BITRATE = $HardwareVideoBitrate
+$env:RENDER_CONCURRENCY = [string]$RenderConcurrency
+$env:RENDER_MAX_CONCURRENCY = [string]$RenderMaxConcurrency
 $env:OPENSHORTS_HOST_FFMPEG_PATH = $FfmpegPath
 $env:OPENSHORTS_BUNDLED_FFMPEG_PATH = $bundledFfmpegPath
+$env:RENDER_METRICS_URL = $MetricsUrl
 
 Write-Host "Starting native renderer on http://127.0.0.1:$Port"
 Write-Host "Output directory: $($env:OUTPUT_DIR)"
-Write-Host "AMD hardware acceleration: opt-in with CPU fallback"
+Write-Host "Hardware acceleration mode: $HardwareAcceleration"
+Write-Host "Render metrics endpoint: $MetricsUrl"
+Write-Host "Render concurrency: $RenderConcurrency (max jobs: $RenderMaxConcurrency)"
 & node (Join-Path $renderServiceRoot "dist\server.js")

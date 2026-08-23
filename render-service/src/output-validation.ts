@@ -17,6 +17,10 @@ export interface ProbePayload {
   format?: Record<string, string | number | undefined>;
 }
 
+export interface OutputValidationOptions {
+  fullDecode?: boolean;
+}
+
 function number(value: string | number | undefined): number {
   return Number(value || 0);
 }
@@ -77,29 +81,49 @@ export function validateProbePayload(
   }
 }
 
+const FAST_START_PROBE_BYTES = 1024 * 1024;
+
 function assertFastStart(filePath: string): void {
-  const data = fs.readFileSync(filePath);
-  let offset = 0;
-  let moov = -1;
-  let mdat = -1;
-  while (offset + 8 <= data.length) {
-    let size = data.readUInt32BE(offset);
-    const type = data.toString("ascii", offset + 4, offset + 8);
-    let headerSize = 8;
-    if (size === 1) {
-      if (offset + 16 > data.length) throw new Error("master output has an invalid MP4 box");
-      const largeSize = Number(data.readBigUInt64BE(offset + 8));
-      size = largeSize;
-      headerSize = 16;
-    } else if (size === 0) {
-      size = data.length - offset;
+  const fileDescriptor = fs.openSync(filePath, "r");
+  const fileSize = fs.fstatSync(fileDescriptor).size;
+  const bytesToRead = Math.min(fileSize, FAST_START_PROBE_BYTES);
+  const data = Buffer.alloc(bytesToRead);
+
+  try {
+    const bytesRead = fs.readSync(fileDescriptor, data, 0, bytesToRead, 0);
+    let offset = 0;
+    let sawMdat = false;
+
+    while (offset + 8 <= bytesRead) {
+      let size = data.readUInt32BE(offset);
+      const type = data.toString("ascii", offset + 4, offset + 8);
+      let headerSize = 8;
+
+      if (size === 1) {
+        if (offset + 16 > bytesRead) break;
+        const largeSize = Number(data.readBigUInt64BE(offset + 8));
+        size = largeSize;
+        headerSize = 16;
+      } else if (size === 0) {
+        size = fileSize - offset;
+      }
+
+      if (size < headerSize || offset + size > fileSize) {
+        throw new Error("master output has an invalid MP4 box");
+      }
+      if (type === "mdat") sawMdat = true;
+      if (type === "moov") {
+        if (sawMdat) throw new Error("master output is not fast-start");
+        return;
+      }
+      if (offset + size > bytesRead) break;
+      offset += size;
     }
-    if (size < headerSize || offset + size > data.length) throw new Error("master output has an invalid MP4 box");
-    if (type === "moov" && moov < 0) moov = offset;
-    if (type === "mdat" && mdat < 0) mdat = offset;
-    offset += size;
+
+    throw new Error("master output is not fast-start");
+  } finally {
+    fs.closeSync(fileDescriptor);
   }
-  if (moov < 0 || (mdat >= 0 && moov > mdat)) throw new Error("master output is not fast-start");
 }
 
 export function isFastStart(filePath: string): boolean {
@@ -127,11 +151,13 @@ export async function validateOutputFile(
   outputPath: string,
   expected: OutputExpectation,
   policy: MasterPolicy,
+  options: OutputValidationOptions = {},
 ): Promise<void> {
   if (!fs.existsSync(outputPath)) throw new Error("master output file does not exist");
   const payload = await probeOutputFile(outputPath);
   validateProbePayload(payload, expected, policy);
   assertFastStart(path.resolve(outputPath));
+  if (options.fullDecode === false) return;
   await new Promise<void>((resolve, reject) => {
     const child = spawn("ffmpeg", ["-v", "error", "-i", outputPath, "-f", "null", "-"]);
     let stderr = "";
