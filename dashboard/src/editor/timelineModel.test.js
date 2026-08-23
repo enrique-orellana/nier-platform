@@ -22,6 +22,25 @@ describe("timelineModel", () => {
       startMs: 100,
       endMs: 180,
     }));
+  it("scales word timings when a cue is resized", () => {
+    const cue = {
+      startMs: 1000,
+      endMs: 3000,
+      captions: [
+        { text: "first", startMs: 1000, endMs: 1500 },
+        { text: "second", startMs: 1500, endMs: 3000 },
+      ],
+    };
+
+    expect(resizeCue(cue, "end", 1000, 5000).captions).toEqual([
+      { text: "first", startMs: 1000, endMs: 1750 },
+      { text: "second", startMs: 1750, endMs: 4000 },
+    ]);
+    expect(resizeCue(cue, "start", 500, 5000).captions).toEqual([
+      { text: "first", startMs: 1500, endMs: 1875 },
+      { text: "second", startMs: 1875, endMs: 3000 },
+    ]);
+  });
   it("creates a blank cue at the playhead with a two-second default", () => {
     expect(
       createSubtitleCue({

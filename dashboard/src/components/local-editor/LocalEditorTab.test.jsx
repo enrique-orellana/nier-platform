@@ -2051,6 +2051,28 @@ describe("LocalEditorTab", () => {
     await waitFor(() => expect(video.play).toHaveBeenCalled());
   });
 
+  it("supports player keyboard controls when focus is elsewhere in the editor", async () => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:demo");
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    render(<LocalEditorTab />);
+    fireEvent.change(screen.getByLabelText(/upload video/i), {
+      target: { files: [makeVideoFile()] },
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("local-editor-workspace")).toBeInTheDocument(),
+    );
+
+    fireEvent.keyDown(screen.getByTestId("local-editor-workspace"), {
+      key: " ",
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("local-editor-native-video").play,
+      ).toHaveBeenCalled(),
+    );
+  });
+
   it("imports an SRT file", async () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:demo");
     render(<LocalEditorTab />);

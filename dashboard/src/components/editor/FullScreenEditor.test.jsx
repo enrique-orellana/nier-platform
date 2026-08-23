@@ -139,6 +139,21 @@ describe("FullScreenEditor", () => {
     ).toBe("https://minio.example/master/source.mp4?X-Amz-Date=fresh");
   });
 
+  it("prefers a project source URL over the generated clip URL", () => {
+    expect(
+      resolveLocalEditorSourceUrl({
+        clip: {
+          video_url:
+            "https://minio.example/openshorts-media/job/clips/clip-1/source_clip_14.mp4?X-Amz-Date=stale",
+          source_video_url:
+            "https://minio.example/openshorts-media/job/master/source.mp4?X-Amz-Date=fresh",
+        },
+      }),
+    ).toBe(
+      "https://minio.example/openshorts-media/job/master/source.mp4?X-Amz-Date=fresh",
+    );
+  });
+
   it("deletes the selected version and loads the newest remaining version", async () => {
     const fetchMock = vi.fn(async (url, options = {}) => {
       const value = String(url);
@@ -758,8 +773,8 @@ describe("FullScreenEditor", () => {
       "standard",
     );
     expect(
-      screen.queryByRole("button", { name: /save as new version/i }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: /save as new version/i }),
+    ).toBeInTheDocument();
     expect(session).toBeTruthy();
   });
 
@@ -1844,8 +1859,8 @@ describe("FullScreenEditor", () => {
       expect(screen.getByRole("button", { name: "Ciao" })).toBeInTheDocument(),
     );
     expect(
-      screen.queryByRole("button", { name: "Save as new version" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Save as new version" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Download version" }),
     ).not.toBeInTheDocument();
@@ -1854,7 +1869,7 @@ describe("FullScreenEditor", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the redundant save action out of the local editor header", async () => {
+  it("shows the save-as-new-version action in the local editor header", async () => {
     render(
       <FullScreenEditor
         useLocalEditor
@@ -1871,8 +1886,8 @@ describe("FullScreenEditor", () => {
       await screen.findByRole("button", { name: "Export Video" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Save as new version" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Save as new version" }),
+    ).toBeInTheDocument();
   });
 
   it("loads changed master subtitles instead of a stale generated version", async () => {

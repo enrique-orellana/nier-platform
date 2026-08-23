@@ -1389,6 +1389,7 @@ export default function LocalEditorTab({
   };
 
   const handlePlayerKeyDown = (event) => {
+    if (event.defaultPrevented || event.target.isContentEditable) return;
     if (
       ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(event.target.tagName)
     )
@@ -1777,7 +1778,10 @@ export default function LocalEditorTab({
     : versionHistoryPanel;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0d0d0f] text-white">
+    <div
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0d0d0f] text-white"
+      onKeyDown={handlePlayerKeyDown}
+    >
       <div
         data-testid="local-editor-header"
         className="flex h-11 flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-1"
@@ -1955,7 +1959,6 @@ export default function LocalEditorTab({
               role="region"
               aria-label="Video preview. Use Space or K to play or pause, arrow keys to seek, M to mute, and F for fullscreen."
               aria-keyshortcuts="Space K ArrowLeft ArrowRight Home End M F"
-              onKeyDown={handlePlayerKeyDown}
               className={
                 isFullscreen
                   ? "fixed inset-0 z-50 flex flex-col overflow-hidden bg-black p-4"

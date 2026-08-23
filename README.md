@@ -11,6 +11,18 @@
 
 https://github.com/user-attachments/assets/b45fa983-16b4-48b5-ac5b-a267836b9ad9
 
+## Development
+
+This repository includes a commit hook that rejects messages outside the
+Conventional Commits format. Enable it once per checkout with:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Accepted examples include `feat: add captions`, `fix(editor): prevent a crash`,
+and `refactor!: change the rendering API`.
+
 
 
 ### Video Tutorial: How it works

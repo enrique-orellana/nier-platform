@@ -64,6 +64,18 @@ describe("App settings layout", () => {
     ).toBeInTheDocument();
   });
 
+  it("covers the projects view while a direct editor route is loading", () => {
+    window.history.pushState(
+      {},
+      "",
+      "/projects/project-1/clips/13/editor?version=version-1#app",
+    );
+
+    render(<App />);
+
+    expect(screen.getByTestId("editor-route-loading")).toBeInTheDocument();
+  });
+
   it("loads the account-available Codex models after the connection is ready", async () => {
     render(<App />);
 

@@ -147,6 +147,60 @@ describe("LocalEditorTimeline", () => {
     });
   });
 
+  it("updates word timings when a subtitle cue is resized", () => {
+    const onChange = vi.fn();
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      width: 1000,
+      height: 100,
+      top: 0,
+      left: 0,
+      right: 1000,
+      bottom: 100,
+    });
+    render(
+      <LocalEditorTimeline
+        durationMs={10000}
+        subtitleCues={[
+          {
+            id: "cue-1",
+            text: "first second",
+            startMs: 1000,
+            endMs: 3000,
+            captions: [
+              { text: "first", startMs: 1000, endMs: 1500 },
+              { text: "second", startMs: 1500, endMs: 3000 },
+            ],
+          },
+        ]}
+        onChange={onChange}
+      />,
+    );
+
+    screen
+      .getByRole("button", { name: "Resize cue end" })
+      .dispatchEvent(
+        new MouseEvent("pointerdown", { bubbles: true, clientX: 0 }),
+      );
+    window.dispatchEvent(
+      new MouseEvent("pointermove", { bubbles: true, clientX: 100 }),
+    );
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        endMs: 4000,
+        captions: [
+          { text: "first", startMs: 1000, endMs: 1750 },
+          { text: "second", startMs: 1750, endMs: 4000 },
+        ],
+      }),
+      "subtitle",
+    );
+
+    window.dispatchEvent(
+      new MouseEvent("pointerup", { bubbles: true, clientX: 100 }),
+    );
+  });
+
   it("allows high zoom levels for uninterrupted cue inspection", () => {
     render(<LocalEditorTimeline durationMs={10000} timelineZoom={4} />);
 

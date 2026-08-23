@@ -4,8 +4,9 @@ export const resolveLocalEditorSourceUrl = ({
   projectManifest,
 }) =>
   refreshedMasterVideoUrl ||
-  clip?.video_url ||
   clip?.source_video_url ||
+  clip?.original_video_url ||
   clip?.source_url ||
   projectManifest?.timeline?.source_video_url ||
+  clip?.video_url ||
   "";

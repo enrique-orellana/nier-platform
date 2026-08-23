@@ -1472,22 +1472,23 @@ function App() {
     <div className="flex h-screen bg-background overflow-hidden selection:bg-primary/30">
       <Sidebar />
 
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-        {route.editor && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-[#0d0d0f] text-white"
-            aria-hidden="true"
-          >
-            <div className="flex flex-col items-center gap-3 text-zinc-300">
-              <Loader2
-                className="h-8 w-8 animate-spin text-cyan-300"
-                aria-hidden="true"
-              />
-              <span className="text-sm">Loading editor...</span>
-            </div>
+      {route.editor && (
+        <div
+          data-testid="editor-route-loading"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0d0d0f] text-white"
+          aria-hidden="true"
+        >
+          <div className="flex flex-col items-center gap-3 text-zinc-300">
+            <Loader2
+              className="h-8 w-8 animate-spin text-cyan-300"
+              aria-hidden="true"
+            />
+            <span className="text-sm">Loading editor...</span>
           </div>
-        )}
+        </div>
+      )}
 
+      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         {/* Background Gradients */}
         <div className="absolute inset-0 overflow-hidden -z-10 pointer-events-none">
           <div className="absolute -top-[10%] -right-[10%] w-[50%] h-[50%] bg-primary/5 rounded-full blur-[120px]" />

@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 import { getApiUrl } from "../../config";
 import {
   manifestWithTranscriptCaptions,
@@ -1091,11 +1091,26 @@ export default function FullScreenEditor({
         allowLocalUpload={false}
         onClose={onClose}
         headerActions={
-          error ? (
-            <span className="text-xs text-red-300" role="alert">
-              {error}
-            </span>
-          ) : null
+          <>
+            <button
+              type="button"
+              onClick={saveVersion}
+              disabled={busy}
+              className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1 text-[10px] font-semibold text-white hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Save size={13} />
+              )}
+              {busy ? "Saving..." : "Save as new version"}
+            </button>
+            {error && (
+              <span className="text-xs text-red-300" role="alert">
+                {error}
+              </span>
+            )}
+          </>
         }
         sidePanel={
           editorActions ? <EditorActionToolbar {...editorActions} /> : null

@@ -75,6 +75,9 @@ export function moveCue(cue, deltaMs, durationMs) {
 
 export function resizeCue(cue, edge, deltaMs, durationMs, minimumMs = 80) {
   const duration = Math.max(1, Number(durationMs) || 1);
+  const previousStart = Number(cue.startMs) || 0;
+  const previousEnd = Number(cue.endMs) || previousStart + minimumMs;
+  const previousDuration = Math.max(1, previousEnd - previousStart);
   let start = Number(cue.startMs) || 0;
   let end = Number(cue.endMs) || start + minimumMs;
   if (edge === "start")
@@ -87,7 +90,42 @@ export function resizeCue(cue, edge, deltaMs, durationMs, minimumMs = 80) {
       start + minimumMs,
       Math.min(duration, end + Number(deltaMs || 0)),
     );
-  return { ...cue, startMs: Math.round(start), endMs: Math.round(end) };
+  const nextStart = Math.round(start);
+  const nextEnd = Math.round(end);
+  const nextDuration = Math.max(1, nextEnd - nextStart);
+  const captions = Array.isArray(cue.captions)
+    ? cue.captions.map((caption) => {
+        const captionStart = Number.isFinite(Number(caption.startMs))
+          ? Number(caption.startMs)
+          : previousStart;
+        const captionEnd = Number.isFinite(Number(caption.endMs))
+          ? Number(caption.endMs)
+          : captionStart + 1;
+        const scaledStart = Math.round(
+          nextStart +
+            ((captionStart - previousStart) / previousDuration) * nextDuration,
+        );
+        const scaledEnd = Math.round(
+          nextStart +
+            ((captionEnd - previousStart) / previousDuration) * nextDuration,
+        );
+        const nextCaptionStart = Math.max(
+          nextStart,
+          Math.min(nextEnd - 1, scaledStart),
+        );
+        return {
+          ...caption,
+          startMs: nextCaptionStart,
+          endMs: Math.max(nextCaptionStart + 1, Math.min(nextEnd, scaledEnd)),
+        };
+      })
+    : cue.captions;
+  return {
+    ...cue,
+    startMs: nextStart,
+    endMs: nextEnd,
+    ...(Array.isArray(cue.captions) ? { captions } : {}),
+  };
 }
 
 const cueWithBounds = (cue, startMs, endMs) => ({
