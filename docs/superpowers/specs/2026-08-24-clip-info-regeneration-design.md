@@ -22,12 +22,13 @@ The action regenerates these fields:
 - the current title and captions;
 - the current editor subtitle/caption text;
 - the current trim start and end seconds;
+- bounded, sanitized original `source_metadata`;
 - the source context;
 - the current viral hook when present.
 
 The current editor state is authoritative at request time. In particular, edited subtitle cues and the live trim range are passed through rather than reading only the original `clip.start`, `clip.end`, or generated captions.
 
-The Python worker receives a new `clip_info` operation and returns JSON with the four generated fields. The worker prompt will instruct the model to stay grounded in the supplied caption/subtitle context, respect the source language, and return only the exact response shape. The Go handler validates the request context, delegates through the existing translation-worker boundary, validates the JSON result, and returns it.
+The Python worker receives a new `clip_info` operation and returns JSON with the four generated fields. The worker prompt will stay simple and organized into four sections: current clip context, live selected content, original source metadata/context, and the exact JSON output contract. It will instruct the model to stay grounded in the supplied content, respect the source language, and return only the exact response shape. The Go handler validates the request context, delegates through the existing translation-worker boundary, validates the JSON result, and returns it.
 
 After a successful response, the panel updates its displayed title/caption and forwards the generated fields to its parent. The full-screen editor persists them through the existing project clip metadata PATCH endpoint. That endpoint will accept optional metadata fields, merge only supplied fields into the selected clip, and retain the existing hashtags-only contract.
 
