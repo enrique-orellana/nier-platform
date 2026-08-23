@@ -1,0 +1,19 @@
+#!/bin/sh
+
+set -eu
+
+commit_message_file=${1:-}
+
+if [ -z "$commit_message_file" ] || [ ! -f "$commit_message_file" ]; then
+  echo "commit-msg: Git did not provide a commit message file." >&2
+  exit 1
+fi
+
+subject=$(sed -n '1p' "$commit_message_file" | tr -d '\r')
+
+if ! printf '%s\n' "$subject" | grep -Eq '^[a-z]+(\([^()]+\))?!?:[[:space:]]+[^[:space:]].*$'; then
+  echo "Commit rejected: the subject must follow Conventional Commits." >&2
+  echo "Expected: type(scope)!: description" >&2
+  echo "Received: $subject" >&2
+  exit 1
+fi
