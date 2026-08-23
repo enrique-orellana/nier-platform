@@ -574,7 +574,7 @@ func TestRenderRoutesProxyToRendererService(t *testing.T) {
 	defer renderer.Close()
 
 	server := NewServer(config.Config{RenderServiceURL: renderer.URL})
-	createReq := httptest.NewRequest(http.MethodPost, "/api/render", strings.NewReader(`{"props":{"videoUrl":"/api/video-proxy?url=https://example.com/video.mp4"}}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/api/render", strings.NewReader(`{"props":{"videoUrl":"https://example.com/video.mp4"}}`))
 	createReq.Header.Set("Content-Type", "application/json")
 	createRes := httptest.NewRecorder()
 	server.Handler().ServeHTTP(createRes, createReq)
@@ -956,6 +956,22 @@ func TestClipVersionRenderForwardsDatabaseManifestInsteadOfBrowserProps(t *testi
 	}
 }
 
+func TestLocalRenderVideoURLRenewsPersistedS3ClipURL(t *testing.T) {
+	server := NewServer(config.Config{})
+	server.s3Store = &integrations.S3Store{
+		Bucket:        "openshorts-media",
+		PublicURLBase: "https://storage.example",
+	}
+	proxyURL := "https://storage.example/openshorts-media/job-1/clips/render-1/source_clip_14.mp4?X-Amz-Signature=expired"
+
+	resolved := server.localRenderVideoURL("job-1", proxyURL)
+
+	expected := "https://storage.example/openshorts-media/job-1/clips/render-1/source_clip_14.mp4"
+	if resolved != expected {
+		t.Fatalf("expected persisted media URL to resolve to %q, got %q", expected, resolved)
+}
+}
+
 func TestPersistSubtitlesUpdatesMasterManifestWithoutDroppingOtherLayers(t *testing.T) {
 	outputDir := t.TempDir()
 	manifestPath := filepath.Join(outputDir, "job-1", "manifests", "clip_1.json")
@@ -1170,29 +1186,6 @@ func TestManifestRouteFindsOneBasedManifestLayout(t *testing.T) {
 
 	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"source_video_url":"/videos/job-1/source.mp4"`) {
 		t.Fatalf("expected one-based manifest to load, got %d: %s", res.Code, res.Body.String())
-	}
-}
-
-func TestVideoProxyForwardsRangeAndContentHeaders(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Range") != "bytes=10-19" {
-			t.Fatalf("expected range header, got %q", r.Header.Get("Range"))
-		}
-		w.Header().Set("Content-Type", "video/mp4")
-		w.Header().Set("Content-Range", "bytes 10-19/100")
-		w.Header().Set("Accept-Ranges", "bytes")
-		w.WriteHeader(http.StatusPartialContent)
-		_, _ = w.Write([]byte("0123456789"))
-	}))
-	defer upstream.Close()
-
-	server := NewServer(config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/video-proxy?url="+url.QueryEscape(upstream.URL+"/video.mp4"), nil)
-	req.Header.Set("Range", "bytes=10-19")
-	res := httptest.NewRecorder()
-	server.Handler().ServeHTTP(res, req)
-	if res.Code != http.StatusPartialContent || res.Header().Get("Content-Range") != "bytes 10-19/100" || res.Body.String() != "0123456789" {
-		t.Fatalf("unexpected proxy response: %d %#v %q", res.Code, res.Header(), res.Body.String())
 	}
 }
 

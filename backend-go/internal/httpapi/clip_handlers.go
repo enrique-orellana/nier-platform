@@ -236,10 +236,13 @@ func (s *Server) renderVersion(w http.ResponseWriter, r *http.Request, jobID str
 }
 
 func (s *Server) localRenderVideoURL(jobID, videoURL string) string {
-	if s.s3Store == nil || s.s3Store.Bucket == "" || strings.TrimSpace(videoURL) == "" {
+	if strings.TrimSpace(videoURL) == "" {
 		return videoURL
 	}
 	parsed, err := url.Parse(videoURL)
+	if s.s3Store == nil || s.s3Store.Bucket == "" {
+		return videoURL
+	}
 	if err != nil || parsed.Path == "" {
 		return videoURL
 	}

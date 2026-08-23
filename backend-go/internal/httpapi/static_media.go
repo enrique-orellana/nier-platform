@@ -215,7 +215,9 @@ func (s *Server) publishRenderOutput(ctx context.Context, outputURL, clipID stri
 	return publishedURL, nil
 }
 
-func (s *Server) videoProxy(w http.ResponseWriter, r *http.Request) {
+const mediaURLExpiration = 2 * time.Hour
+
+func (s *Server) mediaURL(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
 		return
@@ -226,55 +228,34 @@ func (s *Server) videoProxy(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "A valid video URL is required"})
 		return
 	}
-	publicEndpoint := os.Getenv("AWS_S3_PUBLIC_ENDPOINT_URL")
-	if publicEndpoint == "" {
-		publicEndpoint = os.Getenv("AWS_S3_PUBLIC_URL_BASE")
-	}
-	if publicEndpoint != "" {
-		allowed, parseErr := url.Parse(publicEndpoint)
-		if parseErr != nil || allowed.Host != parsedTarget.Host {
-			writeJSON(w, http.StatusForbidden, map[string]string{"detail": "Proxy only allowed for configured MinIO endpoint"})
-			return
-		}
-	}
-	upstreamHeaders := make(http.Header)
-	if value := r.Header.Get("Range"); value != "" {
-		upstreamHeaders.Set("Range", value)
-	}
-	internalEndpoint := os.Getenv("AWS_S3_ENDPOINT_URL")
-	if internalEndpoint != "" && publicEndpoint != "" {
-		internal, parseErr := url.Parse(internalEndpoint)
-		if parseErr == nil && internal.Host != "" {
-			originalHost := parsedTarget.Host
-			parsedTarget.Scheme = internal.Scheme
-			parsedTarget.Host = internal.Host
-			upstreamHeaders.Set("Host", originalHost)
-		}
-	}
-	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, parsedTarget.String(), nil)
+	refreshedURL, err := s.renewMediaURL(r.Context(), parsedTarget)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Video proxy error"})
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Could not renew media URL: %s", err)})
 		return
 	}
-	request.Header = upstreamHeaders
-	response, err := (&http.Client{Timeout: 30 * time.Second}).Do(request)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Video proxy error: %s", err)})
-		return
+	writeJSON(w, http.StatusOK, map[string]string{
+		"url":       refreshedURL,
+		"expiresAt": time.Now().Add(mediaURLExpiration).UTC().Format(time.RFC3339),
+	})
+}
+
+func (s *Server) renewMediaURL(ctx context.Context, target *url.URL) (string, error) {
+	if s.s3Store == nil || s.s3Store.Bucket == "" || target == nil || s.s3Store.PublicURLBase == "" {
+		return "", fmt.Errorf("S3 media URL renewal is not configured")
 	}
-	defer response.Body.Close()
-	for _, key := range []string{"Content-Type", "Content-Length", "Content-Range", "ETag"} {
-		if value := response.Header.Get(key); value != "" {
-			w.Header().Set(key, value)
-		}
+	publicBase, err := url.Parse(s.s3Store.PublicURLBase)
+	if err != nil || publicBase.Host == "" || publicBase.Host != target.Host {
+		return "", fmt.Errorf("media URL is outside the configured public S3 base")
 	}
-	w.Header().Set("Accept-Ranges", "bytes")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Expose-Headers", "Accept-Ranges, Content-Length, Content-Range, Content-Type, ETag")
-	filename := strings.TrimPrefix(r.URL.Path, "/api/video-proxy/")
-	if filename != "" {
-		w.Header().Set("Content-Disposition", inlineContentDisposition(filename))
+	relative := strings.TrimPrefix(target.Path, strings.TrimRight(publicBase.Path, "/"))
+	relative = strings.TrimPrefix(relative, "/")
+	bucketPrefix := strings.Trim(s.s3Store.Bucket, "/") + "/"
+	if strings.HasPrefix(relative, bucketPrefix) {
+		relative = strings.TrimPrefix(relative, bucketPrefix)
 	}
-	w.WriteHeader(response.StatusCode)
-	_, _ = io.Copy(w, response.Body)
+	key, err := url.PathUnescape(relative)
+	if err != nil || key == "" || path.Clean(key) != key || strings.Contains(key, "\\") || strings.HasPrefix(key, "../") {
+		return "", fmt.Errorf("invalid public media object path")
+	}
+	return s.s3Store.DirectObjectURL(ctx, key, mediaURLExpiration)
 }
