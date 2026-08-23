@@ -47,7 +47,7 @@ services:
       AI_MODEL: ${AI_MODEL:-openai/gpt-4o-mini}
       AI_ANALYZE_MODEL: ${AI_ANALYZE_MODEL:-openai/gpt-4o-mini}
       AI_TRANSCRIPTION_MODEL: ${AI_TRANSCRIPTION_MODEL:-openai/whisper-large-v3}
-      RENDER_SERVICE_URL: ${RENDER_SERVICE_URL:-http://renderer:3100}
+      RENDER_SERVICE_URL: ${RENDER_SERVICE_URL:-http://host.docker.internal:13101}
       OPENSHORTS_CODEX_AUTH_FILE: /app/output/.openshorts/codex-auth.json
       NO_PROXY: 192.168.50.2,db,renderer,host.docker.internal,localhost,127.0.0.1
     restart: unless-stopped
@@ -60,6 +60,8 @@ services:
     container_name: openshorts-frontend
     ports:
       - "18575:5173"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./dashboard:/app
       - /app/node_modules
@@ -70,26 +72,28 @@ services:
       - VITE_AI_ANALYZE_MODEL=openai/gpt-4o-mini
       - VITE_AI_TRANSCRIPTION_MODEL=openai/whisper-large-v3
       - VITE_BACKEND_PROXY_TARGET=http://backend:8000
-      - VITE_RENDERER_PROXY_TARGET=http://renderer:3100
+      - VITE_RENDERER_PROXY_TARGET=http://host.docker.internal:13101
     restart: unless-stopped
     depends_on:
       - backend
-  renderer:
-    build:
-      context: .
-      dockerfile: render-service/Dockerfile
-    container_name: openshorts-renderer
-    ports:
-      - "13100:3100"
-    volumes:
-      - ${OPENSHORTS_DATA_ROOT:-D:/openshorts-docker-data}/workdir:/output
-    user: "1000:1000"
-    environment:
-      - REMOTION_BUNDLE_PATH=/app/remotion
-      - OUTPUT_DIR=/output
-      - PORT=3100
-      - RENDER_MAX_CONCURRENCY=${RENDER_MAX_CONCURRENCY:-1}
-      - RENDER_CONCURRENCY=${RENDER_CONCURRENCY:-4}
-    restart: unless-stopped
-    depends_on:
-      - backend
+  # Renderer intentionally runs natively on the Windows host for AMD AMF.
+  # Start it with scripts/start-native-renderer.ps1 on port 13101.
+  # renderer:
+  #   build:
+  #     context: .
+  #     dockerfile: render-service/Dockerfile
+  #   container_name: openshorts-renderer
+  #   ports:
+  #     - "13100:3100"
+  #   volumes:
+  #     - ${OPENSHORTS_DATA_ROOT:-D:/openshorts-docker-data}/workdir:/output
+  #   user: "1000:1000"
+  #   environment:
+  #     - REMOTION_BUNDLE_PATH=/app/remotion
+  #     - OUTPUT_DIR=/output
+  #     - PORT=3100
+  #     - RENDER_MAX_CONCURRENCY=${RENDER_MAX_CONCURRENCY:-1}
+  #     - RENDER_CONCURRENCY=${RENDER_CONCURRENCY:-4}
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - backend

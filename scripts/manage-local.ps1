@@ -17,7 +17,7 @@ $nativeLogDir = Join-Path $repoRoot ".native-renderer-logs"
 $nativeStdout = Join-Path $nativeLogDir "stdout.log"
 $nativeStderr = Join-Path $nativeLogDir "stderr.log"
 $selectedComponents = @($Component | ForEach-Object { $_ -split "," } | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ })
-$allowedComponents = @("all", "native-renderer", "docker-renderer", "renderer", "backend", "frontend", "db")
+$allowedComponents = @("all", "native-renderer", "renderer", "backend", "frontend", "db")
 $invalidComponents = @($selectedComponents | Where-Object { $_ -notin $allowedComponents })
 if ($invalidComponents.Count -gt 0) {
     throw "Unknown component(s): $($invalidComponents -join ', '). Allowed values: $($allowedComponents -join ', ')."
@@ -56,9 +56,6 @@ function Get-DockerServices {
     if (Selects-Component "db") { $services += "db" }
     if (Selects-Component "backend") { $services += "backend" }
     if (Selects-Component "frontend") { $services += "frontend" }
-    if ((Selects-Component "docker-renderer") -or (Selects-Component "renderer")) {
-        $services += "renderer"
-    }
     return @($services | Select-Object -Unique)
 }
 
@@ -176,7 +173,7 @@ function Start-Components {
         } else {
             $env:RENDER_SERVICE_URL = "http://renderer:3100"
         }
-        $composeArguments = @("up", "-d") + $dockerServices
+        $composeArguments = @("up", "-d", "--remove-orphans") + $dockerServices
         Invoke-Compose $composeArguments
     }
 

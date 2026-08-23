@@ -21,7 +21,7 @@ Target one or more components with `-Component`:
 .\scripts\manage-local.ps1 -Action Restart -Component backend,frontend
 ```
 
-`renderer` manages both the native AMD renderer and the Docker renderer. Use `native-renderer` or `docker-renderer` to target only one of them. Available Docker components are `db`, `backend`, and `frontend`.
+`renderer` manages the native AMD renderer. The Docker renderer service is intentionally commented out in Compose. Available Docker components are `db`, `backend`, and `frontend`.
 
 To start only the worker manually:
 
