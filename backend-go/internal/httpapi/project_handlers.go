@@ -234,6 +234,16 @@ func (s *Server) readPersistedProjectClips(job domain.Job) ([]map[string]any, ti
 		}
 	}
 	for _, clip := range result.Clips {
+		if layoutFormat, ok := clip["layout_format"].(string); !ok || strings.TrimSpace(layoutFormat) == "" {
+			if inheritedLayout, inheritedOK := job.Metadata["layout_format"].(string); inheritedOK && strings.TrimSpace(inheritedLayout) != "" {
+				clip["layout_format"] = inheritedLayout
+			}
+		}
+		if facecamSize, ok := clip["facecam_size"].(string); !ok || strings.TrimSpace(facecamSize) == "" {
+			if inheritedSize, inheritedOK := job.Metadata["facecam_size"].(string); inheritedOK && strings.TrimSpace(inheritedSize) != "" {
+				clip["facecam_size"] = inheritedSize
+			}
+		}
 		clipID := clipArtifactID(job.ID, clip)
 		if filename, ok := clip["video_filename"].(string); ok && filename != "" {
 			clip["video_url"] = s.directClipArtifactURL(job.ID, clipID, filename)

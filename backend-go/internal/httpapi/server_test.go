@@ -1410,6 +1410,52 @@ func TestDeferredClipWebcamRegionPatchPersistsResultAndMetadata(t *testing.T) {
 	}
 }
 
+func TestProjectClipsHydratesLegacyLayoutFromDeferredJobMetadata(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	outputDir := t.TempDir()
+	parent, err := store.Create(context.Background(), domain.CreateJobInput{
+		Kind:      "clip-generation",
+		OutputDir: filepath.Join(outputDir, "parent-layout"),
+		Metadata: map[string]any{
+			"defer_render":  true,
+			"layout_format": "streamer_stack",
+			"facecam_size":  "small",
+		},
+	})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	if _, err := store.Claim(context.Background(), parent.ID); err != nil {
+		t.Fatalf("claim parent: %v", err)
+	}
+	if _, err := store.Transition(context.Background(), parent.ID, domain.JobStatusClipsReady, ""); err != nil {
+		t.Fatalf("mark parent ready: %v", err)
+	}
+	if err := store.SetResult(context.Background(), parent.ID, []byte(`{"clips":[{"start":1,"end":4,"render_status":"failed"}]}`)); err != nil {
+		t.Fatalf("set parent result: %v", err)
+	}
+
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(
+		res,
+		httptest.NewRequest(http.MethodGet, "/api/projects/clips/"+parent.ID, nil),
+	)
+	if res.Code != http.StatusOK {
+		t.Fatalf("project clips lookup failed: %d %s", res.Code, res.Body.String())
+	}
+
+	var payload struct {
+		Clips []map[string]any `json:"clips"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode project clips response: %v", err)
+	}
+	if len(payload.Clips) != 1 || payload.Clips[0]["layout_format"] != "streamer_stack" || payload.Clips[0]["facecam_size"] != "small" {
+		t.Fatalf("legacy clip did not inherit layout metadata: %#v", payload.Clips)
+	}
+}
+
 func TestDeferredClipWebcamRegionPatchHydratesAndUpdatesS3Metadata(t *testing.T) {
 	store := jobs.NewMemoryStore()
 	outputDir := t.TempDir()
