@@ -20,7 +20,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getApiUrl } from "../config";
 import { activeClipRenderJobs } from "../lib/clipRenderJobs";
-import { toProxiedVideoUrl } from "../lib/videoUrls";
+import { useRenewableMediaUrl } from "../lib/videoUrls";
 import { CLIP_WORKFLOW_STATUSES } from "./clipWorkflowStatuses";
 import ResultCard from "./ResultCard";
 
@@ -206,7 +206,7 @@ function normalizeClipForResultCard(clip, index, fallbackJobId) {
 
   return {
     ...clip,
-    video_url: toProxiedVideoUrl(videoUrl),
+    video_url: videoUrl,
     source_preview: !renderedVideoUrl && Boolean(clip.source_video_url),
     video_title_for_youtube_short: title,
     video_description_for_tiktok: descriptionTiktok,
@@ -217,6 +217,20 @@ function normalizeClipForResultCard(clip, index, fallbackJobId) {
     job_id: clip.job_id || fallbackJobId || "project",
     index: Number.isInteger(clip.index) ? clip.index : index,
   };
+}
+
+function ProjectPreviewVideo({ src }) {
+  const { url, refresh } = useRenewableMediaUrl(src);
+  return (
+    <video
+      src={url}
+      muted
+      playsInline
+      preload="metadata"
+      onError={() => void refresh()}
+      className="w-full h-full object-cover"
+    />
+  );
 }
 
 export default function ProjectLibrary({
@@ -1716,12 +1730,11 @@ export default function ProjectLibrary({
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredProjects.map((project) => {
-              const previewVideoUrl = toProxiedVideoUrl(
+              const previewVideoUrl =
                 project.clips?.[0]?.url ||
-                  project.clips?.[0]?.video_url ||
-                  project.clips?.[0]?.source_video_url ||
-                  "",
-              );
+                project.clips?.[0]?.video_url ||
+                project.clips?.[0]?.source_video_url ||
+                "";
 
               return (
                 <div
@@ -1736,13 +1749,7 @@ export default function ProjectLibrary({
                 >
                   <div className="aspect-[9/16] rounded-lg overflow-hidden bg-white/5 mb-3 border border-white/5 relative">
                     {previewVideoUrl ? (
-                      <video
-                        src={previewVideoUrl}
-                        muted
-                        playsInline
-                        preload="metadata"
-                        className="w-full h-full object-cover"
-                      />
+                      <ProjectPreviewVideo src={previewVideoUrl} />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-zinc-700">
                         <FolderOpen size={32} />

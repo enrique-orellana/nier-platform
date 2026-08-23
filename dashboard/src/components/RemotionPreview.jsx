@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import { Player } from "@remotion/player";
 import { ShortVideo } from "../remotion/compositions/ShortVideo";
+import { useRenewableMediaUrl } from "../lib/videoUrls";
 
 /**
  * Wraps Remotion's Player component for real-time preview in modals.
@@ -40,6 +41,7 @@ function RemotionPreview({
   onPlayerReady,
   className = "",
 }) {
+  const { url: resolvedVideoUrl } = useRenewableMediaUrl(videoUrl);
   const durationInFrames = Math.max(1, Math.round(durationInSeconds * fps));
   const playerRef = useRef(null);
   const playerFrameRef = useRef(null);
@@ -113,7 +115,7 @@ function RemotionPreview({
 
   const inputProps = useMemo(
     () => ({
-      videoUrl,
+      videoUrl: resolvedVideoUrl,
       videoStartSeconds,
       playbackRate,
       durationInFrames,
@@ -129,7 +131,7 @@ function RemotionPreview({
       onMediaTimeChange,
     }),
     [
-      videoUrl,
+      resolvedVideoUrl,
       videoStartSeconds,
       playbackRate,
       durationInFrames,

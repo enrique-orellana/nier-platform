@@ -4,6 +4,7 @@ import {
   resolveClipVideoUrl,
   resolveMasterVideoUrl,
   resolvePreviewStartSeconds,
+  useRenewableMediaUrl,
 } from "../lib/videoUrls";
 import HookModal from "./HookModal";
 import SubtitleModal from "./SubtitleModal";
@@ -11,11 +12,6 @@ import TranslateModal from "./TranslateModal";
 import ClipWorkflowStatus from "./ClipWorkflowStatus";
 import FullScreenEditor from "./editor/FullScreenEditor";
 import ClipRenderControls from "./ClipRenderControls";
-
-// Route MinIO presigned URLs through the backend proxy to fix CORS/loopback issues.
-// Both browser-side and server-side Remotion flows use same-origin proxy URLs.
-// The backend rewrites renderer requests to an internal backend URL before
-// forwarding them to the render service.
 
 const getUrlFilename = (url) => {
   if (!url) return "";
@@ -28,12 +24,6 @@ const getUrlFilename = (url) => {
       url.split("?")[0].split("#")[0].split("/").filter(Boolean).pop() || ""
     );
   }
-};
-
-const toProxiedVideoUrl = (url) => {
-  return url;
-  // Blob URLs and relative paths are already local — no proxy needed
-  // Relative URL — browser uses same-origin and backend resolves it for the renderer
 };
 
 import { Clock3, Sliders } from "lucide-react";
@@ -95,13 +85,14 @@ export default function ResultCard({
   clip = resolvedClipVideoUrl
     ? { ...clip, video_url: resolvedClipVideoUrl }
     : clip;
-  const trueOriginalUrl = toProxiedVideoUrl(
-    getApiUrl(clip.original_video_url || clip.video_url),
-  ); // The absolute, unedited original
-  const originalVideoUrl = toProxiedVideoUrl(getApiUrl(clip.video_url)); // Never changes — used for Remotion previews
-  const masterVideoUrl = toProxiedVideoUrl(
-    getApiUrl(resolveMasterVideoUrl(clip)),
+  const trueOriginalSourceUrl = getApiUrl(
+    clip.original_video_url || clip.video_url,
   );
+  const originalSourceUrl = getApiUrl(clip.video_url);
+  const masterSourceUrl = getApiUrl(resolveMasterVideoUrl(clip));
+  const { url: trueOriginalUrl } = useRenewableMediaUrl(trueOriginalSourceUrl);
+  const { url: originalVideoUrl } = useRenewableMediaUrl(originalSourceUrl);
+  const { url: masterVideoUrl } = useRenewableMediaUrl(masterSourceUrl);
   const previewVideoUrl = originalVideoUrl || masterVideoUrl;
   const previewStartSeconds = resolvePreviewStartSeconds(clip);
   const [currentVideoUrl, setCurrentVideoUrl] = useState(originalVideoUrl);
@@ -156,11 +147,10 @@ export default function ResultCard({
   const hasVideo = Boolean(originalVideoUrl);
   const effectiveRenderStatus =
     renderStatus || clip.render_status || (hasVideo ? "ready" : "found");
-  const webcamSourceUrl = toProxiedVideoUrl(
-    getApiUrl(
-      clip.source_video_url || clip.original_video_url || clip.video_url,
-    ),
+  const webcamSourceCandidate = getApiUrl(
+    clip.source_video_url || clip.original_video_url || clip.video_url,
   );
+  const { url: webcamSourceUrl } = useRenewableMediaUrl(webcamSourceCandidate);
 
   const handleSaveWebcamRegion = async (region, facecamSize) => {
     if (!onSaveWebcamRegion) {
@@ -236,7 +226,7 @@ export default function ResultCard({
 
   const getSourceVideoUrl = () => persistedVideoUrl || originalVideoUrl;
   const getVideoFilename = () => getUrlFilename(getSourceVideoUrl());
-  const getRendererSourceUrl = () => toProxiedVideoUrl(getSourceVideoUrl());
+  const getRendererSourceUrl = () => getSourceVideoUrl();
 
   const applyRenderedVideoUrl = (nextUrl, { persist = false } = {}) => {
     if (persist) {

@@ -3,10 +3,7 @@ import { X, Type, Loader2 } from "lucide-react";
 import { getApiUrl } from "../config";
 import RemotionPreview from "./RemotionPreview";
 import { toClipGeneratorSubtitleStyle } from "./local-editor/localEditorStyles";
-
-const toProxiedVideoUrl = (url) => {
-  return url;
-};
+import { useRenewableMediaUrl } from "../lib/videoUrls";
 
 const FONT_OPTIONS = [
   { value: "Verdana", label: "Verdana" },
@@ -63,6 +60,8 @@ export default function SubtitleModal({
   const [durationSec, setDurationSec] = useState(30);
   const [captionsLoading, setCaptionsLoading] = useState(false);
   const [useRemotionPreview, setUseRemotionPreview] = useState(false);
+  const { url: resolvedVideoUrl, refresh: refreshVideoUrl } =
+    useRenewableMediaUrl(videoUrl);
 
   // Fetch word-level captions when modal opens
   useEffect(() => {
@@ -185,7 +184,7 @@ export default function SubtitleModal({
             </div>
           ) : useRemotionPreview ? (
             <RemotionPreview
-              videoUrl={toProxiedVideoUrl(videoUrl)}
+              videoUrl={resolvedVideoUrl}
               videoStartSeconds={videoStartSeconds}
               durationInSeconds={durationSec}
               subtitles={subtitleConfig}
@@ -194,7 +193,8 @@ export default function SubtitleModal({
           ) : (
             <>
               <video
-                src={videoUrl}
+                src={resolvedVideoUrl}
+                onError={() => void refreshVideoUrl()}
                 className="w-full h-full object-contain opacity-50"
                 muted
                 playsInline

@@ -732,7 +732,7 @@ describe("LocalEditorTab", () => {
 
     render(
       <LocalEditorTab
-        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoUrl="https://media.example.test/project.mp4"
         initialVideoName="project.mp4"
       />,
     );
@@ -747,7 +747,7 @@ describe("LocalEditorTab", () => {
     expect(screen.getByText(/project\.mp4/)).toBeInTheDocument();
     expect(
       screen.getByTestId("local-editor-player").querySelector("video"),
-    ).toHaveAttribute("src", "/api/video-proxy/project.mp4");
+    ).toHaveAttribute("src", "https://media.example.test/project.mp4");
   });
 
   it("passes the Play button gesture to the Remotion player for audio", async () => {
@@ -1215,7 +1215,7 @@ describe("LocalEditorTab", () => {
 
     render(
       <LocalEditorTab
-        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoUrl="https://media.example.test/project.mp4"
         initialVideoName="project.mp4"
         clipMetadata={{
           start: 12,
@@ -1254,7 +1254,7 @@ describe("LocalEditorTab", () => {
 
     render(
       <LocalEditorTab
-        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoUrl="https://media.example.test/project.mp4"
         initialEditorState={{
           subtitleCues: [
             { id: "a", text: "Primera frase" },
@@ -1316,7 +1316,7 @@ describe("LocalEditorTab", () => {
   it("allows replacing the subtitle font size one digit at a time", async () => {
     render(
       <LocalEditorTab
-        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoUrl="https://media.example.test/project.mp4"
         initialVideoName="project.mp4"
       />,
     );
@@ -1513,7 +1513,7 @@ describe("LocalEditorTab", () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:demo");
     render(
       <LocalEditorTab
-        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoUrl="https://media.example.test/project.mp4"
         initialVideoName="project.mp4"
         initialEditorState={{
           subtitleCues: [
@@ -1867,7 +1867,7 @@ describe("LocalEditorTab", () => {
   it("uses the compact panel treatment for viral hook settings", async () => {
     render(
       <LocalEditorTab
-        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoUrl="https://media.example.test/project.mp4"
         initialVideoName="project.mp4"
         initialEditorState={{
           subtitleCues: [],
@@ -1894,7 +1894,7 @@ describe("LocalEditorTab", () => {
   it("uses a reset icon when a viral hook already exists", async () => {
     render(
       <LocalEditorTab
-        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoUrl="https://media.example.test/project.mp4"
         initialVideoName="project.mp4"
         initialEditorState={{
           subtitleCues: [],
@@ -1920,7 +1920,7 @@ describe("LocalEditorTab", () => {
   it("matches the subtitle color palette styling for viral hook text", async () => {
     render(
       <LocalEditorTab
-        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoUrl="https://media.example.test/project.mp4"
         initialVideoName="project.mp4"
         initialEditorState={{
           subtitleCues: [],
@@ -1953,7 +1953,7 @@ describe("LocalEditorTab", () => {
   it("provides subtitle palette quick picks for viral hook background", async () => {
     render(
       <LocalEditorTab
-        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoUrl="https://media.example.test/project.mp4"
         initialVideoName="project.mp4"
         initialEditorState={{
           subtitleCues: [],
@@ -1986,7 +1986,7 @@ describe("LocalEditorTab", () => {
   it("uses subtitle button colors for viral hook choices", async () => {
     render(
       <LocalEditorTab
-        initialVideoUrl="/api/video-proxy/project.mp4"
+        initialVideoUrl="https://media.example.test/project.mp4"
         initialVideoName="project.mp4"
         initialEditorState={{
           subtitleCues: [],

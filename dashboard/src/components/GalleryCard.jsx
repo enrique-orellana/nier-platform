@@ -8,12 +8,16 @@ import {
   Check,
   Play,
 } from "lucide-react";
+import { useRenewableMediaUrl } from "../lib/videoUrls";
 
 export default function GalleryCard({ clip }) {
   const [copied, setCopied] = useState(null);
   const [isVisible, setIsVisible] = useState(false);
   const cardRef = useRef(null);
   const videoRef = useRef(null);
+  const { url: videoUrl, refresh: refreshVideoUrl } = useRenewableMediaUrl(
+    clip.url,
+  );
 
   // Lazy loading with IntersectionObserver
   useEffect(() => {
@@ -82,7 +86,8 @@ export default function GalleryCard({ clip }) {
         {isVisible ? (
           <video
             ref={videoRef}
-            src={clip.url}
+            src={videoUrl}
+            onError={() => void refreshVideoUrl()}
             controls
             className="w-full h-full object-cover"
             playsInline

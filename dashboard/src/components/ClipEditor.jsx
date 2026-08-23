@@ -9,10 +9,6 @@ import SubtitleCueInspector from "./editor/SubtitleCueInspector";
 import VersionHistory from "./editor/VersionHistory";
 import { makeEditorDraft, msToFrame } from "../editor/timelineModel";
 
-const proxyUrl = (url) => {
-  return url;
-};
-
 const normalizeTracks = (manifest) => {
   const tracks = manifest?.subtitle_tracks || [];
   const normalize = (track) => {
@@ -190,11 +186,10 @@ export default function ClipEditor({
       if (!create.ok)
         throw new Error(created.detail || "Could not create version.");
       const versionId = created.version.version_id;
-      const source = proxyUrl(
+      const source =
         draft.timeline?.source_video_url ||
-          clip.original_video_url ||
-          clip.video_url,
-      );
+        clip.original_video_url ||
+        clip.video_url;
       const fps = clip.output_fps || 30;
       const render = await fetch(
         getApiUrl(
@@ -331,9 +326,7 @@ export default function ClipEditor({
           <main className="min-w-0 space-y-4">
             <div className="aspect-[9/16] max-h-[52vh] rounded-xl bg-black">
               <RemotionPreview
-                videoUrl={proxyUrl(
-                  draft?.timeline?.source_video_url || clip?.video_url,
-                )}
+                videoUrl={draft?.timeline?.source_video_url || clip?.video_url}
                 durationInSeconds={durationMs / 1000}
                 fps={clip.output_fps || 30}
                 width={clip.output_width || 1080}

@@ -21,46 +21,11 @@ import EditorActionToolbar from "./EditorActionToolbar";
 import LocalEditorTab from "../local-editor/LocalEditorTab";
 import { DEFAULT_SUBTITLE_STYLE } from "../local-editor/localEditorStyles";
 import { HOOK_FONT_FAMILY } from "../../remotion/lib/hookVisual";
-import { resolvePreviewStartSeconds } from "../../lib/videoUrls";
+import {
+  resolvePreviewStartSeconds,
+  useRenewableMediaUrl,
+} from "../../lib/videoUrls";
 import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
-
-const proxyUrl = (url) => {
-  return url;
-};
-
-const PRESIGNED_URL_REFRESH_BUFFER_MS = 5 * 60 * 1000;
-
-const parseAmzDate = (value) => {
-  const match = String(value || "").match(
-    /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/,
-  );
-  if (!match) return NaN;
-  return Date.UTC(
-    Number(match[1]),
-    Number(match[2]) - 1,
-    Number(match[3]),
-    Number(match[4]),
-    Number(match[5]),
-    Number(match[6]),
-  );
-};
-
-const shouldRefreshPresignedVideoUrl = (url) => {
-  if (!url) return false;
-  try {
-    const parsed = new URL(url, window.location.origin);
-    const signedAt = parsed.searchParams.get("X-Amz-Date");
-    const expiresInSeconds = parsed.searchParams.get("X-Amz-Expires");
-    if (!signedAt && expiresInSeconds === null && /^https?:\/\//i.test(url))
-      return false;
-
-    const expiresAt = parseAmzDate(signedAt) + Number(expiresInSeconds) * 1000;
-    if (!Number.isFinite(expiresAt)) return true;
-    return Date.now() >= expiresAt - PRESIGNED_URL_REFRESH_BUFFER_MS;
-  } catch {
-    return true;
-  }
-};
 
 const videoPath = (url) => {
   if (!url) return "";
@@ -344,7 +309,6 @@ export default function FullScreenEditor({
   );
   const [localDraftRevision, setLocalDraftRevision] = useState(0);
   const [renderSpecDirty, setRenderSpecDirty] = useState(false);
-  const [refreshedMasterVideoUrl, setRefreshedMasterVideoUrl] = useState("");
   const localDraftRef = useRef(localDraft);
   const versionRef = useRef(version);
   const activeTrackIdRef = useRef(activeTrackId);
@@ -490,43 +454,13 @@ export default function FullScreenEditor({
     jobId,
   ]);
 
-  const currentMasterVideoUrl =
-    clip?.source_video_url || clip?.original_video_url || clip?.video_url;
-
-  useEffect(() => {
-    if (!isOpen || !jobId) return undefined;
-    if (!shouldRefreshPresignedVideoUrl(currentMasterVideoUrl))
-      return undefined;
-    let cancelled = false;
-    const refreshMasterVideoUrl = async () => {
-      try {
-        const response = await fetch(
-          getApiUrl(
-            `/api/projects/clips/${encodeURIComponent(jobId)}?refresh=true`,
-          ),
-        );
-        if (!response.ok) return;
-        const payload = await response.json();
-        const clips = Array.isArray(payload.clips) ? payload.clips : [];
-        const clipPosition = Number(clipIndex);
-        const refreshedClip = clips.find(
-          (candidate, index) =>
-            Number(candidate?.index) === clipPosition || index === clipPosition,
-        );
-        const nextUrl =
-          refreshedClip?.source_video_url ||
-          refreshedClip?.original_video_url ||
-          "";
-        if (!cancelled && nextUrl) setRefreshedMasterVideoUrl(nextUrl);
-      } catch {
-        // Keep the URL already present in the manifest as a fallback.
-      }
-    };
-    void refreshMasterVideoUrl();
-    return () => {
-      cancelled = true;
-    };
-  }, [clipIndex, currentMasterVideoUrl, isOpen, jobId]);
+  const currentMasterVideoUrl = resolveLocalEditorSourceUrl({
+    clip,
+    projectManifest: manifest || initialManifest,
+  });
+  const { url: refreshedMasterVideoUrl } = useRenewableMediaUrl(
+    currentMasterVideoUrl,
+  );
 
   const currentManifest = useMemo(
     () => ({
@@ -568,11 +502,12 @@ export default function FullScreenEditor({
       ...manifestToRenderProps(projectManifest, {
         activeSubtitleTrackId: activeTrackId,
       }),
-      videoUrl: proxyUrl(
-        projectManifest.timeline?.source_video_url || clip.video_url,
-      ),
+      videoUrl:
+        refreshedMasterVideoUrl ||
+        projectManifest.timeline?.source_video_url ||
+        clip.video_url,
     }),
-    [activeTrackId, clip.video_url, projectManifest],
+    [activeTrackId, clip.video_url, projectManifest, refreshedMasterVideoUrl],
   );
   const fallbackDurationSeconds = Math.max(
     1,
@@ -707,12 +642,12 @@ export default function FullScreenEditor({
     ? 0
     : selectedRenderProps.videoStartSeconds;
   const localEditorPreviewUrl = useMemo(() => {
-    return proxyUrl(
+    return (
       resolveLocalEditorSourceUrl({
         refreshedMasterVideoUrl,
         clip,
         projectManifest,
-      }) || projectVideoUrl,
+      }) || projectVideoUrl
     );
   }, [clip, projectManifest, projectVideoUrl, refreshedMasterVideoUrl]);
   const currentManifestRef = useRef(currentManifest);
@@ -1045,13 +980,13 @@ export default function FullScreenEditor({
     >
       <LocalEditorTab
         initialVideoUrl={localEditorPreviewUrl}
-        initialExportVideoUrl={proxyUrl(
+        initialExportVideoUrl={
           resolveLocalEditorSourceUrl({
             refreshedMasterVideoUrl,
             clip,
             projectManifest,
-          }) || projectInputProps.videoUrl,
-        )}
+          }) || projectInputProps.videoUrl
+        }
         initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
         initialProjectId={jobId}
         initialClipIndex={clipIndex}

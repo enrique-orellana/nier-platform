@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  getMediaUrlExpiration,
+  isSignedMediaUrl,
+  refreshMediaUrl,
   resolveClipVideoUrl,
   resolveMasterVideoUrl,
   resolvePreviewStartSeconds,
@@ -26,12 +29,43 @@ describe("resolveClipVideoUrl", () => {
   });
 });
 
-describe("toProxiedVideoUrl", () => {
-  it("keeps presigned S3 URLs direct", async () => {
-    const { toProxiedVideoUrl } = await import("./videoUrls");
-    const url = "https://s3.example.test/media/clip.mp4?signature=abc";
+describe("renewable media URLs", () => {
+  it("recognizes AWS signed media URLs and reads their expiration", () => {
+    const url =
+      "https://s3.example.test/media/clip.mp4?X-Amz-Date=20260822T223514Z&X-Amz-Expires=7200&X-Amz-Signature=abc";
 
-    expect(toProxiedVideoUrl(url)).toBe(url);
+    expect(isSignedMediaUrl(url)).toBe(true);
+    expect(getMediaUrlExpiration(url)).toBe(
+      Date.parse("2026-08-23T00:35:14.000Z"),
+    );
+  });
+
+  it("requests a fresh direct URL from the media URL endpoint", async () => {
+    const originalUrl =
+      "https://s3.example.test/media/clip.mp4?X-Amz-Signature=expired";
+    const freshUrl =
+      "https://s3.example.test/media/clip.mp4?X-Amz-Signature=fresh";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          url: freshUrl,
+          expiresAt: "2026-08-23T01:35:14.000Z",
+        }),
+      }),
+    );
+
+    await expect(
+      refreshMediaUrl(originalUrl, { force: true }),
+    ).resolves.toEqual({
+      url: freshUrl,
+      expiresAt: Date.parse("2026-08-23T01:35:14.000Z"),
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      `/api/media-url?url=${encodeURIComponent(originalUrl)}`,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 });
 

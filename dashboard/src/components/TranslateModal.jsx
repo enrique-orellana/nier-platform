@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { X, Loader2, Globe, Languages, AlertCircle } from "lucide-react";
+import { useRenewableMediaUrl } from "../lib/videoUrls";
 
 const LANGUAGES = {
   es: "Spanish",
@@ -44,6 +45,8 @@ export default function TranslateModal({
   hasApiKey,
 }) {
   const [targetLanguage, setTargetLanguage] = useState("es");
+  const { url: resolvedVideoUrl, refresh: refreshVideoUrl } =
+    useRenewableMediaUrl(videoUrl);
 
   if (!isOpen) return null;
 
@@ -88,7 +91,8 @@ export default function TranslateModal({
         {/* Preview */}
         <div className="mb-6 rounded-xl overflow-hidden bg-black aspect-video relative">
           <video
-            src={videoUrl}
+            src={resolvedVideoUrl}
+            onError={() => void refreshVideoUrl()}
             className="w-full h-full object-contain"
             muted
             playsInline

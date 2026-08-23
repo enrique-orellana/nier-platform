@@ -25,6 +25,7 @@ import {
   Upload,
 } from "lucide-react";
 import { getApiUrl } from "../config";
+import { useRenewableMediaUrl } from "../lib/videoUrls";
 
 const STYLE_OPTIONS = [
   { id: "ugc", label: "UGC Natural", desc: "Authentic, talking to camera" },
@@ -123,6 +124,8 @@ export default function SaaShortsTab({
   const [genLogs, setGenLogs] = useState([]);
   const [genStatus, setGenStatus] = useState("idle");
   const [genResult, setGenResult] = useState(null);
+  const { url: generatedVideoUrl, refresh: refreshGeneratedVideoUrl } =
+    useRenewableMediaUrl(genResult ? getApiUrl(genResult.video_url) : "");
 
   // Publish
   const [publishing, setPublishing] = useState(false);
@@ -1744,7 +1747,8 @@ export default function SaaShortsTab({
                 {/* Video Player */}
                 <div className="aspect-[9/16] max-h-[500px] bg-black rounded-xl overflow-hidden relative">
                   <video
-                    src={getApiUrl(genResult.video_url)}
+                    src={generatedVideoUrl}
+                    onError={() => void refreshGeneratedVideoUrl()}
                     controls
                     className="w-full h-full object-contain"
                     autoPlay

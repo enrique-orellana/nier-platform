@@ -11,6 +11,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { getApiUrl } from "../config";
+import { useRenewableMediaUrl } from "../lib/videoUrls";
 
 export default function UGCGallery() {
   const [tab, setTab] = useState("videos");
@@ -222,6 +223,9 @@ function AvatarCard({ avatar, copied, onCopy }) {
 function VideoCard({ video, copied, onCopy }) {
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
+  const { url: videoUrl, refresh: refreshVideoUrl } = useRenewableMediaUrl(
+    video.video_url,
+  );
 
   const handleMouseEnter = () => {
     if (videoRef.current) {
@@ -251,7 +255,8 @@ function VideoCard({ video, copied, onCopy }) {
       >
         <video
           ref={videoRef}
-          src={video.video_url}
+          src={videoUrl}
+          onError={() => void refreshVideoUrl()}
           poster={video.actor_url}
           muted
           playsInline

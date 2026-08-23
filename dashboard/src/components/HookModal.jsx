@@ -8,10 +8,7 @@ import {
   Zap,
 } from "lucide-react";
 import RemotionPreview from "./RemotionPreview";
-
-const toProxiedVideoUrl = (url) => {
-  return url;
-};
+import { useRenewableMediaUrl } from "../lib/videoUrls";
 
 const ENTRANCE_OPTIONS = [
   { value: "spring", label: "Bounce" },
@@ -40,6 +37,8 @@ export default function HookModal({
   const [size, setSize] = useState("M");
   const [entranceAnimation, setEntranceAnimation] = useState("spring");
   const [displayDuration, setDisplayDuration] = useState(5);
+  const { url: resolvedVideoUrl, refresh: refreshVideoUrl } =
+    useRenewableMediaUrl(videoUrl);
 
   if (!isOpen) return null;
 
@@ -95,7 +94,7 @@ export default function HookModal({
         <div className="flex-1 flex flex-col items-center justify-center bg-black rounded-lg border border-white/5 overflow-hidden relative aspect-[9/16] max-h-[600px]">
           {useRemotionPreview ? (
             <RemotionPreview
-              videoUrl={toProxiedVideoUrl(videoUrl)}
+              videoUrl={resolvedVideoUrl}
               videoStartSeconds={videoStartSeconds}
               durationInSeconds={durationInSeconds || 30}
               hook={hookConfig}
@@ -104,7 +103,8 @@ export default function HookModal({
           ) : (
             <>
               <video
-                src={videoUrl}
+                src={resolvedVideoUrl}
+                onError={() => void refreshVideoUrl()}
                 className="w-full h-full object-contain opacity-50"
                 muted
                 playsInline

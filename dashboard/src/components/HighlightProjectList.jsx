@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import MinioObjectPicker from "./MinioObjectPicker";
 import { getApiUrl } from "../config";
+import { useRenewableMediaUrl } from "../lib/videoUrls";
 
 const DEFAULT_MINUTES = 12;
 const DEFAULT_IDEAL_MINUTES = 20;
@@ -186,6 +187,8 @@ export default function HighlightProjectList({ getAiHeaders, aiProvider }) {
   const activeProject = selectedProject;
   const activeJob = activeProject?.job;
   const result = activeJob?.result;
+  const { url: resultVideoUrl, refresh: refreshResultVideoUrl } =
+    useRenewableMediaUrl(result ? getApiUrl(result.video_url) : "");
 
   return (
     <div className="h-full overflow-y-auto custom-scrollbar p-6 md:p-10 animate-[fadeIn_0.3s_ease-out]">
@@ -412,7 +415,8 @@ export default function HighlightProjectList({ getAiHeaders, aiProvider }) {
                 <video
                   controls
                   className="w-full max-h-[32rem] rounded-xl bg-black"
-                  src={getApiUrl(result.video_url)}
+                  src={resultVideoUrl}
+                  onError={() => void refreshResultVideoUrl()}
                 />
                 <div className="flex flex-wrap gap-3">
                   <a
