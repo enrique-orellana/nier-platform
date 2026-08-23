@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { availableParallelism } from "node:os";
 import path from "node:path";
 import { selectComposition, renderMedia } from "@remotion/renderer";
 import { getBundleLocation } from "./bundle.js";
@@ -12,6 +13,7 @@ import { needsOutputNormalization, normalizeOutputFile } from "./output-normaliz
 import type { RenderRequestProps } from "./render-props.js";
 import { prepareRangeProxy } from "./source-proxy.js";
 import { shouldLogRenderProgress } from "./progress.js";
+import { selectRenderConcurrency } from "./render-concurrency.js";
 
 export interface RenderParams {
   renderId: string;
@@ -53,6 +55,20 @@ export async function executeRender(params: RenderParams): Promise<void> {
     const outputDir = process.env.OUTPUT_DIR
       ? path.resolve(process.env.OUTPUT_DIR)
       : path.resolve(import.meta.dirname, "../../output");
+    const availableWorkers = availableParallelism();
+    const configuredConcurrency = Number.parseInt(
+      process.env.RENDER_CONCURRENCY || "4",
+      10,
+    );
+    const renderConcurrency = selectRenderConcurrency({
+      requested: configuredConcurrency,
+      available: availableWorkers,
+    });
+    console.log(
+      `[render-worker] ${renderId} render concurrency: ${renderConcurrency}/${availableWorkers}`,
+    );
+
+    const sourceStageStartedAt = Date.now();
     const sourceRange = await prepareRangeProxy({
       videoUrl: props.videoUrl,
       outputDir,
@@ -61,16 +77,23 @@ export async function executeRender(params: RenderParams): Promise<void> {
       startSeconds: props.videoStartSeconds || 0,
       durationSeconds: props.durationInFrames / props.fps,
     });
+    console.log(
+      `[render-worker] ${renderId} stage=source.range_prepare duration_ms=${Date.now() - sourceStageStartedAt}`,
+    );
     renderProps.videoUrl = sourceRange.videoUrl;
     renderProps.videoStartSeconds = sourceRange.videoStartSeconds;
 
     // Select the composition with the provided input props
+    const compositionStageStartedAt = Date.now();
     const selectedComposition = await selectComposition({
       serveUrl: bundleLocation,
       id: "ShortVideo",
       inputProps: renderProps,
     });
     const composition = applyRequestedCompositionMetadata(selectedComposition, renderProps);
+    console.log(
+      `[render-worker] ${renderId} stage=composition.select duration_ms=${Date.now() - compositionStageStartedAt}`,
+    );
 
     // Determine output directory and file path
     const jobOutputDir = path.join(outputDir, jobId);
@@ -83,11 +106,13 @@ export async function executeRender(params: RenderParams): Promise<void> {
     console.log(`[render-worker] Output: ${outputLocation}`);
 
     // Render the video
+    const mediaStageStartedAt = Date.now();
     let lastLoggedPercent = -1;
     await renderMedia({
       composition,
       serveUrl: bundleLocation,
       ...buildRenderOptions(policy, renderProps.fps),
+      concurrency: renderConcurrency,
       enforceAudioTrack: true,
       outputLocation,
       onProgress: ({ progress }) => {
@@ -100,6 +125,9 @@ export async function executeRender(params: RenderParams): Promise<void> {
         }
       },
     });
+    console.log(
+      `[render-worker] ${renderId} stage=render.media duration_ms=${Date.now() - mediaStageStartedAt}`,
+    );
 
     const outputExpectation = {
       width: renderProps.width,
@@ -113,7 +141,11 @@ export async function executeRender(params: RenderParams): Promise<void> {
       await normalizeOutputFile(outputLocation, { fps: renderProps.fps, hasAudio: true });
     }
 
+    const validationStageStartedAt = Date.now();
     await validateOutputFile(outputLocation, outputExpectation, policy);
+    console.log(
+      `[render-worker] ${renderId} stage=output.validate duration_ms=${Date.now() - validationStageStartedAt}`,
+    );
 
     // Success
     job.status = "done";

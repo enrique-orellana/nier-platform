@@ -73,6 +73,10 @@ function proxyUrl(outputDir: string, proxyPath: string, serverPort: number): str
   return `http://localhost:${serverPort}/output/${relativePath}`;
 }
 
+function isGeneratedClipPath(sourcePath: string): boolean {
+  return /^source_clip_[^/\\]+\.mp4$/i.test(path.basename(sourcePath));
+}
+
 function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
@@ -96,6 +100,9 @@ export function prepareRangeProxy(options: RangeProxyOptions): Promise<RangeProx
   const sourcePath = localOutputPath(videoUrl, outputDir);
   if (!sourcePath || !fs.existsSync(sourcePath)) {
     return Promise.resolve({ videoUrl, videoStartSeconds: startSeconds });
+  }
+  if (startSeconds === 0 && isGeneratedClipPath(sourcePath)) {
+    return Promise.resolve({ videoUrl, videoStartSeconds: 0 });
   }
   const sourceStat = fs.statSync(sourcePath);
   const cacheDir = path.join(outputDir, jobId, "render-cache");

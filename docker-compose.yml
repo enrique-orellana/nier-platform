@@ -89,6 +89,7 @@ services:
       - OUTPUT_DIR=/output
       - PORT=3100
       - RENDER_MAX_CONCURRENCY=${RENDER_MAX_CONCURRENCY:-1}
+      - RENDER_CONCURRENCY=${RENDER_CONCURRENCY:-4}
     restart: unless-stopped
     depends_on:
       - backend

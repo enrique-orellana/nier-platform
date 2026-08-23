@@ -1,6 +1,10 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildRangeProxyArgs,
+  prepareRangeProxy,
   rangeProxyCacheName,
   rangeProxyTemporaryPath,
 } from "./source-proxy.js";
@@ -27,5 +31,31 @@ describe("range source proxy", () => {
     expect(rangeProxyTemporaryPath("proxy.mp4", 42, 123)).toBe(
       "proxy.mp4.tmp-42-123.mp4",
     );
+  });
+
+  it("reuses an already-trimmed generated clip without running ffmpeg", async () => {
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "source-proxy-"));
+    const sourcePath = path.join(outputDir, "job-1", "source_clip_14.mp4");
+    fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+    fs.writeFileSync(sourcePath, "already-trimmed");
+
+    try {
+      await expect(
+        prepareRangeProxy({
+          videoUrl: "http://localhost:3100/output/job-1/source_clip_14.mp4",
+          outputDir,
+          serverPort: 3100,
+          jobId: "job-1",
+          startSeconds: 0,
+          durationSeconds: 2,
+        }),
+      ).resolves.toEqual({
+        videoUrl: "http://localhost:3100/output/job-1/source_clip_14.mp4",
+        videoStartSeconds: 0,
+      });
+      expect(fs.existsSync(path.join(outputDir, "job-1", "render-cache"))).toBe(false);
+    } finally {
+      fs.rmSync(outputDir, { recursive: true, force: true });
+    }
   });
 });
