@@ -145,4 +145,18 @@ describe("VersionHistory", () => {
       screen.queryByRole("link", { name: /open generated clip/i }),
     ).toBeNull();
   });
+
+  it("allows selecting a failed version to recover its draft", () => {
+    const onSelect = vi.fn();
+    const version = {
+      version_id: "failed-version",
+      status: "failed",
+    };
+
+    render(<VersionHistory versions={[version]} onSelect={onSelect} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /vfailed.*failed/i }));
+
+    expect(onSelect).toHaveBeenCalledWith(version);
+  });
 });

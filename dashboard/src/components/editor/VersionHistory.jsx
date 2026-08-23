@@ -48,7 +48,6 @@ const VersionTreeNode = ({
           type="button"
           className="min-w-0 flex-1 text-left font-semibold drop-shadow-sm"
           onClick={() => onSelect?.(version)}
-          disabled={version.status === "failed"}
         >
           <span className={isSelected ? "text-primary" : "text-white"}>
             v{version.version_id.slice(0, 6)}
