@@ -6,6 +6,11 @@ import { getBundleLocation } from "./bundle.js";
 import { renderJobs } from "./server.js";
 import { buildRenderOptions } from "./master-policy.js";
 import { loadMasterPolicy } from "./master-policy.js";
+import {
+  createAmfFfmpegOverride,
+  resolveRenderAcceleration,
+  type RenderAcceleration,
+} from "./hardware-acceleration.js";
 import { validateOutputFile } from "./output-validation.js";
 import { applyRequestedCompositionMetadata } from "./composition.js";
 import { outputFileNameForVersion } from "./version-render.js";
@@ -20,6 +25,15 @@ export interface RenderParams {
   jobId: string;
   clipIndex: number;
   props: RenderRequestProps;
+}
+
+let renderAccelerationPromise: Promise<RenderAcceleration> | null = null;
+
+function getRenderAcceleration(): Promise<RenderAcceleration> {
+  if (!renderAccelerationPromise) {
+    renderAccelerationPromise = resolveRenderAcceleration();
+  }
+  return renderAccelerationPromise;
 }
 
 /**
@@ -68,6 +82,14 @@ export async function executeRender(params: RenderParams): Promise<void> {
       `[render-worker] ${renderId} render concurrency: ${renderConcurrency}/${availableWorkers}`,
     );
 
+    const renderAcceleration = await getRenderAcceleration();
+    console.log(
+      `[render-worker] ${renderId} encoding mode: ${renderAcceleration.mode}` +
+        (renderAcceleration.mode === "cpu"
+          ? ` (${renderAcceleration.reason})`
+          : ` (${renderAcceleration.videoBitrate})`),
+    );
+
     const sourceStageStartedAt = Date.now();
     const sourceRange = await prepareRangeProxy({
       videoUrl: props.videoUrl,
@@ -111,7 +133,16 @@ export async function executeRender(params: RenderParams): Promise<void> {
     await renderMedia({
       composition,
       serveUrl: bundleLocation,
-      ...buildRenderOptions(policy, renderProps.fps),
+      ...buildRenderOptions(
+        policy,
+        renderProps.fps,
+        renderAcceleration.mode === "gpu"
+          ? {
+              ...renderAcceleration,
+              ffmpegOverride: createAmfFfmpegOverride(),
+            }
+          : undefined,
+      ),
       concurrency: renderConcurrency,
       enforceAudioTrack: true,
       outputLocation,
@@ -138,7 +169,11 @@ export async function executeRender(params: RenderParams): Promise<void> {
       toneMappedToSdr: true,
     };
     if (await needsOutputNormalization(outputLocation, outputExpectation, policy)) {
-      await normalizeOutputFile(outputLocation, { fps: renderProps.fps, hasAudio: true });
+      await normalizeOutputFile(outputLocation, {
+        fps: renderProps.fps,
+        hasAudio: true,
+        preserveVideo: renderAcceleration.mode === "gpu",
+      });
     }
 
     const validationStageStartedAt = Date.now();
@@ -150,7 +185,8 @@ export async function executeRender(params: RenderParams): Promise<void> {
     // Success
     job.status = "done";
     job.progress = 100;
-    job.outputUrl = outputLocation;
+    const relativeOutputPath = path.relative(outputDir, outputLocation).split(path.sep).join("/");
+    job.outputUrl = `/output/${relativeOutputPath}`;
 
     console.log(`[render-worker] Render ${renderId} completed: ${outputLocation}`);
   } catch (err) {

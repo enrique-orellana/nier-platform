@@ -85,6 +85,27 @@ describe("publishable MP4 normalization", () => {
     expect(args).not.toContain("-movflags");
   });
 
+  it("can remux audio without re-encoding the rendered video", () => {
+    const args = buildNormalizationArgs("rendered.mp4", "normalized.mp4", {
+      fps: 30,
+      hasAudio: true,
+      preserveVideo: true,
+    });
+
+    expect(args).toEqual(expect.arrayContaining([
+      "-map", "0:v:0",
+      "-c:v", "copy",
+      "-map", "0:a:0",
+      "-c:a", "aac",
+      "-ar", "48000",
+      "-ac", "2",
+      "-b:a", "192k",
+      "-movflags", "+faststart",
+    ]));
+    expect(args).not.toContain("libx264");
+    expect(args).not.toContain("-crf");
+  });
+
   it("skips normalization for a policy-compliant fast-start output", () => {
     const policy = loadMasterPolicy();
     const probe = {

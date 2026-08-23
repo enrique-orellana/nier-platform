@@ -25,4 +25,21 @@ describe("master policy", () => {
 
     expect(buildRenderOptions(customPolicy).x264Preset).toBe("superfast");
   });
+
+  it("uses bitrate-based AMD hardware encoding without x264-only options", () => {
+    const options = buildRenderOptions(loadMasterPolicy(), 30, {
+      hardwareAcceleration: "required",
+      binariesDirectory: "C:/ffmpeg",
+      videoBitrate: "20M",
+      ffmpegOverride: ({ args }) => args,
+    });
+
+    expect(options).toMatchObject({
+      hardwareAcceleration: "required",
+      binariesDirectory: "C:/ffmpeg",
+      videoBitrate: "20M",
+    });
+    expect(options).not.toHaveProperty("crf");
+    expect(options).not.toHaveProperty("x264Preset");
+  });
 });

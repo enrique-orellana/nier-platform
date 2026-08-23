@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { FfmpegOverrideFn } from "@remotion/renderer";
 
 export type X264Preset =
   | "superfast"
@@ -57,6 +58,15 @@ export function loadMasterPolicy(): MasterPolicy {
   return parseMasterPolicy(JSON.parse(fs.readFileSync(policyPath(), "utf8")));
 }
 
+export type RenderVideoBitrate = `${number}${"k" | "K" | "M"}`;
+
+export interface HardwareRenderOptions {
+  hardwareAcceleration: "required";
+  binariesDirectory: string;
+  videoBitrate: RenderVideoBitrate;
+  ffmpegOverride: FfmpegOverrideFn;
+}
+
 export function parseMasterPolicy(value: unknown): MasterPolicy {
   if (!value || typeof value !== "object") {
     throw new Error("master-export-policy.json does not contain the mandatory master contract");
@@ -81,12 +91,14 @@ export function parseMasterPolicy(value: unknown): MasterPolicy {
   return Object.freeze(candidate as unknown as MasterPolicy);
 }
 
-export function buildRenderOptions(policy = loadMasterPolicy(), fps = 30) {
+export function buildRenderOptions(
+  policy = loadMasterPolicy(),
+  fps = 30,
+  hardware?: HardwareRenderOptions,
+) {
   const gopSize = Math.max(1, Math.round(fps * policy.gop_seconds));
-  return {
+  const common = {
     codec: policy.codec,
-    crf: policy.crf,
-    x264Preset: policy.preset,
     pixelFormat: policy.pixel_format,
     colorSpace: "bt709" as const,
     audioCodec: policy.audio_codec,
@@ -95,5 +107,21 @@ export function buildRenderOptions(policy = loadMasterPolicy(), fps = 30) {
     gopSize,
     everyNthFrame: 1,
     concurrency: null,
+  } as const;
+
+  if (hardware) {
+    return {
+      ...common,
+      hardwareAcceleration: hardware.hardwareAcceleration,
+      binariesDirectory: hardware.binariesDirectory,
+      videoBitrate: hardware.videoBitrate,
+      ffmpegOverride: hardware.ffmpegOverride,
+    } as const;
+  }
+
+  return {
+    ...common,
+    crf: policy.crf,
+    x264Preset: policy.preset,
   } as const;
 }

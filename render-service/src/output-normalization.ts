@@ -6,6 +6,7 @@ import { isFastStart, probeOutputFile, validateProbePayload, type OutputExpectat
 export interface NormalizationOptions {
   fps: number;
   hasAudio: boolean;
+  preserveVideo?: boolean;
 }
 
 export function outputNeedsNormalization(
@@ -42,27 +43,30 @@ export function buildNormalizationArgs(
   policy: MasterPolicy = loadMasterPolicy(),
 ): string[] {
   const gopSize = Math.max(1, Math.round(options.fps * policy.gop_seconds));
-  const args = [
-    "-y",
-    "-i", inputPath,
-    "-map", "0:v:0",
-    "-c:v", "libx264",
-    "-profile:v", policy.profile,
-    "-level:v", policy.h264_level,
-    "-preset", policy.preset,
-    "-crf", String(policy.crf),
-    "-pix_fmt", policy.pixel_format,
-    "-vf", `setsar=1,colorspace=all=${policy.color_space}:iall=${policy.color_space}:range=${policy.color_range}:irange=${policy.color_range}`,
-    "-g", String(gopSize),
-    "-keyint_min", String(gopSize),
-    "-sc_threshold", "0",
-    "-flags:v", "+cgop",
-    "-colorspace", policy.color_space,
-    "-color_range", policy.color_range,
-    "-color_trc", policy.color_transfer,
-    "-color_primaries", policy.color_primaries,
-    "-video_track_timescale", "90000",
-  ];
+  const args = ["-y", "-i", inputPath, "-map", "0:v:0"];
+
+  if (options.preserveVideo) {
+    args.push("-c:v", "copy");
+  } else {
+    args.push(
+      "-c:v", "libx264",
+      "-profile:v", policy.profile,
+      "-level:v", policy.h264_level,
+      "-preset", policy.preset,
+      "-crf", String(policy.crf),
+      "-pix_fmt", policy.pixel_format,
+      "-vf", `setsar=1,colorspace=all=${policy.color_space}:iall=${policy.color_space}:range=${policy.color_range}:irange=${policy.color_range}`,
+      "-g", String(gopSize),
+      "-keyint_min", String(gopSize),
+      "-sc_threshold", "0",
+      "-flags:v", "+cgop",
+      "-colorspace", policy.color_space,
+      "-color_range", policy.color_range,
+      "-color_trc", policy.color_transfer,
+      "-color_primaries", policy.color_primaries,
+      "-video_track_timescale", "90000",
+    );
+  }
 
   if (options.hasAudio) {
     args.push(
