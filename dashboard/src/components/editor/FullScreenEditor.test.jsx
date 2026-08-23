@@ -64,6 +64,61 @@ describe("FullScreenEditor", () => {
     renderVersionMocks.saveAndRenderVersion.mockReset();
   });
 
+  it("shows a loading screen while a direct-link editor is loading", async () => {
+    let resolveHistory;
+    const historyResponse = new Promise((resolve) => {
+      resolveHistory = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url) => {
+        if (String(url).endsWith("/versions")) return historyResponse;
+        if (String(url).endsWith("/versions/v1"))
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              version: { version_id: "v1", status: "done" },
+              manifest,
+            }),
+          });
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: async () => ({}),
+        });
+      }),
+    );
+
+    render(
+      <FullScreenEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{ output_fps: 30, video_url: manifest.timeline.source_video_url }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("status", { name: "Loading editor" }),
+    ).toBeInTheDocument();
+
+    resolveHistory({
+      ok: true,
+      json: async () => ({
+        current_version_id: "v1",
+        versions: [{ version_id: "v1", status: "done" }],
+      }),
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Export Video" }),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("status", { name: "Loading editor" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("uses the renewed master URL for local editor media", () => {
     expect(
       resolveLocalEditorSourceUrl({

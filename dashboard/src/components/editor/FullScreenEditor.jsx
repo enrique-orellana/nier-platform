@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { Loader2 } from "lucide-react";
 import { getApiUrl } from "../../config";
 import {
   manifestWithTranscriptCaptions,
@@ -342,6 +343,7 @@ export default function FullScreenEditor({
     defaultSubtitleTrackId(initialManifest),
   );
   const [busy, setBusy] = useState(false);
+  const [isLoading, setIsLoading] = useState(() => isOpen && !initialManifest);
   const [error, setError] = useState(null);
   const [localDraft, setLocalDraft] = useState(() =>
     manifestToLocalEditorState(
@@ -407,8 +409,12 @@ export default function FullScreenEditor({
   );
 
   useEffect(() => {
-    if (!isOpen || initialManifest) return;
+    if (!isOpen || initialManifest) {
+      setIsLoading(false);
+      return;
+    }
     let cancelled = false;
+    setIsLoading(true);
     const load = async () => {
       const historyResponse = await fetch(
         getApiUrl(`/api/clip/${jobId}/${clipIndex}/versions`),
@@ -471,7 +477,14 @@ export default function FullScreenEditor({
       setLocalDraft(nextDraft);
       setLocalDraftRevision((current) => current + 1);
     };
-    load().catch(() => {});
+    load()
+      .catch((loadError) => {
+        if (!cancelled)
+          setError(loadError.message || "Unable to load the editor");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -1005,6 +1018,24 @@ export default function FullScreenEditor({
   ]);
 
   if (!isOpen) return null;
+  if (isLoading && !initialManifest && !manifest) {
+    return (
+      <div
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-[#0d0d0f] text-white"
+        role="status"
+        aria-label="Loading editor"
+        aria-live="polite"
+      >
+        <div className="flex flex-col items-center gap-3 text-zinc-300">
+          <Loader2
+            className="h-8 w-8 animate-spin text-cyan-300"
+            aria-hidden="true"
+          />
+          <span className="text-sm">Loading editor...</span>
+        </div>
+      </div>
+    );
+  }
   return (
     <div
       className="fixed inset-0 z-[60] bg-background text-white"
