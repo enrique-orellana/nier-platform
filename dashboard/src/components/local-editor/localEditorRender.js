@@ -1,11 +1,13 @@
 import { getApiUrl } from "../../config";
 import { renderInBrowser } from "../../lib/renderInBrowser";
+import { getHookPositionCoordinates } from "../../remotion/lib/hookVisual";
 import { normalizeSubtitleStyle } from "./localEditorStyles";
 
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 const generatedSourceClipPattern = /(?:^|\/)source_clip_[^/]+\.mp4(?:[?#]|$)/i;
+const HOOK_POSITIONS = new Set(["top", "center", "bottom", "custom"]);
 
 const isGeneratedSourceClipUrl = (url) => {
   if (!url) return false;
@@ -194,7 +196,41 @@ export const buildRemotionRenderProps = ({
   subtitleCues = [],
   subtitleStyle = null,
   hook = null,
-}) => ({
+}) => {
+  const normalizedHook = hook
+    ? (() => {
+        const { positionX, positionY, ...hookWithoutCoordinates } = hook;
+        const position = HOOK_POSITIONS.has(hook.position)
+          ? hook.position
+          : "top";
+        const baseHook = {
+          ...hookWithoutCoordinates,
+          text: String(hook.text || ""),
+          position,
+          size: hook.size || "M",
+          entranceAnimation: hook.entranceAnimation || "none",
+          displayDurationSec: Math.max(
+            0.001,
+            (Number(hook.endMs) - Number(hook.startMs)) / 1000,
+          ),
+          startMs: Number(hook.startMs) || 0,
+          endMs: Number(hook.endMs),
+        };
+        if (position !== "custom") return baseHook;
+        const coordinates = getHookPositionCoordinates(
+          { ...hook, position },
+          width,
+          height,
+        );
+        return {
+          ...baseHook,
+          positionX: coordinates.x,
+          positionY: coordinates.y,
+        };
+      })()
+    : null;
+
+  return {
   durationInFrames: Math.max(
     1,
     Math.round(Number(durationSeconds || 0) * Number(fps || 30)),
@@ -211,23 +247,10 @@ export const buildRemotionRenderProps = ({
         style: normalizeSubtitleStyle(subtitleStyle || undefined),
       }
     : null,
-  hook: hook
-    ? {
-        ...hook,
-        text: String(hook.text || ""),
-        position: hook.position || "top",
-        size: hook.size || "M",
-        entranceAnimation: hook.entranceAnimation || "none",
-        displayDurationSec: Math.max(
-          0.001,
-          (Number(hook.endMs) - Number(hook.startMs)) / 1000,
-        ),
-        startMs: Number(hook.startMs) || 0,
-        endMs: Number(hook.endMs),
-      }
-    : null,
+  hook: normalizedHook,
   effects: null,
-});
+  };
+};
 
 export async function renderLocalVideoOnBrowser({
   videoUrl,

@@ -1,5 +1,11 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FullScreenEditor from "./FullScreenEditor";
 import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
@@ -370,6 +376,9 @@ describe("FullScreenEditor", () => {
           fontSize: 48,
           background: "#111111",
           size: "M",
+          position: "custom",
+          positionX: 700,
+          positionY: 420,
         },
         effects: { segments: [{ startSec: 0, endSec: 1 }] },
         audio: { tracks: [{ id: "old-audio" }] },
@@ -465,6 +474,23 @@ describe("FullScreenEditor", () => {
       ).toBeInTheDocument(),
     );
     fireEvent.click(screen.getByRole("button", { name: "Old hook" }));
+    fireEvent.change(screen.getByLabelText("Hook text"), {
+      target: { value: "Edited old hook" },
+    });
+    expect(session.getManifest()).toMatchObject({
+      layers: {
+        hook: {
+          text: "Edited old hook",
+          position: "custom",
+          positionX: 700,
+          positionY: 420,
+        },
+      },
+    });
+    const hookPanel = document.getElementById("viral-hook-settings-panel");
+    fireEvent.click(within(hookPanel).getByRole("button", { name: "Bottom" }));
+    expect(session.getManifest().layers.hook).not.toHaveProperty("positionX");
+    expect(session.getManifest().layers.hook).not.toHaveProperty("positionY");
     fireEvent.click(
       screen.getAllByRole("button", { name: /vversio.*done/i })[1],
     );

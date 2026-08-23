@@ -192,6 +192,12 @@ const manifestToLocalEditorState = (sourceManifest, trackId) => {
           fontSize: Number(hook.fontSize || 48),
           background: hook.background || "#111111",
           fontFamily: hook.fontFamily || HOOK_FONT_FAMILY,
+          ...(Number.isFinite(Number(hook.positionX))
+            ? { positionX: Number(hook.positionX) }
+            : {}),
+          ...(Number.isFinite(Number(hook.positionY))
+            ? { positionY: Number(hook.positionY) }
+            : {}),
         }
       : null,
   };
@@ -234,6 +240,37 @@ const localEditorStateToManifest = (sourceManifest, localState, trackId) => {
     : existingTracks.filter((track) => track.id !== nextTrackId);
   source.subtitle_tracks_disabled = !cues.length;
   source.active_subtitle_track_id = cues.length ? nextTrackId : null;
+  const persistedHook = state.hook
+      ? (() => {
+        const { positionX, positionY, ...hookWithoutCoordinates } = state.hook;
+        const sourceHookWithoutCoordinates = { ...(source.layers?.hook || {}) };
+        delete sourceHookWithoutCoordinates.positionX;
+        delete sourceHookWithoutCoordinates.positionY;
+        const position = ["top", "center", "bottom", "custom"].includes(
+          state.hook.position,
+        )
+          ? state.hook.position
+          : "top";
+        return {
+          ...sourceHookWithoutCoordinates,
+          ...hookWithoutCoordinates,
+          position,
+          ...(position === "custom" && Number.isFinite(Number(positionX))
+            ? { positionX: Number(positionX) }
+            : {}),
+          ...(position === "custom" && Number.isFinite(Number(positionY))
+            ? { positionY: Number(positionY) }
+            : {}),
+          startMs: Math.round(Number(state.hook.startMs || 0)),
+          endMs: Math.round(Number(state.hook.endMs || 0)),
+          displayDurationSec: Math.max(
+            0.001,
+            (Number(state.hook.endMs || 0) - Number(state.hook.startMs || 0)) /
+              1000,
+          ),
+        };
+      })()
+    : null;
   source.layers = {
     ...(source.layers || {}),
     subtitles: cues.length
@@ -251,19 +288,7 @@ const localEditorStateToManifest = (sourceManifest, localState, trackId) => {
             "en",
         }
       : null,
-    hook: state.hook
-      ? {
-          ...(source.layers?.hook || {}),
-          ...state.hook,
-          startMs: Math.round(Number(state.hook.startMs || 0)),
-          endMs: Math.round(Number(state.hook.endMs || 0)),
-          displayDurationSec: Math.max(
-            0.001,
-            (Number(state.hook.endMs || 0) - Number(state.hook.startMs || 0)) /
-              1000,
-          ),
-        }
-      : null,
+    hook: persistedHook,
   };
   return source;
 };

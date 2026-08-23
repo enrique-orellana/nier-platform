@@ -87,6 +87,9 @@ describe("local editor Remotion rendering", () => {
         fontSize: 48,
         layoutFormat: "standard",
         facecamSize: "medium",
+        position: "custom",
+        positionX: 600.6,
+        positionY: -20,
       },
     });
 
@@ -115,6 +118,9 @@ describe("local editor Remotion rendering", () => {
       fontSize: 48,
       layoutFormat: "standard",
       facecamSize: "medium",
+      position: "custom",
+      positionX: 601,
+      positionY: 0,
     });
   });
 
