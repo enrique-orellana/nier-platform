@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import LocalEditorHookInspector from "./LocalEditorHookInspector";
 
@@ -67,5 +67,54 @@ describe("LocalEditorHookInspector", () => {
     expect(sizeInput.compareDocumentPosition(backgroundPresets)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
+  });
+
+  it("shows resolved preset pixels and switches to custom when edited", () => {
+    const onChange = vi.fn();
+    render(
+      <LocalEditorHookInspector
+        hook={hook}
+        onChange={onChange}
+        onRemove={vi.fn()}
+        renderWidth={1080}
+        renderHeight={1920}
+      />,
+    );
+
+    expect(screen.getByLabelText("Hook X position")).toHaveValue(540);
+    expect(screen.getByLabelText("Hook Y position")).toHaveValue(154);
+    expect(screen.getByText("Preset position")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Hook X position"), {
+      target: { value: "700" },
+    });
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        position: "custom",
+        positionX: 700,
+        positionY: 154,
+      }),
+    );
+  });
+
+  it("clears custom coordinates when a preset is selected", () => {
+    const onChange = vi.fn();
+    render(
+      <LocalEditorHookInspector
+        hook={{ ...hook, position: "custom", positionX: 700, positionY: 420 }}
+        onChange={onChange}
+        onRemove={vi.fn()}
+        renderWidth={1080}
+        renderHeight={1920}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Bottom" }));
+
+    const nextHook = onChange.mock.lastCall[0];
+    expect(nextHook).toMatchObject({ position: "bottom" });
+    expect(nextHook).not.toHaveProperty("positionX");
+    expect(nextHook).not.toHaveProperty("positionY");
   });
 });

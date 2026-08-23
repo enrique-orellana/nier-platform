@@ -5,12 +5,22 @@ import {
   SUBTITLE_COLOR_PRESETS,
 } from "./localEditorStyles";
 import { cleanChoiceClass, cleanLabelClass } from "./localEditorUtils";
+import {
+  clampHookCoordinate,
+  getHookPositionCoordinates,
+} from "../../remotion/lib/hookVisual";
 
 const sectionClass = "space-y-3 border-t border-white/10 pt-4";
 const sectionHeadingClass =
   "text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500";
 
-export default function LocalEditorHookInspector({ hook, onChange, onRemove }) {
+export default function LocalEditorHookInspector({
+  hook,
+  onChange,
+  onRemove,
+  renderWidth = 1080,
+  renderHeight = 1920,
+}) {
   if (!hook)
     return (
       <p className="text-xs text-zinc-500">
@@ -26,6 +36,33 @@ export default function LocalEditorHookInspector({ hook, onChange, onRemove }) {
       ...hook,
       endMs: Math.max(hook.startMs + 80, hook.startMs + Number(value) * 1000),
     });
+  const resolvedPosition = getHookPositionCoordinates(
+    hook,
+    renderWidth,
+    renderHeight,
+  );
+  const updateCoordinate = (key, rawValue) => {
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) return;
+    onChange({
+      ...hook,
+      position: "custom",
+      positionX: clampHookCoordinate(
+        key === "positionX" ? value : resolvedPosition.x,
+        renderWidth,
+        resolvedPosition.x,
+      ),
+      positionY: clampHookCoordinate(
+        key === "positionY" ? value : resolvedPosition.y,
+        renderHeight,
+        resolvedPosition.y,
+      ),
+    });
+  };
+  const selectPresetPosition = (position) => {
+    const { positionX, positionY, ...hookWithoutCoordinates } = hook;
+    onChange({ ...hookWithoutCoordinates, position });
+  };
   return (
     <div className="space-y-6">
       <div>
@@ -58,7 +95,14 @@ export default function LocalEditorHookInspector({ hook, onChange, onRemove }) {
           Layout
         </h4>
         <div>
-          <span className={cleanLabelClass}>Position</span>
+          <div className="mb-2 flex items-center justify-between">
+            <span className={cleanLabelClass}>Position</span>
+            <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+              {hook.position === "custom"
+                ? "Custom position"
+                : "Preset position"}
+            </span>
+          </div>
           <div className="grid grid-cols-3 gap-2">
             {["top", "center", "bottom"].map((position) => (
               <button
@@ -67,13 +111,48 @@ export default function LocalEditorHookInspector({ hook, onChange, onRemove }) {
                 aria-label={
                   position.charAt(0).toUpperCase() + position.slice(1)
                 }
-                onClick={() => onChange({ ...hook, position })}
+                onClick={() => selectPresetPosition(position)}
                 className={cleanChoiceClass(hook.position === position)}
               >
                 {position}
               </button>
             ))}
           </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <label className="text-xs text-zinc-400">
+              X (px)
+              <input
+                aria-label="Hook X position"
+                type="number"
+                min="0"
+                max={renderWidth}
+                step="1"
+                value={resolvedPosition.x}
+                onChange={(event) =>
+                  updateCoordinate("positionX", event.target.value)
+                }
+                className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white"
+              />
+            </label>
+            <label className="text-xs text-zinc-400">
+              Y (px)
+              <input
+                aria-label="Hook Y position"
+                type="number"
+                min="0"
+                max={renderHeight}
+                step="1"
+                value={resolvedPosition.y}
+                onChange={(event) =>
+                  updateCoordinate("positionY", event.target.value)
+                }
+                className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white"
+              />
+            </label>
+          </div>
+          <p className="mt-2 text-[10px] text-zinc-500">
+            Center point in a {renderWidth} × {renderHeight} px video.
+          </p>
         </div>
         <div>
           <span className={cleanLabelClass}>Size</span>

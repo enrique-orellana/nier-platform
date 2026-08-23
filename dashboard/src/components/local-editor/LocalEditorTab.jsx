@@ -260,6 +260,18 @@ export default function LocalEditorTab({
       ? Number(initialPlaybackDurationMs)
       : null;
   const remotionFps = Number(remotionPreviewProps?.fps || 30);
+  const hookRenderWidth = Math.max(
+    1,
+    Number(
+      remotionPreviewProps?.width || clipMetadata?.output_width || 1080,
+    ),
+  );
+  const hookRenderHeight = Math.max(
+    1,
+    Number(
+      remotionPreviewProps?.height || clipMetadata?.output_height || 1920,
+    ),
+  );
 
   const handleRemotionFrameChange = useCallback(
     (frame) => {
@@ -2972,6 +2984,8 @@ export default function LocalEditorTab({
                     hook={selected?.type === "hook" ? selectedCue : null}
                     onChange={updateHook}
                     onRemove={removeHook}
+                    renderWidth={hookRenderWidth}
+                    renderHeight={hookRenderHeight}
                   />
                 </div>
               )}
