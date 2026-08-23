@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getFontStack, getHookFontStack } from "./fonts";
+import { getFontStack, getHookFontStack, subtitleFontFace } from "./fonts";
 
 describe("emoji font fallback", () => {
   it("includes browser-native color emoji fonts for subtitles and hooks", () => {
@@ -8,5 +8,14 @@ describe("emoji font fallback", () => {
       expect(stack).toContain("Segoe UI Emoji");
       expect(stack).toContain("Noto Color Emoji");
     }
+  });
+
+  it("uses bundled subtitle font families for stable preview and render output", () => {
+    expect(getFontStack("Impact")).toContain("OpenShortsImpact");
+    expect(getFontStack("Verdana")).toContain("OpenShortsSans");
+    expect(getFontStack("Georgia")).toContain("OpenShortsSerif");
+    expect(getFontStack("Courier New")).toContain("OpenShortsMono");
+    expect(subtitleFontFace).toContain("OpenShortsImpact");
+    expect(subtitleFontFace).toContain("/fonts/OpenShortsImpact.ttf");
   });
 });

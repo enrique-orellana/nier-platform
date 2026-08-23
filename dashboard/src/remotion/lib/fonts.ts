@@ -24,17 +24,62 @@ export const notoSerifFontFace = `
 }
 `;
 
+export const subtitleFontFace = `
+@font-face {
+  font-family: 'OpenShortsSans';
+  src: url('/fonts/OpenShortsSans.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'OpenShortsSans';
+  src: url('/fonts/OpenShortsSans-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'OpenShortsImpact';
+  src: url('/fonts/OpenShortsImpact.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'OpenShortsSerif';
+  src: url('/fonts/OpenShortsSerif.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'OpenShortsSerif';
+  src: url('/fonts/OpenShortsSerif-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'OpenShortsMono';
+  src: url('/fonts/OpenShortsMono.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'OpenShortsMono';
+  src: url('/fonts/OpenShortsMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+`;
+
 /**
  * Map of subtitle font families to their CSS-safe names.
  * These match the options available in SubtitleModal.jsx.
  */
 export const SUBTITLE_FONTS: Record<string, string> = {
-  Verdana: "Verdana, Geneva, sans-serif",
-  Arial: "Arial, Helvetica, sans-serif",
-  Impact: "Impact, Haettenschweiler, sans-serif",
-  Helvetica: "Helvetica, Arial, sans-serif",
-  Georgia: "Georgia, 'Times New Roman', serif",
-  "Courier New": "'Courier New', Courier, monospace",
+  Verdana: "OpenShortsSans, sans-serif",
+  Arial: "OpenShortsSans, sans-serif",
+  Impact: "OpenShortsImpact, sans-serif",
+  Helvetica: "OpenShortsSans, sans-serif",
+  Georgia: "OpenShortsSerif, serif",
+  "Courier New": "OpenShortsMono, monospace",
 };
 
 export function getFontStack(fontFamily: string): string {

@@ -9,7 +9,7 @@ import {
 } from "remotion";
 import type { SubtitleConfig } from "../lib/types";
 import { groupCaptionsIntoBlocks, getActiveWordIndex } from "../lib/captions";
-import { getFontStack } from "../lib/fonts";
+import { getFontStack, subtitleFontFace } from "../lib/fonts";
 
 interface SubtitlesProps {
   config: SubtitleConfig;
@@ -64,6 +64,7 @@ export const Subtitles: React.FC<SubtitlesProps> = ({ config }) => {
 
   return (
     <AbsoluteFill>
+      <style>{subtitleFontFace}</style>
       {blocks.map((block, i) => {
         const { startFrame, durationFrames } = getSubtitleFrameRange(block, fps);
 

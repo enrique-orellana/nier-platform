@@ -110,8 +110,8 @@ import {
   hexToRgba,
   normalizeSubtitleStyle,
   subtitlePositionClass,
-  toClipGeneratorSubtitleStyle,
 } from "./localEditorStyles";
+import { getFontStack, subtitleFontFace } from "../../remotion/lib/fonts";
 import { SUBTITLE_LANGUAGES } from "../subtitleLanguages";
 import {
   DEFAULT_DURATION_MS,
@@ -1749,7 +1749,7 @@ export default function LocalEditorTab({
           text: String(cue.text || ""),
         })),
         position: previewSubtitleStyle.position || "bottom",
-        style: toClipGeneratorSubtitleStyle(previewSubtitleStyle),
+        style: previewSubtitleStyle,
       }
     : null;
   const hookElapsedMs = activeHook
@@ -2010,6 +2010,7 @@ export default function LocalEditorTab({
                         onTimeUpdate={handleVideoTimeUpdate}
                       />
                       <div className="pointer-events-none absolute inset-0">
+                        <style>{subtitleFontFace}</style>
                         {activeHook && (
                           <div
                             className="absolute w-[88%]"
@@ -2031,10 +2032,13 @@ export default function LocalEditorTab({
                         )}
                         {activeSubtitle && (
                           <div
-                            className={`absolute left-1/2 flex w-[88%] -translate-x-1/2 flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-semibold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`}
+                            className={`absolute left-1/2 flex w-[88%] -translate-x-1/2 flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-bold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`}
                             style={{
-                              fontFamily: previewSubtitleStyle.fontFamily,
-                              fontSize: `${Math.max(12, previewSubtitleStyle.fontSize * (20 / 24))}px`,
+                              fontFamily: getFontStack(
+                                previewSubtitleStyle.fontFamily,
+                              ),
+                              fontSize: `${Math.max(12, previewSubtitleStyle.fontSize)}px`,
+                              fontWeight: 700,
                               textShadow: outlineTextShadow(
                                 previewSubtitleStyle.borderWidth,
                                 previewSubtitleStyle.borderColor,

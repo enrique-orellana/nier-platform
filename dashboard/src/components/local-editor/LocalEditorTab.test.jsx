@@ -65,6 +65,9 @@ vi.mock("../RemotionPreview", () => ({
         data-subtitle-text={
           subtitles?.captions?.map((caption) => caption.text).join("|") || ""
         }
+        data-subtitle-font-family={subtitles?.style?.fontFamily || ""}
+        data-subtitle-font-size={subtitles?.style?.fontSize || ""}
+        data-subtitle-border-width={subtitles?.style?.borderWidth || ""}
       >
         <button type="button" onClick={() => onMediaTimeChange?.(2000)}>
           Emit native media time
@@ -353,6 +356,36 @@ describe("LocalEditorTab", () => {
     fireEvent.click(screen.getByRole("option", { name: "1.50x" }));
 
     expect(video.playbackRate).toBe(1.5);
+  });
+
+  it("passes subtitle quick-pick values to the preview without render scaling", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        remotionPreviewProps={{
+          videoUrl: "/videos/project.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+        }}
+        initialEditorState={{
+          subtitleCues: [
+            { id: "cue-1", text: "Caption", startMs: 0, endMs: 1000 },
+          ],
+          subtitleStyle: {
+            ...DEFAULT_SUBTITLE_STYLE,
+            fontFamily: "Impact",
+            fontSize: 30,
+            borderWidth: 3,
+          },
+        }}
+      />,
+    );
+
+    const preview = await screen.findByTestId("local-editor-remotion-preview");
+    expect(preview).toHaveAttribute("data-subtitle-font-family", "Impact");
+    expect(preview).toHaveAttribute("data-subtitle-font-size", "30");
+    expect(preview).toHaveAttribute("data-subtitle-border-width", "3");
   });
 
   it("offers cue actions only for an interior selected subtitle cue", async () => {

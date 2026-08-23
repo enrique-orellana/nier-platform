@@ -12,4 +12,12 @@ describe("renderer emoji font policy", () => {
     expect(rendererFontsSource).toContain("Noto Color Emoji");
     expect(rendererFontsSource).toContain("getHookFontStack");
   });
+
+  it("defines bundled subtitle font families instead of host-only fonts", () => {
+    expect(rendererFontsSource).toContain("OpenShortsImpact");
+    expect(rendererFontsSource).toContain("OpenShortsSans");
+    expect(rendererFontsSource).toContain("OpenShortsSerif");
+    expect(rendererFontsSource).toContain("OpenShortsMono");
+    expect(rendererFontsSource).toContain("subtitleFontFace");
+  });
 });
