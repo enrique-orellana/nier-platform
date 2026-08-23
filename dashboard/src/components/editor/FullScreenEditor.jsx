@@ -62,19 +62,6 @@ const shouldRefreshPresignedVideoUrl = (url) => {
   }
 };
 
-const isPresignedVideoUrl = (url) => {
-  if (!url) return false;
-  try {
-    const parsed = new URL(url, window.location.origin);
-    return Boolean(
-      parsed.searchParams.get("X-Amz-Date") ||
-      parsed.searchParams.get("X-Amz-Expires") !== null,
-    );
-  } catch {
-    return false;
-  }
-};
-
 const videoPath = (url) => {
   if (!url) return "";
   try {
@@ -335,6 +322,10 @@ export default function FullScreenEditor({
   const [publishingMetadata, setPublishingMetadata] = useState(() =>
     publishingMetadataFrom(initialManifest, clip),
   );
+  const publishingMetadataRef = useRef(publishingMetadata);
+  useEffect(() => {
+    publishingMetadataRef.current = publishingMetadata;
+  }, [publishingMetadata]);
   const [versions, setVersions] = useState(
     initialVersion ? [initialVersion] : [],
   );
@@ -623,10 +614,6 @@ export default function FullScreenEditor({
   const selectedRenderProps = renderSpecToProps(selectedRenderSpec);
   const durationSeconds =
     selectedRenderSpec.duration_in_frames / selectedRenderSpec.fps;
-  const masterVideoRefreshPending =
-    isPresignedVideoUrl(currentMasterVideoUrl) &&
-    shouldRefreshPresignedVideoUrl(currentMasterVideoUrl) &&
-    !refreshedMasterVideoUrl;
   const projectVideoUrl = refreshedMasterVideoUrl || projectInputProps.videoUrl;
   const versionManifest = useMemo(
     () => ({
@@ -715,26 +702,19 @@ export default function FullScreenEditor({
     versionManifest,
   ]);
   const generatedClipUrl = generatedClipVideoUrl(clip, projectManifest);
-  const previewVideoUrl =
-    generatedClipUrl || (masterVideoRefreshPending ? "" : projectVideoUrl);
+  const previewVideoUrl = generatedClipUrl || projectVideoUrl;
   const previewVideoStartSeconds = generatedClipUrl
     ? 0
     : selectedRenderProps.videoStartSeconds;
   const localEditorPreviewUrl = useMemo(() => {
-    if (masterVideoRefreshPending) return "";
     return proxyUrl(
       resolveLocalEditorSourceUrl({
         refreshedMasterVideoUrl,
         clip,
         projectManifest,
-      }),
+      }) || projectVideoUrl,
     );
-  }, [
-    clip,
-    masterVideoRefreshPending,
-    projectManifest,
-    refreshedMasterVideoUrl,
-  ]);
+  }, [clip, projectManifest, projectVideoUrl, refreshedMasterVideoUrl]);
   const currentManifestRef = useRef(currentManifest);
   useEffect(() => {
     currentManifestRef.current = projectManifest;
@@ -938,6 +918,28 @@ export default function FullScreenEditor({
     }
   }, [busy, clipIndex, getLatestVersionPayload, jobId, onVersionChange]);
 
+  const saveGeneratedHashtags = useCallback(
+    async (hashtags) => {
+      const nextMetadata = { ...publishingMetadataRef.current, hashtags };
+      publishingMetadataRef.current = nextMetadata;
+      setPublishingMetadata(nextMetadata);
+      if (versionManifestRef.current) {
+        versionManifestRef.current = {
+          ...versionManifestRef.current,
+          publishing_metadata: nextMetadata,
+        };
+      }
+      if (currentManifestRef.current) {
+        currentManifestRef.current = {
+          ...currentManifestRef.current,
+          publishing_metadata: nextMetadata,
+        };
+      }
+      await saveVersion();
+    },
+    [saveVersion],
+  );
+
   const exportVersion = useCallback(
     async ({ onProgress = () => {} } = {}) => {
       if (busy) return null;
@@ -1043,17 +1045,13 @@ export default function FullScreenEditor({
     >
       <LocalEditorTab
         initialVideoUrl={localEditorPreviewUrl}
-        initialExportVideoUrl={
-          masterVideoRefreshPending
-            ? ""
-            : proxyUrl(
-                resolveLocalEditorSourceUrl({
-                  refreshedMasterVideoUrl,
-                  clip,
-                  projectManifest,
-                }) || projectInputProps.videoUrl,
-              )
-        }
+        initialExportVideoUrl={proxyUrl(
+          resolveLocalEditorSourceUrl({
+            refreshedMasterVideoUrl,
+            clip,
+            projectManifest,
+          }) || projectInputProps.videoUrl,
+        )}
         initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
         initialProjectId={jobId}
         initialClipIndex={clipIndex}
@@ -1087,9 +1085,7 @@ export default function FullScreenEditor({
         initialEditorState={localDraft}
         initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}:${localDraftRevision}`}
         clipMetadata={{ ...clip, hashtags: publishingMetadata.hashtags }}
-        onHashtagsChange={(hashtags) =>
-          setPublishingMetadata((current) => ({ ...current, hashtags }))
-        }
+        onHashtagsChange={saveGeneratedHashtags}
         onStateChange={handleLocalDraftChange}
         persistHistory={false}
         allowLocalUpload={false}

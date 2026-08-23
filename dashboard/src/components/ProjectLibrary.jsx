@@ -1111,8 +1111,7 @@ export default function ProjectLibrary({
     (clip, index) => (clip.index ?? index) === editorClipIndex,
   );
   const isDirectEditorLoading =
-    editorOpen &&
-    (isLoading || (selectedProject && isLoadingClips && !editorClipReady));
+    editorOpen && (isLoading || !selectedProject || !editorClipReady);
 
   if (isDirectEditorLoading) return <EditorLoadingScreen />;
 

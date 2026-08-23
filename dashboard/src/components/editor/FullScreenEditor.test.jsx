@@ -923,6 +923,45 @@ describe("FullScreenEditor", () => {
     );
   });
 
+  it("shows the current source while a presigned URL refresh is pending", async () => {
+    const staleUrl =
+      "https://minio.example/master/source.mp4?X-Amz-Date=20200101T000000Z&X-Amz-Expires=60";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {})),
+    );
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          video_url: staleUrl,
+          source_video_url: staleUrl,
+        }}
+        initialManifest={{
+          timeline: {
+            source_video_url: staleUrl,
+            trim: { start_sec: 0, end_sec: 10 },
+          },
+          layers: {},
+          subtitle_tracks: [],
+        }}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
+        "data-video-url",
+        staleUrl,
+      ),
+    );
+  });
+
   it("keeps a still-valid direct MinIO URL stable for browser caching", async () => {
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
       .toISOString()
@@ -970,8 +1009,7 @@ describe("FullScreenEditor", () => {
     );
   });
 
-  it("saves generated hashtags in the new version manifest", async () => {
-    let session = null;
+  it("saves generated hashtags as soon as they are generated", async () => {
     renderVersionMocks.saveDraftVersion.mockResolvedValue({
       status: "saved",
       versionId: "v2",
@@ -1011,9 +1049,6 @@ describe("FullScreenEditor", () => {
         }}
         initialManifest={manifest}
         initialVersion={{ version_id: "v1", status: "done" }}
-        onSessionReady={(nextSession) => {
-          if (nextSession) session = nextSession;
-        }}
         onClose={vi.fn()}
       />,
     );
@@ -1029,9 +1064,6 @@ describe("FullScreenEditor", () => {
         "#editedclip",
       ),
     );
-    await waitFor(() => expect(session).toBeTruthy());
-    await session.save();
-
     await waitFor(() =>
       expect(renderVersionMocks.saveDraftVersion).toHaveBeenCalledWith(
         expect.objectContaining({
