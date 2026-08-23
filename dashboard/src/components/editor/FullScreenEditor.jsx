@@ -313,6 +313,7 @@ export default function FullScreenEditor({
   const versionRef = useRef(version);
   const activeTrackIdRef = useRef(activeTrackId);
   const versionManifestRef = useRef(null);
+  const pendingHashtagMetadataRef = useRef(null);
   const handleLocalDraftChange = useCallback((nextDraft) => {
     localDraftRef.current = nextDraft;
     setLocalDraft(nextDraft);
@@ -816,42 +817,55 @@ export default function FullScreenEditor({
       setBusy(false);
     }
   };
-  const saveVersion = useCallback(async () => {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const { manifest: manifestToSave } = getLatestVersionPayload();
-      const result = await saveDraftVersion({
-        jobId,
-        clipIndex,
-        manifest: manifestToSave,
-        parentVersionId: versionRef.current?.version_id,
-      });
-      const nextVersion = result.version || {
-        version_id: result.versionId,
-        status: "pending",
-      };
-      if (!nextVersion?.version_id)
-        throw new Error("Saved version did not return a version id.");
-      setVersions((current) => [
-        ...current.filter(
-          (candidate) => candidate.version_id !== nextVersion.version_id,
-        ),
-        nextVersion,
-      ]);
-      setRenderCompleteNotice(false);
-      versionRef.current = nextVersion;
-      setVersion(nextVersion);
-      setManifest(result.manifest || manifestToSave);
-      setRenderSpecDirty(false);
-      onVersionChange?.(nextVersion.version_id);
-    } catch (saveError) {
-      setError(saveError.message || "Could not save the new version.");
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, clipIndex, getLatestVersionPayload, jobId, onVersionChange]);
+  const saveVersion = useCallback(
+    async (metadataOverride = null) => {
+      if (busy) return;
+      setBusy(true);
+      setError(null);
+      try {
+        const { manifest: latestManifest } = getLatestVersionPayload();
+        const manifestToSave = metadataOverride
+          ? { ...latestManifest, publishing_metadata: metadataOverride }
+          : latestManifest;
+        const result = await saveDraftVersion({
+          jobId,
+          clipIndex,
+          manifest: manifestToSave,
+          parentVersionId: versionRef.current?.version_id,
+        });
+        const nextVersion = result.version || {
+          version_id: result.versionId,
+          status: "pending",
+        };
+        if (!nextVersion?.version_id)
+          throw new Error("Saved version did not return a version id.");
+        setVersions((current) => [
+          ...current.filter(
+            (candidate) => candidate.version_id !== nextVersion.version_id,
+          ),
+          nextVersion,
+        ]);
+        setRenderCompleteNotice(false);
+        versionRef.current = nextVersion;
+        setVersion(nextVersion);
+        setManifest(result.manifest || manifestToSave);
+        setRenderSpecDirty(false);
+        onVersionChange?.(nextVersion.version_id);
+      } catch (saveError) {
+        setError(saveError.message || "Could not save the new version.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, clipIndex, getLatestVersionPayload, jobId, onVersionChange],
+  );
+
+  useEffect(() => {
+    if (busy || !pendingHashtagMetadataRef.current) return;
+    const pendingMetadata = pendingHashtagMetadataRef.current;
+    pendingHashtagMetadataRef.current = null;
+    void saveVersion(pendingMetadata);
+  }, [busy, saveVersion]);
 
   const saveGeneratedHashtags = useCallback(
     async (hashtags) => {
@@ -870,9 +884,13 @@ export default function FullScreenEditor({
           publishing_metadata: nextMetadata,
         };
       }
-      await saveVersion();
+      if (busy) {
+        pendingHashtagMetadataRef.current = nextMetadata;
+        return;
+      }
+      await saveVersion(nextMetadata);
     },
-    [saveVersion],
+    [busy, saveVersion],
   );
 
   const exportVersion = useCallback(

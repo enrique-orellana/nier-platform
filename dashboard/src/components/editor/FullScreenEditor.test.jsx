@@ -1091,6 +1091,84 @@ describe("FullScreenEditor", () => {
     expect(renderVersionMocks.saveAndRenderVersion).not.toHaveBeenCalled();
   });
 
+  it("persists generated hashtags after an earlier save finishes", async () => {
+    let resolveFirstSave;
+    renderVersionMocks.saveDraftVersion.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstSave = resolve;
+        }),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url) =>
+        String(url).includes("/api/local-editor/hashtags")
+          ? Promise.resolve({
+              ok: true,
+              json: async () => ({ hashtags: ["#queued"] }),
+            })
+          : Promise.resolve({
+              ok: true,
+              blob: async () => new Blob(["video"], { type: "video/mp4" }),
+            }),
+      ),
+    );
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(() => "blob:project-video"),
+    });
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          video_url: manifest.timeline.source_video_url,
+          video_title_for_youtube_short: "Título",
+          video_description_for_tiktok: "Caption",
+        }}
+        initialManifest={manifest}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /save as new version/i }),
+    );
+    await waitFor(() =>
+      expect(renderVersionMocks.saveDraftVersion).toHaveBeenCalledTimes(1),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /generate hashtags/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("group", { name: "Hashtags" })).toHaveTextContent(
+        "#queued",
+      ),
+    );
+
+    resolveFirstSave({
+      status: "saved",
+      versionId: "v2",
+      version: { version_id: "v2", status: "pending" },
+      manifest,
+    });
+
+    await waitFor(() =>
+      expect(renderVersionMocks.saveDraftVersion).toHaveBeenCalledTimes(2),
+    );
+    expect(
+      renderVersionMocks.saveDraftVersion.mock.calls[1][0].manifest,
+    ).toEqual(
+      expect.objectContaining({
+        publishing_metadata: { hashtags: ["#queued"] },
+      }),
+    );
+  });
+
   it("shows and clears the local editor render-ready badge", async () => {
     renderVersionMocks.saveAndRenderVersion.mockResolvedValue({
       status: "done",
