@@ -62,7 +62,7 @@ describe("local editor Remotion rendering", () => {
     });
   });
 
-  it("converts local editor overlays to the native render contract", () => {
+  it("preserves local editor subtitle styles in the render contract", () => {
     const props = buildRemotionRenderProps({
       durationSeconds: 6,
       fps: 25,
@@ -109,8 +109,8 @@ describe("local editor Remotion rendering", () => {
     ]);
     expect(props.subtitles.style).toMatchObject({
       fontFamily: "Verdana",
-      fontSize: 52.8,
-      borderWidth: 3,
+      fontSize: 24,
+      borderWidth: 2,
     });
     expect(props.hook).toMatchObject({
       text: "Hook",

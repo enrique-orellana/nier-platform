@@ -1,6 +1,6 @@
 import { getApiUrl } from "../../config";
 import { renderInBrowser } from "../../lib/renderInBrowser";
-import { toClipGeneratorSubtitleStyle } from "./localEditorStyles";
+import { normalizeSubtitleStyle } from "./localEditorStyles";
 
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -214,7 +214,7 @@ export const buildRemotionRenderProps = ({
           text: String(cue.text || ""),
         })),
         position: subtitleStyle?.position || "bottom",
-        style: toClipGeneratorSubtitleStyle(subtitleStyle || undefined),
+        style: normalizeSubtitleStyle(subtitleStyle || undefined),
       }
     : null,
   hook: hook

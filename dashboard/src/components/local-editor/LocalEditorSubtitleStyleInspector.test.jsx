@@ -25,26 +25,29 @@ describe("LocalEditorSubtitleStyleInspector", () => {
     });
   });
 
-  it("applies a selected quick pick to the subtitle style", () => {
-    const onChange = vi.fn();
-    render(
-      <LocalEditorSubtitleStyleInspector
-        style={DEFAULT_SUBTITLE_STYLE}
-        onChange={onChange}
-        onRemove={vi.fn()}
-        hasCues
-      />,
-    );
+  it.each(SUBTITLE_STYLE_TEMPLATES)(
+    "applies the complete $label quick-pick style",
+    (template) => {
+      const onChange = vi.fn();
+      render(
+        <LocalEditorSubtitleStyleInspector
+          style={DEFAULT_SUBTITLE_STYLE}
+          onChange={onChange}
+          onRemove={vi.fn()}
+          hasCues
+        />,
+      );
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: SUBTITLE_STYLE_TEMPLATES[0].ariaLabel,
-      }),
-    );
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: template.ariaLabel,
+        }),
+      );
 
-    expect(onChange).toHaveBeenCalledWith({
-      ...DEFAULT_SUBTITLE_STYLE,
-      ...SUBTITLE_STYLE_TEMPLATES[0].style,
-    });
-  });
+      expect(onChange).toHaveBeenCalledWith({
+        ...DEFAULT_SUBTITLE_STYLE,
+        ...template.style,
+      });
+    },
+  );
 });
