@@ -152,4 +152,24 @@ describe("ClipRenderControls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onRender).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps Streamer Stack area editing available after a failed render", () => {
+    const onSelectWebcam = vi.fn();
+    render(
+      <ClipRenderControls
+        status="failed"
+        error="worker exited with status 1"
+        layoutFormat="streamer_stack"
+        webcamRegion={{ x: 0.1, y: 0.2, width: 0.3, height: 0.4 }}
+        gameplayRegion={{ x: 0.4, y: 0.1, width: 0.5, height: 0.8 }}
+        onRender={vi.fn()}
+        onSelectWebcamRegion={onSelectWebcam}
+        onSelectGameplayRegion={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("worker exited with status 1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Webcam Area" }));
+    expect(onSelectWebcam).toHaveBeenCalledTimes(1);
+  });
 });

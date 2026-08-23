@@ -100,7 +100,7 @@ export default function ClipRenderControls({
   const validGameplayRegion = hasValidRegion(gameplayRegion);
   const hasAllStreamerRegions = validWebcamRegion && validGameplayRegion;
 
-  if (status === "failed" && (!streamerStack || hasAllStreamerRegions)) {
+  if (status === "failed" && !streamerStack) {
     return (
       <div className="mb-3 space-y-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3">
         <p className="text-xs text-red-300">{error || "Render failed."}</p>
@@ -126,9 +126,12 @@ export default function ClipRenderControls({
     return (
       <div className="mb-3 space-y-2 rounded-xl border border-white/[0.08] bg-white/[0.02] p-2.5">
         {status === "failed" && (
-          <p className="text-xs text-amber-200">
-            Select both source areas before retrying Streamer Stack analysis.
-          </p>
+          <div className="space-y-1">
+            <p className="text-xs text-red-300">{error || "Render failed."}</p>
+            <p className="text-xs text-amber-200">
+              Select both source areas before retrying Streamer Stack analysis.
+            </p>
+          </div>
         )}
         <div className="grid grid-cols-2 gap-2">
           <RegionButton
