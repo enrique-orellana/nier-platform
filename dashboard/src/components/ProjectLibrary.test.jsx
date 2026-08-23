@@ -18,6 +18,21 @@ describe("ProjectLibrary", () => {
     );
   });
 
+  it("shows an editor loading screen while opening a direct editor link", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {})),
+    );
+
+    render(
+      <ProjectLibrary projectId="job-direct" editorOpen editorClipIndex={0} />,
+    );
+
+    expect(
+      screen.getByRole("status", { name: "Loading editor" }),
+    ).toBeInTheDocument();
+  });
+
   it("opens the processing timeline drawer and renders audited request bodies", async () => {
     const fetchMock = vi.fn((url) => {
       const value = String(url);

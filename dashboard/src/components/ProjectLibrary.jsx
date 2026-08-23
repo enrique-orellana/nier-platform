@@ -154,6 +154,25 @@ function persistStatusFilters(projectId, filters) {
   }
 }
 
+function EditorLoadingScreen() {
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-[#0d0d0f] text-white"
+      role="status"
+      aria-label="Loading editor"
+      aria-live="polite"
+    >
+      <div className="flex flex-col items-center gap-3 text-zinc-300">
+        <Loader2
+          className="h-8 w-8 animate-spin text-cyan-300"
+          aria-hidden="true"
+        />
+        <span className="text-sm">Loading editor...</span>
+      </div>
+    </div>
+  );
+}
+
 function normalizeClipForResultCard(clip, index, fallbackJobId) {
   const renderedVideoUrl =
     clip.video_url ||
@@ -1088,6 +1107,15 @@ export default function ProjectLibrary({
     return haystack.includes(search.trim().toLowerCase());
   });
 
+  const editorClipReady = normalizedProjectClips.some(
+    (clip, index) => (clip.index ?? index) === editorClipIndex,
+  );
+  const isDirectEditorLoading =
+    editorOpen &&
+    (isLoading || (selectedProject && isLoadingClips && !editorClipReady));
+
+  if (isDirectEditorLoading) return <EditorLoadingScreen />;
+
   if (selectedProject) {
     return (
       <div className="h-full min-h-0 overflow-y-auto custom-scrollbar">
@@ -1662,9 +1690,24 @@ export default function ProjectLibrary({
         )}
 
         {isLoading ? (
-          <div className="glass-panel p-20 flex flex-col items-center justify-center gap-4 text-zinc-500">
+          <div
+            className="glass-panel p-20 flex flex-col items-center justify-center gap-4 text-zinc-500"
+            role={editorOpen && editorClipIndex !== null ? "status" : undefined}
+            aria-label={
+              editorOpen && editorClipIndex !== null
+                ? "Loading editor"
+                : undefined
+            }
+            aria-live={
+              editorOpen && editorClipIndex !== null ? "polite" : undefined
+            }
+          >
             <Loader2 size={32} className="animate-spin text-cyan-400" />
-            <p>Loading your projects...</p>
+            <p>
+              {editorOpen && editorClipIndex !== null
+                ? "Loading editor..."
+                : "Loading your projects..."}
+            </p>
           </div>
         ) : filteredProjects.length === 0 ? (
           <div className="glass-panel p-20 text-center text-zinc-500 border-2 border-dashed border-white/5">
