@@ -42,7 +42,7 @@ function pointerEvent(type, clientX, clientY) {
 }
 
 describe("WebcamRegionSelector", () => {
-  it("defaults the webcam panel size to medium for legacy clips", () => {
+  it("defaults the webcam panel size to small when no size is saved", () => {
     render(
       <WebcamRegionSelector
         videoUrl="/videos/source.mp4"
@@ -52,7 +52,7 @@ describe("WebcamRegionSelector", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Webcam panel size")).toHaveValue("medium");
+    expect(screen.getByLabelText("Webcam panel size")).toHaveValue("small");
   });
 
   it("restores the current facecam size and returns the selected size on save", () => {
@@ -125,7 +125,7 @@ describe("WebcamRegionSelector", () => {
         width: expect.closeTo(0.5, 3),
         height: expect.closeTo((250 - 100) / 225, 3),
       },
-      "medium",
+      "small",
     );
   });
 
