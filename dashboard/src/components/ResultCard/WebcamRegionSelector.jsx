@@ -13,7 +13,7 @@ export default function WebcamRegionSelector(props) {
         { value: "medium", label: "Medium" },
         { value: "large", label: "Large" },
       ]}
-      initialPanelSize={props.initialFacecamSize || "small"}
+      initialPanelSize={props.initialFacecamSize || "medium"}
       panelSizeLabel="Webcam panel size"
     />
   );
