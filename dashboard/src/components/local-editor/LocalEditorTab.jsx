@@ -50,7 +50,10 @@ import LocalEditorFeaturePanel from "./LocalEditorFeaturePanel";
 import LocalEditorFeatureRail from "./LocalEditorFeatureRail";
 import { LOCAL_EDITOR_FEATURES } from "./localEditorFeatures";
 import RemotionPreview from "../RemotionPreview";
-import { getSubtitleWordsForDisplay } from "../../remotion/lib/captions";
+import {
+  getSubtitleWordsForDisplay,
+  groupCaptionsIntoBlocks,
+} from "../../remotion/lib/captions";
 import { parseSubtitleFile, serializeSrt } from "./subtitleFormats";
 import { activeCueAt, formatClock } from "./localEditorExport";
 import {
@@ -1730,10 +1733,16 @@ export default function LocalEditorTab({
     );
   }
 
-  const activeSubtitle = activeCueAt(subtitleCues, playheadMs);
-  const activeSubtitleWords = activeSubtitle
-    ? cueCaptionsForRender(activeSubtitle)
-    : [];
+  const previewSubtitleCaptions = subtitleCues.flatMap((cue) =>
+    cueCaptionsForRender(cue),
+  );
+  const previewSubtitleBlocks = groupCaptionsIntoBlocks(
+    previewSubtitleCaptions,
+  );
+  const activeSubtitle = previewSubtitleBlocks.find(
+    (block) => playheadMs >= block.startMs && playheadMs < block.endMs,
+  );
+  const activeSubtitleWords = activeSubtitle?.words || [];
   const activeSubtitleWordIndex = activeSubtitleWords.findIndex(
     (word) => playheadMs >= word.startMs && playheadMs < word.endMs,
   );
@@ -1749,13 +1758,7 @@ export default function LocalEditorTab({
     Boolean(activeSubtitle) && previewSubtitleWords.length > 0;
   const previewSubtitles = subtitleCues.length
     ? {
-        captions: subtitleCues.flatMap((cue) => cueCaptionsForRender(cue)),
-        blocks: subtitleCues.map((cue) => ({
-          words: cueCaptionsForRender(cue),
-          startMs: Number(cue.startMs),
-          endMs: Number(cue.endMs),
-          text: String(cue.text || ""),
-        })),
+        captions: previewSubtitleCaptions,
         position: previewSubtitleStyle.position || "bottom",
         style: previewSubtitleStyle,
       }

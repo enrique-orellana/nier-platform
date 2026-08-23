@@ -207,12 +207,6 @@ export const buildRemotionRenderProps = ({
   subtitles: subtitleCues.length
     ? {
         captions: subtitleCues.flatMap((cue) => cueCaptionsForRender(cue)),
-        blocks: subtitleCues.map((cue) => ({
-          words: cueCaptionsForRender(cue),
-          startMs: Number(cue.startMs),
-          endMs: Number(cue.endMs),
-          text: String(cue.text || ""),
-        })),
         position: subtitleStyle?.position || "bottom",
         style: normalizeSubtitleStyle(subtitleStyle || undefined),
       }

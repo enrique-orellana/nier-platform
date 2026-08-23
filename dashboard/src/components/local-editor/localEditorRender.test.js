@@ -99,14 +99,7 @@ describe("local editor Remotion rendering", () => {
     expect(props.subtitles.captions).toEqual([
       { text: "Hello", startMs: 500, endMs: 1500 },
     ]);
-    expect(props.subtitles.blocks).toEqual([
-      {
-        words: [{ text: "Hello", startMs: 500, endMs: 1500 }],
-        startMs: 500,
-        endMs: 1500,
-        text: "Hello",
-      },
-    ]);
+    expect(props.subtitles.blocks).toBeUndefined();
     expect(props.subtitles.style).toMatchObject({
       fontFamily: "Verdana",
       fontSize: 24,
@@ -123,6 +116,22 @@ describe("local editor Remotion rendering", () => {
       layoutFormat: "standard",
       facecamSize: "medium",
     });
+  });
+
+  it("leaves subtitle block grouping to the renderer for word-level cues", () => {
+    const props = buildRemotionRenderProps({
+      durationSeconds: 2,
+      fps: 25,
+      width: 608,
+      height: 1080,
+      subtitleCues: [
+        { text: "Hello", startMs: 0, endMs: 400 },
+        { text: "world", startMs: 400, endMs: 800 },
+      ],
+      subtitleStyle: { displayMode: "phrase" },
+    });
+
+    expect(props.subtitles.blocks).toBeUndefined();
   });
 
   it("preserves Clip Generator word timings when generated cues are rendered", () => {
@@ -148,7 +157,7 @@ describe("local editor Remotion rendering", () => {
       { text: "Do", startMs: 200, endMs: 400 },
       { text: "I", startMs: 400, endMs: 550 },
     ]);
-    expect(props.subtitles.blocks).toHaveLength(1);
+    expect(props.subtitles.blocks).toBeUndefined();
   });
 
   it("uses edited cue text instead of stale generated words", () => {
@@ -439,14 +448,7 @@ describe("local editor Remotion rendering", () => {
     ).toMatchObject({ videoStartSeconds: 962 });
     expect(
       JSON.parse(fetchImpl.mock.calls[0][1].body.get("props")).subtitles.blocks,
-    ).toEqual([
-      {
-        words: [{ text: "Do I need to undress?", startMs: 0, endMs: 1000 }],
-        startMs: 0,
-        endMs: 1000,
-        text: "Do I need to undress?",
-      },
-    ]);
+    ).toBeUndefined();
   });
 
   it("uses the Clip Generator Remotion path for word-timed generated cues", async () => {
