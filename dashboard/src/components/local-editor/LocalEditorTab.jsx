@@ -2038,8 +2038,13 @@ export default function LocalEditorTab({
                           <div
                             className="absolute w-[88%]"
                             style={{
-                              left: "50%",
-                              ...getHookPositionStyle(activeHook.position),
+                              ...getHookPositionStyle(
+                                activeHook,
+                                activeHook.layoutFormat,
+                                activeHook.facecamSize,
+                                hookRenderWidth,
+                                hookRenderHeight,
+                              ),
                             }}
                           >
                             <div

@@ -19,7 +19,7 @@ interface HookOverlayProps {
 }
 
 export const HookOverlay: React.FC<HookOverlayProps> = ({ config }) => {
-  const { fps, width } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const fromFrames = Math.max(0, Math.round(((config.startMs || 0) / 1000) * fps));
   const displayFrames = Math.max(1, Math.round((((config.endMs ?? ((config.startMs || 0) + config.displayDurationSec * 1000)) - (config.startMs || 0)) / 1000) * fps));
 
@@ -27,7 +27,12 @@ export const HookOverlay: React.FC<HookOverlayProps> = ({ config }) => {
     <AbsoluteFill>
       <style>{notoSerifFontFace}</style>
       <Sequence from={fromFrames} durationInFrames={displayFrames} layout="none">
-        <HookBox config={config} displayFrames={displayFrames} width={width} />
+        <HookBox
+          config={config}
+          displayFrames={displayFrames}
+          width={width}
+          height={height}
+        />
       </Sequence>
     </AbsoluteFill>
   );
@@ -37,16 +42,24 @@ interface HookBoxProps {
   config: HookConfig;
   displayFrames: number;
   width: number;
+  height: number;
 }
 
-const HookBox: React.FC<HookBoxProps> = ({ config, displayFrames, width }) => {
+const HookBox: React.FC<HookBoxProps> = ({
+  config,
+  displayFrames,
+  width,
+  height,
+}) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const elapsedMs = (frame / fps) * 1000;
   const positionStyle = getHookPositionStyle(
-    config.position,
+    config,
     config.layoutFormat,
     config.facecamSize,
+    width,
+    height,
   );
   const boxStyle = getHookBoxStyle(
     {

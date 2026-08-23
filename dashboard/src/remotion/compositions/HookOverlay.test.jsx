@@ -9,7 +9,7 @@ vi.mock("remotion", () => ({
   spring: vi.fn(),
   staticFile: (file) => `/${file}`,
   useCurrentFrame: () => 0,
-  useVideoConfig: () => ({ fps: 30, width: 360 }),
+  useVideoConfig: () => ({ fps: 30, width: 360, height: 100 }),
 }));
 
 import { HookOverlay } from "./HookOverlay";
@@ -71,6 +71,31 @@ describe("HookOverlay visual contract", () => {
     );
     expect(container).toHaveStyle({
       top: "46%",
+      transform: "translate(-50%, -50%)",
+    });
+  });
+
+  it("renders custom hooks at their pixel coordinates", () => {
+    render(
+      <HookOverlay
+        config={{
+          text: "Move me",
+          position: "custom",
+          positionX: 90,
+          positionY: 20,
+          size: "M",
+          entranceAnimation: "none",
+          displayDurationSec: 2,
+          startMs: 0,
+          endMs: 2000,
+        }}
+      />,
+    );
+
+    const container = screen.getByText("Move me").parentElement.parentElement;
+    expect(container).toHaveStyle({
+      left: "25%",
+      top: "20%",
       transform: "translate(-50%, -50%)",
     });
   });

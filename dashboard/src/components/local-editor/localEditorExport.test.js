@@ -4,6 +4,7 @@ import {
   chooseRecordingMimeType,
   clampOverlayY,
   formatClock,
+  getHookCanvasPosition,
   getExportSourceUrl,
   getRecordingOptions,
   getVideoFrameDimensions,
@@ -37,6 +38,16 @@ describe("local editor export helpers", () => {
     expect(
       hookVisualState({ size: "M", entranceAnimation: "fade" }, 0).opacity,
     ).toBe(0);
+  });
+
+  it("uses custom hook coordinates on the export canvas", () => {
+    expect(
+      getHookCanvasPosition(
+        { position: "custom", positionX: 700, positionY: 420 },
+        1080,
+        1920,
+      ),
+    ).toEqual({ x: 700, y: 420 });
   });
 
   it("converts subtitle style to canvas values", () => {

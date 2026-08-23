@@ -4,6 +4,7 @@ import {
   hexToRgba,
   normalizeSubtitleStyle,
 } from "./localEditorStyles";
+import { getHookPositionCoordinates } from "../../remotion/lib/hookVisual";
 
 export const activeCueAt = (cues, playheadMs) =>
   (cues || []).find(
@@ -94,6 +95,9 @@ export const hookVisualState = (hook = {}, elapsedMs = 0) => {
   }
   return { scale, opacity: 1, translateY: 0 };
 };
+
+export const getHookCanvasPosition = (hook, canvasWidth, canvasHeight) =>
+  getHookPositionCoordinates(hook, canvasWidth, canvasHeight);
 
 export const subtitleVisualStyle = (style = {}) => {
   const current = normalizeSubtitleStyle(style);
@@ -392,14 +396,13 @@ export async function renderLocalVideo({
           currentHook,
           nowMs - currentHook.startMs,
         );
-        const positionY =
-          currentHook.position === "bottom"
-            ? canvas.height * 0.84
-            : currentHook.position === "center"
-              ? canvas.height * 0.46
-              : canvas.height * 0.12;
+        const { x, y } = getHookCanvasPosition(
+          currentHook,
+          canvas.width,
+          canvas.height,
+        );
         context.save();
-        context.translate(canvas.width / 2, positionY + hookState.translateY);
+        context.translate(x, y + hookState.translateY);
         context.scale(hookState.scale, hookState.scale);
         drawOverlay(context, currentHook.text, {
           x: 0,
