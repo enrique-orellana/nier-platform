@@ -49,3 +49,6 @@ skills-lock.json
 # Installation-scoped ChatGPT Codex credentials
 .openshorts/
 **/codex-auth.json
+.native-*/
+render-service/.native-renderer/
+.remotion/
