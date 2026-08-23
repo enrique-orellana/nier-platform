@@ -498,6 +498,7 @@ export default function FullScreenEditor({
     currentManifest,
     localDraft,
   ]);
+  const generatedClipUrl = generatedClipVideoUrl(clip, projectManifest);
   const projectInputProps = useMemo(
     () => ({
       ...manifestToRenderProps(projectManifest, {
@@ -550,7 +551,8 @@ export default function FullScreenEditor({
   const selectedRenderProps = renderSpecToProps(selectedRenderSpec);
   const durationSeconds =
     selectedRenderSpec.duration_in_frames / selectedRenderSpec.fps;
-  const projectVideoUrl = refreshedMasterVideoUrl || projectInputProps.videoUrl;
+  const projectVideoUrl =
+    generatedClipUrl || refreshedMasterVideoUrl || projectInputProps.videoUrl;
   const versionManifest = useMemo(
     () => ({
       ...projectManifest,
@@ -637,7 +639,6 @@ export default function FullScreenEditor({
     renderSpecDirty,
     versionManifest,
   ]);
-  const generatedClipUrl = generatedClipVideoUrl(clip, projectManifest);
   const previewVideoUrl = generatedClipUrl || projectVideoUrl;
   const previewVideoStartSeconds = generatedClipUrl
     ? 0
@@ -1072,7 +1073,7 @@ export default function FullScreenEditor({
           <>
             <button
               type="button"
-              onClick={saveVersion}
+              onClick={() => saveVersion()}
               disabled={busy}
               className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1 text-[10px] font-semibold text-white hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
             >

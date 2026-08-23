@@ -139,6 +139,57 @@ describe("FullScreenEditor", () => {
     ).toBe("https://minio.example/master/source.mp4?X-Amz-Date=fresh");
   });
 
+  it("exports the generated clip source used by the preview", async () => {
+    const generatedClipUrl =
+      "https://minio.example/openshorts-media/job/clips/clip-1/source_clip_14.mp4";
+    const masterUrl =
+      "https://minio.example/openshorts-media/job/master/source.mp4";
+    let session = null;
+    renderVersionMocks.saveAndRenderVersion.mockResolvedValue({
+      status: "done",
+      outputUrl: "/videos/job/v2.mp4",
+      version: { version_id: "v2", status: "done" },
+    });
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          video_url: generatedClipUrl,
+          source_video_url: masterUrl,
+        }}
+        initialManifest={{
+          ...manifest,
+          timeline: { ...manifest.timeline, source_video_url: masterUrl },
+        }}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        onSessionReady={(nextSession) => {
+          if (nextSession) session = nextSession;
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(session).toBeTruthy());
+    await session.export();
+
+    await waitFor(() =>
+      expect(renderVersionMocks.saveAndRenderVersion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          manifest: expect.objectContaining({
+            timeline: expect.objectContaining({
+              source_video_url: generatedClipUrl,
+            }),
+          }),
+          props: expect.objectContaining({ videoUrl: generatedClipUrl }),
+        }),
+      ),
+    );
+  });
+
   it("prefers a project source URL over the generated clip URL", () => {
     expect(
       resolveLocalEditorSourceUrl({
@@ -1965,6 +2016,43 @@ describe("FullScreenEditor", () => {
     expect(
       screen.getByRole("button", { name: "Save as new version" }),
     ).toBeInTheDocument();
+  });
+
+  it("does not serialize the save button event as version metadata", async () => {
+    renderVersionMocks.saveDraftVersion.mockResolvedValue({
+      status: "saved",
+      versionId: "v2",
+      version: { version_id: "v2", status: "pending" },
+      manifest,
+    });
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          video_url: manifest.timeline.source_video_url,
+        }}
+        initialManifest={manifest}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save as new version" }),
+    );
+
+    await waitFor(() =>
+      expect(renderVersionMocks.saveDraftVersion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          manifest: expect.objectContaining({
+            publishing_metadata: { hashtags: ["#shorts", "#viral"] },
+          }),
+        }),
+      ),
+    );
   });
 
   it("loads changed master subtitles instead of a stale generated version", async () => {
