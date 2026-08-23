@@ -111,4 +111,45 @@ describe("manifestToVersionRenderProps", () => {
       ),
     ).toThrow("render_spec");
   });
+
+  it("does not apply the master timeline offset to generated source clips", () => {
+    const props = manifestToVersionRenderProps(
+      {
+        timeline: {
+          source_video_url:
+            "https://media.example/clips/clip-1/source_clip_4.mp4",
+        },
+        render_spec: {
+          video_start_seconds: 1686,
+          duration_in_frames: 240,
+          fps: 24,
+          width: 1080,
+          height: 1920,
+          video_fit: "contain",
+        },
+      },
+      { versionId: "v4", manifestRevision: "rev-4" },
+    );
+
+    expect(props.videoStartSeconds).toBe(0);
+  });
+
+  it("keeps the timeline offset for master video sources", () => {
+    const props = manifestToVersionRenderProps(
+      {
+        timeline: { source_video_url: "https://media.example/master.mp4" },
+        render_spec: {
+          video_start_seconds: 1686,
+          duration_in_frames: 240,
+          fps: 24,
+          width: 1080,
+          height: 1920,
+          video_fit: "contain",
+        },
+      },
+      { versionId: "v4", manifestRevision: "rev-4" },
+    );
+
+    expect(props.videoStartSeconds).toBe(1686);
+  });
 });

@@ -4,6 +4,16 @@ type VersionManifest = Record<string, any>;
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value ?? null));
 
+const isGeneratedSourceClip = (url: string) => {
+  try {
+    return /(?:^|\/)source_clip_[^/]+\.mp4$/i.test(
+      new URL(url, "http://localhost").pathname,
+    );
+  } catch {
+    return /(?:^|\/)source_clip_[^/]+\.mp4(?:[?#]|$)/i.test(url);
+  }
+};
+
 const normalizeSubtitleStyleForRender = (
   style: Record<string, any> | null,
 ): Record<string, any> | null => {
@@ -67,6 +77,10 @@ export function manifestToVersionRenderProps(
   metadata: { versionId: string; manifestRevision: string },
 ): RenderRequestProps {
   const renderSpec = requireRenderSpec(manifest);
+  const videoUrl = String(manifest.timeline?.source_video_url || "");
+  const videoStartSeconds = isGeneratedSourceClip(videoUrl)
+    ? 0
+    : renderSpec.videoStartSeconds;
   const subtitleTracks = Array.isArray(manifest.subtitle_tracks)
     ? clone(manifest.subtitle_tracks).map((track: Record<string, any>) => ({
         ...track,
@@ -97,8 +111,9 @@ export function manifestToVersionRenderProps(
       : null;
 
   return {
-    videoUrl: String(manifest.timeline?.source_video_url || ""),
+    videoUrl,
     ...renderSpec,
+    videoStartSeconds,
     subtitles,
     subtitleTracks,
     activeSubtitleTrackId: subtitles ? activeSubtitleTrackId : null,
