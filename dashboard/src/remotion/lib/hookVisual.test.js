@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  getHookPositionCoordinates,
-  getHookPositionStyle,
-} from "./hookVisual";
+import { getHookPositionCoordinates, getHookPositionStyle } from "./hookVisual";
 
 describe("hook pixel positioning", () => {
   it("resolves preset and custom hook center points in output pixels", () => {

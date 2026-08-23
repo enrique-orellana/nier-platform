@@ -78,7 +78,6 @@ describe("local editor Remotion rendering", () => {
         text: "Hook",
         startMs: 0,
         endMs: 2000,
-        position: "center",
         size: "M",
         entranceAnimation: "fade",
         color: "#FFFFFF",
@@ -111,14 +110,13 @@ describe("local editor Remotion rendering", () => {
     expect(props.hook).toMatchObject({
       text: "Hook",
       displayDurationSec: 2,
-      position: "center",
+      position: "custom",
       color: "#FFFFFF",
       background: "#111111",
       fontFamily: "Arial, Helvetica, sans-serif",
       fontSize: 48,
       layoutFormat: "standard",
       facecamSize: "medium",
-      position: "custom",
       positionX: 601,
       positionY: 0,
     });

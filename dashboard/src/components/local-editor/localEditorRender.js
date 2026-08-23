@@ -199,7 +199,9 @@ export const buildRemotionRenderProps = ({
 }) => {
   const normalizedHook = hook
     ? (() => {
-        const { positionX, positionY, ...hookWithoutCoordinates } = hook;
+        const hookWithoutCoordinates = { ...hook };
+        delete hookWithoutCoordinates.positionX;
+        delete hookWithoutCoordinates.positionY;
         const position = HOOK_POSITIONS.has(hook.position)
           ? hook.position
           : "top";
@@ -231,24 +233,24 @@ export const buildRemotionRenderProps = ({
     : null;
 
   return {
-  durationInFrames: Math.max(
-    1,
-    Math.round(Number(durationSeconds || 0) * Number(fps || 30)),
-  ),
-  fps: Number(fps || 30),
-  videoStartSeconds: Math.max(0, Number(videoStartSeconds) || 0),
-  width: Number(width),
-  height: Number(height),
-  videoFit,
-  subtitles: subtitleCues.length
-    ? {
-        captions: subtitleCues.flatMap((cue) => cueCaptionsForRender(cue)),
-        position: subtitleStyle?.position || "bottom",
-        style: normalizeSubtitleStyle(subtitleStyle || undefined),
-      }
-    : null,
-  hook: normalizedHook,
-  effects: null,
+    durationInFrames: Math.max(
+      1,
+      Math.round(Number(durationSeconds || 0) * Number(fps || 30)),
+    ),
+    fps: Number(fps || 30),
+    videoStartSeconds: Math.max(0, Number(videoStartSeconds) || 0),
+    width: Number(width),
+    height: Number(height),
+    videoFit,
+    subtitles: subtitleCues.length
+      ? {
+          captions: subtitleCues.flatMap((cue) => cueCaptionsForRender(cue)),
+          position: subtitleStyle?.position || "bottom",
+          style: normalizeSubtitleStyle(subtitleStyle || undefined),
+        }
+      : null,
+    hook: normalizedHook,
+    effects: null,
   };
 };
 

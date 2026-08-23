@@ -262,15 +262,11 @@ export default function LocalEditorTab({
   const remotionFps = Number(remotionPreviewProps?.fps || 30);
   const hookRenderWidth = Math.max(
     1,
-    Number(
-      remotionPreviewProps?.width || clipMetadata?.output_width || 1080,
-    ),
+    Number(remotionPreviewProps?.width || clipMetadata?.output_width || 1080),
   );
   const hookRenderHeight = Math.max(
     1,
-    Number(
-      remotionPreviewProps?.height || clipMetadata?.output_height || 1920,
-    ),
+    Number(remotionPreviewProps?.height || clipMetadata?.output_height || 1920),
   );
 
   const handleRemotionFrameChange = useCallback(

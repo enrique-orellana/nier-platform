@@ -60,7 +60,9 @@ export default function LocalEditorHookInspector({
     });
   };
   const selectPresetPosition = (position) => {
-    const { positionX, positionY, ...hookWithoutCoordinates } = hook;
+    const hookWithoutCoordinates = { ...hook };
+    delete hookWithoutCoordinates.positionX;
+    delete hookWithoutCoordinates.positionY;
     onChange({ ...hookWithoutCoordinates, position });
   };
   return (

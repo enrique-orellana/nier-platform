@@ -241,7 +241,7 @@ const localEditorStateToManifest = (sourceManifest, localState, trackId) => {
   source.subtitle_tracks_disabled = !cues.length;
   source.active_subtitle_track_id = cues.length ? nextTrackId : null;
   const persistedHook = state.hook
-      ? (() => {
+    ? (() => {
         const { positionX, positionY, ...hookWithoutCoordinates } = state.hook;
         const sourceHookWithoutCoordinates = { ...(source.layers?.hook || {}) };
         delete sourceHookWithoutCoordinates.positionX;
