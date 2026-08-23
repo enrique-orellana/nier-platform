@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getSubtitleFrameRange,
   getSubtitleTimeMs,
+  getSubtitleWordsForDisplay,
   isSubtitleBlockActiveAt,
   normalizeSubtitleConfig,
 } from "./Subtitles";
@@ -16,8 +17,22 @@ describe("subtitle rendering defaults", () => {
       fontFamily: "Arial",
       fontSize: 52,
       animation: "none",
+      displayMode: "phrase",
     });
     expect(normalized.style.fontColor).toBe("#FFFFFF");
+  });
+
+  it("selects either the full phrase or the active word for display", () => {
+    const words = [
+      { text: "Hola", startMs: 0, endMs: 400 },
+      { text: "mundo", startMs: 400, endMs: 800 },
+    ];
+
+    expect(getSubtitleWordsForDisplay(words, 1, "phrase")).toEqual(words);
+    expect(getSubtitleWordsForDisplay(words, 1, "single-word")).toEqual([
+      words[1],
+    ]);
+    expect(getSubtitleWordsForDisplay(words, -1, "single-word")).toEqual([]);
   });
 
   it("uses one consistent absolute frame range for subtitle sequences", () => {

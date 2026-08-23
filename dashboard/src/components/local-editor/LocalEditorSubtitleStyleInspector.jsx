@@ -95,6 +95,32 @@ export default function LocalEditorSubtitleStyleInspector({
           ))}
         </div>
       </div>
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[.02] px-3 py-2.5">
+        <div>
+          <span className="block text-xs font-semibold text-zinc-200">
+            One word at a time
+          </span>
+          <span className="block text-[10px] text-zinc-500">
+            Show only the active timed word in the preview and export
+          </span>
+        </div>
+        <button
+          type="button"
+          aria-label="One word at a time"
+          aria-pressed={current.displayMode === "single-word"}
+          onClick={() =>
+            update(
+              "displayMode",
+              current.displayMode === "single-word" ? "phrase" : "single-word",
+            )
+          }
+          className={`relative h-5 w-10 shrink-0 rounded-full transition-colors ${current.displayMode === "single-word" ? "bg-primary" : "bg-zinc-700"}`}
+        >
+          <span
+            className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${current.displayMode === "single-word" ? "translate-x-5" : ""}`}
+          />
+        </button>
+      </div>
       <div>
         <label className={cleanLabelClass}>
           Font

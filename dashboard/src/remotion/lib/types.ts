@@ -17,6 +17,7 @@ export interface SubtitleBlock {
 // --- Subtitle config ---
 export type SubtitleAnimation = "none" | "word-highlight" | "pop" | "karaoke";
 export type SubtitlePosition = "top" | "middle" | "bottom";
+export type SubtitleDisplayMode = "phrase" | "single-word";
 
 export interface SubtitleStyle {
   fontFamily: string;
@@ -28,6 +29,7 @@ export interface SubtitleStyle {
   bgColor: string;
   bgOpacity: number;
   animation: SubtitleAnimation;
+  displayMode: SubtitleDisplayMode;
 }
 
 export interface SubtitleConfig {
@@ -126,6 +128,7 @@ export const subtitleStyleSchema = z.object({
   bgColor: z.string(),
   bgOpacity: z.number().min(0).max(1),
   animation: z.enum(["none", "word-highlight", "pop", "karaoke"]),
+  displayMode: z.enum(["phrase", "single-word"]).default("phrase"),
 });
 
 export const subtitleConfigSchema = z.object({

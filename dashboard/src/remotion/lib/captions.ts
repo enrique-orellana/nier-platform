@@ -1,10 +1,24 @@
-import type { CaptionWord } from "./types";
+import type { CaptionWord, SubtitleDisplayMode } from "./types";
 
 export interface CaptionBlock {
   words: CaptionWord[];
   startMs: number;
   endMs: number;
   text: string;
+}
+
+/**
+ * Select the words shown for a subtitle block at the current playhead.
+ * Phrase mode preserves the complete block; single-word mode keeps only the
+ * word currently under the playhead.
+ */
+export function getSubtitleWordsForDisplay(
+  words: CaptionWord[],
+  activeIndex: number,
+  displayMode: SubtitleDisplayMode = "phrase",
+): CaptionWord[] {
+  if (displayMode !== "single-word") return words;
+  return activeIndex >= 0 ? [words[activeIndex]] : [];
 }
 
 /**

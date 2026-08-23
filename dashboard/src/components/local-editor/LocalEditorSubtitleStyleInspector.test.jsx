@@ -50,4 +50,48 @@ describe("LocalEditorSubtitleStyleInspector", () => {
       });
     },
   );
+
+  it("toggles one-word-at-a-time display", () => {
+    const onChange = vi.fn();
+    render(
+      <LocalEditorSubtitleStyleInspector
+        style={DEFAULT_SUBTITLE_STYLE}
+        onChange={onChange}
+        onRemove={vi.fn()}
+        hasCues
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: "One word at a time" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(toggle);
+
+    expect(onChange).toHaveBeenCalledWith({
+      ...DEFAULT_SUBTITLE_STYLE,
+      displayMode: "single-word",
+    });
+  });
+
+  it("turns one-word-at-a-time display off", () => {
+    const onChange = vi.fn();
+    render(
+      <LocalEditorSubtitleStyleInspector
+        style={{ ...DEFAULT_SUBTITLE_STYLE, displayMode: "single-word" }}
+        onChange={onChange}
+        onRemove={vi.fn()}
+        hasCues
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: "One word at a time" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(toggle);
+
+    expect(onChange).toHaveBeenCalledWith({
+      ...DEFAULT_SUBTITLE_STYLE,
+      displayMode: "phrase",
+    });
+  });
 });

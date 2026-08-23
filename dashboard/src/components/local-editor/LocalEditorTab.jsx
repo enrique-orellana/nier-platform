@@ -50,6 +50,7 @@ import LocalEditorFeaturePanel from "./LocalEditorFeaturePanel";
 import LocalEditorFeatureRail from "./LocalEditorFeatureRail";
 import { LOCAL_EDITOR_FEATURES } from "./localEditorFeatures";
 import RemotionPreview from "../RemotionPreview";
+import { getSubtitleWordsForDisplay } from "../../remotion/lib/captions";
 import { parseSubtitleFile, serializeSrt } from "./subtitleFormats";
 import { activeCueAt, formatClock } from "./localEditorExport";
 import {
@@ -1739,6 +1740,13 @@ export default function LocalEditorTab({
   const activeHook =
     hook && playheadMs >= hook.startMs && playheadMs < hook.endMs ? hook : null;
   const previewSubtitleStyle = normalizeSubtitleStyle(subtitleStyle);
+  const previewSubtitleWords = getSubtitleWordsForDisplay(
+    activeSubtitleWords,
+    activeSubtitleWordIndex,
+    previewSubtitleStyle.displayMode,
+  );
+  const shouldShowPreviewSubtitle =
+    Boolean(activeSubtitle) && previewSubtitleWords.length > 0;
   const previewSubtitles = subtitleCues.length
     ? {
         captions: subtitleCues.flatMap((cue) => cueCaptionsForRender(cue)),
@@ -2030,7 +2038,7 @@ export default function LocalEditorTab({
                             </div>
                           </div>
                         )}
-                        {activeSubtitle && (
+                        {shouldShowPreviewSubtitle && (
                           <div
                             className={`absolute left-1/2 flex w-[88%] -translate-x-1/2 flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-bold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`}
                             style={{
@@ -2052,8 +2060,10 @@ export default function LocalEditorTab({
                                   : "transparent",
                             }}
                           >
-                            {activeSubtitleWords.map((word, index) => {
+                            {previewSubtitleWords.map((word, index) => {
                               const isActive =
+                                previewSubtitleStyle.displayMode ===
+                                  "single-word" ||
                                 index === activeSubtitleWordIndex;
                               const isKaraoke =
                                 previewSubtitleStyle.animation === "karaoke" &&

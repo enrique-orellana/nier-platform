@@ -37,6 +37,7 @@ const DEFAULT_PROPS: ShortVideoProps = {
       bgColor: "#000000",
       bgOpacity: 0,
       animation: "pop",
+      displayMode: "phrase",
     },
   },
   hook: {

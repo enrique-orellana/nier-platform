@@ -36,6 +36,16 @@ describe("local editor overlay styles", () => {
     });
   });
 
+  it("normalizes the optional subtitle display mode", () => {
+    expect(normalizeSubtitleStyle({}).displayMode).toBe("phrase");
+    expect(
+      normalizeSubtitleStyle({ displayMode: "single-word" }).displayMode,
+    ).toBe("single-word");
+    expect(normalizeSubtitleStyle({ displayMode: "invalid" }).displayMode).toBe(
+      "phrase",
+    );
+  });
+
   it("converts editor subtitle controls to the Clip Generator render scale", () => {
     expect(
       toClipGeneratorSubtitleStyle({

@@ -7,9 +7,15 @@ import {
   spring,
   interpolate,
 } from "remotion";
-import type { SubtitleConfig } from "../lib/types";
-import { groupCaptionsIntoBlocks, getActiveWordIndex } from "../lib/captions";
+import type { SubtitleBlock, SubtitleConfig } from "../lib/types";
+import {
+  getActiveWordIndex,
+  getSubtitleWordsForDisplay,
+  groupCaptionsIntoBlocks,
+} from "../lib/captions";
 import { getFontStack, subtitleFontFace } from "../lib/fonts";
+
+export { getSubtitleWordsForDisplay } from "../lib/captions";
 
 interface SubtitlesProps {
   config: SubtitleConfig;
@@ -32,6 +38,7 @@ const DEFAULT_SUBTITLE_STYLE: SubtitleConfig["style"] = {
   bgColor: "#000000",
   bgOpacity: 0,
   animation: "none",
+  displayMode: "phrase",
 };
 
 export const getSubtitleFrameRange = (
@@ -64,7 +71,12 @@ export function normalizeSubtitleConfig(
     captions: Array.isArray(config?.captions) ? config.captions : [],
     blocks: Array.isArray(config?.blocks) ? config.blocks : undefined,
     position: config?.position || "bottom",
-    style: { ...DEFAULT_SUBTITLE_STYLE, ...(config?.style || {}) },
+    style: {
+      ...DEFAULT_SUBTITLE_STYLE,
+      ...(config?.style || {}),
+      displayMode:
+        config?.style?.displayMode === "single-word" ? "single-word" : "phrase",
+    },
   };
 }
 
@@ -143,6 +155,13 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
       ? frame
       : Math.max(0, (currentTimeMs / 1000) * fps - blockStartFrame);
   const activeIndex = getActiveWordIndex(block.words, currentTimeMs);
+  const visibleWords = getSubtitleWordsForDisplay(
+    block.words,
+    activeIndex,
+    style.displayMode,
+  );
+
+  if (style.displayMode === "single-word" && activeIndex < 0) return null;
 
   const positionStyle = POSITION_MAP[position] ?? POSITION_MAP.bottom;
   const fontStack = getFontStack(style.fontFamily);
@@ -180,11 +199,11 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
           ...bgStyle,
         }}
       >
-        {block.words.map((word, i) => (
+        {visibleWords.map((word, i) => (
           <WordSpan
             key={i}
             word={word.text}
-            isActive={i === activeIndex}
+            isActive={style.displayMode === "single-word" || i === activeIndex}
             style={style}
             fontStack={fontStack}
             animation={style.animation}

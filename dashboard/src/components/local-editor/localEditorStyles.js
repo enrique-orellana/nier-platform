@@ -195,11 +195,13 @@ export const DEFAULT_SUBTITLE_STYLE = {
   bgColor: "#000000",
   bgOpacity: 0,
   animation: "pop",
+  displayMode: "phrase",
 };
 
 export const normalizeSubtitleStyle = (style = {}) => ({
   ...DEFAULT_SUBTITLE_STYLE,
   ...style,
+  displayMode: style.displayMode === "single-word" ? "single-word" : "phrase",
 });
 
 // SubtitleModal uses compact controls and scales them for the 1080x1920

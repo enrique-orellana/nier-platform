@@ -1413,6 +1413,10 @@ describe("FullScreenEditor", () => {
 
   it("saves and renders a subtitle quick-pick style in the version manifest", async () => {
     const selectedTemplate = SUBTITLE_STYLE_TEMPLATES[0];
+    const selectedTemplateStyle = {
+      ...selectedTemplate.style,
+      displayMode: "phrase",
+    };
     let session = null;
     renderVersionMocks.saveDraftVersion.mockResolvedValue({
       status: "saved",
@@ -1457,11 +1461,11 @@ describe("FullScreenEditor", () => {
         expect.objectContaining({
           manifest: expect.objectContaining({
             subtitle_tracks: [
-              expect.objectContaining({ style: selectedTemplate.style }),
+              expect.objectContaining({ style: selectedTemplateStyle }),
             ],
             layers: expect.objectContaining({
               subtitles: expect.objectContaining({
-                style: selectedTemplate.style,
+                style: selectedTemplateStyle,
               }),
             }),
           }),
@@ -1477,12 +1481,12 @@ describe("FullScreenEditor", () => {
         expect.objectContaining({
           manifest: expect.objectContaining({
             subtitle_tracks: [
-              expect.objectContaining({ style: selectedTemplate.style }),
+              expect.objectContaining({ style: selectedTemplateStyle }),
             ],
           }),
           props: expect.objectContaining({
             subtitles: expect.objectContaining({
-              style: selectedTemplate.style,
+              style: selectedTemplateStyle,
             }),
           }),
         }),
