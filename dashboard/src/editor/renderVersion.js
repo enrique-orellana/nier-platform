@@ -48,6 +48,11 @@ const defaultApi = {
     ),
 };
 
+const isRenderingConflict = (error) =>
+  String(error?.message || error || "")
+    .toLowerCase()
+    .includes("currently rendering");
+
 export async function createDraftVersion({
   api = defaultApi,
   jobId,
@@ -130,12 +135,33 @@ export async function saveAndRenderVersion({
   let renderVersionId = versionId;
   try {
     if (renderVersionId) {
-      const updated = await api.updateVersion({
-        jobId,
-        clipIndex,
-        versionId: renderVersionId,
-        manifest,
-      });
+      let updated;
+      try {
+        updated = await api.updateVersion({
+          jobId,
+          clipIndex,
+          versionId: renderVersionId,
+          manifest,
+        });
+      } catch (error) {
+        if (!isRenderingConflict(error)) throw error;
+        try {
+          await api.completeVersion({
+            jobId,
+            clipIndex,
+            versionId: renderVersionId,
+            error: "Recovered stale render state before retrying.",
+          });
+        } catch {
+          throw error;
+        }
+        updated = await api.updateVersion({
+          jobId,
+          clipIndex,
+          versionId: renderVersionId,
+          manifest,
+        });
+      }
       if (!updated?.version?.version_id)
         throw new Error("Version update did not return an id.");
     } else {

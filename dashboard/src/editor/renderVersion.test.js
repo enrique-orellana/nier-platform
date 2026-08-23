@@ -75,6 +75,46 @@ describe("saveAndRenderVersion", () => {
     expect(result.versionId).toBe("v3");
   });
 
+  it("recovers a version left rendering before retrying its export", async () => {
+    const api = {
+      updateVersion: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("version is currently rendering"))
+        .mockResolvedValueOnce({
+          version: { version_id: "v3", status: "pending" },
+        }),
+      createVersion: vi.fn(),
+      startRender: vi.fn().mockResolvedValue({ renderId: "r1" }),
+      getRenderStatus: vi
+        .fn()
+        .mockResolvedValue({ status: "done", outputUrl: "/videos/job/v3.mp4" }),
+      completeVersion: vi
+        .fn()
+        .mockResolvedValue({ version: { version_id: "v3", status: "failed" } }),
+    };
+
+    const result = await saveAndRenderVersion({
+      api,
+      jobId: "job",
+      clipIndex: 0,
+      versionId: "v3",
+      manifest: { layers: {} },
+      pollMs: 0,
+    });
+
+    expect(api.completeVersion).toHaveBeenCalledWith({
+      jobId: "job",
+      clipIndex: 0,
+      versionId: "v3",
+      error: "Recovered stale render state before retrying.",
+    });
+    expect(api.updateVersion).toHaveBeenCalledTimes(2);
+    expect(api.startRender).toHaveBeenCalledWith(
+      expect.objectContaining({ versionId: "v3" }),
+    );
+    expect(result.status).toBe("done");
+  });
+
   it("does not report 100 percent until rendering is complete", async () => {
     const api = {
       startRender: vi.fn().mockResolvedValue({ renderId: "r1" }),
