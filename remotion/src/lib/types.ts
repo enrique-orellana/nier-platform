@@ -50,7 +50,7 @@ export interface SubtitleTrack {
 }
 
 // --- Hook config ---
-export type HookPosition = "top" | "center" | "bottom";
+export type HookPosition = "top" | "center" | "bottom" | "custom";
 export type HookSize = "S" | "M" | "L";
 export type HookEntrance = "spring" | "fade" | "slide-up" | "none";
 
@@ -66,6 +66,8 @@ export interface HookConfig {
   fontFamily?: string;
   startMs?: number;
   endMs?: number;
+  positionX?: number;
+  positionY?: number;
   layoutFormat?: "standard" | "streamer_stack";
   facecamSize?: "small" | "medium" | "large";
 }
@@ -152,12 +154,14 @@ export const subtitleTrackSchema = z.object({
 
 export const hookConfigSchema = z.object({
   text: z.string(),
-  position: z.enum(["top", "center", "bottom"]),
+  position: z.enum(["top", "center", "bottom", "custom"]),
   size: z.enum(["S", "M", "L"]),
   entranceAnimation: z.enum(["spring", "fade", "slide-up", "none"]),
   displayDurationSec: z.number().positive(),
   startMs: z.number().min(0).optional(),
   endMs: z.number().positive().optional(),
+  positionX: z.number().optional(),
+  positionY: z.number().optional(),
 });
 
 export const effectSegmentSchema = z.object({

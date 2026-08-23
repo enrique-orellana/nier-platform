@@ -1,4 +1,6 @@
 export const HOOK_PREVIEW_WIDTH = 360;
+export const HOOK_OUTPUT_WIDTH = 1080;
+export const HOOK_OUTPUT_HEIGHT = 1920;
 export const HOOK_FONT_FAMILY = "Arial, Helvetica, sans-serif";
 export const HOOK_SIZE_SCALE = { S: 0.8, M: 1, L: 1.3 };
 export const FACECAM_HEIGHT_RATIOS = { small: 0.3, medium: 0.38, large: 0.46 };
@@ -22,23 +24,61 @@ export const getHookFontSize = (
 export const getStreamerBoundaryRatio = (facecamSize = "medium") =>
   FACECAM_HEIGHT_RATIOS[facecamSize] || FACECAM_HEIGHT_RATIOS.medium;
 
-export const getHookPositionStyle = (
-  position = "top",
-  layoutFormat = "standard",
-  facecamSize = "medium",
+export const clampHookCoordinate = (value, maximum, fallback) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return Math.round(fallback);
+  return Math.round(Math.max(0, Math.min(maximum, numeric)));
+};
+
+export const getHookPositionCoordinates = (
+  hook = {},
+  renderWidth = HOOK_OUTPUT_WIDTH,
+  renderHeight = HOOK_OUTPUT_HEIGHT,
 ) => {
-  if (position === "center")
-    return { top: "50%", bottom: "auto", transform: "translate(-50%, -50%)" };
-  if (position === "bottom")
-    return { top: "auto", bottom: "18%", transform: "translateX(-50%)" };
-  if (layoutFormat === "streamer_stack") {
+  const width = Math.max(1, Number(renderWidth) || HOOK_OUTPUT_WIDTH);
+  const height = Math.max(1, Number(renderHeight) || HOOK_OUTPUT_HEIGHT);
+  if (hook.position === "custom") {
     return {
-      top: `${getStreamerBoundaryRatio(facecamSize) * 100}%`,
-      bottom: "auto",
-      transform: "translate(-50%, -50%)",
+      x: clampHookCoordinate(hook.positionX, width, width / 2),
+      y: clampHookCoordinate(hook.positionY, height, height / 2),
     };
   }
-  return { top: "8%", bottom: "auto", transform: "translateX(-50%)" };
+  const x = Math.round(width / 2);
+  const y =
+    hook.position === "center"
+      ? height * 0.5
+      : hook.position === "bottom"
+        ? height * 0.82
+        : hook.layoutFormat === "streamer_stack"
+          ? height * getStreamerBoundaryRatio(hook.facecamSize)
+          : height * 0.08;
+  return { x, y: Math.round(y) };
+};
+
+export const getHookPositionStyle = (
+  positionOrHook = "top",
+  layoutFormat = "standard",
+  facecamSize = "medium",
+  renderWidth = HOOK_OUTPUT_WIDTH,
+  renderHeight = HOOK_OUTPUT_HEIGHT,
+) => {
+  const hook =
+    typeof positionOrHook === "string"
+      ? { position: positionOrHook, layoutFormat, facecamSize }
+      : {
+          ...positionOrHook,
+          layoutFormat: positionOrHook.layoutFormat || layoutFormat,
+          facecamSize: positionOrHook.facecamSize || facecamSize,
+        };
+  const width = Math.max(1, Number(renderWidth) || HOOK_OUTPUT_WIDTH);
+  const height = Math.max(1, Number(renderHeight) || HOOK_OUTPUT_HEIGHT);
+  const { x, y } = getHookPositionCoordinates(hook, width, height);
+  return {
+    left: `${(x / width) * 100}%`,
+    top: `${(y / height) * 100}%`,
+    bottom: "auto",
+    transform: "translate(-50%, -50%)",
+  };
 };
 
 export const getHookAnimationStyle = (
