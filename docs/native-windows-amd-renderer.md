@@ -11,6 +11,24 @@ From the repository root, manage all components with:
 .\scripts\manage-local.ps1 -Action Stop
 ```
 
+### Applying code changes to the live local app
+
+After changing application code, commit the verified change (unless the user
+explicitly requests no commit), then rebuild and restart the affected component
+so the running app uses the new code:
+
+```powershell
+.\scripts\manage-local.ps1 -Action Restart
+```
+
+For a focused update, use `-Component frontend`, `-Component backend`, or
+`-Component renderer`. `-Action Update` only rebuilds and does not apply the
+change to already-running services. Confirm the result with:
+
+```powershell
+.\scripts\manage-local.ps1 -Action Status
+```
+
 `Restart` runs all three update/start phases in the correct order. It stops containers without removing volumes.
 
 Target one or more components with `-Component`:

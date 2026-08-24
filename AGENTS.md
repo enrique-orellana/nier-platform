@@ -50,3 +50,44 @@ This project is indexed by GitNexus as **openshorts** (6208 symbols, 14981 relat
 ## Browser testing
 
 - Use Brave for browser-based reproduction and end-to-end verification. Do not use Chrome or the in-app Chromium browser unless the user explicitly requests it.
+
+## Live local app workflow
+
+When a user asks for a code change to be applied to the running local app, use the
+repository-managed workflow below. Work inline in the current checkout when the
+user requests inline implementation; do not create a worktree unless the user
+asks for one.
+
+1. Make and verify the requested change.
+2. Review `git status` and the diff. Preserve unrelated user changes and stage
+   only the files belonging to the requested change.
+3. Unless the user explicitly says not to commit, create the requested commit
+   after the required tests and checks pass. Run GitNexus `detect_changes()`
+   before committing.
+4. Rebuild and apply the committed code to the running app from the repository
+   root:
+
+   ```powershell
+   .\scripts\manage-local.ps1 -Action Restart
+   ```
+
+   `Restart` stops the selected services, rebuilds them, and starts them again;
+   Docker volumes are preserved. Use `-Component` when only one area changed:
+
+   ```powershell
+   .\scripts\manage-local.ps1 -Action Restart -Component frontend
+   .\scripts\manage-local.ps1 -Action Restart -Component backend
+   .\scripts\manage-local.ps1 -Action Restart -Component renderer
+   ```
+
+   Component mapping: dashboard changes use `frontend`; Go/Python API or worker
+   changes use `backend`; `render-service` or Remotion changes use `renderer`.
+   For cross-component changes, use the default all-component restart.
+
+5. Run `.\scripts\manage-local.ps1 -Action Status` and the relevant health or
+   focused smoke check, then report the commit and live-app update result.
+
+`-Action Update` only rebuilds selected components; it does not restart the
+running app. Do not claim that the live app was updated until `Restart` (or an
+equivalent targeted restart) completes successfully. If the user explicitly
+requests no commit, keep the change inline and still use `Restart` to apply it.
