@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Instagram, Loader2, Video, Wand2, Youtube } from "lucide-react";
 import { getApiUrl } from "../../config";
 import { getLocalAiHeaders, subtitleTextFromCues } from "./localEditorAi";
@@ -16,6 +16,16 @@ const formatDuration = (seconds) => {
   return `${minutes}m ${remainder}s`;
 };
 
+const clipInfoFromMetadata = (metadata = {}) => ({
+  video_title_for_youtube_short:
+    metadata.video_title_for_youtube_short || metadata.title || "",
+  video_description_for_tiktok:
+    metadata.video_description_for_tiktok || metadata.description || "",
+  video_description_for_instagram:
+    metadata.video_description_for_instagram || metadata.description || "",
+  viral_hook_text: metadata.viral_hook_text || "",
+});
+
 export default function ClipMetadataPanel({
   clip = {},
   subtitleCues = [],
@@ -25,12 +35,29 @@ export default function ClipMetadataPanel({
   height = null,
   hashtags,
   onHashtagsChange,
+  sourceMetadata = null,
+  trimStartSeconds = 0,
+  trimEndSeconds = null,
+  onClipInfoChange,
 }) {
   const metadata = clip || {};
-  const title = metadata.video_title_for_youtube_short || metadata.title || "";
+  const incomingClipInfo = clipInfoFromMetadata(metadata);
+  const clipInfoSourceKey = JSON.stringify({
+    ...incomingClipInfo,
+    start: metadata.start,
+    end: metadata.end,
+    video_filename: metadata.video_filename,
+  });
+  const incomingClipInfoRef = useRef(incomingClipInfo);
+  incomingClipInfoRef.current = incomingClipInfo;
+  const clipInfoSourceKeyRef = useRef(clipInfoSourceKey);
+  const [clipInfo, setClipInfo] = useState(() => incomingClipInfo);
+  const [regeneratingClipInfo, setRegeneratingClipInfo] = useState(false);
+  const [clipInfoError, setClipInfoError] = useState("");
+  const title = clipInfo.video_title_for_youtube_short;
   const caption =
-    metadata.video_description_for_tiktok ||
-    metadata.video_description_for_instagram ||
+    clipInfo.video_description_for_tiktok ||
+    clipInfo.video_description_for_instagram ||
     metadata.description ||
     "";
   const start = finiteNumber(metadata.start);
@@ -48,6 +75,11 @@ export default function ClipMetadataPanel({
   const [generatedHashtags, setGeneratedHashtags] = useState(initialHashtags);
   const [generatingHashtags, setGeneratingHashtags] = useState(false);
   const [hashtagError, setHashtagError] = useState("");
+  useEffect(() => {
+    if (clipInfoSourceKeyRef.current === clipInfoSourceKey) return;
+    clipInfoSourceKeyRef.current = clipInfoSourceKey;
+    setClipInfo(incomingClipInfoRef.current);
+  }, [clipInfoSourceKey]);
   const outputWidth = finiteNumber(width || metadata.output_width);
   const outputHeight = finiteNumber(height || metadata.output_height);
   const frameRate = finiteNumber(fps || metadata.output_fps || metadata.fps);
@@ -92,7 +124,8 @@ export default function ClipMetadataPanel({
           title,
           caption,
           subtitle_text: subtitleTextFromCues(subtitleCues),
-          source_context: metadata.source_context || null,
+          source_metadata: sourceMetadata || metadata.source_metadata || {},
+          source_context: metadata.source_context || {},
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -108,6 +141,58 @@ export default function ClipMetadataPanel({
       setHashtagError(error.message || "Could not generate hashtags.");
     } finally {
       setGeneratingHashtags(false);
+    }
+  };
+
+  const generateClipInfo = async () => {
+    setRegeneratingClipInfo(true);
+    setClipInfoError("");
+    try {
+      const response = await fetch(getApiUrl("/api/local-editor/clip-info"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getLocalAiHeaders() },
+        body: JSON.stringify({
+          title,
+          caption,
+          instagram_caption: clipInfo.video_description_for_instagram,
+          subtitle_text: subtitleTextFromCues(subtitleCues),
+          trim_start_seconds: finiteNumber(trimStartSeconds),
+          trim_end_seconds:
+            trimEndSeconds == null
+              ? finiteNumber(trimStartSeconds) + duration
+              : finiteNumber(trimEndSeconds),
+          source_metadata: sourceMetadata || metadata.source_metadata || {},
+          source_context: metadata.source_context || {},
+          viral_hook_text: clipInfo.viral_hook_text,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok)
+        throw new Error(
+          payload.detail || "Could not regenerate clip information.",
+        );
+      const nextInfo = {
+        video_title_for_youtube_short: String(
+          payload.video_title_for_youtube_short || "",
+        ).trim(),
+        video_description_for_tiktok: String(
+          payload.video_description_for_tiktok || "",
+        ).trim(),
+        video_description_for_instagram: String(
+          payload.video_description_for_instagram || "",
+        ).trim(),
+        viral_hook_text: String(payload.viral_hook_text || "").trim(),
+      };
+      if (Object.values(nextInfo).some((value) => !value))
+        throw new Error("The AI returned incomplete clip information.");
+      setClipInfo(nextInfo);
+      onClipInfoChange?.(nextInfo);
+    } catch (error) {
+      setClipInfoError(
+        error.message || "Could not regenerate clip information.",
+      );
+    } finally {
+      setRegeneratingClipInfo(false);
     }
   };
 
@@ -156,9 +241,29 @@ export default function ClipMetadataPanel({
           )}
           {generatingHashtags ? "Generating…" : "Generate hashtags"}
         </button>
+        <button
+          type="button"
+          onClick={generateClipInfo}
+          disabled={regeneratingClipInfo}
+          className="mt-2 flex items-center gap-1.5 rounded-sm border border-violet-400/30 px-2 py-1 text-[10px] font-semibold text-violet-300 transition-colors hover:bg-violet-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {regeneratingClipInfo ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <Wand2 size={12} />
+          )}
+          {regeneratingClipInfo
+            ? "Regenerating..."
+            : "Regenerate clip information"}
+        </button>
         {hashtagError && (
           <p role="alert" className="mt-1.5 text-[10px] leading-4 text-red-300">
             {hashtagError}
+          </p>
+        )}
+        {clipInfoError && (
+          <p role="alert" className="mt-1.5 text-[10px] leading-4 text-red-300">
+            {clipInfoError}
           </p>
         )}
       </div>

@@ -1121,6 +1121,23 @@ export default function ProjectLibrary({
     return haystack.includes(search.trim().toLowerCase());
   });
 
+  const projectSourceMetadata =
+    selectedProject?.source_metadata &&
+    typeof selectedProject.source_metadata === "object"
+      ? selectedProject.source_metadata
+      : null;
+  const projectSourceTitle = String(
+    projectSourceMetadata?.title || projectSourceMetadata?.channel || "",
+  ).trim();
+  const projectSourceDetails = [
+    projectSourceMetadata?.channel && projectSourceMetadata?.title
+      ? String(projectSourceMetadata.channel).trim()
+      : "",
+    projectSourceMetadata?.platform
+      ? String(projectSourceMetadata.platform).trim()
+      : "",
+  ].filter(Boolean);
+
   const editorClipReady = normalizedProjectClips.some(
     (clip, index) => (clip.index ?? index) === editorClipIndex,
   );
@@ -1181,16 +1198,37 @@ export default function ProjectLibrary({
 
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 relative z-10">
               {/* Title and ID */}
-              <div className="min-w-0 flex-1 flex items-center gap-2.5 flex-wrap">
-                <h1
-                  className="text-lg sm:text-xl font-bold text-white tracking-tight leading-snug line-clamp-1"
-                  title={selectedProject.title || "Untitled Project"}
-                >
-                  {selectedProject.title || "Untitled Project"}
-                </h1>
-                <span className="font-mono text-[11px] text-zinc-400 bg-black/50 border border-white/10 px-2 py-0.5 rounded-md select-all shrink-0">
-                  {selectedProject.job_id}
-                </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h1
+                    className="text-lg sm:text-xl font-bold text-white tracking-tight leading-snug line-clamp-1"
+                    title={selectedProject.title || "Untitled Project"}
+                  >
+                    {selectedProject.title || "Untitled Project"}
+                  </h1>
+                  <span className="font-mono text-[11px] text-zinc-400 bg-black/50 border border-white/10 px-2 py-0.5 rounded-md select-all shrink-0">
+                    {selectedProject.job_id}
+                  </span>
+                </div>
+                {projectSourceTitle && (
+                  <div
+                    data-testid="project-source-metadata"
+                    className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-zinc-400"
+                    title={projectSourceTitle}
+                  >
+                    <span className="shrink-0 font-semibold uppercase tracking-[0.16em] text-cyan-300/80">
+                      Source
+                    </span>
+                    <span className="min-w-0 truncate text-zinc-200">
+                      {projectSourceTitle}
+                    </span>
+                    {projectSourceDetails.map((detail) => (
+                      <span key={detail} className="shrink-0 text-zinc-500">
+                        · {detail}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Metadata Badges Strip */}

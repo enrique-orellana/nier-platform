@@ -1232,6 +1232,83 @@ describe("FullScreenEditor", () => {
     );
   });
 
+  it("persists regenerated clip information to the project", async () => {
+    const onClipInfoChange = vi.fn();
+    const nextInfo = {
+      video_title_for_youtube_short:
+        "Rubius compra el upgrade final del arma en Meltopia",
+      video_description_for_tiktok: "Caption nuevo para TikTok",
+      video_description_for_instagram: "Caption nuevo para Instagram",
+      viral_hook_text: "ESTO LO CAMBIA TODO",
+    };
+    const fetchMock = vi.fn((url) => {
+      if (String(url).includes("/api/local-editor/clip-info"))
+        return Promise.resolve({ ok: true, json: async () => nextInfo });
+      if (String(url).includes("/api/projects/job/clips/0/metadata"))
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      return Promise.resolve({
+        ok: true,
+        blob: async () => new Blob(["video"], { type: "video/mp4" }),
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(() => "blob:project-video"),
+    });
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          video_url: manifest.timeline.source_video_url,
+          video_title_for_youtube_short: "Título original",
+          video_description_for_tiktok: "Caption original",
+          video_description_for_instagram: "Instagram original",
+          source_context: { what: "Meltopia upgrade" },
+          source_metadata: {
+            platform: "youtube",
+            title: "Rubius juega Meltopia y desbloquea mejoras",
+          },
+        }}
+        initialManifest={manifest}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        onClipInfoChange={onClipInfoChange}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /regenerate clip information/i }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /regenerate clip information/i }),
+    );
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/projects/job/clips/0/metadata",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify(nextInfo),
+        }),
+      ),
+    );
+    expect(onClipInfoChange).toHaveBeenCalledWith(nextInfo);
+    fireEvent.click(screen.getByRole("button", { name: "Viral Hook" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Hook text")).toHaveValue(
+        nextInfo.viral_hook_text,
+      ),
+    );
+  });
+
   it("persists generated hashtags after an earlier save finishes", async () => {
     let resolveFirstSave;
     renderVersionMocks.saveDraftVersion.mockImplementationOnce(
@@ -2103,6 +2180,39 @@ describe("FullScreenEditor", () => {
     expect(
       screen.getByRole("button", { name: "Save as new version" }),
     ).toBeInTheDocument();
+  });
+
+  it("uses the clip viral hook text when the manifest has no saved hook", async () => {
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          video_url: "/videos/clip.mp4",
+          viral_hook_text: "The moment everything changed",
+        }}
+        initialManifest={{
+          timeline: {
+            source_video_url: "/videos/clip.mp4",
+            trim: { start_sec: 0, end_sec: 4 },
+          },
+          layers: {},
+          subtitle_tracks: [],
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "The moment everything changed",
+      }),
+    );
+    expect(screen.getByLabelText("Hook text")).toHaveValue(
+      "The moment everything changed",
+    );
   });
 
   it("does not serialize the save button event as version metadata", async () => {

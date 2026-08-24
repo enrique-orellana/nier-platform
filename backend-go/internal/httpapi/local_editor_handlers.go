@@ -182,6 +182,44 @@ func (s *Server) generateHashtags(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) generateClipInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	if s.translationRunner == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"detail": "Python worker is not configured"})
+		return
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+	if strings.TrimSpace(fmt.Sprint(payload["title"])) == "" && strings.TrimSpace(fmt.Sprint(payload["caption"])) == "" && strings.TrimSpace(fmt.Sprint(payload["subtitle_text"])) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Clip context is required to regenerate clip information."})
+		return
+	}
+	result, err := s.translationRunner.Run(r.Context(), "clip-info", "clip_info", payload, translationHeaders(r))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Clip information generation failed: %s", err)})
+		return
+	}
+	var response map[string]any
+	if err := json.Unmarshal(result, &response); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Invalid clip information worker result"})
+		return
+	}
+	for _, key := range []string{"video_title_for_youtube_short", "video_description_for_tiktok", "video_description_for_instagram", "viral_hook_text"} {
+		value, ok := response[key].(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Clip information worker returned incomplete metadata"})
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
 func (s *Server) renderLocalEditor(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})

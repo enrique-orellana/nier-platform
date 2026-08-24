@@ -111,7 +111,14 @@ def load_generation_result(output_dir: str) -> dict[str, Any]:
         "clips": data.get("shorts", []),
         "cost_analysis": data.get("cost_analysis"),
     }
-    for key in ("source_path", "source_asset", "source_object", "video_title", "transcript"):
+    for key in (
+        "source_path",
+        "source_asset",
+        "source_object",
+        "source_metadata",
+        "video_title",
+        "transcript",
+    ):
         if key in data:
             result[key] = data[key]
     return result
@@ -777,6 +784,53 @@ def handle_request(request: Mapping[str, Any]) -> None:
                 value = {"status": "pending", "connected": False, "pending": True}
             _emit({"id": request_id, "type": "result", "result": value})
             return
+        if operation == "clip_info":
+            from ai_client import chat_json, load_ai_config
+
+            payload = request.get("payload") or {}
+            headers = request.get("headers") or {}
+            config = load_ai_config(headers)
+            if config.is_gemini() and not config.api_key:
+                raise ValueError("Missing X-Gemini-Key header")
+            source_metadata = payload.get("source_metadata") or {}
+            source_context = payload.get("source_context") or {}
+            prompt = (
+                "Create clip information for the selected video moment. "
+                "Use the selected content and source metadata as context. "
+                "Write in the source language. Return JSON only with exactly these keys: "
+                "video_title_for_youtube_short, video_description_for_tiktok, "
+                "video_description_for_instagram, viral_hook_text.\n\n"
+                "CURRENT CLIP\n"
+                f"Title: {str(payload.get('title') or '').strip()}\n"
+                f"TikTok caption: {str(payload.get('caption') or '').strip()}\n"
+                f"Instagram caption: {str(payload.get('instagram_caption') or '').strip()}\n"
+                f"Current subtitles: {str(payload.get('subtitle_text') or '').strip()}\n"
+                f"Trim range: {payload.get('trim_start_seconds', 0)}s to {payload.get('trim_end_seconds', 0)}s\n"
+                f"Existing hook: {str(payload.get('viral_hook_text') or '').strip()}\n\n"
+                "SOURCE METADATA\n"
+                f"{json.dumps(source_metadata, ensure_ascii=False, default=str)}\n\n"
+                "SOURCE CONTEXT\n"
+                f"{json.dumps(source_context, ensure_ascii=False, default=str)}\n\n"
+                "OUTPUT\n"
+                '{"video_title_for_youtube_short":"...",'
+                '"video_description_for_tiktok":"...",'
+                '"video_description_for_instagram":"...",'
+                '"viral_hook_text":"..."}'
+            )
+            response = chat_json(config, prompt, model=config.analyze_model or config.text_model)
+            clip_info = {
+                key: str(response.get(key) or "").strip()
+                for key in (
+                    "video_title_for_youtube_short",
+                    "video_description_for_tiktok",
+                    "video_description_for_instagram",
+                    "viral_hook_text",
+                )
+            } if isinstance(response, dict) else {}
+            if any(not value for value in clip_info.values()):
+                raise ValueError("AI returned incomplete clip information")
+            _emit({"id": request_id, "type": "result", "result": clip_info})
+            return
         if operation == "hashtags":
             from ai_client import chat_json, load_ai_config
 
@@ -788,10 +842,14 @@ def handle_request(request: Mapping[str, Any]) -> None:
             prompt = (
                 "Generate 8 to 12 relevant social-media hashtags. Return JSON only with "
                 '{"hashtags":["#tag1"]}. Use the source language and do not return duplicates.\n\n'
-                f"TITLE: {str(payload.get('title') or '').strip()}\n"
-                f"CAPTION: {str(payload.get('caption') or '').strip()}\n"
-                f"SUBTITLES: {str(payload.get('subtitle_text') or '').strip()}\n"
-                f"SOURCE CONTEXT: {json.dumps(payload.get('source_context') or {}, ensure_ascii=False)}"
+                "CURRENT CLIP\n"
+                f"Title: {str(payload.get('title') or '').strip()}\n"
+                f"Caption: {str(payload.get('caption') or '').strip()}\n"
+                f"Current subtitles: {str(payload.get('subtitle_text') or '').strip()}\n\n"
+                "SOURCE METADATA\n"
+                f"{json.dumps(payload.get('source_metadata') or {}, ensure_ascii=False, default=str)}\n\n"
+                "SOURCE CONTEXT\n"
+                f"{json.dumps(payload.get('source_context') or {}, ensure_ascii=False, default=str)}"
             )
             response = chat_json(config, prompt, model=config.analyze_model or config.text_model)
             hashtags = []

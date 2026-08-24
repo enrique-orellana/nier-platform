@@ -21,6 +21,99 @@ from python_worker import (
 )
 
 
+def test_handle_request_generates_clip_info_with_source_context(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    seen = {}
+    config = SimpleNamespace(
+        is_gemini=lambda: False,
+        api_key="",
+        analyze_model="analyze-model",
+        text_model="text-model",
+    )
+
+    monkeypatch.setattr("ai_client.load_ai_config", lambda headers: config)
+
+    def fake_chat_json(_config, prompt, **_kwargs):
+        seen["prompt"] = prompt
+        return {
+            "video_title_for_youtube_short": "Rubius compra el upgrade final del arma en Meltopia",
+            "video_description_for_tiktok": "Rubius compra el último upgrade del arma 🔥",
+            "video_description_for_instagram": "Rubius desbloquea la mejora final 😭🔥",
+            "viral_hook_text": "ESTO LO CAMBIA TODO",
+        }
+
+    monkeypatch.setattr("ai_client.chat_json", fake_chat_json)
+
+    handle_request(
+        {
+            "id": "clip-info-1",
+            "operation": "clip_info",
+            "payload": {
+                "title": "Old title",
+                "caption": "Live caption",
+                "instagram_caption": "Live Instagram caption",
+                "subtitle_text": "Texto editado del rango actual",
+                "trim_start_seconds": 120,
+                "trim_end_seconds": 158,
+                "source_metadata": {
+                    "title": "Rubius juega Meltopia",
+                    "channel": "Rubius",
+                },
+                "source_context": {"what": "Meltopia upgrade"},
+            },
+            "headers": {},
+        }
+    )
+
+    event = json.loads(capsys.readouterr().out.strip())
+    assert event["result"]["video_title_for_youtube_short"].startswith("Rubius compra")
+    assert "CURRENT CLIP" in seen["prompt"]
+    assert "Texto editado del rango actual" in seen["prompt"]
+    assert "Rubius juega Meltopia" in seen["prompt"]
+    assert "Meltopia upgrade" in seen["prompt"]
+    assert "120" in seen["prompt"] and "158" in seen["prompt"]
+
+
+def test_handle_request_generates_hashtags_with_source_metadata(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    seen = {}
+    config = SimpleNamespace(
+        is_gemini=lambda: False,
+        api_key="",
+        analyze_model="analyze-model",
+        text_model="text-model",
+    )
+    monkeypatch.setattr("ai_client.load_ai_config", lambda headers: config)
+
+    def fake_chat_json(_config, prompt, **_kwargs):
+        seen["prompt"] = prompt
+        return {"hashtags": ["#Meltopia", "#Rubius"]}
+
+    monkeypatch.setattr("ai_client.chat_json", fake_chat_json)
+    handle_request(
+        {
+            "id": "hashtags-1",
+            "operation": "hashtags",
+            "payload": {
+                "title": "Rubius compra el upgrade final",
+                "caption": "Compra el último upgrade 🔥",
+                "subtitle_text": "Texto actual",
+                "source_metadata": {"channel": "Rubius", "tags": ["Meltopia"]},
+                "source_context": {"what": "upgrade final"},
+            },
+            "headers": {},
+        }
+    )
+
+    event = json.loads(capsys.readouterr().out.strip())
+    assert event["result"]["hashtags"] == ["#Meltopia", "#Rubius"]
+    assert "SOURCE METADATA" in seen["prompt"]
+    assert "Rubius" in seen["prompt"]
+    assert "SOURCE CONTEXT" in seen["prompt"]
+
+
 def test_parse_request_requires_id_and_operation():
     with pytest.raises(ValueError, match="request id is required"):
         parse_request(json.dumps({"operation": "clip_generation"}))
@@ -184,11 +277,24 @@ def test_load_generation_result_reads_metadata_for_go_status_api():
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
         (output_dir / "source_metadata.json").write_text(
-            json.dumps({"shorts": [{"title": "First clip"}], "cost_analysis": {"total": 1.2}}),
+            json.dumps(
+                {
+                    "source_metadata": {
+                        "platform": "youtube",
+                        "title": "Source video",
+                    },
+                    "shorts": [{"title": "First clip"}],
+                    "cost_analysis": {"total": 1.2},
+                }
+            ),
             encoding="utf-8",
         )
 
         assert load_generation_result(str(output_dir)) == {
+            "source_metadata": {
+                "platform": "youtube",
+                "title": "Source video",
+            },
             "clips": [{"title": "First clip"}],
             "cost_analysis": {"total": 1.2},
         }

@@ -153,7 +153,7 @@ func (s *Server) projectHistory(w http.ResponseWriter, r *http.Request) {
 			if len(clips) > 0 {
 				title = firstString(clips[0], "title", "video_title_for_youtube_short")
 			}
-			projects = append(projects, projectEntry{Project: map[string]any{"job_id": job.ID, "title": title, "description": "", "created_at": createdAt.Format(time.RFC3339Nano), "clips": clips}, ModTime: createdAt})
+			projects = append(projects, projectEntry{Project: map[string]any{"job_id": job.ID, "title": title, "description": "", "created_at": createdAt.Format(time.RFC3339Nano), "clips": clips, "source_metadata": sourceMetadataFromClips(clips)}, ModTime: createdAt})
 		}
 	}
 	for _, entry := range entries {
@@ -171,7 +171,7 @@ func (s *Server) projectHistory(w http.ResponseWriter, r *http.Request) {
 		if len(clips) > 0 {
 			title = firstString(clips[0], "title", "video_title_for_youtube_short")
 		}
-		projects = append(projects, projectEntry{Project: map[string]any{"job_id": entry.Name(), "title": title, "description": "", "created_at": createdAt.Format(time.RFC3339Nano), "clips": clips}, ModTime: createdAt})
+		projects = append(projects, projectEntry{Project: map[string]any{"job_id": entry.Name(), "title": title, "description": "", "created_at": createdAt.Format(time.RFC3339Nano), "clips": clips, "source_metadata": sourceMetadataFromClips(clips)}, ModTime: createdAt})
 	}
 	sort.Slice(projects, func(i, j int) bool { return projects[i].ModTime.After(projects[j].ModTime) })
 	if len(projects) > limit {
@@ -182,6 +182,14 @@ func (s *Server) projectHistory(w http.ResponseWriter, r *http.Request) {
 		result = append(result, project.Project)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"projects": result, "total": len(result)})
+}
+
+func sourceMetadataFromClips(clips []map[string]any) map[string]any {
+	if len(clips) == 0 {
+		return nil
+	}
+	metadata, _ := clips[0]["source_metadata"].(map[string]any)
+	return metadata
 }
 
 func (s *Server) projectClips(w http.ResponseWriter, r *http.Request) {
@@ -219,21 +227,31 @@ func (s *Server) readPersistedProjectClips(job domain.Job) ([]map[string]any, ti
 	if json.Unmarshal(resultBytes, &result) != nil || len(result.Clips) == 0 {
 		return nil, time.Time{}, false
 	}
+	sourceMetadata, _ := payload["source_metadata"].(map[string]any)
 	masterDuration := sourceDurationFromMetadata(payload)
-	if masterDuration <= 0 {
+	if len(sourceMetadata) == 0 || masterDuration <= 0 {
 		root := s.config.OutputDir
 		if root == "" {
 			root = "output"
 		}
-		metadataPath := filepath.Join(root, job.ID, "source_metadata.json")
-		if metadataBytes, err := os.ReadFile(metadataPath); err == nil {
-			var metadata map[string]any
-			if json.Unmarshal(metadataBytes, &metadata) == nil {
-				masterDuration = sourceDurationFromMetadata(metadata)
+		if metadataPath, pathErr := firstMetadataPath(filepath.Join(root, job.ID)); pathErr == nil {
+			if metadataBytes, err := os.ReadFile(metadataPath); err == nil {
+				var metadata map[string]any
+				if json.Unmarshal(metadataBytes, &metadata) == nil {
+					if len(sourceMetadata) == 0 {
+						sourceMetadata, _ = metadata["source_metadata"].(map[string]any)
+					}
+					if masterDuration <= 0 {
+						masterDuration = sourceDurationFromMetadata(metadata)
+					}
+				}
 			}
 		}
 	}
 	for _, clip := range result.Clips {
+		if len(sourceMetadata) > 0 {
+			clip["source_metadata"] = sourceMetadata
+		}
 		if layoutFormat, ok := clip["layout_format"].(string); !ok || strings.TrimSpace(layoutFormat) == "" {
 			if inheritedLayout, inheritedOK := job.Metadata["layout_format"].(string); inheritedOK && strings.TrimSpace(inheritedLayout) != "" {
 				clip["layout_format"] = inheritedLayout
@@ -347,6 +365,7 @@ func (s *Server) readProjectClips(jobID string) ([]map[string]any, time.Time, bo
 	}
 	var data struct {
 		Shorts                []map[string]any `json:"shorts"`
+		SourceMetadata        map[string]any   `json:"source_metadata"`
 		SourceDurationSeconds float64          `json:"source_duration_seconds"`
 		VideoDuration         float64          `json:"video_duration"`
 		SourceAsset           struct {
@@ -366,6 +385,9 @@ func (s *Server) readProjectClips(jobID string) ([]map[string]any, time.Time, bo
 		masterDuration = data.SourceAsset.Probe.DurationSeconds
 	}
 	for _, clip := range data.Shorts {
+		if len(data.SourceMetadata) > 0 {
+			clip["source_metadata"] = data.SourceMetadata
+		}
 		if filename, ok := clip["video_filename"].(string); ok && filename != "" {
 			clipID := clipArtifactID(jobID, clip)
 			clip["video_url"] = s.directClipArtifactURL(jobID, clipID, filename)
@@ -441,20 +463,27 @@ func (s *Server) updateProjectClipMetadata(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var request struct {
-		Hashtags []string `json:"hashtags"`
+		Hashtags                     *[]string `json:"hashtags"`
+		VideoTitleForYouTubeShort    *string   `json:"video_title_for_youtube_short"`
+		VideoDescriptionForTikTok    *string   `json:"video_description_for_tiktok"`
+		VideoDescriptionForInstagram *string   `json:"video_description_for_instagram"`
+		ViralHookText                *string   `json:"viral_hook_text"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
 		return
 	}
-	if request.Hashtags == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "hashtags must be an array"})
+	if request.Hashtags == nil && request.VideoTitleForYouTubeShort == nil && request.VideoDescriptionForTikTok == nil && request.VideoDescriptionForInstagram == nil && request.ViralHookText == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "At least one clip metadata field is required"})
 		return
 	}
-	hashtags := make([]string, 0, len(request.Hashtags))
-	for _, hashtag := range request.Hashtags {
-		if value := strings.TrimSpace(hashtag); value != "" {
-			hashtags = append(hashtags, value)
+	var hashtags []string
+	if request.Hashtags != nil {
+		hashtags = make([]string, 0, len(*request.Hashtags))
+		for _, hashtag := range *request.Hashtags {
+			if value := strings.TrimSpace(hashtag); value != "" {
+				hashtags = append(hashtags, value)
+			}
 		}
 	}
 	var payload map[string]any
@@ -472,7 +501,26 @@ func (s *Server) updateProjectClipMetadata(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Clip not found"})
 		return
 	}
-	clip["hashtags"] = hashtags
+	if request.Hashtags != nil {
+		clip["hashtags"] = hashtags
+	}
+	clipInfo := map[string]*string{
+		"video_title_for_youtube_short":   request.VideoTitleForYouTubeShort,
+		"video_description_for_tiktok":    request.VideoDescriptionForTikTok,
+		"video_description_for_instagram": request.VideoDescriptionForInstagram,
+		"viral_hook_text":                 request.ViralHookText,
+	}
+	for key, value := range clipInfo {
+		if value == nil {
+			continue
+		}
+		trimmed := strings.TrimSpace(*value)
+		if trimmed == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": key + " must not be empty"})
+			return
+		}
+		clip[key] = trimmed
+	}
 	updatedResult, err := json.Marshal(payload)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not encode clip metadata"})
@@ -486,11 +534,16 @@ func (s *Server) updateProjectClipMetadata(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not persist clip metadata"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"job_id":     job.ID,
-		"clip_index": clipIndex,
-		"hashtags":   hashtags,
-	})
+	response := map[string]any{"job_id": job.ID, "clip_index": clipIndex}
+	if request.Hashtags != nil {
+		response["hashtags"] = hashtags
+	}
+	for key, value := range clipInfo {
+		if value != nil {
+			response[key] = strings.TrimSpace(*value)
+		}
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request, jobID string) {

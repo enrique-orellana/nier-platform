@@ -176,6 +176,29 @@ describe("LocalEditorTab", () => {
     );
   });
 
+  it("renders source metadata as a compact project header summary", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        clipMetadata={{
+          source_metadata: {
+            platform: "youtube",
+            title: "How to build a better short",
+            channel: "OpenShorts",
+          },
+        }}
+        initialPlaybackDurationMs={10000}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("local-editor-source-metadata"),
+    ).toHaveTextContent("How to build a better short");
+    expect(
+      screen.getByTestId("local-editor-source-metadata"),
+    ).toHaveTextContent("OpenShorts");
+  });
+
   it("hides the Projects action when editing a project clip", () => {
     render(
       <LocalEditorTab
@@ -1319,6 +1342,72 @@ describe("LocalEditorTab", () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).subtitle_text).toBe(
       "Primera frase Segunda frase",
     );
+  });
+
+  it("uses the live trim range and source metadata when regenerating clip information", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        video_title_for_youtube_short: "Rubius compra el upgrade final",
+        video_description_for_tiktok: "Caption nuevo",
+        video_description_for_instagram: "Caption de Instagram nuevo",
+        viral_hook_text: "ESTO LO CAMBIA TODO",
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <LocalEditorTab
+        initialVideoUrl="https://media.example.test/project.mp4"
+        initialPlaybackStartMs={120000}
+        initialPlaybackDurationMs={38000}
+        initialEditorState={{
+          subtitleCues: [
+            { id: "a", text: "Primera frase" },
+            { id: "b", text: "Segunda frase" },
+          ],
+          subtitleStyle: DEFAULT_SUBTITLE_STYLE,
+          subtitleLanguage: "es",
+          hook: null,
+        }}
+        initialStateKey="clip-info-test"
+        clipMetadata={{
+          video_title_for_youtube_short: "Título original",
+          video_description_for_tiktok: "Caption original",
+          video_description_for_instagram: "Instagram original",
+          source_context: { what: "Meltopia upgrade" },
+          source_metadata: {
+            platform: "youtube",
+            title: "Rubius juega Meltopia y desbloquea mejoras",
+            channel: "Rubius",
+          },
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /regenerate clip information/i }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /regenerate clip information/i }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: /Rubius compra/ }),
+      ).toBeInTheDocument(),
+    );
+    const request = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(request).toMatchObject({
+      subtitle_text: "Primera frase Segunda frase",
+      trim_start_seconds: 120,
+      trim_end_seconds: 158,
+      source_metadata: {
+        title: "Rubius juega Meltopia y desbloquea mejoras",
+      },
+    });
   });
 
   it("shows timeline controls after selecting a video", async () => {

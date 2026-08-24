@@ -162,6 +162,7 @@ export default function LocalEditorTab({
   allowLocalUpload = true,
   clipMetadata = null,
   onHashtagsChange = null,
+  onClipInfoChange = null,
   onExport = null,
 }) {
   const projectClipIndex = Number(initialClipIndex);
@@ -172,6 +173,20 @@ export default function LocalEditorTab({
     Number.isInteger(projectClipIndex) &&
     projectClipIndex >= 0,
   );
+  const sourceMetadata =
+    clipMetadata?.source_metadata &&
+    typeof clipMetadata.source_metadata === "object"
+      ? clipMetadata.source_metadata
+      : null;
+  const sourceMetadataTitle = String(
+    sourceMetadata?.title || sourceMetadata?.channel || "",
+  ).trim();
+  const sourceMetadataDetails = [
+    sourceMetadata?.channel && sourceMetadata?.title
+      ? String(sourceMetadata.channel).trim()
+      : "",
+    sourceMetadata?.platform ? String(sourceMetadata.platform).trim() : "",
+  ].filter(Boolean);
   const videoRef = useRef(null);
   const playerRef = useRef(null);
   const workspaceRef = useRef(null);
@@ -1811,6 +1826,25 @@ export default function LocalEditorTab({
             {videoFile?.name || initialVideoName || "Project video"} ·{" "}
             {videoFile ? "local-only editing" : "streamed project video"}
           </p>
+          {sourceMetadataTitle && (
+            <div
+              data-testid="local-editor-source-metadata"
+              className="mt-0.5 flex min-w-0 max-w-[min(65vw,560px)] items-center gap-1 text-[10px] leading-3 text-zinc-400"
+              title={sourceMetadataTitle}
+            >
+              <span className="shrink-0 font-semibold uppercase tracking-wider text-cyan-300/80">
+                Source
+              </span>
+              <span className="min-w-0 truncate text-zinc-200">
+                {sourceMetadataTitle}
+              </span>
+              {sourceMetadataDetails.map((detail) => (
+                <span key={detail} className="shrink-0 text-zinc-500">
+                  · {detail}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <div
           data-testid="local-editor-header-actions"
@@ -2681,6 +2715,10 @@ export default function LocalEditorTab({
                 height={remotionPreviewProps?.height}
                 hashtags={clipMetadata?.hashtags}
                 onHashtagsChange={onHashtagsChange}
+                sourceMetadata={clipMetadata?.source_metadata}
+                trimStartSeconds={playbackStartMs / 1000}
+                trimEndSeconds={(playbackStartMs + durationMs) / 1000}
+                onClipInfoChange={onClipInfoChange}
               />
             </div>
             <section
@@ -2982,7 +3020,7 @@ export default function LocalEditorTab({
                   className="border-t border-white/10 px-4 pb-4 pt-3"
                 >
                   <LocalEditorHookInspector
-                    hook={selected?.type === "hook" ? selectedCue : null}
+                    hook={selected?.type === "hook" ? selectedCue : hook}
                     onChange={updateHook}
                     onRemove={removeHook}
                     renderWidth={hookRenderWidth}

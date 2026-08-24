@@ -146,7 +146,11 @@ const localCuesFromTrack = (track) => {
   }));
 };
 
-const manifestToLocalEditorState = (sourceManifest, trackId) => {
+const manifestToLocalEditorState = (
+  sourceManifest,
+  trackId,
+  fallbackHookText = "",
+) => {
   const source = manifestWithTranscriptCaptions(sourceManifest || {}, null);
   const legacySubtitles = source.layers?.subtitles;
   const tracks =
@@ -167,7 +171,11 @@ const manifestToLocalEditorState = (sourceManifest, trackId) => {
           ]
         : [];
   const activeTrack = tracks.find((track) => track.id === trackId) || tracks[0];
-  const hook = source.layers?.hook;
+  const hook =
+    source.layers?.hook ||
+    (String(fallbackHookText || "").trim()
+      ? { text: String(fallbackHookText).trim() }
+      : null);
   return {
     subtitleCues: localCuesFromTrack(activeTrack),
     subtitleStyle:
@@ -302,6 +310,7 @@ export default function FullScreenEditor({
   initialVersionId = null,
   initialManifest = null,
   onClose,
+  onClipInfoChange = null,
   onRendered,
   onVersionChange,
   editorActions = null,
@@ -330,6 +339,7 @@ export default function FullScreenEditor({
     manifestToLocalEditorState(
       initialManifest,
       defaultSubtitleTrackId(initialManifest),
+      clip?.viral_hook_text,
     ),
   );
   const [localDraftRevision, setLocalDraftRevision] = useState(0);
@@ -342,6 +352,19 @@ export default function FullScreenEditor({
   const handleLocalDraftChange = useCallback((nextDraft) => {
     localDraftRef.current = nextDraft;
     setLocalDraft(nextDraft);
+    setRenderSpecDirty(true);
+  }, []);
+  const applyGeneratedClipInfoToDraft = useCallback((clipInfo) => {
+    const hookText = String(clipInfo?.viral_hook_text || "").trim();
+    if (!hookText) return;
+    const currentDraft = localDraftRef.current;
+    const nextHook = currentDraft?.hook
+      ? { ...currentDraft.hook, text: hookText }
+      : { text: hookText };
+    const nextDraft = { ...currentDraft, hook: nextHook };
+    localDraftRef.current = nextDraft;
+    setLocalDraft(nextDraft);
+    setLocalDraftRevision((current) => current + 1);
     setRenderSpecDirty(true);
   }, []);
   const fallbackFps = Number(clip.output_fps) || 30;
@@ -447,6 +470,7 @@ export default function FullScreenEditor({
       const nextDraft = manifestToLocalEditorState(
         hydratedManifest,
         nextTrackId,
+        clip?.viral_hook_text,
       );
       versionRef.current = nextVersion;
       activeTrackIdRef.current = nextTrackId;
@@ -722,7 +746,11 @@ export default function FullScreenEditor({
   const replaceManifest = useCallback(
     (nextManifest, nextTrackId, { dirty = false } = {}) => {
       const trackId = nextTrackId || defaultSubtitleTrackId(nextManifest);
-      const nextDraft = manifestToLocalEditorState(nextManifest, trackId);
+      const nextDraft = manifestToLocalEditorState(
+        nextManifest,
+        trackId,
+        clip?.viral_hook_text,
+      );
       currentManifestRef.current = nextManifest;
       activeTrackIdRef.current = trackId;
       localDraftRef.current = nextDraft;
@@ -732,7 +760,7 @@ export default function FullScreenEditor({
       setLocalDraftRevision((current) => current + 1);
       setRenderSpecDirty(dirty);
     },
-    [],
+    [clip?.viral_hook_text],
   );
 
   const applyLayer = useCallback(
@@ -946,6 +974,26 @@ export default function FullScreenEditor({
     [clipIndex, jobId],
   );
 
+  const persistProjectClipInfo = useCallback(
+    async (clipInfo) => {
+      const response = await fetch(
+        getApiUrl(
+          `/api/projects/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipIndex)}/metadata`,
+        ),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(clipInfo),
+        },
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.detail || "Could not save clip information.");
+      }
+    },
+    [clipIndex, jobId],
+  );
+
   const saveGeneratedHashtags = useCallback(
     async (hashtags) => {
       const nextMetadata = { ...publishingMetadataRef.current, hashtags };
@@ -975,6 +1023,19 @@ export default function FullScreenEditor({
       }
     },
     [busy, persistProjectClipHashtags, saveVersion],
+  );
+
+  const saveGeneratedClipInfo = useCallback(
+    async (clipInfo) => {
+      try {
+        await persistProjectClipInfo(clipInfo);
+        applyGeneratedClipInfoToDraft(clipInfo);
+        onClipInfoChange?.(clipInfo);
+      } catch (saveError) {
+        setError(saveError.message || "Could not save clip information.");
+      }
+    },
+    [applyGeneratedClipInfoToDraft, onClipInfoChange, persistProjectClipInfo],
   );
 
   const exportVersion = useCallback(
@@ -1126,6 +1187,7 @@ export default function FullScreenEditor({
         initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}:${localDraftRevision}`}
         clipMetadata={{ ...clip, hashtags: publishingMetadata.hashtags }}
         onHashtagsChange={saveGeneratedHashtags}
+        onClipInfoChange={saveGeneratedClipInfo}
         onStateChange={handleLocalDraftChange}
         persistHistory={false}
         allowLocalUpload={false}

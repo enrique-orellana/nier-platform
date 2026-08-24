@@ -5,6 +5,7 @@ import ResultCard from "./ResultCard";
 
 const testDoubles = vi.hoisted(() => ({
   webcamSelectorProps: vi.fn(),
+  fullScreenEditorProps: vi.fn(),
 }));
 
 vi.mock("./ResultCard/CardActions", () => ({
@@ -16,14 +17,29 @@ vi.mock("./ResultCard/CardActions", () => ({
 }));
 
 vi.mock("./editor/FullScreenEditor", () => ({
-  default: ({ isOpen, onClose }) =>
-    isOpen ? (
+  default: (props) => {
+    testDoubles.fullScreenEditorProps(props);
+    return props.isOpen ? (
       <div data-testid="full-screen-editor" data-local-editor="true">
-        <button type="button" onClick={onClose}>
+        <button type="button" onClick={props.onClose}>
           Close editor
         </button>
+        <button
+          type="button"
+          onClick={() =>
+            props.onClipInfoChange?.({
+              video_title_for_youtube_short: "Regenerated title",
+              video_description_for_tiktok: "Regenerated TikTok caption",
+              video_description_for_instagram: "Regenerated Instagram caption",
+              viral_hook_text: "Regenerated hook",
+            })
+          }
+        >
+          Regenerate clip information
+        </button>
       </div>
-    ) : null,
+    ) : null;
+  },
 }));
 
 vi.mock("./ResultCard/VideoPreview", () => ({ default: () => null }));
@@ -110,5 +126,33 @@ describe("ResultCard editor lifecycle", () => {
     expect(testDoubles.webcamSelectorProps).toHaveBeenLastCalledWith(
       expect.objectContaining({ initialFacecamSize: undefined }),
     );
+  });
+
+  it("keeps regenerated clip information available to the card", () => {
+    render(
+      <ResultCard
+        clip={{ video_url: "/videos/clip.mp4", title: "Clip" }}
+        index={0}
+        jobId="job-1"
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Clip Controls & Actions" }),
+    );
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Edit Timeline" }).at(-1),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Regenerate clip information" }),
+    );
+
+    const latestProps = testDoubles.fullScreenEditorProps.mock.calls.at(-1)[0];
+    expect(latestProps.clip).toMatchObject({
+      video_title_for_youtube_short: "Regenerated title",
+      video_description_for_tiktok: "Regenerated TikTok caption",
+      video_description_for_instagram: "Regenerated Instagram caption",
+      viral_hook_text: "Regenerated hook",
+    });
   });
 });

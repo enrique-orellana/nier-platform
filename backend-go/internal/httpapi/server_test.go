@@ -182,6 +182,24 @@ func (hashtagOperation) Run(_ context.Context, _ string, operation string, _ map
 	return json.RawMessage(`{"hashtags":["#one","#two"]}`), nil
 }
 
+type clipInfoOperation struct{}
+
+func (clipInfoOperation) Run(_ context.Context, _ string, operation string, payload map[string]any, _ map[string]string) (json.RawMessage, error) {
+	if operation != "clip_info" || payload["trim_start_seconds"] != float64(120) {
+		return nil, fmt.Errorf("unexpected clip info request: %s %#v", operation, payload)
+	}
+	return json.RawMessage(`{"video_title_for_youtube_short":"New title","video_description_for_tiktok":"TikTok caption","video_description_for_instagram":"Instagram caption","viral_hook_text":"NEW HOOK"}`), nil
+}
+
+type incompleteClipInfoOperation struct{}
+
+func (incompleteClipInfoOperation) Run(_ context.Context, _ string, operation string, _ map[string]any, _ map[string]string) (json.RawMessage, error) {
+	if operation != "clip_info" {
+		return nil, fmt.Errorf("unexpected operation %s", operation)
+	}
+	return json.RawMessage(`{}`), nil
+}
+
 type burnOperation struct{}
 
 func (burnOperation) Run(_ context.Context, _ string, operation string, payload map[string]any, _ map[string]string) (json.RawMessage, error) {
@@ -2277,7 +2295,7 @@ func TestProjectClipHashtagsPersistInJobResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create job: %v", err)
 	}
-	if err := store.SetResult(context.Background(), job.ID, []byte(`{"clips":[{"title":"First","caption":"Keep this","hashtags":["#old"]}],"source":"preserve"}`)); err != nil {
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"clips":[{"title":"First","caption":"Keep this","video_filename":"source_clip_1.mp4","hashtags":["#old"]}],"source":"preserve"}`)); err != nil {
 		t.Fatalf("set result: %v", err)
 	}
 	server := NewServerWithStore(config.Config{OutputDir: t.TempDir()}, store)
@@ -2285,7 +2303,7 @@ func TestProjectClipHashtagsPersistInJobResult(t *testing.T) {
 	request := httptest.NewRequest(
 		http.MethodPatch,
 		"/api/projects/"+job.ID+"/clips/0/metadata",
-		strings.NewReader(`{"hashtags":["#new","#viral"]}`),
+		strings.NewReader(`{"hashtags":["#new","#viral"],"video_title_for_youtube_short":"New title","video_description_for_tiktok":"TikTok caption","video_description_for_instagram":"Instagram caption","viral_hook_text":"NEW HOOK"}`),
 	)
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -2314,8 +2332,11 @@ func TestProjectClipHashtagsPersistInJobResult(t *testing.T) {
 	if err != nil || string(encodedHashtags) != `["#new","#viral"]` {
 		t.Fatalf("expected hashtags in stored result, got %#v", clip["hashtags"])
 	}
-	if clip["title"] != "First" || clip["caption"] != "Keep this" || payload["source"] != "preserve" {
+	if clip["title"] != "First" || clip["caption"] != "Keep this" || clip["video_filename"] != "source_clip_1.mp4" || payload["source"] != "preserve" {
 		t.Fatalf("metadata update dropped existing result fields: %#v", payload)
+	}
+	if clip["video_title_for_youtube_short"] != "New title" || clip["video_description_for_tiktok"] != "TikTok caption" || clip["video_description_for_instagram"] != "Instagram caption" || clip["viral_hook_text"] != "NEW HOOK" {
+		t.Fatalf("expected regenerated clip information in stored result, got %#v", clip)
 	}
 }
 
@@ -2559,6 +2580,28 @@ func TestLocalEditorHashtagsUseGoWorkerBoundary(t *testing.T) {
 	server.Handler().ServeHTTP(res, req)
 	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"#one"`) {
 		t.Fatalf("unexpected hashtag response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestLocalEditorClipInfoUsesGoWorkerBoundary(t *testing.T) {
+	server := NewServerWithDependencies(config.Config{}, jobs.NewMemoryStore(), nil, clipInfoOperation{})
+	req := httptest.NewRequest(http.MethodPost, "/api/local-editor/clip-info", strings.NewReader(`{"title":"A title","caption":"A caption","subtitle_text":"Current subtitles","trim_start_seconds":120,"trim_end_seconds":158,"source_metadata":{"channel":"Rubius"},"source_context":{"what":"Meltopia"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"New title"`) || !strings.Contains(res.Body.String(), `"NEW HOOK"`) {
+		t.Fatalf("unexpected clip info response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestLocalEditorClipInfoRejectsIncompleteWorkerResult(t *testing.T) {
+	server := NewServerWithDependencies(config.Config{}, jobs.NewMemoryStore(), nil, incompleteClipInfoOperation{})
+	req := httptest.NewRequest(http.MethodPost, "/api/local-editor/clip-info", strings.NewReader(`{"title":"A title","caption":"A caption","subtitle_text":"Current subtitles"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusBadGateway || !strings.Contains(res.Body.String(), "incomplete") {
+		t.Fatalf("expected incomplete worker result to be rejected, got %d %s", res.Code, res.Body.String())
 	}
 }
 

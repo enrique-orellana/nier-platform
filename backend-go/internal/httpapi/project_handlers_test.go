@@ -96,6 +96,84 @@ func TestDeleteProjectRemovesItFromProjectHistory(t *testing.T) {
 	}
 }
 
+func TestProjectHistoryIncludesSourceMetadataOnProjectAndClips(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"source_metadata":{"platform":"youtube","title":"A source video worth watching","channel":"OpenShorts"},"clips":[{"start":1,"end":5}]}`)); err != nil {
+		t.Fatal(err)
+	}
+
+	server := NewServerWithStore(config.Config{OutputDir: t.TempDir()}, store)
+	request := httptest.NewRequest(http.MethodGet, "/api/projects/history", nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected project history to load, got %d: %s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Projects []struct {
+			SourceMetadata map[string]any   `json:"source_metadata"`
+			Clips          []map[string]any `json:"clips"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Projects) != 1 || len(payload.Projects[0].Clips) != 1 {
+		t.Fatalf("unexpected project history payload: %#v", payload)
+	}
+	if payload.Projects[0].SourceMetadata["title"] != "A source video worth watching" {
+		t.Fatalf("project source metadata missing: %#v", payload.Projects[0].SourceMetadata)
+	}
+	clipMetadata, ok := payload.Projects[0].Clips[0]["source_metadata"].(map[string]any)
+	if !ok || clipMetadata["channel"] != "OpenShorts" {
+		t.Fatalf("clip source metadata missing: %#v", payload.Projects[0].Clips[0])
+	}
+}
+
+func TestProjectHistoryRecoversSourceMetadataFromPersistedMetadataFile(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetResult(context.Background(), job.ID, []byte(`{"clips":[{"start":1,"end":5}]}`)); err != nil {
+		t.Fatal(err)
+	}
+	outputDir := t.TempDir()
+	jobOutputDir := filepath.Join(outputDir, job.ID)
+	if err := os.MkdirAll(jobOutputDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobOutputDir, "source_video_metadata.json"), []byte(`{"source_metadata":{"platform":"youtube","title":"Recovered source","channel":"OpenShorts"},"shorts":[{}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server := NewServerWithStore(config.Config{OutputDir: outputDir}, store)
+	request := httptest.NewRequest(http.MethodGet, "/api/projects/history", nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected project history to load, got %d: %s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Projects []struct {
+			SourceMetadata map[string]any `json:"source_metadata"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Projects) != 1 || payload.Projects[0].SourceMetadata["title"] != "Recovered source" {
+		t.Fatalf("persisted metadata file was not recovered: %#v", payload)
+	}
+}
+
 func TestProjectAuditReturnsOrderedEventsAndEffectivePolicy(t *testing.T) {
 	store := jobs.NewMemoryStore()
 	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})

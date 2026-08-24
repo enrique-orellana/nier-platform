@@ -80,11 +80,16 @@ export default function ResultCard({
   const [showModal, setShowModal] = useState(false);
   const [showSubtitleModal, setShowSubtitleModal] = useState(false);
   const [showSubtitleDetails, setShowSubtitleDetails] = useState(false);
+  const [clipInfoOverrides, setClipInfoOverrides] = useState({});
+  useEffect(() => {
+    setClipInfoOverrides({});
+  }, [jobId, index]);
   const videoRef = React.useRef(null);
-  const resolvedClipVideoUrl = resolveClipVideoUrl(clip, jobId);
+  const clipWithOverrides = { ...(clip || {}), ...clipInfoOverrides };
+  const resolvedClipVideoUrl = resolveClipVideoUrl(clipWithOverrides, jobId);
   clip = resolvedClipVideoUrl
-    ? { ...clip, video_url: resolvedClipVideoUrl }
-    : clip;
+    ? { ...clipWithOverrides, video_url: resolvedClipVideoUrl }
+    : clipWithOverrides;
   const trueOriginalSourceUrl = getApiUrl(
     clip.original_video_url || clip.video_url,
   );
@@ -956,6 +961,7 @@ export default function ResultCard({
         onSessionReady={(session) => {
           editorSessionRef.current = session;
         }}
+        onClipInfoChange={setClipInfoOverrides}
         editorActions={{
           onAutoEdit: handleAutoEdit,
           isEditing,

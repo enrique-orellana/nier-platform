@@ -100,6 +100,7 @@ func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, 
 	mux.HandleFunc("/api/local-editor/translate", server.createTranslation)
 	mux.HandleFunc("/api/local-editor/transcribe", server.transcribeLocalEditor)
 	mux.HandleFunc("/api/local-editor/hashtags", server.generateHashtags)
+	mux.HandleFunc("/api/local-editor/clip-info", server.generateClipInfo)
 	mux.HandleFunc("/api/local-editor/render", server.renderLocalEditor)
 	mux.HandleFunc("/api/local-editor/burn-subtitles", server.burnLocalEditorSubtitles)
 	mux.HandleFunc("/api/translation/", server.translationStatus)
