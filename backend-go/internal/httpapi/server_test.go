@@ -2551,6 +2551,77 @@ func TestProjectClipsUsesCompletedDeferredRenderArtifact(t *testing.T) {
 	}
 }
 
+func TestProjectClipMetadataSurvivesDeferredRenderDecoration(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	parent, err := store.Create(context.Background(), domain.CreateJobInput{
+		Kind:     "clip-generation",
+		Metadata: map[string]any{"defer_render": true},
+	})
+	if err != nil {
+		t.Fatalf("create parent job: %v", err)
+	}
+	if err := store.SetResult(context.Background(), parent.ID, []byte(`{"clips":[{"video_title_for_youtube_short":"Original title","video_description_for_tiktok":"Original TikTok","video_description_for_instagram":"Original Instagram","viral_hook_text":"Original hook"}]}`)); err != nil {
+		t.Fatalf("set parent result: %v", err)
+	}
+	child, err := store.Create(context.Background(), domain.CreateJobInput{
+		Kind:        "clip-render",
+		ParentJobID: parent.ID,
+		ClipIndex:   0,
+	})
+	if err != nil {
+		t.Fatalf("create render job: %v", err)
+	}
+	if err := store.SetResult(context.Background(), child.ID, []byte(`{"clips":[{"video_filename":"source_clip_1.mp4","video_title_for_youtube_short":"Stale child title","video_description_for_tiktok":"Stale child TikTok","video_description_for_instagram":"Stale child Instagram","viral_hook_text":"Stale child hook"}]}`)); err != nil {
+		t.Fatalf("set render result: %v", err)
+	}
+	if _, err := store.Transition(context.Background(), child.ID, domain.JobStatusProcessing, ""); err != nil {
+		t.Fatalf("start render job: %v", err)
+	}
+	if _, err := store.Transition(context.Background(), child.ID, domain.JobStatusCompleted, ""); err != nil {
+		t.Fatalf("complete render job: %v", err)
+	}
+
+	server := NewServerWithStore(config.Config{OutputDir: t.TempDir()}, store)
+	request := httptest.NewRequest(
+		http.MethodPatch,
+		fmt.Sprintf("/api/projects/%s/clips/0/metadata", parent.ID),
+		strings.NewReader(`{"video_title_for_youtube_short":"Regenerated title","video_description_for_tiktok":"Regenerated TikTok","video_description_for_instagram":"Regenerated Instagram","viral_hook_text":"Regenerated hook"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected metadata update to succeed, got %d: %s", response.Code, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/api/projects/clips/"+parent.ID, nil)
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected project clips to load, got %d: %s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Clips []map[string]any `json:"clips"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode project clips: %v", err)
+	}
+	if len(payload.Clips) != 1 {
+		t.Fatalf("expected one clip, got %#v", payload.Clips)
+	}
+	clip := payload.Clips[0]
+	for key, want := range map[string]string{
+		"video_title_for_youtube_short":   "Regenerated title",
+		"video_description_for_tiktok":    "Regenerated TikTok",
+		"video_description_for_instagram": "Regenerated Instagram",
+		"viral_hook_text":                 "Regenerated hook",
+	} {
+		if clip[key] != want {
+			t.Fatalf("expected persisted %s %q, got %#v", key, want, clip[key])
+		}
+	}
+}
+
 func TestCodexStatelessRoutesUseWorkerOperations(t *testing.T) {
 	server := NewServerWithDependencies(config.Config{}, jobs.NewMemoryStore(), nil, codexOperation{})
 	for _, test := range []struct {

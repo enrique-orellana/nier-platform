@@ -1047,7 +1047,22 @@ func (s *Server) decorateDeferredClipResult(ctx context.Context, parent domain.J
 				Clips []map[string]any `json:"clips"`
 			}
 			if json.Unmarshal(child.Result, &childResult) == nil && child.ClipIndex < len(childResult.Clips) {
+				persistedMetadata := make(map[string]any)
+				for _, key := range []string{
+					"hashtags",
+					"video_title_for_youtube_short",
+					"video_description_for_tiktok",
+					"video_description_for_instagram",
+					"viral_hook_text",
+				} {
+					if value, exists := clip[key]; exists {
+						persistedMetadata[key] = value
+					}
+				}
 				for key, value := range childResult.Clips[child.ClipIndex] {
+					clip[key] = value
+				}
+				for key, value := range persistedMetadata {
 					clip[key] = value
 				}
 			}
