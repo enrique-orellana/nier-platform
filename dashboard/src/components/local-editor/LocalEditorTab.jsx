@@ -8,6 +8,7 @@ import React, {
 import {
   ChevronDown,
   Bookmark,
+  Blend,
   Download,
   PanelLeftClose,
   PanelRightClose,
@@ -29,6 +30,7 @@ import {
   Rewind,
   RotateCcw,
   Save,
+  Scissors,
   SkipBack,
   SkipForward,
   Split,
@@ -43,7 +45,6 @@ import {
   X,
 } from "lucide-react";
 import LocalEditorTimeline from "./LocalEditorTimeline";
-import LayoutSegmentInspector from "./LayoutSegmentInspector";
 import ClipMetadataPanel from "./ClipMetadataPanel";
 import SubtitleCueTable from "./SubtitleCueTable";
 import SubtitleCueModal from "./SubtitleCueModal";
@@ -365,6 +366,11 @@ export default function LocalEditorTab({
   );
   const selectedLayoutSegment = effectiveLayoutSegments.find(
     (segment) => segment.id === selectedLayoutSegmentId,
+  );
+  const canSplitSelectedLayout = Boolean(
+    selectedLayoutSegment &&
+    playheadMs > selectedLayoutSegment.startMs &&
+    playheadMs < selectedLayoutSegment.endMs,
   );
   const editHistoryRef = useRef(editHistory);
   const activeProjectIdRef = useRef(null);
@@ -791,6 +797,7 @@ export default function LocalEditorTab({
 
   const handleTimelineSelect = (cue, type, { openEditor = true } = {}) => {
     setSelected({ id: cue.id, type });
+    setSelectedLayoutSegmentId(null);
     if (type === "subtitle" && openEditor) setEditingSubtitle(cue);
   };
   const handleLayoutSelect = (segment) => {
@@ -1248,6 +1255,7 @@ export default function LocalEditorTab({
 
   const selectMarker = (markerId, markerTimeMs) => {
     setSelectedMarkerId(markerId);
+    setSelectedLayoutSegmentId(null);
     setSelected(null);
     handleSeek(markerTimeMs);
   };
@@ -2483,10 +2491,27 @@ export default function LocalEditorTab({
                   />
                   <button
                     type="button"
-                    aria-label="Split cue"
-                    title="Split cue (Ctrl/Cmd+B)"
-                    onClick={() => applyCueAction("split")}
-                    disabled={busy || !selectedSubtitleCueIsEditable}
+                    aria-label={
+                      selectedLayoutSegmentId
+                        ? "Split layout at playhead"
+                        : "Split cue"
+                    }
+                    title={
+                      selectedLayoutSegmentId
+                        ? "Split layout at playhead (Ctrl/Cmd+B)"
+                        : "Split cue (Ctrl/Cmd+B)"
+                    }
+                    onClick={() =>
+                      selectedLayoutSegmentId
+                        ? splitLayoutAtPlayhead()
+                        : applyCueAction("split")
+                    }
+                    disabled={
+                      busy ||
+                      (selectedLayoutSegmentId
+                        ? !canSplitSelectedLayout
+                        : !selectedSubtitleCueIsEditable)
+                    }
                     className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <Split size={14} />
@@ -2511,6 +2536,126 @@ export default function LocalEditorTab({
                   >
                     <PanelRightClose size={14} />
                   </button>
+                  <span
+                    className="mx-1 h-5 w-px bg-white/10"
+                    aria-hidden="true"
+                  />
+                  {selectedLayoutSegment && (
+                    <div
+                      role="group"
+                      aria-label="Layout type"
+                      data-testid="local-editor-layout-type-controls"
+                      className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-cyan-300/20 bg-cyan-400/[.04] px-1 text-[10px] text-zinc-400"
+                    >
+                      <span className="px-1 text-zinc-500">Layout</span>
+                      <span className="text-zinc-600" aria-hidden="true">
+                        |
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Standard layout"
+                        aria-pressed={
+                          selectedLayoutSegment.format === "standard"
+                        }
+                        onClick={() =>
+                          updateSelectedLayout({ format: "standard" })
+                        }
+                        disabled={busy}
+                        className={`inline-flex h-6 items-center rounded px-1.5 transition-colors hover:bg-white/10 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.format === "standard" ? "bg-cyan-300/20 text-cyan-100" : "text-zinc-400"}`}
+                      >
+                        Standard
+                      </button>
+                      <span className="text-zinc-600" aria-hidden="true">
+                        |
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Streamer layout"
+                        aria-pressed={
+                          selectedLayoutSegment.format === "streamer_stack"
+                        }
+                        onClick={() =>
+                          updateSelectedLayout({ format: "streamer_stack" })
+                        }
+                        disabled={busy}
+                        className={`inline-flex h-6 items-center rounded px-1.5 transition-colors hover:bg-white/10 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.format === "streamer_stack" ? "bg-cyan-300/20 text-cyan-100" : "text-zinc-400"}`}
+                      >
+                        Streamer
+                      </button>
+                    </div>
+                  )}
+                  {selectedLayoutSegment && (
+                    <span
+                      className="mx-1 h-5 w-px bg-white/10"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <div
+                    role="group"
+                    aria-label="Transition effects"
+                    data-testid="local-editor-transition-controls"
+                    className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-cyan-300/20 bg-cyan-400/[.04] px-1 text-[10px] text-zinc-400"
+                  >
+                    <button
+                      type="button"
+                      aria-label="Cut transition"
+                      title="Cut transition"
+                      aria-pressed={selectedLayoutSegment?.transition === "cut"}
+                      onClick={() =>
+                        updateSelectedLayout({ transition: "cut" })
+                      }
+                      disabled={busy || !selectedLayoutSegment}
+                      className={`inline-flex h-6 items-center gap-1 rounded px-1.5 transition-colors hover:bg-white/10 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment?.transition === "cut" ? "bg-cyan-300/20 text-cyan-100" : "text-zinc-400"}`}
+                    >
+                      <Scissors
+                        size={12}
+                        aria-hidden="true"
+                        data-testid="local-editor-cut-icon"
+                      />
+                      Cut
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Crossfade transition"
+                      title="Crossfade transition"
+                      aria-pressed={
+                        selectedLayoutSegment?.transition === "crossfade"
+                      }
+                      onClick={() =>
+                        updateSelectedLayout({ transition: "crossfade" })
+                      }
+                      disabled={busy || !selectedLayoutSegment}
+                      className={`inline-flex h-6 items-center gap-1 rounded px-1.5 transition-colors hover:bg-white/10 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment?.transition === "crossfade" ? "bg-cyan-300/20 text-cyan-100" : "text-zinc-400"}`}
+                    >
+                      <Blend
+                        size={12}
+                        aria-hidden="true"
+                        data-testid="local-editor-crossfade-icon"
+                      />
+                      Crossfade
+                    </button>
+                    {selectedLayoutSegment?.transition === "crossfade" && (
+                      <input
+                        type="number"
+                        min="1"
+                        max="2000"
+                        step="10"
+                        aria-label="Crossfade duration (ms)"
+                        title="Crossfade duration (ms)"
+                        value={
+                          selectedLayoutSegment.transitionDurationMs ?? 250
+                        }
+                        onChange={(event) =>
+                          updateSelectedLayout({
+                            transitionDurationMs:
+                              Number(event.target.value) || 0,
+                          })
+                        }
+                        disabled={busy}
+                        className="h-6 w-14 rounded border border-white/10 bg-black/20 px-1 text-[10px] text-zinc-200 outline-none focus:border-cyan-300/60"
+                      />
+                    )}
+                  </div>
                 </div>
                 <div className="flex min-w-0 items-center gap-2">
                   {subtitleView === "timeline" && (
@@ -2685,6 +2830,7 @@ export default function LocalEditorTab({
                     layoutSegments={effectiveLayoutSegments}
                     selectedLayoutSegmentId={selectedLayoutSegmentId}
                     onLayoutSelect={handleLayoutSelect}
+                    onLayoutDeselect={() => setSelectedLayoutSegmentId(null)}
                     selectedId={selected?.id}
                     onSelect={(cue, type) =>
                       handleTimelineSelect(cue, type, { openEditor: false })
@@ -2768,14 +2914,6 @@ export default function LocalEditorTab({
                 trimEndSeconds={(playbackStartMs + durationMs) / 1000}
                 onClipInfoChange={onClipInfoChange}
               />
-              <div className="mt-3">
-                <LayoutSegmentInspector
-                  segment={selectedLayoutSegment}
-                  onChange={updateSelectedLayout}
-                  onSplit={splitLayoutAtPlayhead}
-                  disabled={busy}
-                />
-              </div>
             </div>
             <section
               className={`overflow-hidden rounded-xl border border-white/10 bg-white/[.02] ${activeFeature === "subtitles" ? "" : "sr-only"}`}

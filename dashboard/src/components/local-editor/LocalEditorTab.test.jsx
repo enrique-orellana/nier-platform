@@ -226,7 +226,10 @@ describe("LocalEditorTab", () => {
     expect(subtitle).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Streamer", exact: true }),
+      within(screen.getByTestId("local-editor-layout-type-controls")).getByRole(
+        "button",
+        { name: "Streamer layout" },
+      ),
     );
     expect(screen.getByTestId("local-editor-layout-segment")).toHaveAttribute(
       "data-layout-format",
@@ -243,11 +246,116 @@ describe("LocalEditorTab", () => {
       height: 30,
     });
     fireEvent.click(ruler, { clientX: 500 });
-    fireEvent.click(screen.getByRole("button", { name: "Split at playhead" }));
+    fireEvent.click(screen.getByTestId("local-editor-layout-segment"));
+    fireEvent.click(
+      within(screen.getByTestId("local-editor-timeline-actions")).getByRole(
+        "button",
+        { name: "Split layout at playhead" },
+      ),
+    );
 
     expect(screen.getAllByTestId("local-editor-layout-segment")).toHaveLength(
       2,
     );
+  });
+
+  it("keeps layout types and transitions together in the timeline toolbar", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        initialEditorState={{
+          ...controlledEditorState,
+          subtitleCues: [
+            { id: "cue-1", text: "Caption", startMs: 1000, endMs: 3000 },
+          ],
+          layoutSegments: [
+            {
+              id: "layout-1",
+              startMs: 0,
+              endMs: 10000,
+              format: "standard",
+              transition: "cut",
+              transitionDurationMs: 250,
+            },
+          ],
+        }}
+        initialStateKey="layout-toolbar-test"
+      />,
+    );
+
+    const toolbar = screen.getByTestId("local-editor-timeline-actions");
+    const layoutTrackLabel = screen.getByTestId(
+      "local-editor-layout-track-label",
+    );
+    expect(layoutTrackLabel).toHaveClass("w-36");
+    expect(
+      within(toolbar).queryByTestId("local-editor-layout-type-controls"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("local-editor-layout-segment"));
+    const layoutControls = within(toolbar).getByTestId(
+      "local-editor-layout-type-controls",
+    );
+    const transitionControls = within(toolbar).getByTestId(
+      "local-editor-transition-controls",
+    );
+    expect(
+      within(transitionControls).getByTestId("local-editor-cut-icon"),
+    ).toBeInTheDocument();
+    expect(
+      within(transitionControls).getByTestId("local-editor-crossfade-icon"),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.queryByRole("region", { name: "Layout segment settings" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      within(layoutControls).getByRole("button", { name: "Streamer layout" }),
+    );
+    fireEvent.click(
+      within(transitionControls).getByRole("button", {
+        name: "Crossfade transition",
+      }),
+    );
+    fireEvent.change(
+      within(transitionControls).getByRole("spinbutton", {
+        name: "Crossfade duration (ms)",
+      }),
+      { target: { value: "400" } },
+    );
+
+    expect(screen.getByTestId("local-editor-layout-segment")).toHaveAttribute(
+      "data-layout-format",
+      "streamer_stack",
+    );
+    expect(
+      within(transitionControls).getByRole("button", {
+        name: "Crossfade transition",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Caption" }));
+    expect(
+      within(toolbar).queryByTestId("local-editor-layout-type-controls"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("local-editor-layout-segment"));
+    fireEvent.click(layoutTrackLabel);
+    expect(
+      within(toolbar).queryByTestId("local-editor-layout-type-controls"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("local-editor-layout-segment"));
+    fireEvent.click(screen.getByRole("slider", { name: "Timeline seek" }));
+    expect(
+      within(toolbar).queryByTestId("local-editor-layout-type-controls"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(transitionControls).getByRole("button", {
+        name: "Crossfade transition",
+      }),
+    ).toBeDisabled();
   });
 
   it("hides undo and redo actions when editing a project clip", async () => {

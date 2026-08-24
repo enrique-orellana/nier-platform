@@ -222,6 +222,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
     layoutSegments = [],
     selectedLayoutSegmentId = null,
     onLayoutSelect,
+    onLayoutDeselect,
     selectedId,
     onSelect,
     onDoubleClick,
@@ -299,6 +300,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
 
   const seek = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
+    onLayoutDeselect?.();
     onSeek?.(
       Math.max(
         0,
@@ -425,12 +427,19 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
             data-testid="local-editor-layout-track"
             className="flex min-h-12 w-full items-stretch border-b border-white/10 last:border-b-0"
           >
-            <div className="flex w-36 shrink-0 items-center bg-white/[.03] px-3 text-[11px] font-medium text-zinc-300">
+            <div
+              data-testid="local-editor-layout-track-label"
+              className="flex w-36 shrink-0 items-center bg-white/[.03] px-3 text-[11px] font-medium text-zinc-300"
+              onClick={() => onLayoutDeselect?.()}
+            >
               Layout
             </div>
             <div
               className="relative shrink-0 bg-black/20"
               style={{ width: `${timelineWidth}px` }}
+              onClick={(event) => {
+                if (event.target === event.currentTarget) onLayoutDeselect?.();
+              }}
             >
               {layoutSegments.map((segment) => (
                 <LayoutSegmentBlock
