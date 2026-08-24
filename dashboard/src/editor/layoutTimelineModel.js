@@ -19,8 +19,15 @@ const normalizeFormat = (format, fallback = DEFAULT_LAYOUT_FORMAT) =>
 const normalizeTransition = (transition) =>
   TRANSITIONS.has(transition) ? transition : DEFAULT_LAYOUT_TRANSITION;
 
-const normalizeTransitionDuration = (durationMs, segmentDurationMs, transition) => {
-  const rawDuration = numberOr(durationMs, DEFAULT_LAYOUT_TRANSITION_DURATION_MS);
+const normalizeTransitionDuration = (
+  durationMs,
+  segmentDurationMs,
+  transition,
+) => {
+  const rawDuration = numberOr(
+    durationMs,
+    DEFAULT_LAYOUT_TRANSITION_DURATION_MS,
+  );
   const requested = Math.max(
     0,
     Math.round(
@@ -52,7 +59,10 @@ const normalizeSegment = (segment, startMs, endMs, fallbackId) => {
   };
 };
 
-export function createLayoutSegments(durationMs, format = DEFAULT_LAYOUT_FORMAT) {
+export function createLayoutSegments(
+  durationMs,
+  format = DEFAULT_LAYOUT_FORMAT,
+) {
   const duration = positiveDuration(durationMs);
   return [
     {
@@ -90,9 +100,12 @@ export function normalizeLayoutSegments(
       return { segment, index, startMs, endMs };
     })
     .filter(({ startMs, endMs }) => endMs > startMs)
-    .sort((left, right) => left.startMs - right.startMs || left.index - right.index);
+    .sort(
+      (left, right) => left.startMs - right.startMs || left.index - right.index,
+    );
 
-  if (candidates.length === 0) return createLayoutSegments(duration, fallbackFormat);
+  if (candidates.length === 0)
+    return createLayoutSegments(duration, fallbackFormat);
 
   let cursor = 0;
   const normalized = [];
@@ -111,7 +124,8 @@ export function normalizeLayoutSegments(
     cursor = nextEnd;
   });
 
-  if (normalized.length === 0) return createLayoutSegments(duration, fallbackFormat);
+  if (normalized.length === 0)
+    return createLayoutSegments(duration, fallbackFormat);
   if (normalized[normalized.length - 1].endMs < duration) {
     normalized[normalized.length - 1] = normalizeSegment(
       normalized[normalized.length - 1],
@@ -161,7 +175,10 @@ export function updateLayoutSegment(segments, segmentId, changes = {}) {
     if (segment?.id !== segmentId) return segment;
     const next = { ...segment, ...changes };
     const startMs = Math.max(0, numberOr(next.startMs, 0));
-    const endMs = Math.max(startMs, Math.min(duration, numberOr(next.endMs, startMs)));
+    const endMs = Math.max(
+      startMs,
+      Math.min(duration, numberOr(next.endMs, startMs)),
+    );
     const transition = normalizeTransition(next.transition);
     return {
       ...next,
@@ -182,9 +199,13 @@ export function getLayoutSegmentAt(segments, playheadMs) {
   if (!Array.isArray(segments) || segments.length === 0) return null;
   const timeMs = numberOr(playheadMs, 0);
   const ordered = segments
-    .filter((segment) => numberOr(segment?.endMs, 0) > numberOr(segment?.startMs, 0))
+    .filter(
+      (segment) => numberOr(segment?.endMs, 0) > numberOr(segment?.startMs, 0),
+    )
     .slice()
-    .sort((left, right) => numberOr(left.startMs, 0) - numberOr(right.startMs, 0));
+    .sort(
+      (left, right) => numberOr(left.startMs, 0) - numberOr(right.startMs, 0),
+    );
   const active = ordered.find(
     (segment) =>
       timeMs >= numberOr(segment.startMs, 0) &&

@@ -88,9 +88,22 @@ export interface EffectsConfig {
   segments: EffectSegment[];
 }
 
+export type LayoutFormat = "standard" | "streamer_stack";
+export type LayoutTransition = "cut" | "crossfade";
+
+export interface LayoutSegmentConfig {
+  id: string;
+  startMs: number;
+  endMs: number;
+  format: LayoutFormat;
+  transition?: LayoutTransition;
+  transitionDurationMs?: number;
+}
+
 export interface LayoutConfig {
-  format: "standard" | "streamer_stack";
+  format: LayoutFormat;
   facecam_size?: "small" | "medium" | "large";
+  segments?: LayoutSegmentConfig[];
 }
 
 // --- Main composition props ---
@@ -181,6 +194,18 @@ export const effectsConfigSchema = z.object({
 export const layoutConfigSchema = z.object({
   format: z.enum(["standard", "streamer_stack"]),
   facecam_size: z.enum(["small", "medium", "large"]).optional(),
+  segments: z
+    .array(
+      z.object({
+        id: z.string(),
+        startMs: z.number().min(0),
+        endMs: z.number().positive(),
+        format: z.enum(["standard", "streamer_stack"]),
+        transition: z.enum(["cut", "crossfade"]).optional(),
+        transitionDurationMs: z.number().min(0).optional(),
+      }),
+    )
+    .optional(),
 });
 
 export const shortVideoPropsSchema = z.object({

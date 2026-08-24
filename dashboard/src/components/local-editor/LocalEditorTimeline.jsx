@@ -117,6 +117,54 @@ function CueBlock({
   );
 }
 
+const layoutLabel = (format) =>
+  format === "streamer_stack" ? "Streamer" : "Standard";
+
+const layoutColor = (format) =>
+  format === "streamer_stack" ? "#0e7490" : "#2563eb";
+
+function LayoutSegmentBlock({
+  segment,
+  durationMs,
+  playheadMs,
+  selected,
+  onSelect,
+}) {
+  const left = clampPercent((segment.startMs / durationMs) * 100);
+  const width = Math.max(
+    0,
+    Math.min(
+      100 - left,
+      ((segment.endMs - segment.startMs) / durationMs) * 100,
+    ),
+  );
+  const current = playheadMs >= segment.startMs && playheadMs < segment.endMs;
+  const label = layoutLabel(segment.format);
+  return (
+    <button
+      type="button"
+      role="button"
+      data-testid="local-editor-layout-segment"
+      data-layout-segment-id={segment.id}
+      data-layout-format={segment.format}
+      data-current-layout={current ? "true" : "false"}
+      aria-label={`${label} layout segment`}
+      aria-pressed={selected}
+      title={`${label} layout · ${segment.startMs}–${segment.endMs} ms`}
+      onClick={() => onSelect?.(segment)}
+      className={`absolute inset-y-1 overflow-hidden rounded-md border px-2 py-1 text-left text-[10px] font-semibold text-white opacity-95 shadow-sm transition-[filter,box-shadow,border-color] hover:border-white/80 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200 ${current ? "border-cyan-200 shadow-[inset_0_2px_0_rgba(103,232,249,0.95)]" : "border-white/25"} ${selected ? "ring-2 ring-white" : ""}`}
+      style={{
+        left: `${left}%`,
+        width: `${width}%`,
+        background: layoutColor(segment.format),
+        zIndex: selected ? 10 : 1,
+      }}
+    >
+      <span className="pointer-events-none block truncate">{label}</span>
+    </button>
+  );
+}
+
 function Track({
   label,
   cues,
@@ -171,6 +219,9 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
     fps = 30,
     subtitleCues = [],
     hook = null,
+    layoutSegments = [],
+    selectedLayoutSegmentId = null,
+    onLayoutSelect,
     selectedId,
     onSelect,
     onDoubleClick,
@@ -369,6 +420,29 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
               className="absolute bottom-0 top-0 w-px bg-cyan-300"
               style={{ left: `${(playheadMs / safeDuration) * 100}%` }}
             />
+          </div>
+          <div
+            data-testid="local-editor-layout-track"
+            className="flex min-h-12 w-full items-stretch border-b border-white/10 last:border-b-0"
+          >
+            <div className="flex w-36 shrink-0 items-center bg-white/[.03] px-3 text-[11px] font-medium text-zinc-300">
+              Layout
+            </div>
+            <div
+              className="relative shrink-0 bg-black/20"
+              style={{ width: `${timelineWidth}px` }}
+            >
+              {layoutSegments.map((segment) => (
+                <LayoutSegmentBlock
+                  key={segment.id}
+                  segment={segment}
+                  durationMs={safeDuration}
+                  playheadMs={playheadMs}
+                  selected={selectedLayoutSegmentId === segment.id}
+                  onSelect={onLayoutSelect}
+                />
+              ))}
+            </div>
           </div>
           <Track
             testId="local-editor-hook-track"

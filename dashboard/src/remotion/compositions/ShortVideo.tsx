@@ -11,6 +11,7 @@ import type { ShortVideoProps } from "../lib/types";
 import { Subtitles } from "./Subtitles";
 import { HookOverlay } from "./HookOverlay";
 import { VideoEffects } from "./VideoEffects";
+import { resolveLayoutAtFrame } from "../lib/layoutSegments";
 
 export const getMediaTimeMs = (
   mediaCurrentTimeSeconds: number,
@@ -30,6 +31,7 @@ const BrowserVideo: React.FC<{
   onMediaTimeChange?: (mediaTimeMs: number | null) => void;
   fps: number;
   objectFit: string;
+  muted: boolean;
 }> = ({
   videoUrl,
   videoStartSeconds,
@@ -38,6 +40,7 @@ const BrowserVideo: React.FC<{
   onMediaTimeChange,
   fps,
   objectFit,
+  muted,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoId = useId();
@@ -73,7 +76,8 @@ const BrowserVideo: React.FC<{
     const video = videoRef.current;
     if (!video) return;
     video.playbackRate = playbackRate;
-  }, [playbackRate, videoUrl]);
+    video.muted = muted;
+  }, [muted, playbackRate, videoUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -140,6 +144,7 @@ const BrowserVideo: React.FC<{
       src={videoUrl}
       preload="auto"
       playsInline
+      muted={muted}
       onLoadedMetadata={() => {
         lastSourceKeyRef.current = "";
       }}
@@ -152,6 +157,90 @@ const BrowserVideo: React.FC<{
         objectFit,
       }}
     />
+  );
+};
+
+const LayoutVideoLayer: React.FC<{
+  segment: { format: "standard" | "streamer_stack" };
+  videoUrl: string;
+  videoStartFrame: number;
+  videoStartSeconds: number;
+  videoFit?: "cover" | "contain";
+  playbackRate: number;
+  fps: number;
+  opacity: number;
+  muted: boolean;
+  isRendering: boolean;
+  onAutoPlayError?: () => void;
+  onMediaTimeChange?: (mediaTimeMs: number | null) => void;
+  reportMediaTime: boolean;
+}> = ({
+  segment,
+  videoUrl,
+  videoStartFrame,
+  videoStartSeconds,
+  videoFit,
+  playbackRate,
+  fps,
+  opacity,
+  muted,
+  isRendering,
+  onAutoPlayError,
+  onMediaTimeChange,
+  reportMediaTime,
+}) => {
+  const usesStandardLayout = segment.format === "standard";
+  return (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        opacity,
+        pointerEvents: opacity > 0 ? "auto" : "none",
+      }}
+    >
+      {usesStandardLayout && isRendering && (
+        <Video
+          src={videoUrl}
+          trimBefore={videoStartFrame}
+          objectFit="cover"
+          muted
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            filter: "blur(24px)",
+            transform: "scale(1.08)",
+          }}
+        />
+      )}
+      {isRendering ? (
+        <Video
+          src={videoUrl}
+          trimBefore={videoStartFrame}
+          objectFit={usesStandardLayout ? "contain" : videoFit || "cover"}
+          muted={muted}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+          }}
+        />
+      ) : (
+        <BrowserVideo
+          videoUrl={videoUrl}
+          videoStartSeconds={videoStartSeconds}
+          playbackRate={playbackRate}
+          onAutoPlayError={onAutoPlayError}
+          onMediaTimeChange={reportMediaTime ? onMediaTimeChange : undefined}
+          fps={fps}
+          objectFit={usesStandardLayout ? "contain" : videoFit || "cover"}
+          muted={muted}
+        />
+      )}
+    </div>
   );
 };
 
@@ -179,6 +268,8 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     onAutoPlayError?: () => void;
   };
   const [mediaTimeMs, setMediaTimeMs] = useState<number | null>(null);
+  const frame = useCurrentFrame();
+  const videoConfig = useVideoConfig();
   const videoStartFrame = Math.max(
     0,
     Math.round(Number(videoStartSeconds) * Number(fps)),
@@ -203,56 +294,49 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     },
     [hasActiveSubtitles, onMediaTimeChange],
   );
-  const usesStandardLayout = layout?.format === "standard";
+  const resolvedLayout = resolveLayoutAtFrame(
+    layout,
+    frame,
+    videoConfig.durationInFrames,
+    Number(videoConfig.fps || fps),
+  );
   const environment = useRemotionEnvironment();
+  const layoutLayers = resolvedLayout.previous
+    ? [
+        {
+          segment: resolvedLayout.previous,
+          opacity: 1 - resolvedLayout.transitionProgress,
+          muted: true,
+        },
+        {
+          segment: resolvedLayout.active,
+          opacity: resolvedLayout.transitionProgress,
+          muted: false,
+        },
+      ]
+    : [{ segment: resolvedLayout.active, opacity: 1, muted: false }];
   return (
     <AbsoluteFill style={{ backgroundColor: "#000", overflow: "hidden" }}>
-      {usesStandardLayout && environment.isRendering && (
-        <Video
-          src={videoUrl}
-          trimBefore={videoStartFrame}
-          objectFit="cover"
-          muted
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            filter: "blur(24px)",
-            transform: "scale(1.08)",
-          }}
-        />
-      )}
-
       {/* Base video with optional zoom/color effects */}
       <VideoEffects config={effects}>
-        {environment.isRendering ? (
-          <Video
-            src={videoUrl}
-            trimBefore={videoStartFrame}
-            objectFit={usesStandardLayout ? "contain" : videoFit || "cover"}
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-            }}
-          />
-        ) : (
-          <BrowserVideo
+        {layoutLayers.map(({ segment, opacity, muted }) => (
+          <LayoutVideoLayer
+            key={`${segment.id}-${muted ? "previous" : "active"}`}
+            segment={segment}
             videoUrl={videoUrl}
+            videoStartFrame={videoStartFrame}
             videoStartSeconds={videoStartSeconds}
+            videoFit={videoFit}
             playbackRate={playbackRate}
-            onAutoPlayError={onAutoPlayError}
-            onMediaTimeChange={
-              hasActiveSubtitles || onMediaTimeChange
-                ? handleMediaTimeChange
-                : undefined
-            }
             fps={Number(fps)}
-            objectFit={usesStandardLayout ? "contain" : videoFit || "cover"}
+            opacity={opacity}
+            muted={muted}
+            isRendering={environment.isRendering}
+            onAutoPlayError={onAutoPlayError}
+            onMediaTimeChange={handleMediaTimeChange}
+            reportMediaTime={hasActiveSubtitles || Boolean(onMediaTimeChange)}
           />
-        )}
+        ))}
       </VideoEffects>
 
       {/* Layer 2: Animated subtitles */}

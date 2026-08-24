@@ -43,6 +43,7 @@ import {
   X,
 } from "lucide-react";
 import LocalEditorTimeline from "./LocalEditorTimeline";
+import LayoutSegmentInspector from "./LayoutSegmentInspector";
 import ClipMetadataPanel from "./ClipMetadataPanel";
 import SubtitleCueTable from "./SubtitleCueTable";
 import SubtitleCueModal from "./SubtitleCueModal";
@@ -79,6 +80,12 @@ import {
   trimCueLeft,
   trimCueRight,
 } from "../../editor/timelineModel";
+import {
+  createLayoutSegments,
+  normalizeLayoutSegments,
+  splitLayoutSegment,
+  updateLayoutSegment,
+} from "../../editor/layoutTimelineModel";
 import {
   getHookAnimationStyle,
   getHookBoxStyle,
@@ -213,6 +220,7 @@ export default function LocalEditorTab({
     }
   });
   const [selected, setSelected] = useState(null);
+  const [selectedLayoutSegmentId, setSelectedLayoutSegmentId] = useState(null);
   const [selectedMarkerId, setSelectedMarkerId] = useState(null);
   const [editingSubtitle, setEditingSubtitle] = useState(null);
   const [pendingSubtitle, setPendingSubtitle] = useState(null);
@@ -343,7 +351,21 @@ export default function LocalEditorTab({
     subtitleLanguage,
     hook,
     markers = [],
+    layoutSegments = [],
   } = editHistory.present;
+  const effectiveLayoutSegments = useMemo(
+    () =>
+      normalizeLayoutSegments(
+        Array.isArray(layoutSegments) && layoutSegments.length
+          ? layoutSegments
+          : createLayoutSegments(durationMs),
+        durationMs,
+      ),
+    [durationMs, layoutSegments],
+  );
+  const selectedLayoutSegment = effectiveLayoutSegments.find(
+    (segment) => segment.id === selectedLayoutSegmentId,
+  );
   const editHistoryRef = useRef(editHistory);
   const activeProjectIdRef = useRef(null);
   const activeProjectNameRef = useRef("");
@@ -413,6 +435,7 @@ export default function LocalEditorTab({
       present: { ...current.present, ...initialEditorState },
     }));
     setSelected(null);
+    setSelectedLayoutSegmentId(null);
   }, [initialEditorState, initialStateKey]);
 
   useEffect(() => {
@@ -700,6 +723,10 @@ export default function LocalEditorTab({
         hook: current.present.hook
           ? clampCue(current.present.hook, nextDuration)
           : current.present.hook,
+        layoutSegments: normalizeLayoutSegments(
+          current.present.layoutSegments,
+          nextDuration,
+        ),
       },
     }));
   };
@@ -765,6 +792,48 @@ export default function LocalEditorTab({
   const handleTimelineSelect = (cue, type, { openEditor = true } = {}) => {
     setSelected({ id: cue.id, type });
     if (type === "subtitle" && openEditor) setEditingSubtitle(cue);
+  };
+  const handleLayoutSelect = (segment) => {
+    setSelectedLayoutSegmentId(segment?.id || null);
+    setSelectedMarkerId(null);
+    setActiveFeature("details");
+  };
+  const splitLayoutAtPlayhead = () => {
+    if (!selectedLayoutSegmentId) return;
+    const replacement = splitLayoutSegment(
+      effectiveLayoutSegments,
+      selectedLayoutSegmentId,
+      playheadMs,
+    );
+    if (!replacement) return;
+    const nextSegment = replacement.find(
+      (segment) => segment.startMs === Math.round(playheadMs),
+    );
+    commitEdit((current) => ({
+      ...current,
+      layoutSegments:
+        splitLayoutSegment(
+          Array.isArray(current.layoutSegments) && current.layoutSegments.length
+            ? current.layoutSegments
+            : createLayoutSegments(durationMs),
+          selectedLayoutSegmentId,
+          playheadMs,
+        ) || current.layoutSegments,
+    }));
+    setSelectedLayoutSegmentId(nextSegment?.id || selectedLayoutSegmentId);
+  };
+  const updateSelectedLayout = (changes) => {
+    if (!selectedLayoutSegmentId) return;
+    commitEdit((current) => ({
+      ...current,
+      layoutSegments: updateLayoutSegment(
+        Array.isArray(current.layoutSegments) && current.layoutSegments.length
+          ? current.layoutSegments
+          : createLayoutSegments(durationMs),
+        selectedLayoutSegmentId,
+        changes,
+      ),
+    }));
   };
   const beginTimelineEdit = () => {
     timelineDragRef.current = { recorded: false };
@@ -1201,7 +1270,8 @@ export default function LocalEditorTab({
     const key = event.key.toLowerCase();
     if ((event.ctrlKey || event.metaKey) && key === "b") {
       event.preventDefault();
-      applyCueAction("split");
+      if (selectedLayoutSegmentId) splitLayoutAtPlayhead();
+      else applyCueAction("split");
       return;
     }
     if (!event.ctrlKey && !event.metaKey && key === "q") {
@@ -1496,6 +1566,7 @@ export default function LocalEditorTab({
         subtitleCues,
         subtitleStyle,
         hook,
+        layout: previewLayout,
         onProgress: setProgress,
       };
       const backendSourceParams = projectSourceUrl
@@ -1555,6 +1626,7 @@ export default function LocalEditorTab({
     setPreviewVideoUrl("");
     setEditHistory(createEmptyEditorHistory(editorPreferencesRef.current));
     setSelected(null);
+    setSelectedLayoutSegmentId(null);
     setPendingSubtitle(null);
     setPlayheadMs(0);
     setProgress(0);
@@ -1631,6 +1703,7 @@ export default function LocalEditorTab({
     await setActiveProjectId(stored.project.id);
     setEditHistory(stored.project.history);
     setSelected(null);
+    setSelectedLayoutSegmentId(null);
     loadVideo(stored.file, {
       persist: false,
       projectId: stored.project.id,
@@ -1772,6 +1845,10 @@ export default function LocalEditorTab({
         style: previewSubtitleStyle,
       }
     : null;
+  const previewLayout = {
+    ...(remotionPreviewProps?.layout || {}),
+    segments: effectiveLayoutSegments,
+  };
   const hookElapsedMs = activeHook
     ? Math.max(0, playheadMs - activeHook.startMs)
     : 0;
@@ -1993,6 +2070,7 @@ export default function LocalEditorTab({
                   {remotionPreviewProps ? (
                     <RemotionPreview
                       {...remotionPreviewProps}
+                      layout={previewLayout}
                       subtitles={previewSubtitles}
                       subtitleTracks={[]}
                       activeSubtitleTrackId={null}
@@ -2604,6 +2682,9 @@ export default function LocalEditorTab({
                     fps={remotionFps}
                     subtitleCues={subtitleCues}
                     hook={hook}
+                    layoutSegments={effectiveLayoutSegments}
+                    selectedLayoutSegmentId={selectedLayoutSegmentId}
+                    onLayoutSelect={handleLayoutSelect}
                     selectedId={selected?.id}
                     onSelect={(cue, type) =>
                       handleTimelineSelect(cue, type, { openEditor: false })
@@ -2687,6 +2768,14 @@ export default function LocalEditorTab({
                 trimEndSeconds={(playbackStartMs + durationMs) / 1000}
                 onClipInfoChange={onClipInfoChange}
               />
+              <div className="mt-3">
+                <LayoutSegmentInspector
+                  segment={selectedLayoutSegment}
+                  onChange={updateSelectedLayout}
+                  onSplit={splitLayoutAtPlayhead}
+                  disabled={busy}
+                />
+              </div>
             </div>
             <section
               className={`overflow-hidden rounded-xl border border-white/10 bg-white/[.02] ${activeFeature === "subtitles" ? "" : "sr-only"}`}

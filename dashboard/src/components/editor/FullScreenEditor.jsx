@@ -26,6 +26,10 @@ import {
   useRenewableMediaUrl,
 } from "../../lib/videoUrls";
 import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
+import {
+  createLayoutSegments,
+  normalizeLayoutSegments,
+} from "../../editor/layoutTimelineModel";
 
 const videoPath = (url) => {
   if (!url) return "";
@@ -80,6 +84,16 @@ const manifestFromClip = (clip = {}) => {
     layers: {},
     subtitle_tracks: [],
   };
+};
+
+const manifestDurationMs = (manifest) => {
+  const trim = manifest?.timeline?.trim || {};
+  const durationSec = Math.max(
+    0.001,
+    Number(trim.end_sec ?? manifest?.duration_sec ?? 0) -
+      Number(trim.start_sec ?? 0),
+  );
+  return Math.round(durationSec * 1000);
 };
 
 const normalizeRenderSpec = (source) => {
@@ -146,10 +160,12 @@ const localCuesFromTrack = (track) => {
   }));
 };
 
-const manifestToLocalEditorState = (
+// eslint-disable-next-line react-refresh/only-export-components
+export const manifestToLocalEditorState = (
   sourceManifest,
   trackId,
   fallbackHookText = "",
+  fallbackLayoutFormat = "standard",
 ) => {
   const source = manifestWithTranscriptCaptions(sourceManifest || {}, null);
   const legacySubtitles = source.layers?.subtitles;
@@ -176,6 +192,21 @@ const manifestToLocalEditorState = (
     (String(fallbackHookText || "").trim()
       ? { text: String(fallbackHookText).trim() }
       : null);
+  const layout = source.layers?.layout || {};
+  const layoutSegments = Array.isArray(layout.segments)
+    ? normalizeLayoutSegments(
+        layout.segments,
+        manifestDurationMs(source),
+        layout.format ||
+          source.export_policy?.layout_format ||
+          fallbackLayoutFormat,
+      )
+    : createLayoutSegments(
+        manifestDurationMs(source),
+        layout.format ||
+          source.export_policy?.layout_format ||
+          fallbackLayoutFormat,
+      );
   return {
     subtitleCues: localCuesFromTrack(activeTrack),
     subtitleStyle:
@@ -208,10 +239,16 @@ const manifestToLocalEditorState = (
             : {}),
         }
       : null,
+    layoutSegments,
   };
 };
 
-const localEditorStateToManifest = (sourceManifest, localState, trackId) => {
+// eslint-disable-next-line react-refresh/only-export-components
+export const localEditorStateToManifest = (
+  sourceManifest,
+  localState,
+  trackId,
+) => {
   const source = JSON.parse(JSON.stringify(sourceManifest || {}));
   const state = localState || manifestToLocalEditorState(source, trackId);
   const nextTrackId = trackId || "original";
@@ -279,6 +316,23 @@ const localEditorStateToManifest = (sourceManifest, localState, trackId) => {
         };
       })()
     : null;
+  const sourceLayout = source.layers?.layout || {};
+  const fallbackLayoutFormat =
+    sourceLayout.format || source.export_policy?.layout_format || "standard";
+  const rawLayoutSegments =
+    Array.isArray(state.layoutSegments) && state.layoutSegments.length
+      ? state.layoutSegments
+      : Array.isArray(sourceLayout.segments) && sourceLayout.segments.length
+        ? sourceLayout.segments
+        : createLayoutSegments(
+            manifestDurationMs(source),
+            fallbackLayoutFormat,
+          );
+  const layoutSegments = normalizeLayoutSegments(
+    rawLayoutSegments,
+    manifestDurationMs(source),
+    fallbackLayoutFormat,
+  );
   source.layers = {
     ...(source.layers || {}),
     subtitles: cues.length
@@ -297,6 +351,11 @@ const localEditorStateToManifest = (sourceManifest, localState, trackId) => {
         }
       : null,
     hook: persistedHook,
+    layout: {
+      ...sourceLayout,
+      format: sourceLayout.format || fallbackLayoutFormat,
+      segments: layoutSegments,
+    },
   };
   return source;
 };
@@ -337,9 +396,10 @@ export default function FullScreenEditor({
   const [error, setError] = useState(null);
   const [localDraft, setLocalDraft] = useState(() =>
     manifestToLocalEditorState(
-      initialManifest,
+      initialManifest || manifestFromClip(clip),
       defaultSubtitleTrackId(initialManifest),
       clip?.viral_hook_text,
+      clip?.layout_format || "standard",
     ),
   );
   const [localDraftRevision, setLocalDraftRevision] = useState(0);
@@ -471,6 +531,7 @@ export default function FullScreenEditor({
         hydratedManifest,
         nextTrackId,
         clip?.viral_hook_text,
+        clip?.layout_format || "standard",
       );
       versionRef.current = nextVersion;
       activeTrackIdRef.current = nextTrackId;
@@ -750,6 +811,7 @@ export default function FullScreenEditor({
         nextManifest,
         trackId,
         clip?.viral_hook_text,
+        clip?.layout_format || "standard",
       );
       currentManifestRef.current = nextManifest;
       activeTrackIdRef.current = trackId;
@@ -760,7 +822,7 @@ export default function FullScreenEditor({
       setLocalDraftRevision((current) => current + 1);
       setRenderSpecDirty(dirty);
     },
-    [clip?.viral_hook_text],
+    [clip?.layout_format, clip?.viral_hook_text],
   );
 
   const applyLayer = useCallback(

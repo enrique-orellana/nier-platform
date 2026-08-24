@@ -385,6 +385,36 @@ describe("designcomboAdapter", () => {
     });
   });
 
+  it("preserves segmented layout data in render props", () => {
+    const segments = [
+      {
+        id: "layout-1",
+        startMs: 0,
+        endMs: 2500,
+        format: "standard",
+        transition: "cut",
+        transitionDurationMs: 250,
+      },
+      {
+        id: "layout-2",
+        startMs: 2500,
+        endMs: 5000,
+        format: "streamer_stack",
+        transition: "crossfade",
+        transitionDurationMs: 250,
+      },
+    ];
+    const props = manifestToRenderProps({
+      timeline: { source_video_url: "/videos/source.mp4" },
+      layers: {
+        layout: { format: "standard", facecam_size: "medium", segments },
+      },
+      subtitle_tracks: [],
+    });
+
+    expect(props.layout.segments).toEqual(segments);
+  });
+
   it("uses populated captions when a subtitle track has an empty cues array", () => {
     const source = {
       timeline: { trim: { start_sec: 0, end_sec: 4 } },

@@ -191,4 +191,42 @@ describe("manifestToVersionRenderProps", () => {
 
     expect(props.videoStartSeconds).toBe(1686);
   });
+
+  it("passes persisted layout segments through to the renderer", () => {
+    const segments = [
+      {
+        id: "layout-1",
+        startMs: 0,
+        endMs: 5000,
+        format: "standard",
+        transition: "cut",
+        transitionDurationMs: 250,
+      },
+      {
+        id: "layout-2",
+        startMs: 5000,
+        endMs: 10000,
+        format: "streamer_stack",
+        transition: "crossfade",
+        transitionDurationMs: 250,
+      },
+    ];
+    const props = manifestToVersionRenderProps(
+      {
+        timeline: { source_video_url: "/videos/job/source.mp4" },
+        render_spec: {
+          video_start_seconds: 0,
+          duration_in_frames: 300,
+          fps: 30,
+          width: 1080,
+          height: 1920,
+          video_fit: "contain",
+        },
+        layers: { layout: { format: "standard", segments } },
+      },
+      { versionId: "v5", manifestRevision: "rev-5" },
+    );
+
+    expect(props.layout?.segments).toEqual(segments);
+  });
 });

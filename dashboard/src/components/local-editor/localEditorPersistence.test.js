@@ -24,6 +24,16 @@ const history = {
     subtitleLanguage: "en",
     hook: null,
     markers: [{ id: "marker-1", timeMs: 2500, label: "" }],
+    layoutSegments: [
+      {
+        id: "layout-1",
+        startMs: 0,
+        endMs: 4200,
+        format: "standard",
+        transition: "cut",
+        transitionDurationMs: 250,
+      },
+    ],
   },
   future: [],
 };
@@ -61,6 +71,7 @@ describe("local editor project persistence", () => {
     expect(history.present.subtitleCues).toEqual([]);
     expect(history.present.hook).toBeNull();
     expect(history.present.markers).toEqual([]);
+    expect(history.present.layoutSegments).toEqual([]);
   });
 
   it("creates, lists, loads, renames, and deletes a stored project", async () => {
@@ -81,6 +92,9 @@ describe("local editor project persistence", () => {
     expect(loadedProject.file.name).toBe("demo.mp4");
     expect(loadedProject.project.history.present.markers).toEqual(
       history.present.markers,
+    );
+    expect(loadedProject.project.history.present.layoutSegments).toEqual(
+      history.present.layoutSegments,
     );
 
     await renameStoredProject(project.id, "Renamed Project");

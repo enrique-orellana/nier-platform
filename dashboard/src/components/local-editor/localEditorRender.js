@@ -196,6 +196,7 @@ export const buildRemotionRenderProps = ({
   subtitleCues = [],
   subtitleStyle = null,
   hook = null,
+  layout = null,
 }) => {
   const normalizedHook = hook
     ? (() => {
@@ -250,6 +251,7 @@ export const buildRemotionRenderProps = ({
         }
       : null,
     hook: normalizedHook,
+    layout,
     effects: null,
   };
 };
@@ -265,6 +267,7 @@ export async function renderLocalVideoOnBrowser({
   subtitleCues = [],
   subtitleStyle = null,
   hook = null,
+  layout = null,
   onProgress = () => {},
   signal,
 }) {
@@ -278,6 +281,7 @@ export async function renderLocalVideoOnBrowser({
     subtitleCues,
     subtitleStyle,
     hook,
+    layout,
   });
   return renderInBrowser({
     videoUrl,
@@ -288,6 +292,7 @@ export async function renderLocalVideoOnBrowser({
     height,
     subtitles: props.subtitles,
     hook: props.hook,
+    layout: props.layout,
     effects: props.effects,
     onProgress,
     signal,
@@ -317,6 +322,7 @@ export async function renderLocalVideoOnBackend({
   subtitleCues = [],
   subtitleStyle = null,
   hook = null,
+  layout = null,
   onProgress = () => {},
   pollMs = 1200,
   fetchImpl = fetch,
@@ -333,6 +339,7 @@ export async function renderLocalVideoOnBackend({
     subtitleCues,
     subtitleStyle,
     hook,
+    layout,
   });
   let requestUrl = getApiUrl("/api/local-editor/render");
   let requestOptions;
@@ -411,6 +418,7 @@ export async function burnLocalEditorSubtitles({
   subtitleCues = [],
   subtitleStyle = null,
   hook = null,
+  layout = null,
   onProgress = () => {},
   pollMs = 1200,
   fetchImpl = fetch,
@@ -429,6 +437,7 @@ export async function burnLocalEditorSubtitles({
     subtitleCues,
     subtitleStyle,
     hook,
+    layout,
     onProgress,
     pollMs,
     fetchImpl,

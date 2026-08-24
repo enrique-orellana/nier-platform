@@ -319,6 +319,7 @@ describe("LocalEditorTimeline", () => {
     const canvas = screen.getByTestId("local-editor-timeline-canvas");
     const lanes = [...canvas.querySelectorAll('[data-testid$="-track"]')];
     expect(lanes.map((lane) => lane.dataset.testid)).toEqual([
+      "local-editor-layout-track",
       "local-editor-hook-track",
       "local-editor-subtitles-track",
       "local-editor-audio-track",
@@ -331,5 +332,43 @@ describe("LocalEditorTimeline", () => {
 
     expect(screen.getByTestId("local-editor-audio-track")).toBeInTheDocument();
     expect(screen.getByText("No audio source")).toBeInTheDocument();
+  });
+
+  it("renders selectable Standard and Streamer layout segments", () => {
+    const onLayoutSelect = vi.fn();
+    render(
+      <LocalEditorTimeline
+        durationMs={10000}
+        playheadMs={6000}
+        layoutSegments={[
+          {
+            id: "layout-1",
+            startMs: 0,
+            endMs: 4000,
+            format: "standard",
+          },
+          {
+            id: "layout-2",
+            startMs: 4000,
+            endMs: 10000,
+            format: "streamer_stack",
+          },
+        ]}
+        selectedLayoutSegmentId="layout-2"
+        onLayoutSelect={onLayoutSelect}
+      />,
+    );
+
+    const segments = screen.getAllByTestId("local-editor-layout-segment");
+    expect(segments).toHaveLength(2);
+    expect(segments[0]).toHaveTextContent("Standard");
+    expect(segments[1]).toHaveTextContent("Streamer");
+    expect(segments[1]).toHaveAttribute("aria-pressed", "true");
+    expect(segments[1]).toHaveAttribute("data-current-layout", "true");
+
+    fireEvent.click(segments[1]);
+    expect(onLayoutSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "layout-2", format: "streamer_stack" }),
+    );
   });
 });

@@ -7,7 +7,10 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import FullScreenEditor from "./FullScreenEditor";
+import FullScreenEditor, {
+  localEditorStateToManifest,
+  manifestToLocalEditorState,
+} from "./FullScreenEditor";
 import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
 import { SUBTITLE_STYLE_TEMPLATES } from "../local-editor/localEditorStyles";
 
@@ -68,6 +71,81 @@ describe("FullScreenEditor", () => {
     vi.unstubAllGlobals();
     renderVersionMocks.saveDraftVersion.mockReset();
     renderVersionMocks.saveAndRenderVersion.mockReset();
+  });
+
+  it("round-trips layout segments without dropping existing clip layers", () => {
+    const source = {
+      ...manifest,
+      layers: {
+        ...manifest.layers,
+        layout: {
+          format: "standard",
+          facecam_size: "medium",
+          segments: [
+            {
+              id: "layout-1",
+              startMs: 0,
+              endMs: 10000,
+              format: "standard",
+              transition: "cut",
+              transitionDurationMs: 250,
+            },
+          ],
+        },
+      },
+    };
+    const state = manifestToLocalEditorState(source, "original");
+    const nextSegments = [
+      {
+        id: "layout-1",
+        startMs: 0,
+        endMs: 4000,
+        format: "standard",
+        transition: "cut",
+        transitionDurationMs: 250,
+      },
+      {
+        id: "layout-1-split-1",
+        startMs: 4000,
+        endMs: 10000,
+        format: "streamer_stack",
+        transition: "crossfade",
+        transitionDurationMs: 250,
+      },
+    ];
+
+    expect(state.layoutSegments).toEqual(source.layers.layout.segments);
+    const next = localEditorStateToManifest(
+      source,
+      { ...state, layoutSegments: nextSegments },
+      "original",
+    );
+
+    expect(next.layers.layout).toMatchObject({
+      format: "standard",
+      facecam_size: "medium",
+      segments: nextSegments,
+    });
+    expect(next.layers.hook).toMatchObject(source.layers.hook);
+    expect(next.subtitle_tracks[0].cues).toEqual(
+      source.subtitle_tracks[0].cues,
+    );
+  });
+
+  it("creates a full-duration segment from a legacy layout format", () => {
+    const source = {
+      ...manifest,
+      layers: { ...manifest.layers, layout: { format: "streamer_stack" } },
+    };
+    const state = manifestToLocalEditorState(source, "original");
+
+    expect(state.layoutSegments).toEqual([
+      expect.objectContaining({
+        startMs: 0,
+        endMs: 10000,
+        format: "streamer_stack",
+      }),
+    ]);
   });
 
   it("shows a loading screen while a direct-link editor is loading", async () => {
@@ -1214,7 +1292,11 @@ describe("FullScreenEditor", () => {
               }),
             ],
             layers: expect.objectContaining({
-              layout: { format: "standard", facecam_size: "medium" },
+              layout: expect.objectContaining({
+                format: "standard",
+                facecam_size: "medium",
+                segments: expect.any(Array),
+              }),
             }),
           }),
         }),

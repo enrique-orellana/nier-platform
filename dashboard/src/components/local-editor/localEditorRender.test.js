@@ -122,6 +122,35 @@ describe("local editor Remotion rendering", () => {
     });
   });
 
+  it("preserves layout segments in local render props", () => {
+    const segments = [
+      {
+        id: "layout-1",
+        startMs: 0,
+        endMs: 1000,
+        format: "standard",
+        transition: "cut",
+        transitionDurationMs: 250,
+      },
+      {
+        id: "layout-2",
+        startMs: 1000,
+        endMs: 2000,
+        format: "streamer_stack",
+        transition: "crossfade",
+        transitionDurationMs: 250,
+      },
+    ];
+    expect(
+      buildRemotionRenderProps({
+        durationSeconds: 2,
+        width: 608,
+        height: 1080,
+        layout: { format: "standard", segments },
+      }).layout,
+    ).toEqual({ format: "standard", segments });
+  });
+
   it("leaves subtitle block grouping to the renderer for word-level cues", () => {
     const props = buildRemotionRenderProps({
       durationSeconds: 2,

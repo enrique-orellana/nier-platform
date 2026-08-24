@@ -2,6 +2,7 @@ import {
   DEFAULT_SUBTITLE_STYLE,
   normalizeSubtitleStyle,
 } from "./localEditorStyles";
+import { normalizeLayoutSegments } from "../../editor/layoutTimelineModel";
 
 export const EDITOR_HISTORY_STORAGE_KEY = "openshorts_local_editor_state_v1";
 export const EDITOR_VIDEO_DB_NAME = "openshorts-local-editor-v1";
@@ -28,27 +29,44 @@ export const createEmptyEditorHistory = (preferences = {}) => ({
     ).toLowerCase(),
     hook: null,
     markers: [],
+    layoutSegments: [],
   },
   future: [],
 });
 
-const normalizeSnapshot = (snapshot) => ({
-  subtitleCues: Array.isArray(snapshot?.subtitleCues)
-    ? snapshot.subtitleCues
-    : [],
-  subtitleStyle: normalizeSubtitleStyle(snapshot?.subtitleStyle),
-  subtitleLanguage: String(snapshot?.subtitleLanguage || "en").toLowerCase(),
-  hook: snapshot?.hook || null,
-  markers: Array.isArray(snapshot?.markers)
-    ? snapshot.markers
-        .map((marker, index) => ({
-          id: String(marker?.id || `marker-${index}`),
-          timeMs: Math.max(0, Number(marker?.timeMs) || 0),
-          label: marker?.label ? String(marker.label) : "",
-        }))
-        .filter((marker) => Number.isFinite(marker.timeMs))
-    : [],
-});
+const snapshotDurationMs = (segments) =>
+  segments.reduce(
+    (duration, segment) => Math.max(duration, Number(segment?.endMs) || 0),
+    0,
+  );
+
+const normalizeSnapshot = (snapshot) => {
+  const rawLayoutSegments = snapshot?.layoutSegments;
+  const layoutSegments = Array.isArray(rawLayoutSegments)
+    ? normalizeLayoutSegments(
+        rawLayoutSegments,
+        Math.max(1, snapshotDurationMs(rawLayoutSegments)),
+      )
+    : [];
+  return {
+    subtitleCues: Array.isArray(snapshot?.subtitleCues)
+      ? snapshot.subtitleCues
+      : [],
+    subtitleStyle: normalizeSubtitleStyle(snapshot?.subtitleStyle),
+    subtitleLanguage: String(snapshot?.subtitleLanguage || "en").toLowerCase(),
+    hook: snapshot?.hook || null,
+    markers: Array.isArray(snapshot?.markers)
+      ? snapshot.markers
+          .map((marker, index) => ({
+            id: String(marker?.id || `marker-${index}`),
+            timeMs: Math.max(0, Number(marker?.timeMs) || 0),
+            label: marker?.label ? String(marker.label) : "",
+          }))
+          .filter((marker) => Number.isFinite(marker.timeMs))
+      : [],
+    layoutSegments,
+  };
+};
 
 export const normalizeEditorHistory = (history) => ({
   past: Array.isArray(history?.past)

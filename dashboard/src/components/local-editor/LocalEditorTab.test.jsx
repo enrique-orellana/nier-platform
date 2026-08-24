@@ -194,6 +194,62 @@ describe("LocalEditorTab", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("lets the Layout track split and change only the selected section", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        initialEditorState={{
+          ...controlledEditorState,
+          subtitleCues: [
+            { id: "cue-1", text: "Caption", startMs: 1000, endMs: 3000 },
+          ],
+          layoutSegments: [
+            {
+              id: "layout-1",
+              startMs: 0,
+              endMs: 10000,
+              format: "standard",
+              transition: "cut",
+              transitionDurationMs: 250,
+            },
+          ],
+        }}
+        initialStateKey="layout-test"
+      />,
+    );
+
+    const subtitle = screen.getByRole("button", { name: "Caption" });
+    fireEvent.click(subtitle);
+    const layout = screen.getByTestId("local-editor-layout-segment");
+    fireEvent.click(layout);
+    expect(subtitle).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Streamer", exact: true }),
+    );
+    expect(screen.getByTestId("local-editor-layout-segment")).toHaveAttribute(
+      "data-layout-format",
+      "streamer_stack",
+    );
+
+    const ruler = screen.getByRole("slider", { name: "Timeline seek" });
+    vi.spyOn(ruler, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 1000,
+      bottom: 30,
+      width: 1000,
+      height: 30,
+    });
+    fireEvent.click(ruler, { clientX: 500 });
+    fireEvent.click(screen.getByRole("button", { name: "Split at playhead" }));
+
+    expect(screen.getAllByTestId("local-editor-layout-segment")).toHaveLength(
+      2,
+    );
+  });
+
   it("hides undo and redo actions when editing a project clip", async () => {
     const history = createEmptyEditorHistory();
     localStorage.setItem(
