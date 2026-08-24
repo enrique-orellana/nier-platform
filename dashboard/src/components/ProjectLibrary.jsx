@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   Clock,
+  ExternalLink,
   Film,
   FolderOpen,
   HardDrive,
@@ -106,6 +107,14 @@ function formatDuration(seconds) {
   const minutes = Math.floor(rounded / 60);
   const remainder = rounded % 60;
   return `${minutes}m ${remainder.toString().padStart(2, "0")}s`;
+}
+
+function formatSourceUploadDate(value) {
+  const raw = String(value || "").trim();
+  if (/^\d{8}$/.test(raw)) {
+    return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6)}`;
+  }
+  return raw || "Unknown";
 }
 
 function safeNumber(value, fallback = 0) {
@@ -258,6 +267,7 @@ export default function ProjectLibrary({
   const [clipRenderJobs, setClipRenderJobs] = useState({});
   const [statusError, setStatusError] = useState("");
   const [isAuditOpen, setIsAuditOpen] = useState(false);
+  const [isSourceMetadataOpen, setIsSourceMetadataOpen] = useState(false);
   const [isLoadingAudit, setIsLoadingAudit] = useState(false);
   const [auditEvents, setAuditEvents] = useState([]);
   const [auditPolicy, setAuditPolicy] = useState(null);
@@ -437,6 +447,7 @@ export default function ProjectLibrary({
       setClipRenderJobs({});
       setStatusError("");
       setIsAuditOpen(false);
+      setIsSourceMetadataOpen(false);
       setAuditEvents([]);
       setAuditPolicy(null);
       setAuditError("");
@@ -466,6 +477,7 @@ export default function ProjectLibrary({
     setClipRenderJobs({});
     setStatusError("");
     setIsAuditOpen(false);
+    setIsSourceMetadataOpen(false);
     setAuditEvents([]);
     setAuditPolicy(null);
     setAuditError("");
@@ -484,6 +496,14 @@ export default function ProjectLibrary({
     selectedProject?.job_id ||
     selectedProject?.session_id ||
     selectedProject?.id;
+
+  const sourceMetadata =
+    selectedProject?.source_metadata &&
+    typeof selectedProject.source_metadata === "object"
+      ? selectedProject.source_metadata
+      : null;
+  const hasSourceMetadata =
+    sourceMetadata && Object.keys(sourceMetadata).length > 0;
 
   useEffect(() => {
     persistStatusFilters(selectedProjectId, statusFilters);
@@ -1195,6 +1215,25 @@ export default function ProjectLibrary({
 
               {/* Metadata Badges Strip */}
               <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {hasSourceMetadata && (
+                  <button
+                    type="button"
+                    onClick={() => setIsSourceMetadataOpen(true)}
+                    aria-label="View source details"
+                    title="View all source metadata"
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-cyan-400/25 bg-cyan-400/[0.08] text-cyan-200 shadow-sm transition-colors hover:bg-cyan-400/[0.16]"
+                  >
+                    <Info size={14} className="text-cyan-300 shrink-0" />
+                    <div className="flex flex-col text-left">
+                      <span className="text-[9px] uppercase tracking-wider text-cyan-300/70 font-bold leading-none mb-0.5">
+                        Source
+                      </span>
+                      <span className="text-xs font-bold leading-none">
+                        Details
+                      </span>
+                    </div>
+                  </button>
+                )}
                 <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] shadow-sm">
                   <Film size={14} className="text-cyan-400 shrink-0" />
                   <div className="flex flex-col">
@@ -1432,6 +1471,197 @@ export default function ProjectLibrary({
             )}
           </div>
         </div>
+        {isSourceMetadataOpen && sourceMetadata && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+            <button
+              type="button"
+              aria-label="Close source details"
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              onClick={() => setIsSourceMetadataOpen(false)}
+            />
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="source-details-title"
+              className="relative flex max-h-[min(90vh,900px)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#101216] shadow-2xl"
+            >
+              <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 bg-gradient-to-r from-cyan-400/[0.08] to-transparent p-5">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-300">
+                    Source metadata
+                  </p>
+                  <h2
+                    id="source-details-title"
+                    className="mt-1 truncate text-xl font-bold text-white"
+                  >
+                    Source details
+                  </h2>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Complete information from the original source.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSourceMetadataOpen(false)}
+                  aria-label="Close source details"
+                  className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="min-h-0 space-y-5 overflow-y-auto p-5">
+                <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <div className="overflow-hidden rounded-xl border border-white/10 bg-black/30">
+                    {sourceMetadata.thumbnail ? (
+                      <img
+                        src={String(sourceMetadata.thumbnail)}
+                        alt={String(sourceMetadata.title || "Source thumbnail")}
+                        className="aspect-video h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex aspect-video items-center justify-center text-zinc-600">
+                        <FolderOpen size={28} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {sourceMetadata.platform && (
+                        <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-200">
+                          {String(sourceMetadata.platform)}
+                        </span>
+                      )}
+                      {sourceMetadata.channel && (
+                        <span className="text-xs text-zinc-400">
+                          {String(sourceMetadata.channel)}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="mt-3 text-lg font-bold leading-snug text-white">
+                      {String(sourceMetadata.title || "Untitled source")}
+                    </h3>
+                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-400">
+                      {String(
+                        sourceMetadata.description ||
+                          "No description available.",
+                      )}
+                    </p>
+                    {sourceMetadata.webpage_url && (
+                      <a
+                        href={String(sourceMetadata.webpage_url)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-300 hover:text-cyan-200"
+                      >
+                        Open source page
+                        <ExternalLink size={13} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {[
+                    [
+                      "Views",
+                      Number(sourceMetadata.view_count || 0).toLocaleString(),
+                    ],
+                    [
+                      "Duration",
+                      formatDuration(sourceMetadata.duration) || "Unknown",
+                    ],
+                    [
+                      "Upload date",
+                      formatSourceUploadDate(sourceMetadata.upload_date),
+                    ],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
+                    >
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                        {label}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-white">
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid gap-4 border-t border-white/10 pt-5 md:grid-cols-2">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                      Categories
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(Array.isArray(sourceMetadata.categories)
+                        ? sourceMetadata.categories
+                        : []
+                      ).map((category) => (
+                        <span
+                          key={category}
+                          className="rounded-full bg-purple-400/10 px-2.5 py-1 text-xs text-purple-200"
+                        >
+                          {String(category)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                      Tags
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(Array.isArray(sourceMetadata.tags)
+                        ? sourceMetadata.tags
+                        : []
+                      ).map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full bg-white/[0.06] px-2.5 py-1 text-xs text-zinc-300"
+                        >
+                          {String(tag)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-x-5 gap-y-3 border-t border-white/10 pt-5 text-xs md:grid-cols-2">
+                  {[
+                    ["Source ID", sourceMetadata.id],
+                    ["Platform", sourceMetadata.platform],
+                    ["Source URL", sourceMetadata.source_url],
+                    ["Webpage URL", sourceMetadata.webpage_url],
+                    ["Thumbnail URL", sourceMetadata.thumbnail],
+                  ].map(([label, value]) => (
+                    <div key={label} className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                        {label}
+                      </p>
+                      {String(value || "").startsWith("http") ? (
+                        <a
+                          href={String(value)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 block truncate text-cyan-300 hover:text-cyan-200"
+                        >
+                          {String(value)}
+                        </a>
+                      ) : (
+                        <p className="mt-1 break-words text-zinc-300">
+                          {String(value || "Unknown")}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
         {isAuditOpen && (
           <div className="fixed inset-0 z-50" role="presentation">
             <button

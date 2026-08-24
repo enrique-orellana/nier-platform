@@ -122,6 +122,61 @@ describe("ProjectLibrary", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/job-audit/audit");
   });
 
+  it("opens all source metadata from the project header button", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url) => {
+        if (String(url).includes("/api/projects/history")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              projects: [
+                {
+                  job_id: "job-source-details",
+                  title: "Project with source details",
+                  clips: [],
+                  source_metadata: {
+                    categories: ["Gaming"],
+                    channel: "Rubius Z",
+                    description: "A detailed source description",
+                    duration: 2331,
+                    id: "CD6p5aHx5gw",
+                    platform: "youtube",
+                    source_url: "https://example.com/source",
+                    tags: ["rubius", "meltopia"],
+                    thumbnail: "https://example.com/thumbnail.webp",
+                    title: "Hice un MEGA-AGUJERO de Hielo",
+                    upload_date: "20260731",
+                    view_count: 2488618,
+                    webpage_url: "https://example.com/watch",
+                  },
+                },
+              ],
+            }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }),
+    );
+
+    render(<ProjectLibrary projectId="job-source-details" />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "View source details" }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Source details" });
+    expect(dialog).toHaveTextContent("Hice un MEGA-AGUJERO de Hielo");
+    expect(dialog).toHaveTextContent("Rubius Z");
+    expect(dialog).toHaveTextContent("A detailed source description");
+    expect(dialog).toHaveTextContent("2,488,618");
+    expect(dialog).toHaveTextContent("rubius");
+    expect(dialog).toHaveTextContent("Gaming");
+    expect(
+      screen.getByRole("link", { name: "Open source page" }),
+    ).toHaveAttribute("href", "https://example.com/watch");
+  });
+
   it("notifies the router when opening a clip editor", async () => {
     const onOpenEditor = vi.fn();
     vi.stubGlobal(
