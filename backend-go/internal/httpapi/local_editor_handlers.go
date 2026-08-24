@@ -179,7 +179,18 @@ func (s *Server) generateHashtags(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Invalid hashtag worker result"})
 		return
 	}
+	if hashtags, ok := response["hashtags"].([]any); ok {
+		for index, value := range hashtags {
+			if hashtag, ok := value.(string); ok {
+				hashtags[index] = normalizeHashtag(hashtag)
+			}
+		}
+	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func normalizeHashtag(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 func (s *Server) generateClipInfo(w http.ResponseWriter, r *http.Request) {

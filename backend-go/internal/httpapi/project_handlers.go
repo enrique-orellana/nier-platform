@@ -481,7 +481,7 @@ func (s *Server) updateProjectClipMetadata(w http.ResponseWriter, r *http.Reques
 	if request.Hashtags != nil {
 		hashtags = make([]string, 0, len(*request.Hashtags))
 		for _, hashtag := range *request.Hashtags {
-			if value := strings.TrimSpace(hashtag); value != "" {
+			if value := normalizeHashtag(hashtag); value != "" {
 				hashtags = append(hashtags, value)
 			}
 		}

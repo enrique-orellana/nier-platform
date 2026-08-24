@@ -179,7 +179,7 @@ func (hashtagOperation) Run(_ context.Context, _ string, operation string, _ map
 	if operation != "hashtags" {
 		return nil, fmt.Errorf("unexpected operation %s", operation)
 	}
-	return json.RawMessage(`{"hashtags":["#one","#two"]}`), nil
+	return json.RawMessage(`{"hashtags":["#One","#Rubius"]}`), nil
 }
 
 type clipInfoOperation struct{}
@@ -2303,7 +2303,7 @@ func TestProjectClipHashtagsPersistInJobResult(t *testing.T) {
 	request := httptest.NewRequest(
 		http.MethodPatch,
 		"/api/projects/"+job.ID+"/clips/0/metadata",
-		strings.NewReader(`{"hashtags":["#new","#viral"],"video_title_for_youtube_short":"New title","video_description_for_tiktok":"TikTok caption","video_description_for_instagram":"Instagram caption","viral_hook_text":"NEW HOOK"}`),
+		strings.NewReader(`{"hashtags":["#New","#Viral"],"video_title_for_youtube_short":"New title","video_description_for_tiktok":"TikTok caption","video_description_for_instagram":"Instagram caption","viral_hook_text":"NEW HOOK"}`),
 	)
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -2649,7 +2649,7 @@ func TestLocalEditorHashtagsUseGoWorkerBoundary(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	res := httptest.NewRecorder()
 	server.Handler().ServeHTTP(res, req)
-	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"#one"`) {
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"#one"`) || !strings.Contains(res.Body.String(), `"#rubius"`) {
 		t.Fatalf("unexpected hashtag response: %d %s", res.Code, res.Body.String())
 	}
 }
