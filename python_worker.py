@@ -842,6 +842,15 @@ def handle_request(request: Mapping[str, Any]) -> None:
             config = load_ai_config(headers)
             if config.is_gemini() and not config.api_key:
                 raise ValueError("Missing X-Gemini-Key header")
+            source_metadata = payload.get("source_metadata") or {}
+            if isinstance(source_metadata, Mapping):
+                source_metadata = {
+                    key: value
+                    for key in ("title", "channel", "categories", "tags")
+                    if (value := source_metadata.get(key)) is not None
+                }
+            else:
+                source_metadata = {}
             prompt = (
                 "Generate 8 to 12 relevant social-media hashtags. Return JSON only with "
                 '{"hashtags":["#tag1"]}. Use the source language and do not return duplicates.\n\n'
@@ -850,7 +859,7 @@ def handle_request(request: Mapping[str, Any]) -> None:
                 f"Caption: {str(payload.get('caption') or '').strip()}\n"
                 f"Current subtitles: {str(payload.get('subtitle_text') or '').strip()}\n\n"
                 "SOURCE METADATA\n"
-                f"{json.dumps(payload.get('source_metadata') or {}, ensure_ascii=False, default=str)}\n\n"
+                f"{json.dumps(source_metadata, ensure_ascii=False, default=str)}\n\n"
                 "SOURCE CONTEXT\n"
                 f"{json.dumps(payload.get('source_context') or {}, ensure_ascii=False, default=str)}"
             )

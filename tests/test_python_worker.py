@@ -112,7 +112,14 @@ def test_handle_request_generates_hashtags_with_source_metadata(monkeypatch, cap
                 "title": "Rubius compra el upgrade final",
                 "caption": "Compra el último upgrade 🔥",
                 "subtitle_text": "Texto actual",
-                "source_metadata": {"channel": "Rubius", "tags": ["Meltopia"]},
+                "source_metadata": {
+                    "title": "Hice un MEGA-AGUJERO de Hielo",
+                    "channel": "Rubius Z",
+                    "categories": ["Gaming"],
+                    "description": "Promotional source description",
+                    "source_url": "https://example.com/source",
+                    "tags": ["Meltopia"],
+                },
                 "source_context": {"what": "upgrade final"},
             },
             "headers": {},
@@ -122,7 +129,12 @@ def test_handle_request_generates_hashtags_with_source_metadata(monkeypatch, cap
     event = json.loads(capsys.readouterr().out.strip())
     assert event["result"]["hashtags"] == ["#Meltopia", "#Rubius"]
     assert "SOURCE METADATA" in seen["prompt"]
-    assert "Rubius" in seen["prompt"]
+    assert "Hice un MEGA-AGUJERO de Hielo" in seen["prompt"]
+    assert '"channel": "Rubius Z"' in seen["prompt"]
+    assert '"categories": ["Gaming"]' in seen["prompt"]
+    assert "Promotional source description" not in seen["prompt"]
+    assert "https://example.com/source" not in seen["prompt"]
+    assert '"tags": ["Meltopia"]' in seen["prompt"]
     assert "SOURCE CONTEXT" in seen["prompt"]
 
 
