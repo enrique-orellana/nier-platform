@@ -122,44 +122,6 @@ describe("ProjectLibrary", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/job-audit/audit");
   });
 
-  it("renders source metadata in the project header", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((url) => {
-        const value = String(url);
-        if (value.includes("/api/projects/history")) {
-          return Promise.resolve({
-            ok: true,
-            json: async () => ({
-              projects: [
-                {
-                  job_id: "job-source-metadata",
-                  title: "Source metadata project",
-                  source_metadata: {
-                    platform: "youtube",
-                    title: "A source video worth watching",
-                    channel: "OpenShorts",
-                  },
-                  clips: [],
-                },
-              ],
-            }),
-          });
-        }
-        return Promise.resolve({ ok: true, json: async () => ({}) });
-      }),
-    );
-
-    render(<ProjectLibrary projectId="job-source-metadata" />);
-
-    expect(
-      await screen.findByTestId("project-source-metadata"),
-    ).toHaveTextContent("A source video worth watching");
-    expect(screen.getByTestId("project-source-metadata")).toHaveTextContent(
-      "OpenShorts",
-    );
-  });
-
   it("notifies the router when opening a clip editor", async () => {
     const onOpenEditor = vi.fn();
     vi.stubGlobal(

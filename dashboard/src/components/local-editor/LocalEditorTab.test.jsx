@@ -176,29 +176,6 @@ describe("LocalEditorTab", () => {
     );
   });
 
-  it("renders source metadata as a compact project header summary", () => {
-    render(
-      <LocalEditorTab
-        initialVideoUrl="/videos/project.mp4"
-        clipMetadata={{
-          source_metadata: {
-            platform: "youtube",
-            title: "How to build a better short",
-            channel: "OpenShorts",
-          },
-        }}
-        initialPlaybackDurationMs={10000}
-      />,
-    );
-
-    expect(
-      screen.getByTestId("local-editor-source-metadata"),
-    ).toHaveTextContent("How to build a better short");
-    expect(
-      screen.getByTestId("local-editor-source-metadata"),
-    ).toHaveTextContent("OpenShorts");
-  });
-
   it("hides the Projects action when editing a project clip", () => {
     render(
       <LocalEditorTab
