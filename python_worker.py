@@ -793,21 +793,27 @@ def handle_request(request: Mapping[str, Any]) -> None:
             if config.is_gemini() and not config.api_key:
                 raise ValueError("Missing X-Gemini-Key header")
             source_metadata = payload.get("source_metadata") or {}
+            if isinstance(source_metadata, Mapping):
+                source_metadata = {
+                    key: value
+                    for key in ("title", "channel", "categories")
+                    if (value := source_metadata.get(key)) is not None
+                }
+            else:
+                source_metadata = {}
             source_context = payload.get("source_context") or {}
             prompt = (
-                "Create clip information from the live selected video moment. "
-                "The SELECTED CONTENT section is authoritative for what happens in the current time range. "
-                "SOURCE METADATA and SOURCE CONTEXT are background only and must not override the selected content. "
+                "Create clip information for the selected video moment. "
                 "Write in the source language. Return JSON only with exactly these keys: "
                 "video_title_for_youtube_short, video_description_for_tiktok, "
                 "video_description_for_instagram, viral_hook_text.\n\n"
-                "SELECTED CONTENT\n"
-                f"Trim range: {payload.get('trim_start_seconds', 0)}s to {payload.get('trim_end_seconds', 0)}s\n"
-                f"Live subtitles and captions: {str(payload.get('subtitle_text') or '').strip()}\n\n"
-                "SOURCE METADATA\n"
-                f"{json.dumps(source_metadata, ensure_ascii=False, default=str)}\n\n"
-                "SOURCE CONTEXT\n"
-                f"{json.dumps(source_context, ensure_ascii=False, default=str)}\n\n"
+                f"TITLE: {str(payload.get('title') or '').strip()}\n"
+                f"CAPTION: {str(payload.get('caption') or '').strip()}\n"
+                f"INSTAGRAM CAPTION: {str(payload.get('instagram_caption') or '').strip()}\n"
+                f"SUBTITLES: {str(payload.get('subtitle_text') or '').strip()}\n"
+                f"TRIM RANGE: {payload.get('trim_start_seconds', 0)}s to {payload.get('trim_end_seconds', 0)}s\n"
+                f"SOURCE METADATA: {json.dumps(source_metadata, ensure_ascii=False, default=str)}\n"
+                f"SOURCE CONTEXT: {json.dumps(source_context, ensure_ascii=False)}\n\n"
                 "OUTPUT\n"
                 '{"video_title_for_youtube_short":"...",'
                 '"video_description_for_tiktok":"...",'
