@@ -156,15 +156,11 @@ describe("ClipMetadataPanel", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          title: clip.video_title_for_youtube_short,
-          caption: clip.video_description_for_tiktok,
-          instagram_caption: clip.video_description_for_instagram,
           subtitle_text: "Texto editado",
           trim_start_seconds: 120,
           trim_end_seconds: 158,
           source_metadata: clip.source_metadata,
           source_context: clip.source_context,
-          viral_hook_text: clip.viral_hook_text,
         }),
       }),
     );

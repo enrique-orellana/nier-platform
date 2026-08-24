@@ -152,9 +152,6 @@ export default function ClipMetadataPanel({
         method: "POST",
         headers: { "Content-Type": "application/json", ...getLocalAiHeaders() },
         body: JSON.stringify({
-          title,
-          caption,
-          instagram_caption: clipInfo.video_description_for_instagram,
           subtitle_text: subtitleTextFromCues(subtitleCues),
           trim_start_seconds: finiteNumber(trimStartSeconds),
           trim_end_seconds:
@@ -163,7 +160,6 @@ export default function ClipMetadataPanel({
               : finiteNumber(trimEndSeconds),
           source_metadata: sourceMetadata || metadata.source_metadata || {},
           source_context: metadata.source_context || {},
-          viral_hook_text: clipInfo.viral_hook_text,
         }),
       });
       const payload = await response.json().catch(() => ({}));

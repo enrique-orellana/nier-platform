@@ -795,18 +795,15 @@ def handle_request(request: Mapping[str, Any]) -> None:
             source_metadata = payload.get("source_metadata") or {}
             source_context = payload.get("source_context") or {}
             prompt = (
-                "Create clip information for the selected video moment. "
-                "Use the selected content and source metadata as context. "
+                "Create clip information from the live selected video moment. "
+                "The SELECTED CONTENT section is authoritative for what happens in the current time range. "
+                "SOURCE METADATA and SOURCE CONTEXT are background only and must not override the selected content. "
                 "Write in the source language. Return JSON only with exactly these keys: "
                 "video_title_for_youtube_short, video_description_for_tiktok, "
                 "video_description_for_instagram, viral_hook_text.\n\n"
-                "CURRENT CLIP\n"
-                f"Title: {str(payload.get('title') or '').strip()}\n"
-                f"TikTok caption: {str(payload.get('caption') or '').strip()}\n"
-                f"Instagram caption: {str(payload.get('instagram_caption') or '').strip()}\n"
-                f"Current subtitles: {str(payload.get('subtitle_text') or '').strip()}\n"
+                "SELECTED CONTENT\n"
                 f"Trim range: {payload.get('trim_start_seconds', 0)}s to {payload.get('trim_end_seconds', 0)}s\n"
-                f"Existing hook: {str(payload.get('viral_hook_text') or '').strip()}\n\n"
+                f"Live subtitles and captions: {str(payload.get('subtitle_text') or '').strip()}\n\n"
                 "SOURCE METADATA\n"
                 f"{json.dumps(source_metadata, ensure_ascii=False, default=str)}\n\n"
                 "SOURCE CONTEXT\n"

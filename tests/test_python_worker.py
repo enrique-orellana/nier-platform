@@ -50,9 +50,9 @@ def test_handle_request_generates_clip_info_with_source_context(monkeypatch, cap
             "id": "clip-info-1",
             "operation": "clip_info",
             "payload": {
-                "title": "Old title",
-                "caption": "Live caption",
-                "instagram_caption": "Live Instagram caption",
+                "title": "Old title from previous time range",
+                "caption": "Old caption from previous time range",
+                "instagram_caption": "Old Instagram caption from previous time range",
                 "subtitle_text": "Texto editado del rango actual",
                 "trim_start_seconds": 120,
                 "trim_end_seconds": 158,
@@ -68,11 +68,15 @@ def test_handle_request_generates_clip_info_with_source_context(monkeypatch, cap
 
     event = json.loads(capsys.readouterr().out.strip())
     assert event["result"]["video_title_for_youtube_short"].startswith("Rubius compra")
-    assert "CURRENT CLIP" in seen["prompt"]
     assert "Texto editado del rango actual" in seen["prompt"]
     assert "Rubius juega Meltopia" in seen["prompt"]
     assert "Meltopia upgrade" in seen["prompt"]
     assert "120" in seen["prompt"] and "158" in seen["prompt"]
+    assert "SELECTED CONTENT" in seen["prompt"]
+    assert "authoritative" in seen["prompt"].lower()
+    assert "Old title from previous time range" not in seen["prompt"]
+    assert "Old caption from previous time range" not in seen["prompt"]
+    assert "Old Instagram caption from previous time range" not in seen["prompt"]
 
 
 def test_handle_request_generates_hashtags_with_source_metadata(monkeypatch, capsys):
