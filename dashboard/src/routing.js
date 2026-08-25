@@ -7,6 +7,7 @@ const TAB_PATHS = {
   editor: "/editor",
   highlights: "/highlights",
   projects: "/projects",
+  performance: "/performance",
   settings: "/settings",
 };
 

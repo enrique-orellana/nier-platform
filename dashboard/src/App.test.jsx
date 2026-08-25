@@ -55,6 +55,30 @@ describe("App settings layout", () => {
     ).toHaveClass("lucide-sparkles");
   });
 
+  it("places Performance immediately before Settings", () => {
+    render(<App />);
+
+    const performanceButton = screen.getByText("Performance").closest("button");
+    const settingsButton = screen.getByRole("button", { name: "Settings" });
+    expect(performanceButton.querySelector("svg")).toHaveClass(
+      "lucide-activity",
+    );
+    expect(
+      performanceButton.compareDocumentPosition(settingsButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("renders the Performance view from its direct route", async () => {
+    window.history.pushState({}, "", "/performance");
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Performance" }),
+    ).toBeInTheDocument();
+  });
+
   it("makes the idle clip generator content vertically scrollable", () => {
     window.history.pushState({}, "", "/");
     const { container } = render(<App />);

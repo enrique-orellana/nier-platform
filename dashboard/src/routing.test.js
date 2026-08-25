@@ -17,6 +17,12 @@ describe("frontend tab routing", () => {
     expect(getPathForTab("dashboard")).toBe("/");
   });
 
+  it("maps the performance tab to a stable direct route", () => {
+    expect(getPathForTab("performance")).toBe("/performance");
+    expect(getTabFromPath("/performance")).toBe("performance");
+    expect(parseRoute("/performance").tab).toBe("performance");
+  });
+
   it("maps the standalone local editor tab to /editor", () => {
     expect(getPathForTab("editor")).toBe("/editor");
     expect(getTabFromPath("/editor")).toBe("editor");

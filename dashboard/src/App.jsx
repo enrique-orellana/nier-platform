@@ -51,6 +51,7 @@ import ScheduleWeekModal from "./components/ScheduleWeekModal";
 import AISettingsPanel from "./components/AISettingsPanel";
 import LocalEditorTab from "./components/local-editor/LocalEditorTab";
 import HighlightsTab from "./components/HighlightsTab";
+import PerformanceDashboard from "./components/PerformanceDashboard";
 
 import {
   pickLmStudioModel,
@@ -1459,6 +1460,12 @@ function App() {
           activeColor="bg-cyan-500/10 text-cyan-400"
         />
         <NavItem
+          tabKey="performance"
+          icon={Activity}
+          label="Performance"
+          activeColor="bg-cyan-500/10 text-cyan-400"
+        />
+        <NavItem
           tabKey="settings"
           icon={Settings}
           label="Settings"
@@ -1582,6 +1589,8 @@ function App() {
 
         {/* Main Workspace */}
         <div className="flex-1 overflow-hidden relative">
+          {activeTab === "performance" && <PerformanceDashboard />}
+
           {/* View: Settings */}
           {activeTab === "settings" && (
             <div className="h-full overflow-y-auto p-8 max-w-2xl mx-auto animate-[fadeIn_0.3s_ease-out]">

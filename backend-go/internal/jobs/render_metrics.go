@@ -3,6 +3,9 @@ package jobs
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math"
+	"sort"
 	"time"
 )
 
@@ -98,4 +101,238 @@ func (s *MemoryStore) GetRenderPerformanceMetric(_ context.Context, renderID str
 		return RenderPerformanceMetric{}, false, nil
 	}
 	return cloneRenderPerformanceMetric(metric), true, nil
+}
+
+const renderPerformanceRecentLimit = 20
+
+type RenderPerformanceRange struct {
+	Key  string
+	From *time.Time
+	To   time.Time
+}
+
+type RenderPerformanceSummary struct {
+	Range   string                         `json:"range"`
+	From    *time.Time                     `json:"from"`
+	To      time.Time                      `json:"to"`
+	Summary RenderPerformanceSummaryStats  `json:"summary"`
+	Trend   []RenderPerformanceTrendPoint  `json:"trend"`
+	Stages  []RenderPerformanceStage       `json:"stages"`
+	Recent  []RenderPerformanceRecentEntry `json:"recent"`
+}
+
+type RenderPerformanceSummaryStats struct {
+	RenderCount        int64            `json:"render_count"`
+	SuccessfulCount    int64            `json:"successful_count"`
+	FailedCount        int64            `json:"failed_count"`
+	SuccessRate        float64          `json:"success_rate"`
+	AverageDurationMS  int64            `json:"average_duration_ms"`
+	P95DurationMS      int64            `json:"p95_duration_ms"`
+	TotalOutputBytes   int64            `json:"total_output_bytes"`
+	AccelerationCounts map[string]int64 `json:"acceleration_counts"`
+}
+
+type RenderPerformanceTrendPoint struct {
+	Date              string `json:"date"`
+	RenderCount       int64  `json:"render_count"`
+	FailedCount       int64  `json:"failed_count"`
+	AverageDurationMS int64  `json:"average_duration_ms"`
+	P95DurationMS     int64  `json:"p95_duration_ms"`
+}
+
+type RenderPerformanceStage struct {
+	Name       string  `json:"name"`
+	DurationMS int64   `json:"duration_ms"`
+	Share      float64 `json:"share"`
+}
+
+type RenderPerformanceRecentEntry struct {
+	RenderID         string    `json:"render_id"`
+	JobID            string    `json:"job_id"`
+	VersionID        string    `json:"version_id,omitempty"`
+	ClipIndex        int       `json:"clip_index"`
+	Status           string    `json:"status"`
+	TotalDurationMS  int64     `json:"total_duration_ms"`
+	AccelerationMode string    `json:"acceleration_mode"`
+	OutputBytes      int64     `json:"output_bytes"`
+	FinishedAt       time.Time `json:"finished_at"`
+	Error            string    `json:"error,omitempty"`
+}
+
+func ParseRenderPerformanceRange(value string, now time.Time) (RenderPerformanceRange, error) {
+	to := now.UTC()
+	if value == "" {
+		value = "30d"
+	}
+	period := RenderPerformanceRange{Key: value, To: to}
+	switch value {
+	case "7d":
+		from := to.Add(-7 * 24 * time.Hour)
+		period.From = &from
+	case "30d":
+		from := to.Add(-30 * 24 * time.Hour)
+		period.From = &from
+	case "90d":
+		from := to.Add(-90 * 24 * time.Hour)
+		period.From = &from
+	case "all":
+	default:
+		return RenderPerformanceRange{}, fmt.Errorf("unsupported render metrics range %q", value)
+	}
+	return period, nil
+}
+
+type renderPerformanceTrendAggregate struct {
+	renderCount int64
+	failedCount int64
+	durationsMS []int64
+}
+
+func (s *MemoryStore) GetRenderPerformanceSummary(_ context.Context, rangeKey string, now time.Time) (RenderPerformanceSummary, error) {
+	period, err := ParseRenderPerformanceRange(rangeKey, now)
+	if err != nil {
+		return RenderPerformanceSummary{}, err
+	}
+
+	s.mu.RLock()
+	metrics := make([]RenderPerformanceMetric, 0, len(s.renderMetrics))
+	for _, metric := range s.renderMetrics {
+		metrics = append(metrics, cloneRenderPerformanceMetric(metric))
+	}
+	s.mu.RUnlock()
+
+	filtered := make([]RenderPerformanceMetric, 0, len(metrics))
+	for _, metric := range metrics {
+		finishedAt := metric.FinishedAt.UTC()
+		if period.From != nil && finishedAt.Before(*period.From) {
+			continue
+		}
+		if finishedAt.After(period.To) {
+			continue
+		}
+		filtered = append(filtered, metric)
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		if filtered[i].FinishedAt.Equal(filtered[j].FinishedAt) {
+			return filtered[i].RenderID > filtered[j].RenderID
+		}
+		return filtered[i].FinishedAt.After(filtered[j].FinishedAt)
+	})
+
+	result := RenderPerformanceSummary{
+		Range:  period.Key,
+		From:   period.From,
+		To:     period.To,
+		Trend:  make([]RenderPerformanceTrendPoint, 0),
+		Stages: make([]RenderPerformanceStage, 0),
+		Recent: make([]RenderPerformanceRecentEntry, 0),
+	}
+	result.Summary.AccelerationCounts = map[string]int64{"cpu": 0, "gpu": 0}
+	trendByDate := make(map[string]*renderPerformanceTrendAggregate)
+	stageTotals := make(map[string]int64)
+	var successfulDurations []int64
+	var totalSuccessfulStageDuration int64
+
+	for _, metric := range filtered {
+		result.Summary.RenderCount++
+		result.Summary.TotalOutputBytes += metric.OutputBytes
+		result.Summary.AccelerationCounts[metric.AccelerationMode]++
+		if metric.Status == "done" {
+			result.Summary.SuccessfulCount++
+			successfulDurations = append(successfulDurations, metric.TotalDurationMS)
+			for stage, duration := range metric.StageDurationsMS {
+				stageTotals[stage] += duration
+				totalSuccessfulStageDuration += duration
+			}
+		} else if metric.Status == "error" {
+			result.Summary.FailedCount++
+		}
+
+		day := metric.FinishedAt.UTC().Format("2006-01-02")
+		trend := trendByDate[day]
+		if trend == nil {
+			trend = &renderPerformanceTrendAggregate{}
+			trendByDate[day] = trend
+		}
+		trend.renderCount++
+		if metric.Status == "error" {
+			trend.failedCount++
+		} else if metric.Status == "done" {
+			trend.durationsMS = append(trend.durationsMS, metric.TotalDurationMS)
+		}
+
+		if len(result.Recent) < renderPerformanceRecentLimit {
+			result.Recent = append(result.Recent, RenderPerformanceRecentEntry{
+				RenderID: metric.RenderID, JobID: metric.JobID, VersionID: metric.VersionID,
+				ClipIndex: metric.ClipIndex, Status: metric.Status, TotalDurationMS: metric.TotalDurationMS,
+				AccelerationMode: metric.AccelerationMode, OutputBytes: metric.OutputBytes,
+				FinishedAt: metric.FinishedAt, Error: metric.Error,
+			})
+		}
+	}
+
+	if result.Summary.RenderCount > 0 {
+		result.Summary.SuccessRate = roundToOneDecimal(float64(result.Summary.SuccessfulCount) / float64(result.Summary.RenderCount) * 100)
+	}
+	result.Summary.AverageDurationMS = averageDuration(successfulDurations)
+	result.Summary.P95DurationMS = percentileDuration(successfulDurations, 0.95)
+
+	trendDates := make([]string, 0, len(trendByDate))
+	for day := range trendByDate {
+		trendDates = append(trendDates, day)
+	}
+	sort.Strings(trendDates)
+	for _, day := range trendDates {
+		trend := trendByDate[day]
+		result.Trend = append(result.Trend, RenderPerformanceTrendPoint{
+			Date: day, RenderCount: trend.renderCount, FailedCount: trend.failedCount,
+			AverageDurationMS: averageDuration(trend.durationsMS), P95DurationMS: percentileDuration(trend.durationsMS, 0.95),
+		})
+	}
+
+	for stage, duration := range stageTotals {
+		share := float64(0)
+		if totalSuccessfulStageDuration > 0 {
+			share = roundToOneDecimal(float64(duration) / float64(totalSuccessfulStageDuration) * 100)
+		}
+		result.Stages = append(result.Stages, RenderPerformanceStage{Name: stage, DurationMS: duration, Share: share})
+	}
+	sort.Slice(result.Stages, func(i, j int) bool {
+		if result.Stages[i].DurationMS == result.Stages[j].DurationMS {
+			return result.Stages[i].Name < result.Stages[j].Name
+		}
+		return result.Stages[i].DurationMS > result.Stages[j].DurationMS
+	})
+	return result, nil
+}
+
+func averageDuration(durations []int64) int64 {
+	if len(durations) == 0 {
+		return 0
+	}
+	var total int64
+	for _, duration := range durations {
+		total += duration
+	}
+	return int64(math.Round(float64(total) / float64(len(durations))))
+}
+
+func percentileDuration(durations []int64, percentile float64) int64 {
+	if len(durations) == 0 {
+		return 0
+	}
+	sorted := append([]int64(nil), durations...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	position := percentile * float64(len(sorted)-1)
+	lower := int(math.Floor(position))
+	upper := int(math.Ceil(position))
+	if lower == upper {
+		return sorted[lower]
+	}
+	weight := position - float64(lower)
+	return int64(math.Round(float64(sorted[lower]) + (float64(sorted[upper])-float64(sorted[lower]))*weight))
+}
+
+func roundToOneDecimal(value float64) float64 {
+	return math.Round(value*10) / 10
 }

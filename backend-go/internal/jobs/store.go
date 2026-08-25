@@ -53,6 +53,7 @@ type Store interface {
 	ListAuditEvents(context.Context, string) ([]domain.JobAuditEvent, error)
 	UpsertRenderPerformanceMetric(context.Context, RenderPerformanceMetric) error
 	GetRenderPerformanceMetric(context.Context, string) (RenderPerformanceMetric, bool, error)
+	GetRenderPerformanceSummary(context.Context, string, time.Time) (RenderPerformanceSummary, error)
 }
 
 type ClipStatus struct {

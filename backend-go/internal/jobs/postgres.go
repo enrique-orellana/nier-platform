@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -928,6 +929,166 @@ func (s *PostgresStore) GetRenderPerformanceMetric(ctx context.Context, renderID
 		}
 	}
 	return metric, true, nil
+}
+
+func (s *PostgresStore) GetRenderPerformanceSummary(ctx context.Context, rangeKey string, now time.Time) (RenderPerformanceSummary, error) {
+	period, err := ParseRenderPerformanceRange(rangeKey, now)
+	if err != nil {
+		return RenderPerformanceSummary{}, err
+	}
+	where, args := renderPerformanceTimeFilter(period)
+	result := RenderPerformanceSummary{
+		Range:  period.Key,
+		From:   period.From,
+		To:     period.To,
+		Trend:  make([]RenderPerformanceTrendPoint, 0),
+		Stages: make([]RenderPerformanceStage, 0),
+		Recent: make([]RenderPerformanceRecentEntry, 0),
+	}
+	result.Summary.AccelerationCounts = map[string]int64{"cpu": 0, "gpu": 0}
+
+	var averageDurationMS float64
+	var p95DurationMS float64
+	var cpuCount int64
+	var gpuCount int64
+	err = s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)::bigint,
+		       COUNT(*) FILTER (WHERE status = 'done')::bigint,
+		       COUNT(*) FILTER (WHERE status = 'error')::bigint,
+		       COALESCE(AVG(total_duration_ms) FILTER (WHERE status = 'done'), 0)::double precision,
+		       COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY total_duration_ms) FILTER (WHERE status = 'done'), 0)::double precision,
+		       COALESCE(SUM(output_bytes), 0)::bigint,
+		       COUNT(*) FILTER (WHERE acceleration_mode = 'cpu')::bigint,
+		       COUNT(*) FILTER (WHERE acceleration_mode = 'gpu')::bigint
+		FROM render_performance_metrics
+		WHERE `+where, args...).Scan(
+		&result.Summary.RenderCount,
+		&result.Summary.SuccessfulCount,
+		&result.Summary.FailedCount,
+		&averageDurationMS,
+		&p95DurationMS,
+		&result.Summary.TotalOutputBytes,
+		&cpuCount,
+		&gpuCount,
+	)
+	if err != nil {
+		return RenderPerformanceSummary{}, fmt.Errorf("query render performance summary: %w", err)
+	}
+	result.Summary.AccelerationCounts["cpu"] = cpuCount
+	result.Summary.AccelerationCounts["gpu"] = gpuCount
+	result.Summary.AverageDurationMS = int64(averageDurationMS + 0.5)
+	result.Summary.P95DurationMS = int64(p95DurationMS + 0.5)
+	if result.Summary.RenderCount > 0 {
+		result.Summary.SuccessRate = roundToOneDecimal(float64(result.Summary.SuccessfulCount) / float64(result.Summary.RenderCount) * 100)
+	}
+
+	trendRows, err := s.db.QueryContext(ctx, `
+		SELECT TO_CHAR(finished_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
+		       COUNT(*)::bigint,
+		       COUNT(*) FILTER (WHERE status = 'error')::bigint,
+		       COALESCE(AVG(total_duration_ms) FILTER (WHERE status = 'done'), 0)::double precision,
+		       COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY total_duration_ms) FILTER (WHERE status = 'done'), 0)::double precision
+		FROM render_performance_metrics
+		WHERE `+where+`
+		GROUP BY 1
+		ORDER BY 1`, args...)
+	if err != nil {
+		return RenderPerformanceSummary{}, fmt.Errorf("query render performance trend: %w", err)
+	}
+	for trendRows.Next() {
+		var point RenderPerformanceTrendPoint
+		var average, p95 float64
+		if err := trendRows.Scan(&point.Date, &point.RenderCount, &point.FailedCount, &average, &p95); err != nil {
+			trendRows.Close()
+			return RenderPerformanceSummary{}, fmt.Errorf("scan render performance trend: %w", err)
+		}
+		point.AverageDurationMS = int64(average + 0.5)
+		point.P95DurationMS = int64(p95 + 0.5)
+		result.Trend = append(result.Trend, point)
+	}
+	if err := trendRows.Err(); err != nil {
+		trendRows.Close()
+		return RenderPerformanceSummary{}, fmt.Errorf("read render performance trend: %w", err)
+	}
+	trendRows.Close()
+
+	stageRows, err := s.db.QueryContext(ctx, `
+		SELECT stage.key, COALESCE(SUM((stage.value)::bigint), 0)::bigint
+		FROM render_performance_metrics AS metrics
+		CROSS JOIN LATERAL jsonb_each_text(metrics.stage_durations_ms) AS stage(key, value)
+		WHERE metrics.status = 'done' AND `+where+`
+		GROUP BY stage.key`, args...)
+	if err != nil {
+		return RenderPerformanceSummary{}, fmt.Errorf("query render performance stages: %w", err)
+	}
+	type stageTotal struct {
+		name     string
+		duration int64
+	}
+	stageTotals := make([]stageTotal, 0)
+	var totalStageDuration int64
+	for stageRows.Next() {
+		var stage stageTotal
+		if err := stageRows.Scan(&stage.name, &stage.duration); err != nil {
+			stageRows.Close()
+			return RenderPerformanceSummary{}, fmt.Errorf("scan render performance stage: %w", err)
+		}
+		stageTotals = append(stageTotals, stage)
+		totalStageDuration += stage.duration
+	}
+	if err := stageRows.Err(); err != nil {
+		stageRows.Close()
+		return RenderPerformanceSummary{}, fmt.Errorf("read render performance stages: %w", err)
+	}
+	stageRows.Close()
+	sort.Slice(stageTotals, func(i, j int) bool {
+		if stageTotals[i].duration == stageTotals[j].duration {
+			return stageTotals[i].name < stageTotals[j].name
+		}
+		return stageTotals[i].duration > stageTotals[j].duration
+	})
+	for _, stage := range stageTotals {
+		share := float64(0)
+		if totalStageDuration > 0 {
+			share = roundToOneDecimal(float64(stage.duration) / float64(totalStageDuration) * 100)
+		}
+		result.Stages = append(result.Stages, RenderPerformanceStage{Name: stage.name, DurationMS: stage.duration, Share: share})
+	}
+
+	recentRows, err := s.db.QueryContext(ctx, `
+		SELECT render_id, job_id, COALESCE(version_id, ''), clip_index, status,
+		       total_duration_ms, acceleration_mode, output_bytes, finished_at, error
+		FROM render_performance_metrics
+		WHERE `+where+`
+		ORDER BY finished_at DESC, render_id DESC
+		LIMIT `+fmt.Sprint(renderPerformanceRecentLimit), args...)
+	if err != nil {
+		return RenderPerformanceSummary{}, fmt.Errorf("query recent render performance: %w", err)
+	}
+	for recentRows.Next() {
+		var entry RenderPerformanceRecentEntry
+		if err := recentRows.Scan(
+			&entry.RenderID, &entry.JobID, &entry.VersionID, &entry.ClipIndex, &entry.Status,
+			&entry.TotalDurationMS, &entry.AccelerationMode, &entry.OutputBytes, &entry.FinishedAt, &entry.Error,
+		); err != nil {
+			recentRows.Close()
+			return RenderPerformanceSummary{}, fmt.Errorf("scan recent render performance: %w", err)
+		}
+		result.Recent = append(result.Recent, entry)
+	}
+	if err := recentRows.Err(); err != nil {
+		recentRows.Close()
+		return RenderPerformanceSummary{}, fmt.Errorf("read recent render performance: %w", err)
+	}
+	recentRows.Close()
+	return result, nil
+}
+
+func renderPerformanceTimeFilter(period RenderPerformanceRange) (string, []any) {
+	if period.From == nil {
+		return "finished_at <= $1", []any{period.To}
+	}
+	return "finished_at >= $1 AND finished_at <= $2", []any{*period.From, period.To}
 }
 
 type sqlQueryer interface {

@@ -71,3 +71,75 @@ func TestRenderMetricsHandlerPersistsCompletedAndFailedMetrics(t *testing.T) {
 		t.Fatalf("failed metric did not replace completed metric: %#v", got)
 	}
 }
+
+func TestRenderMetricsHandlerReadsSummary(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	now := time.Now().UTC()
+	for _, metric := range []jobs.RenderPerformanceMetric{
+		{
+			RenderID: "summary-handler-done-1", JobID: "summary-handler-job-1", ClipIndex: 1, Status: "done",
+			StartedAt: now.Add(-2 * time.Minute), FinishedAt: now.Add(-time.Minute), TotalDurationMS: 1000,
+			StageDurationsMS: map[string]int64{"compositing": 600, "encoding": 400}, OutputBytes: 100,
+			AccelerationMode: "gpu",
+		},
+		{
+			RenderID: "summary-handler-done-2", JobID: "summary-handler-job-2", ClipIndex: 2, Status: "done",
+			StartedAt: now.Add(-3 * time.Hour), FinishedAt: now.Add(-2 * time.Hour), TotalDurationMS: 3000,
+			StageDurationsMS: map[string]int64{"compositing": 1500, "encoding": 1500}, OutputBytes: 300,
+			AccelerationMode: "cpu",
+		},
+		{
+			RenderID: "summary-handler-error-1", JobID: "summary-handler-job-3", ClipIndex: 3, Status: "error",
+			StartedAt: now.Add(-2 * time.Hour), FinishedAt: now.Add(-time.Hour), TotalDurationMS: 9000,
+			StageDurationsMS: map[string]int64{"encoding": 9000}, AccelerationMode: "gpu", Error: "renderer failed",
+		},
+	} {
+		if err := store.UpsertRenderPerformanceMetric(context.Background(), metric); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	server := NewServerWithStore(config.Config{}, store)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/render-metrics?range=7d", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected summary response, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var summary jobs.RenderPerformanceSummary
+	if err := json.NewDecoder(response.Body).Decode(&summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.Range != "7d" || summary.Summary.RenderCount != 3 || summary.Summary.AverageDurationMS != 2000 || summary.Summary.P95DurationMS != 2900 {
+		t.Fatalf("unexpected summary response: %#v", summary)
+	}
+	if len(summary.Trend) != 1 || len(summary.Stages) != 2 || len(summary.Recent) != 3 {
+		t.Fatalf("unexpected summary collections: %#v", summary)
+	}
+}
+
+func TestRenderMetricsHandlerRejectsInvalidSummaryRange(t *testing.T) {
+	server := NewServerWithStore(config.Config{}, jobs.NewMemoryStore())
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/render-metrics?range=365d", nil))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected invalid range to return 400, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestRenderMetricsHandlerReturnsEmptySummary(t *testing.T) {
+	server := NewServerWithStore(config.Config{}, jobs.NewMemoryStore())
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/render-metrics?range=30d", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected empty summary response, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var summary jobs.RenderPerformanceSummary
+	if err := json.NewDecoder(response.Body).Decode(&summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.Summary.RenderCount != 0 || len(summary.Trend) != 0 || len(summary.Stages) != 0 || len(summary.Recent) != 0 {
+		t.Fatalf("expected empty summary, got %#v", summary)
+	}
+}
