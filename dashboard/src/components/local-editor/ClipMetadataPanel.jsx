@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Instagram, Loader2, Video, Wand2, Youtube } from "lucide-react";
 import { getApiUrl } from "../../config";
 import { getLocalAiHeaders, subtitleTextFromCues } from "./localEditorAi";
+import { formatClock } from "./localEditorExport";
 
 const finiteNumber = (value) => {
   const parsed = Number(value);
@@ -15,6 +16,15 @@ const formatDuration = (seconds) => {
   const remainder = String(rounded % 60).padStart(2, "0");
   return `${minutes}m ${remainder}s`;
 };
+
+const hasTimestamp = (value) =>
+  value !== null &&
+  value !== undefined &&
+  value !== "" &&
+  Number.isFinite(Number(value));
+
+const formatSourceTime = (seconds, fps) =>
+  formatClock(Math.max(0, Number(seconds) || 0) * 1000, fps);
 
 const clipInfoFromMetadata = (metadata = {}) => ({
   video_title_for_youtube_short:
@@ -36,6 +46,7 @@ export default function ClipMetadataPanel({
   hashtags,
   onHashtagsChange,
   sourceMetadata = null,
+  masterDuration = null,
   trimStartSeconds = 0,
   trimEndSeconds = null,
   onClipInfoChange,
@@ -83,6 +94,18 @@ export default function ClipMetadataPanel({
   const outputWidth = finiteNumber(width || metadata.output_width);
   const outputHeight = finiteNumber(height || metadata.output_height);
   const frameRate = finiteNumber(fps || metadata.output_fps || metadata.fps);
+  const sourceTiming = [
+    hasTimestamp(metadata.start)
+      ? `Start ${formatSourceTime(metadata.start, frameRate || 30)}`
+      : null,
+    hasTimestamp(metadata.end)
+      ? `End ${formatSourceTime(metadata.end, frameRate || 30)}`
+      : null,
+    hasTimestamp(masterDuration ?? metadata.master_duration) &&
+    Number(masterDuration ?? metadata.master_duration) > 0
+      ? `Master ${formatSourceTime(masterDuration ?? metadata.master_duration, frameRate || 30)}`
+      : null,
+  ].filter(Boolean);
   const sourceName =
     videoName ||
     metadata.source_file_name ||
@@ -207,14 +230,30 @@ export default function ClipMetadataPanel({
           {title}
         </h3>
       )}
-      <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-mono text-zinc-500">
+      <div className="mt-2 flex min-w-0 flex-wrap gap-2 text-[10px] font-mono text-zinc-500">
         {duration > 0 && (
           <span className="rounded-sm border border-white/10 px-1.5 py-0.5">
             {formatDuration(duration)}
           </span>
         )}
+        {sourceTiming.length > 0 && (
+          <div
+            className="flex min-w-0 flex-wrap gap-2"
+            data-testid="clip-timing-metadata"
+            aria-label="Clip source timing"
+          >
+            {sourceTiming.map((item) => (
+              <span
+                key={item}
+                className="max-w-full break-all rounded-sm border border-white/10 px-1.5 py-0.5"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        )}
         <div
-          className="flex flex-wrap items-center gap-1.5 rounded-sm border border-white/10 px-1.5 py-0.5"
+          className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 rounded-sm border border-white/10 px-1.5 py-0.5"
           role="group"
           aria-label="Hashtags"
         >

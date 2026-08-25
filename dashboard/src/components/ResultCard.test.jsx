@@ -102,6 +102,28 @@ describe("ResultCard editor lifecycle", () => {
     expect(screen.queryByTestId("full-screen-editor")).not.toBeInTheDocument();
   });
 
+  it("passes the master duration into the timeline editor metadata panel", () => {
+    render(
+      <ResultCard
+        clip={{ video_url: "/videos/clip.mp4", title: "Clip" }}
+        index={0}
+        jobId="job-1"
+        masterDuration={3577}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Clip Controls & Actions" }),
+    );
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Edit Timeline" }).at(-1),
+    );
+
+    expect(testDoubles.fullScreenEditorProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ masterDuration: 3577 }),
+    );
+  });
+
   it("leaves an unsaved webcam size for the selector default", () => {
     render(
       <ResultCard

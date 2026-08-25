@@ -950,6 +950,7 @@ export default function ResultCard({
         onClose={handleEditorClose}
         onVersionChange={onEditorVersionChange}
         clip={clip}
+        masterDuration={masterDuration}
         jobId={jobId}
         clipIndex={index}
         aiHeaders={

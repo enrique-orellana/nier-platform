@@ -14,6 +14,7 @@ const clip = {
   output_width: 1080,
   output_height: 1920,
   output_fps: 30,
+  master_duration: 3577,
   source_context: {
     who: ["Streamer"],
     what: "Launch event",
@@ -54,6 +55,16 @@ describe("ClipMetadataPanel", () => {
     expect(screen.getByText("1080 × 1920")).toBeInTheDocument();
     expect(screen.getByText("30 fps")).toBeInTheDocument();
     expect(screen.getByText("0 cues")).toBeInTheDocument();
+  });
+
+  it("keeps the clip duration and adds boxed source timing metadata", () => {
+    render(<ClipMetadataPanel clip={clip} />);
+
+    expect(screen.getByText("39s")).toBeInTheDocument();
+    const timing = screen.getByTestId("clip-timing-metadata");
+    expect(timing).toHaveTextContent("Start 00:00:12:00");
+    expect(timing).toHaveTextContent("End 00:00:51:00");
+    expect(timing).toHaveTextContent("Master 00:59:37:00");
   });
 
   it("omits itself when no generated metadata is available", () => {

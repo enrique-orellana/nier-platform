@@ -169,6 +169,7 @@ export default function LocalEditorTab({
   persistHistory = true,
   allowLocalUpload = true,
   clipMetadata = null,
+  masterDuration = null,
   onHashtagsChange = null,
   onClipInfoChange = null,
   onExport = null,
@@ -2917,6 +2918,7 @@ export default function LocalEditorTab({
                 hashtags={clipMetadata?.hashtags}
                 onHashtagsChange={onHashtagsChange}
                 sourceMetadata={clipMetadata?.source_metadata}
+                masterDuration={masterDuration ?? clipMetadata?.master_duration}
                 trimStartSeconds={playbackStartMs / 1000}
                 trimEndSeconds={(playbackStartMs + durationMs) / 1000}
                 onClipInfoChange={onClipInfoChange}

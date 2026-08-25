@@ -339,6 +339,7 @@ export default function FullScreenEditor({
   jobId,
   clipIndex,
   clip = {},
+  masterDuration = null,
   initialVersion = null,
   initialVersionId = null,
   initialManifest = null,
@@ -1193,6 +1194,7 @@ export default function FullScreenEditor({
         }}
         initialEditorState={localDraft}
         initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}:${localDraftRevision}`}
+        masterDuration={masterDuration}
         clipMetadata={{ ...clip, hashtags: publishingMetadata.hashtags }}
         onHashtagsChange={saveGeneratedHashtags}
         onClipInfoChange={saveGeneratedClipInfo}
