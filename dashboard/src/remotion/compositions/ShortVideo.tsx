@@ -104,6 +104,8 @@ const cropVideoStyle = (crop: SourceRegion): React.CSSProperties => ({
   height: `${(1 / crop.height) * 100}%`,
   left: `${(-crop.x / crop.width) * 100}%`,
   top: `${(-crop.y / crop.height) * 100}%`,
+  maxWidth: "none",
+  maxHeight: "none",
   objectFit: "fill",
 });
 

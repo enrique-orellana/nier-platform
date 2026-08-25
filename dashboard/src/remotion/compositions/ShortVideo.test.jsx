@@ -256,6 +256,8 @@ describe("ShortVideo media source", () => {
         style: expect.objectContaining({
           width: expect.stringContaining("%"),
           height: expect.stringContaining("%"),
+          maxWidth: "none",
+          maxHeight: "none",
         }),
       }),
     );
