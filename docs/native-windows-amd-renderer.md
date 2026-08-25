@@ -39,7 +39,7 @@ Target one or more components with `-Component`:
 .\scripts\manage-local.ps1 -Action Restart -Component backend,frontend
 ```
 
-`renderer` manages the native AMD renderer. The Docker renderer service is intentionally commented out in Compose. Available Docker components are `db`, `backend`, and `frontend`.
+`renderer` manages the native AMD renderer. The Docker renderer service is intentionally commented out in Compose. Available Docker components are `db`, `backend`, and `frontend`. Starting or restarting `renderer` also recreates the backend so it cannot retain the obsolete `http://renderer:3100` URL; startup verifies the backend's effective renderer configuration before reporting success.
 
 To start only the worker manually (GPU is preferred with CPU fallback):
 

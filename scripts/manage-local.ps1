@@ -56,12 +56,67 @@ function Uses-NativeRenderer {
     return (Selects-Component "native-renderer") -or (Selects-Component "renderer")
 }
 
+function Get-NativeRendererUrl {
+    return "http://host.docker.internal:$NativeRendererPort"
+}
+
 function Get-DockerServices {
     $services = @()
     if (Selects-Component "db") { $services += "db" }
     if (Selects-Component "backend") { $services += "backend" }
     if (Selects-Component "frontend") { $services += "frontend" }
     return @($services | Select-Object -Unique)
+}
+
+function Get-StartDockerServices {
+    $services = @(Get-DockerServices)
+    if ((Uses-NativeRenderer) -and ($services -notcontains "backend")) {
+        $services += "backend"
+    }
+    return @($services | Select-Object -Unique)
+}
+
+function Assert-BackendRendererConfiguration {
+    param([string]$ExpectedRendererUrl)
+
+    $environmentLines = @(docker inspect openshorts-backend --format '{{range .Config.Env}}{{println .}}{{end}}')
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to inspect openshorts-backend after startup."
+    }
+
+    $configuredLine = $environmentLines |
+        Where-Object { $_ -like "RENDER_SERVICE_URL=*" } |
+        Select-Object -First 1
+    $configuredUrl = if ($configuredLine) {
+        $configuredLine -replace '^RENDER_SERVICE_URL=', ''
+    } else {
+        ""
+    }
+    if ($configuredUrl -ne $ExpectedRendererUrl) {
+        throw "Backend renderer URL is '$configuredUrl'; expected '$ExpectedRendererUrl'. The backend was not recreated with the native renderer configuration."
+    }
+
+    $deadline = (Get-Date).AddSeconds(30)
+    $lastError = "backend health endpoint did not respond"
+    do {
+        $runtimeConfig = $null
+        try {
+            $runtimeConfig = Invoke-RestMethod "http://127.0.0.1:18000/api/config" -TimeoutSec 2
+        } catch {
+            $lastError = $_.Exception.Message
+            Start-Sleep -Milliseconds 500
+            continue
+        }
+
+        $runtimeUrl = [string]$runtimeConfig.render_service_url
+        if ($runtimeUrl -ne $ExpectedRendererUrl) {
+            throw "Backend reports renderer URL '$runtimeUrl'; expected '$ExpectedRendererUrl'."
+        }
+        Write-Host "Backend renderer URL verified: $runtimeUrl."
+        return
+    } while ((Get-Date) -lt $deadline)
+
+    throw "Backend renderer URL could not be verified: $lastError"
 }
 
 function Get-NativeRendererListener {
@@ -170,20 +225,20 @@ function Update-Components {
 }
 
 function Start-Components {
-    $dockerServices = Get-DockerServices
+    $dockerServices = Get-StartDockerServices
     if (Uses-NativeRenderer) {
         Start-NativeRenderer
     }
 
     if ($dockerServices.Count -gt 0) {
         Require-Command "docker"
-        if (Uses-NativeRenderer) {
-            $env:RENDER_SERVICE_URL = "http://host.docker.internal:$NativeRendererPort"
-        } else {
-            $env:RENDER_SERVICE_URL = "http://renderer:3100"
-        }
-        $composeArguments = @("up", "-d", "--remove-orphans") + $dockerServices
+        $env:RENDER_SERVICE_URL = Get-NativeRendererUrl
+        $composeArguments = @("up", "-d", "--force-recreate", "--remove-orphans") + $dockerServices
         Invoke-Compose $composeArguments
+    }
+
+    if ($dockerServices -contains "backend") {
+        Assert-BackendRendererConfiguration -ExpectedRendererUrl (Get-NativeRendererUrl)
     }
 
     if (Uses-NativeRenderer -and $dockerServices.Count -gt 0) {
