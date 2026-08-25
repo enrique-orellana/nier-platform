@@ -754,6 +754,48 @@ func TestRenderStatusPublishesRemotionOutputToClipScope(t *testing.T) {
 	}
 }
 
+func TestRenderStatusRetainsProjectRangeCacheAfterPublishingClip(t *testing.T) {
+	outputDir := t.TempDir()
+	jobDir := filepath.Join(outputDir, "job-1")
+	cacheDir := filepath.Join(jobDir, "render-cache")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatalf("create output directory: %v", err)
+	}
+	remotionPath := filepath.Join(jobDir, "remotion_8_1787260172918.mp4")
+	cachePath := filepath.Join(cacheDir, "clip-reusable.mp4")
+	if err := os.WriteFile(remotionPath, []byte("clip render"), 0o644); err != nil {
+		t.Fatalf("write remotion output: %v", err)
+	}
+	if err := os.WriteFile(cachePath, []byte("range proxy"), 0o644); err != nil {
+		t.Fatalf("write range cache: %v", err)
+	}
+	renderer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"renderId":"clip-render-cache","status":"done","outputUrl":"/output/job-1/remotion_8_1787260172918.mp4"}`))
+	}))
+	defer renderer.Close()
+
+	server := NewServer(config.Config{OutputDir: outputDir, RenderServiceURL: renderer.URL})
+	client := &regionMetadataS3Client{}
+	server.s3Store = &integrations.S3Store{
+		Client:        client,
+		Bucket:        "openshorts-media",
+		PublicURLBase: "https://minio.example",
+	}
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/render/clip-render-cache", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if _, err := os.Stat(cachePath); err != nil {
+		t.Fatalf("project range cache was removed after publishing clip: %v", err)
+	}
+	if _, err := os.Stat(remotionPath); !os.IsNotExist(err) {
+		t.Fatalf("clip staging file was not removed: %v", err)
+	}
+}
+
 func TestRenderStatusPublishesLocalEditorOutputOnceAndCleansStaging(t *testing.T) {
 	outputDir := t.TempDir()
 	jobDir := filepath.Join(outputDir, "local-editor-1")

@@ -210,7 +210,9 @@ func (s *Server) publishRenderOutput(ctx context.Context, outputURL, clipID stri
 		if filename != "source.mp4" && !strings.HasSuffix(filename, "_metadata.json") {
 			_ = os.Remove(localPath)
 		}
-		_ = os.RemoveAll(filepath.Join(root, jobID, "render-cache"))
+		// Keep project range proxies so subsequent versions with the same source
+		// range can skip the expensive preparation transcode. Project deletion
+		// still removes the cache directory with the rest of the job output.
 	}
 	return publishedURL, nil
 }
