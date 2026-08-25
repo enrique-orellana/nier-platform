@@ -54,6 +54,7 @@ type Store interface {
 	UpsertRenderPerformanceMetric(context.Context, RenderPerformanceMetric) error
 	GetRenderPerformanceMetric(context.Context, string) (RenderPerformanceMetric, bool, error)
 	GetRenderPerformanceSummary(context.Context, string, time.Time) (RenderPerformanceSummary, error)
+	GetRenderPerformanceRecent(context.Context, RenderPerformanceRecentQuery, time.Time) (RenderPerformanceRecentResult, error)
 }
 
 type ClipStatus struct {

@@ -118,6 +118,50 @@ func TestRenderMetricsHandlerReadsSummary(t *testing.T) {
 	}
 }
 
+func TestRenderMetricsHandlerReadsFilteredRecentPage(t *testing.T) {
+	store := jobs.NewMemoryStore()
+	now := time.Now().UTC()
+	for index, metric := range []jobs.RenderPerformanceMetric{
+		{
+			RenderID: "filtered-recent-done-1", JobID: "filtered-job-1", ClipIndex: 1, Status: "done",
+			StartedAt: now.Add(-1 * time.Minute), FinishedAt: now.Add(-30 * time.Second), TotalDurationMS: 1000,
+			StageDurationsMS: map[string]int64{}, AccelerationMode: "gpu",
+		},
+		{
+			RenderID: "filtered-recent-error", JobID: "filtered-job-2", ClipIndex: 2, Status: "error",
+			StartedAt: now.Add(-2 * time.Minute), FinishedAt: now.Add(-1 * time.Minute), TotalDurationMS: 2000,
+			StageDurationsMS: map[string]int64{}, AccelerationMode: "gpu",
+		},
+		{
+			RenderID: "filtered-recent-done-2", JobID: "filtered-job-3", ClipIndex: 3, Status: "done",
+			StartedAt: now.Add(-3 * time.Minute), FinishedAt: now.Add(-2 * time.Minute), TotalDurationMS: 3000,
+			StageDurationsMS: map[string]int64{}, AccelerationMode: "cpu",
+		},
+	} {
+		if err := store.UpsertRenderPerformanceMetric(context.Background(), metric); err != nil {
+			t.Fatalf("insert metric %d: %v", index, err)
+		}
+	}
+
+	server := NewServerWithStore(config.Config{}, store)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/render-metrics?range=7d&recent_page=2&recent_page_size=1&recent_status=done", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected filtered recent response, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var summary jobs.RenderPerformanceSummary
+	if err := json.NewDecoder(response.Body).Decode(&summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.RecentTotal != 2 || summary.RecentPage != 2 || summary.RecentPageSize != 1 || len(summary.Recent) != 1 {
+		t.Fatalf("unexpected recent pagination: %#v", summary)
+	}
+	if summary.Recent[0].RenderID != "filtered-recent-done-2" || summary.Recent[0].Status != "done" {
+		t.Fatalf("unexpected filtered recent item: %#v", summary.Recent[0])
+	}
+}
+
 func TestRenderMetricsHandlerRejectsInvalidSummaryRange(t *testing.T) {
 	server := NewServerWithStore(config.Config{}, jobs.NewMemoryStore())
 	response := httptest.NewRecorder()

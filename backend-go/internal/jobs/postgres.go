@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -1089,6 +1090,74 @@ func renderPerformanceTimeFilter(period RenderPerformanceRange) (string, []any) 
 		return "finished_at <= $1", []any{period.To}
 	}
 	return "finished_at >= $1 AND finished_at <= $2", []any{*period.From, period.To}
+}
+
+func (s *PostgresStore) GetRenderPerformanceRecent(ctx context.Context, query RenderPerformanceRecentQuery, now time.Time) (RenderPerformanceRecentResult, error) {
+	if query.PageSize == 0 {
+		query.PageSize = RenderPerformanceDefaultPageSize
+	}
+	if err := ValidateRenderPerformanceRecentQuery(query); err != nil {
+		return RenderPerformanceRecentResult{}, err
+	}
+	period, err := ParseRenderPerformanceRange(query.Range, now)
+	if err != nil {
+		return RenderPerformanceRecentResult{}, err
+	}
+	where, args := renderPerformanceRecentFilter(period, query)
+	var total int64
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*)::bigint FROM render_performance_metrics WHERE `+where, args...).Scan(&total); err != nil {
+		return RenderPerformanceRecentResult{}, fmt.Errorf("count recent render performance: %w", err)
+	}
+
+	limitPosition := len(args) + 1
+	offsetPosition := len(args) + 2
+	offset := (query.Page - 1) * query.PageSize
+	pageArgs := append(append([]any{}, args...), query.PageSize, offset)
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
+		SELECT render_id, job_id, COALESCE(version_id, ''), clip_index, status,
+		       total_duration_ms, acceleration_mode, output_bytes, finished_at, error
+		FROM render_performance_metrics
+		WHERE %s
+		ORDER BY finished_at DESC, render_id DESC
+		LIMIT $%d OFFSET $%d`, where, limitPosition, offsetPosition), pageArgs...)
+	if err != nil {
+		return RenderPerformanceRecentResult{}, fmt.Errorf("query recent render performance page: %w", err)
+	}
+	defer rows.Close()
+
+	result := RenderPerformanceRecentResult{Items: make([]RenderPerformanceRecentEntry, 0, query.PageSize), Total: total, Page: query.Page, PageSize: query.PageSize}
+	for rows.Next() {
+		var entry RenderPerformanceRecentEntry
+		if err := rows.Scan(
+			&entry.RenderID, &entry.JobID, &entry.VersionID, &entry.ClipIndex, &entry.Status,
+			&entry.TotalDurationMS, &entry.AccelerationMode, &entry.OutputBytes, &entry.FinishedAt, &entry.Error,
+		); err != nil {
+			return RenderPerformanceRecentResult{}, fmt.Errorf("scan recent render performance page: %w", err)
+		}
+		result.Items = append(result.Items, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return RenderPerformanceRecentResult{}, fmt.Errorf("read recent render performance page: %w", err)
+	}
+	return result, nil
+}
+
+func renderPerformanceRecentFilter(period RenderPerformanceRange, query RenderPerformanceRecentQuery) (string, []any) {
+	where, args := renderPerformanceTimeFilter(period)
+	if query.Status != "" && query.Status != "all" {
+		args = append(args, query.Status)
+		where += fmt.Sprintf(" AND status = $%d", len(args))
+	}
+	if query.AccelerationMode != "" && query.AccelerationMode != "all" {
+		args = append(args, query.AccelerationMode)
+		where += fmt.Sprintf(" AND acceleration_mode = $%d", len(args))
+	}
+	if search := strings.TrimSpace(query.Search); search != "" {
+		args = append(args, "%"+search+"%")
+		position := len(args)
+		where += fmt.Sprintf(" AND (render_id ILIKE $%d OR job_id ILIKE $%d OR COALESCE(version_id, '') ILIKE $%d OR CONCAT('clip_', LPAD((clip_index + 1)::text, 2, '0')) ILIKE $%d)", position, position, position, position)
+	}
+	return where, args
 }
 
 type sqlQueryer interface {

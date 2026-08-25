@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -103,7 +104,11 @@ func (s *MemoryStore) GetRenderPerformanceMetric(_ context.Context, renderID str
 	return cloneRenderPerformanceMetric(metric), true, nil
 }
 
-const renderPerformanceRecentLimit = 20
+const (
+	renderPerformanceRecentLimit     = 20
+	RenderPerformanceDefaultPageSize = 10
+	RenderPerformanceMaxPageSize     = 100
+)
 
 type RenderPerformanceRange struct {
 	Key  string
@@ -112,13 +117,16 @@ type RenderPerformanceRange struct {
 }
 
 type RenderPerformanceSummary struct {
-	Range   string                         `json:"range"`
-	From    *time.Time                     `json:"from"`
-	To      time.Time                      `json:"to"`
-	Summary RenderPerformanceSummaryStats  `json:"summary"`
-	Trend   []RenderPerformanceTrendPoint  `json:"trend"`
-	Stages  []RenderPerformanceStage       `json:"stages"`
-	Recent  []RenderPerformanceRecentEntry `json:"recent"`
+	Range          string                         `json:"range"`
+	From           *time.Time                     `json:"from"`
+	To             time.Time                      `json:"to"`
+	Summary        RenderPerformanceSummaryStats  `json:"summary"`
+	Trend          []RenderPerformanceTrendPoint  `json:"trend"`
+	Stages         []RenderPerformanceStage       `json:"stages"`
+	Recent         []RenderPerformanceRecentEntry `json:"recent"`
+	RecentTotal    int64                          `json:"recent_total"`
+	RecentPage     int                            `json:"recent_page"`
+	RecentPageSize int                            `json:"recent_page_size"`
 }
 
 type RenderPerformanceSummaryStats struct {
@@ -157,6 +165,38 @@ type RenderPerformanceRecentEntry struct {
 	OutputBytes      int64     `json:"output_bytes"`
 	FinishedAt       time.Time `json:"finished_at"`
 	Error            string    `json:"error,omitempty"`
+}
+
+type RenderPerformanceRecentQuery struct {
+	Range            string
+	Page             int
+	PageSize         int
+	Status           string
+	AccelerationMode string
+	Search           string
+}
+
+type RenderPerformanceRecentResult struct {
+	Items    []RenderPerformanceRecentEntry
+	Total    int64
+	Page     int
+	PageSize int
+}
+
+func ValidateRenderPerformanceRecentQuery(query RenderPerformanceRecentQuery) error {
+	if query.Page < 1 {
+		return errors.New("recent page must be at least 1")
+	}
+	if query.PageSize < 1 || query.PageSize > RenderPerformanceMaxPageSize {
+		return fmt.Errorf("recent page size must be between 1 and %d", RenderPerformanceMaxPageSize)
+	}
+	if query.Status != "" && query.Status != "all" && query.Status != "done" && query.Status != "error" {
+		return fmt.Errorf("unsupported render status %q", query.Status)
+	}
+	if query.AccelerationMode != "" && query.AccelerationMode != "all" && query.AccelerationMode != "cpu" && query.AccelerationMode != "gpu" {
+		return fmt.Errorf("unsupported acceleration mode %q", query.AccelerationMode)
+	}
+	return nil
 }
 
 func ParseRenderPerformanceRange(value string, now time.Time) (RenderPerformanceRange, error) {
@@ -303,6 +343,76 @@ func (s *MemoryStore) GetRenderPerformanceSummary(_ context.Context, rangeKey st
 		}
 		return result.Stages[i].DurationMS > result.Stages[j].DurationMS
 	})
+	return result, nil
+}
+
+func (s *MemoryStore) GetRenderPerformanceRecent(_ context.Context, query RenderPerformanceRecentQuery, now time.Time) (RenderPerformanceRecentResult, error) {
+	if query.PageSize == 0 {
+		query.PageSize = RenderPerformanceDefaultPageSize
+	}
+	if err := ValidateRenderPerformanceRecentQuery(query); err != nil {
+		return RenderPerformanceRecentResult{}, err
+	}
+	period, err := ParseRenderPerformanceRange(query.Range, now)
+	if err != nil {
+		return RenderPerformanceRecentResult{}, err
+	}
+
+	s.mu.RLock()
+	metrics := make([]RenderPerformanceMetric, 0, len(s.renderMetrics))
+	for _, metric := range s.renderMetrics {
+		metrics = append(metrics, cloneRenderPerformanceMetric(metric))
+	}
+	s.mu.RUnlock()
+
+	search := strings.ToLower(strings.TrimSpace(query.Search))
+	filtered := make([]RenderPerformanceMetric, 0, len(metrics))
+	for _, metric := range metrics {
+		finishedAt := metric.FinishedAt.UTC()
+		if (period.From != nil && finishedAt.Before(*period.From)) || finishedAt.After(period.To) {
+			continue
+		}
+		if query.Status != "" && query.Status != "all" && metric.Status != query.Status {
+			continue
+		}
+		if query.AccelerationMode != "" && query.AccelerationMode != "all" && metric.AccelerationMode != query.AccelerationMode {
+			continue
+		}
+		if search != "" {
+			searchable := strings.ToLower(fmt.Sprintf("%s %s %s clip_%02d", metric.RenderID, metric.JobID, metric.VersionID, metric.ClipIndex+1))
+			if !strings.Contains(searchable, search) {
+				continue
+			}
+		}
+		filtered = append(filtered, metric)
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		if filtered[i].FinishedAt.Equal(filtered[j].FinishedAt) {
+			return filtered[i].RenderID > filtered[j].RenderID
+		}
+		return filtered[i].FinishedAt.After(filtered[j].FinishedAt)
+	})
+
+	result := RenderPerformanceRecentResult{
+		Items: make([]RenderPerformanceRecentEntry, 0, query.PageSize), Page: query.Page, PageSize: query.PageSize,
+		Total: int64(len(filtered)),
+	}
+	start := (query.Page - 1) * query.PageSize
+	if start >= len(filtered) {
+		return result, nil
+	}
+	end := start + query.PageSize
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	for _, metric := range filtered[start:end] {
+		result.Items = append(result.Items, RenderPerformanceRecentEntry{
+			RenderID: metric.RenderID, JobID: metric.JobID, VersionID: metric.VersionID,
+			ClipIndex: metric.ClipIndex, Status: metric.Status, TotalDurationMS: metric.TotalDurationMS,
+			AccelerationMode: metric.AccelerationMode, OutputBytes: metric.OutputBytes,
+			FinishedAt: metric.FinishedAt, Error: metric.Error,
+		})
+	}
 	return result, nil
 }
 

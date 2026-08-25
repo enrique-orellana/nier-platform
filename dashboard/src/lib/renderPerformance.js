@@ -8,16 +8,35 @@ export const RENDER_METRIC_RANGES = [
 ];
 
 export const DEFAULT_RENDER_METRIC_RANGE = "30d";
+export const DEFAULT_RENDER_PAGE_SIZE = 10;
 
 const allowedRanges = new Set(RENDER_METRIC_RANGES.map(({ value }) => value));
 
 export const normalizeRenderMetricRange = (value) =>
   allowedRanges.has(value) ? value : DEFAULT_RENDER_METRIC_RANGE;
 
-export const buildRenderMetricsUrl = (range) =>
-  getApiUrl(
-    `/api/render-metrics?range=${encodeURIComponent(normalizeRenderMetricRange(range))}`,
-  );
+export const buildRenderMetricsUrl = (range, recent = {}) => {
+  const params = new URLSearchParams({
+    range: normalizeRenderMetricRange(range),
+  });
+  if (Object.keys(recent).length > 0) {
+    params.set("recent_page", String(Math.max(1, Number(recent.page) || 1)));
+    params.set(
+      "recent_page_size",
+      String(Math.max(1, Number(recent.pageSize) || DEFAULT_RENDER_PAGE_SIZE)),
+    );
+  }
+  if (recent.status && recent.status !== "all") {
+    params.set("recent_status", recent.status);
+  }
+  if (recent.mode && recent.mode !== "all") {
+    params.set("recent_mode", recent.mode);
+  }
+  if (recent.search?.trim()) {
+    params.set("recent_search", recent.search.trim());
+  }
+  return getApiUrl(`/api/render-metrics?${params.toString()}`);
+};
 
 const formatDecimal = (value) => Number(value.toFixed(1)).toString();
 
@@ -77,5 +96,11 @@ export const normalizeRenderPerformanceSummary = (payload) => {
     trend: Array.isArray(source.trend) ? source.trend : [],
     stages: Array.isArray(source.stages) ? source.stages : [],
     recent: Array.isArray(source.recent) ? source.recent : [],
+    recent_total:
+      Number(source.recent_total) ||
+      (Array.isArray(source.recent) ? source.recent.length : 0),
+    recent_page: Number(source.recent_page) || 1,
+    recent_page_size:
+      Number(source.recent_page_size) || DEFAULT_RENDER_PAGE_SIZE,
   };
 };

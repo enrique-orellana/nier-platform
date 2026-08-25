@@ -24,6 +24,9 @@ const summaryResponse = {
     },
   ],
   stages: [{ name: "compositing", duration_ms: 120000, share: 56 }],
+  recent_total: 21,
+  recent_page: 1,
+  recent_page_size: 10,
   recent: [
     {
       render_id: "render-8",
@@ -61,9 +64,13 @@ describe("PerformanceDashboard", () => {
     expect(screen.getByText("142")).toBeInTheDocument();
     expect(screen.getByText("98.6%")).toBeInTheDocument();
     expect(screen.getByText("42.8s")).toBeInTheDocument();
-    expect(screen.getByText(/1m 11\.4s/)).toBeInTheDocument();
+    expect(screen.getAllByText(/1m 11\.4s/).length).toBeGreaterThan(0);
     expect(screen.getByText(/clip_08/)).toBeInTheDocument();
     expect(screen.getByText("Compositing")).toBeInTheDocument();
+    expect(screen.getByText("0ms")).toBeInTheDocument();
+    expect(screen.getByText("Aug 25")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Average on 2026-08-25/)).toBeInTheDocument();
+    expect(screen.getByText("1–10 of 21")).toBeInTheDocument();
   });
 
   it("reloads the selected range and supports manual refresh", async () => {
@@ -75,8 +82,10 @@ describe("PerformanceDashboard", () => {
       target: { value: "7d" },
     });
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenLastCalledWith(
-        "/api/render-metrics?range=7d",
+      expect(fetchMock.mock.calls.at(-1)?.[0]).toContain(
+        "/api/render-metrics?range=7d&recent_page=1&recent_page_size=10",
+      );
+      expect(fetchMock.mock.calls.at(-1)?.[1]).toEqual(
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
@@ -85,6 +94,34 @@ describe("PerformanceDashboard", () => {
     fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.length).toBe(callCount + 1),
+    );
+  });
+
+  it("filters renders and moves through result pages", async () => {
+    const fetchMock = vi.mocked(fetch);
+    render(<PerformanceDashboard />);
+    await screen.findByText("142");
+
+    fireEvent.change(screen.getByLabelText("Render status filter"), {
+      target: { value: "error" },
+    });
+    fireEvent.change(screen.getByLabelText("Acceleration filter"), {
+      target: { value: "gpu" },
+    });
+    fireEvent.input(screen.getByLabelText("Search renders"), {
+      target: { value: "clip-12" },
+    });
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.at(-1)?.[0]).toContain("recent_status=error");
+      expect(fetchMock.mock.calls.at(-1)?.[0]).toContain("recent_mode=gpu");
+      expect(fetchMock.mock.calls.at(-1)?.[0]).toContain(
+        "recent_search=clip-12",
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Next render page" }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.at(-1)?.[0]).toContain("recent_page=2"),
     );
   });
 

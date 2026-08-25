@@ -57,6 +57,32 @@ func TestMemoryStoreRenderPerformanceSummaryAggregatesSuccessfulMetrics(t *testi
 	}
 }
 
+func TestMemoryStoreRenderPerformanceRecentSupportsPaginationAndFilters(t *testing.T) {
+	store := NewMemoryStore()
+	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	for index, status := range []string{"done", "error", "done"} {
+		metric := RenderPerformanceMetric{
+			RenderID: "recent-" + string(rune('a'+index)), JobID: "job-recent", ClipIndex: index,
+			Status: status, StartedAt: now.Add(-time.Duration(index+1) * time.Minute),
+			FinishedAt: now.Add(-time.Duration(index) * time.Minute), TotalDurationMS: int64(index+1) * 1000,
+			StageDurationsMS: map[string]int64{}, AccelerationMode: []string{"gpu", "cpu", "gpu"}[index],
+		}
+		if err := store.UpsertRenderPerformanceMetric(context.Background(), metric); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := store.GetRenderPerformanceRecent(context.Background(), RenderPerformanceRecentQuery{
+		Range: "30d", Page: 2, PageSize: 1, Status: "done", AccelerationMode: "gpu", Search: "recent",
+	}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Total != 2 || got.Page != 2 || got.PageSize != 1 || len(got.Items) != 1 || got.Items[0].ClipIndex != 2 {
+		t.Fatalf("unexpected filtered page: %#v", got)
+	}
+}
+
 func TestParseRenderPerformanceRangeRejectsUnsupportedValues(t *testing.T) {
 	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 	if _, err := ParseRenderPerformanceRange("365d", now); err == nil {

@@ -12,6 +12,17 @@ describe("render performance helpers", () => {
     expect(buildRenderMetricsUrl("7d")).toContain(
       "/api/render-metrics?range=7d",
     );
+    expect(
+      buildRenderMetricsUrl("30d", {
+        page: 2,
+        pageSize: 25,
+        status: "error",
+        mode: "gpu",
+        search: "clip-12",
+      }),
+    ).toContain(
+      "/api/render-metrics?range=30d&recent_page=2&recent_page_size=25&recent_status=error&recent_mode=gpu&recent_search=clip-12",
+    );
   });
 
   it("formats durations and byte counts for dashboard cards", () => {
