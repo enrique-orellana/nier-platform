@@ -365,7 +365,10 @@ const StreamerPanel: React.FC<{
 const MemoizedStreamerPanel = React.memo(StreamerPanel);
 
 const LayoutVideoLayer: React.FC<{
-  segment: { format: "standard" | "streamer_stack" };
+  segment: {
+    format: "standard" | "streamer_stack";
+    layoutSlot: 0 | 1;
+  };
   videoUrl: string;
   videoStartFrame: number;
   videoStartSeconds: number;
@@ -559,7 +562,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
       <VideoEffects config={effects}>
         {layoutLayers.map(({ segment, opacity, muted }) => (
           <MemoizedLayoutVideoLayer
-            key={muted ? "layout-previous" : "layout-active"}
+            key={`layout-slot-${segment.layoutSlot}`}
             segment={segment}
             videoUrl={videoUrl}
             videoStartFrame={videoStartFrame}

@@ -164,6 +164,45 @@ describe("ShortVideo media source", () => {
     );
   });
 
+  it("keeps the outgoing native video mounted when a crossfade starts", () => {
+    currentFrameMock.value = 149;
+    const props = {
+      videoUrl: "/videos/master.mp4",
+      fps: 30,
+      layout: {
+        format: "standard",
+        segments: [
+          {
+            id: "standard",
+            startMs: 0,
+            endMs: 5000,
+            format: "standard",
+            transition: "cut",
+          },
+          {
+            id: "streamer",
+            startMs: 5000,
+            endMs: 10000,
+            format: "streamer_stack",
+            transition: "crossfade",
+            transitionDurationMs: 1000,
+          },
+        ],
+      },
+    };
+
+    const { rerender } = render(<ShortVideo {...props} />);
+    const videoBeforeTransition = screen.getByTestId("native-browser-video");
+
+    currentFrameMock.value = 150;
+    rerender(<ShortVideo {...props} />);
+
+    expect(screen.getAllByTestId("native-browser-video")).toContain(
+      videoBeforeTransition,
+    );
+    expect(videoBeforeTransition).toHaveStyle({ objectFit: "contain" });
+  });
+
   it("lets only the active crossfade layer publish the native media clock", () => {
     const animationFrames = [];
     const onMediaTimeChange = vi.fn();

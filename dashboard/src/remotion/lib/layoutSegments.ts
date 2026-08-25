@@ -12,6 +12,7 @@ export interface ResolvedLayoutSegment {
   format: LayoutFormat;
   transition: LayoutTransition;
   transitionDurationMs: number;
+  layoutSlot: 0 | 1;
 }
 
 export interface ResolvedLayout {
@@ -51,6 +52,7 @@ const normalizeSegments = (
         format: fallbackFormat,
         transition: "cut",
         transitionDurationMs: 250,
+        layoutSlot: 0,
       },
     ];
 
@@ -70,6 +72,7 @@ const normalizeSegments = (
 
   const usedIds = new Set<string>();
   let cursor = 0;
+  let layoutSlot: 0 | 1 = 0;
   const normalized: ResolvedLayoutSegment[] = [];
   candidates.forEach(({ segment, endMs }, index) => {
     if (cursor >= durationMs) return;
@@ -83,6 +86,7 @@ const normalizeSegments = (
       segment.format === "streamer_stack" ? "streamer_stack" : "standard";
     const transition: LayoutTransition =
       segment.transition === "crossfade" ? "crossfade" : "cut";
+    if (transition === "crossfade") layoutSlot = layoutSlot === 0 ? 1 : 0;
     const rawTransitionDuration = numberOr(segment.transitionDurationMs, 250);
     normalized.push({
       id,
@@ -107,6 +111,7 @@ const normalizeSegments = (
                 rawTransitionDuration < 0 ? 250 : rawTransitionDuration,
               ),
             ),
+      layoutSlot,
     });
     cursor = nextEnd;
   });
@@ -171,4 +176,5 @@ export const layoutSegmentInput = (
   format: segment.format,
   transition: segment.transition || "cut",
   transitionDurationMs: segment.transitionDurationMs ?? 250,
+  layoutSlot: 0,
 });
