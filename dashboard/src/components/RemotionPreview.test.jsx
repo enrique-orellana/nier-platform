@@ -53,6 +53,26 @@ describe("RemotionPreview", () => {
     expect(onFrameChange).toHaveBeenCalledWith(180);
   });
 
+  it("pauses non-looping playback on the final composition frame", () => {
+    pauseMock.mockClear();
+    const onPlayingChange = vi.fn();
+    render(
+      <RemotionPreview
+        videoUrl="/video.mp4"
+        durationInSeconds={1}
+        fps={30}
+        playing={true}
+        loop={false}
+        onPlayingChange={onPlayingChange}
+      />,
+    );
+
+    act(() => playerEmitMock("frameupdate", { frame: 29 }));
+
+    expect(pauseMock).toHaveBeenCalledTimes(1);
+    expect(onPlayingChange).toHaveBeenCalledWith(false);
+  });
+
   it("plays immediately when the editor transport requests playback", () => {
     render(<RemotionPreview videoUrl="/video.mp4" playing={false} />);
     window.dispatchEvent(

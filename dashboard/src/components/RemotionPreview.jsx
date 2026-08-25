@@ -97,8 +97,13 @@ function RemotionPreview({
     if (!player) return undefined;
     onPlayerReady?.(player);
     const onFrameUpdate = (event) => {
-      playerFrameRef.current = event.detail.frame;
-      onFrameChange?.(event.detail.frame);
+      const frame = event.detail.frame;
+      playerFrameRef.current = frame;
+      onFrameChange?.(frame);
+      if (wasPlayingRef.current && !loop && frame >= durationInFrames - 1) {
+        player.pause?.();
+        onPlayingChange?.(false);
+      }
     };
     const onPlay = () => onPlayingChange?.(true);
     const onPause = () => onPlayingChange?.(false);
@@ -111,7 +116,7 @@ function RemotionPreview({
       player.removeEventListener("pause", onPause);
       onPlayerReady?.(null);
     };
-  }, [onFrameChange, onPlayingChange, onPlayerReady]);
+  }, [durationInFrames, loop, onFrameChange, onPlayingChange, onPlayerReady]);
 
   const inputProps = useMemo(
     () => ({
