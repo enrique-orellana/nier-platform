@@ -129,6 +129,7 @@ const BrowserVideo: React.FC<{
   objectFit: string;
   style?: React.CSSProperties;
   muted: boolean;
+  audioOnly?: boolean;
 }> = ({
   videoUrl,
   videoStartSeconds,
@@ -139,6 +140,7 @@ const BrowserVideo: React.FC<{
   objectFit,
   style,
   muted,
+  audioOnly = false,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoId = useId();
@@ -238,11 +240,12 @@ const BrowserVideo: React.FC<{
   return (
     <video
       ref={videoRef}
-      data-testid="native-browser-video"
+      data-testid={audioOnly ? "native-browser-audio" : "native-browser-video"}
       src={videoUrl}
       preload="auto"
       playsInline
       muted={muted}
+      aria-hidden={audioOnly || undefined}
       onLoadedMetadata={() => {
         lastSourceKeyRef.current = "";
       }}
@@ -253,6 +256,7 @@ const BrowserVideo: React.FC<{
         width: "100%",
         height: "100%",
         objectFit,
+        ...(audioOnly ? { opacity: 0, pointerEvents: "none" as const } : {}),
         ...style,
       }}
     />
@@ -560,7 +564,21 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     <AbsoluteFill style={{ backgroundColor: "#000", overflow: "hidden" }}>
       {/* Base video with optional zoom/color effects */}
       <VideoEffects config={effects}>
-        {layoutLayers.map(({ segment, opacity, muted }) => (
+        {!environment.isRendering && (
+          <BrowserVideo
+            videoUrl={videoUrl}
+            videoStartSeconds={videoStartSeconds}
+            playbackRate={playbackRate}
+            onAutoPlayError={onAutoPlayError}
+            onMediaTimeChange={handleMediaTimeChange}
+            fps={Number(fps)}
+            objectFit="contain"
+            style={{ opacity: 0, pointerEvents: "none" }}
+            muted={false}
+            audioOnly
+          />
+        )}
+        {layoutLayers.map(({ segment, opacity }) => (
           <MemoizedLayoutVideoLayer
             key={`layout-slot-${segment.layoutSlot}`}
             segment={segment}
@@ -570,7 +588,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             playbackRate={playbackRate}
             fps={Number(fps)}
             opacity={opacity}
-            muted={muted}
+            muted
             isRendering={environment.isRendering}
             onAutoPlayError={onAutoPlayError}
             onMediaTimeChange={handleMediaTimeChange}

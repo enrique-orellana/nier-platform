@@ -83,7 +83,7 @@ describe("ShortVideo media source", () => {
       />,
     );
 
-    const video = screen.getByTestId("native-browser-video");
+    const video = screen.getByTestId("native-browser-audio");
     Object.defineProperty(video, "currentTime", {
       configurable: true,
       value: 10.75,
@@ -114,7 +114,7 @@ describe("ShortVideo media source", () => {
       />,
     );
 
-    const video = screen.getByTestId("native-browser-video");
+    const video = screen.getByTestId("native-browser-audio");
     Object.defineProperty(video, "currentTime", {
       configurable: true,
       value: 10.75,
@@ -162,6 +162,52 @@ describe("ShortVideo media source", () => {
     expect(screen.getAllByTestId("native-browser-video")[0]).toBe(
       videoBeforeBoundary,
     );
+  });
+
+  it("keeps one persistent audio clock when switching from streamer to standard", () => {
+    timelineContextMock.playing = true;
+    currentFrameMock.value = 149;
+    const props = {
+      videoUrl: "/videos/master.mp4",
+      fps: 30,
+      layout: {
+        format: "streamer_stack",
+        segments: [
+          {
+            id: "streamer",
+            startMs: 0,
+            endMs: 5000,
+            format: "streamer_stack",
+            transition: "cut",
+          },
+          {
+            id: "standard",
+            startMs: 5000,
+            endMs: 10000,
+            format: "standard",
+            transition: "cut",
+          },
+        ],
+      },
+    };
+
+    const { rerender } = render(<ShortVideo {...props} />);
+    const audioBeforeBoundary = screen.getByTestId("native-browser-audio");
+
+    currentFrameMock.value = 150;
+    rerender(<ShortVideo {...props} />);
+
+    expect(screen.getByTestId("native-browser-audio")).toBe(
+      audioBeforeBoundary,
+    );
+    expect(
+      screen
+        .getAllByTestId("native-browser-video")
+        .every((video) => video.muted),
+    ).toBe(true);
+    expect(screen.getAllByTestId("native-browser-video")[0]).toHaveStyle({
+      objectFit: "contain",
+    });
   });
 
   it("keeps the outgoing native video mounted when a crossfade starts", () => {
@@ -373,7 +419,9 @@ describe("ShortVideo media source", () => {
       "preload",
       "auto",
     );
-    expect(timelineContextMock.audioAndVideoTags.current).toHaveLength(1);
+    expect(
+      timelineContextMock.audioAndVideoTags.current.length,
+    ).toBeGreaterThan(0);
     expect(timelineContextMock.audioAndVideoTags.current[0].play).toEqual(
       expect.any(Function),
     );
