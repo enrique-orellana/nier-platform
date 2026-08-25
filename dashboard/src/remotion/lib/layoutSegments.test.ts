@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveLayoutAtFrame } from "./layoutSegments";
+import {
+  normalizeLayoutSegments,
+  resolveLayoutAtFrame,
+  resolveLayoutAtNormalizedSegments,
+} from "./layoutSegments";
 
 describe("dashboard layout segment resolver", () => {
   it("falls back to the legacy layout format", () => {
@@ -42,5 +46,33 @@ describe("dashboard layout segment resolver", () => {
     expect(resolved.active.format).toBe("streamer_stack");
     expect(resolved.previous?.format).toBe("standard");
     expect(resolved.transitionProgress).toBeCloseTo(1 / 3);
+  });
+
+  it("resolves cached normalized segments without changing the result", () => {
+    const layout = {
+      format: "standard" as const,
+      segments: [
+        {
+          id: "standard",
+          startMs: 0,
+          endMs: 5000,
+          format: "standard" as const,
+          transition: "cut" as const,
+        },
+        {
+          id: "streamer",
+          startMs: 5000,
+          endMs: 10000,
+          format: "streamer_stack" as const,
+          transition: "crossfade" as const,
+          transitionDurationMs: 1000,
+        },
+      ],
+    };
+    const normalized = normalizeLayoutSegments(layout, 300, 30);
+
+    expect(resolveLayoutAtNormalizedSegments(normalized, 160, 30)).toEqual(
+      resolveLayoutAtFrame(layout, 160, 300, 30),
+    );
   });
 });

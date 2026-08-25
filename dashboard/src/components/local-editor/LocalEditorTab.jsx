@@ -364,6 +364,13 @@ export default function LocalEditorTab({
       ),
     [durationMs, layoutSegments],
   );
+  const previewLayout = useMemo(
+    () => ({
+      ...(remotionPreviewProps?.layout || {}),
+      segments: effectiveLayoutSegments,
+    }),
+    [effectiveLayoutSegments, remotionPreviewProps?.layout],
+  );
   const selectedLayoutSegment = effectiveLayoutSegments.find(
     (segment) => segment.id === selectedLayoutSegmentId,
   );
@@ -1857,10 +1864,6 @@ export default function LocalEditorTab({
         style: previewSubtitleStyle,
       }
     : null;
-  const previewLayout = {
-    ...(remotionPreviewProps?.layout || {}),
-    segments: effectiveLayoutSegments,
-  };
   const hookElapsedMs = activeHook
     ? Math.max(0, playheadMs - activeHook.startMs)
     : 0;

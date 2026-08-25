@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useId, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Video } from "@remotion/media";
 import {
   AbsoluteFill,
@@ -11,7 +18,10 @@ import type { LayoutConfig, ShortVideoProps, SourceRegion } from "../lib/types";
 import { Subtitles } from "./Subtitles";
 import { HookOverlay } from "./HookOverlay";
 import { VideoEffects } from "./VideoEffects";
-import { resolveLayoutAtFrame } from "../lib/layoutSegments";
+import {
+  normalizeLayoutSegments,
+  resolveLayoutAtNormalizedSegments,
+} from "../lib/layoutSegments";
 
 export const getMediaTimeMs = (
   mediaCurrentTimeSeconds: number,
@@ -352,6 +362,8 @@ const StreamerPanel: React.FC<{
   );
 };
 
+const MemoizedStreamerPanel = React.memo(StreamerPanel);
+
 const LayoutVideoLayer: React.FC<{
   segment: { format: "standard" | "streamer_stack" };
   videoUrl: string;
@@ -416,7 +428,7 @@ const LayoutVideoLayer: React.FC<{
           }}
         />
       )}
-      <StreamerPanel
+      <MemoizedStreamerPanel
         key="main-panel"
         videoUrl={videoUrl}
         videoStartFrame={videoStartFrame}
@@ -438,7 +450,7 @@ const LayoutVideoLayer: React.FC<{
         reportMediaTime={reportMediaTime && !muted}
       />
       {!usesStandardLayout && (
-        <StreamerPanel
+        <MemoizedStreamerPanel
           key="facecam-panel"
           videoUrl={videoUrl}
           videoStartFrame={videoStartFrame}
@@ -459,6 +471,8 @@ const LayoutVideoLayer: React.FC<{
     </div>
   );
 };
+
+const MemoizedLayoutVideoLayer = React.memo(LayoutVideoLayer);
 
 /**
  * Main composition that layers all post-processing on top of the base video.
@@ -485,9 +499,19 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
   const [mediaTimeMs, setMediaTimeMs] = useState<number | null>(null);
   const frame = useCurrentFrame();
   const videoConfig = useVideoConfig();
+  const compositionFps = Number(videoConfig.fps || fps);
   const videoStartFrame = Math.max(
     0,
     Math.round(Number(videoStartSeconds) * Number(fps)),
+  );
+  const normalizedLayoutSegments = useMemo(
+    () =>
+      normalizeLayoutSegments(
+        layout,
+        videoConfig.durationInFrames,
+        compositionFps,
+      ),
+    [compositionFps, layout, videoConfig.durationInFrames],
   );
   const activeTrack = subtitleTracks?.find(
     (track) => track.id === (activeSubtitleTrackId || subtitleTracks[0]?.id),
@@ -509,11 +533,10 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     },
     [hasActiveSubtitles, onMediaTimeChange],
   );
-  const resolvedLayout = resolveLayoutAtFrame(
-    layout,
+  const resolvedLayout = resolveLayoutAtNormalizedSegments(
+    normalizedLayoutSegments,
     frame,
-    videoConfig.durationInFrames,
-    Number(videoConfig.fps || fps),
+    compositionFps,
   );
   const environment = useRemotionEnvironment();
   const layoutLayers = resolvedLayout.previous
@@ -535,7 +558,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
       {/* Base video with optional zoom/color effects */}
       <VideoEffects config={effects}>
         {layoutLayers.map(({ segment, opacity, muted }) => (
-          <LayoutVideoLayer
+          <MemoizedLayoutVideoLayer
             key={muted ? "layout-previous" : "layout-active"}
             segment={segment}
             videoUrl={videoUrl}

@@ -40,6 +40,7 @@ const remotionPlayerMock = vi.hoisted(() => ({
   mute: vi.fn(),
   unmute: vi.fn(),
 }));
+const remotionPreviewLayoutMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../RemotionPreview", () => ({
   default: function MockRemotionPreview({
@@ -48,9 +49,11 @@ vi.mock("../RemotionPreview", () => ({
     controls = true,
     hook = null,
     subtitles = null,
+    layout = null,
     onPlayerReady,
     onMediaTimeChange,
   }) {
+    remotionPreviewLayoutMock(layout);
     useEffect(() => {
       onPlayerReady?.(remotionPlayerMock);
       return () => onPlayerReady?.(null);
@@ -116,6 +119,7 @@ if (!URL.createObjectURL) {
 
 describe("LocalEditorTab", () => {
   beforeEach(async () => {
+    remotionPreviewLayoutMock.mockClear();
     localStorage.clear();
     await deleteDatabase(EDITOR_PROJECT_DB_NAME);
     await deleteDatabase(EDITOR_VIDEO_DB_NAME);
@@ -989,6 +993,37 @@ describe("LocalEditorTab", () => {
     await waitFor(() =>
       expect(screen.getAllByText(/00:00:02:00/).length).toBeGreaterThan(0),
     );
+  });
+
+  it("keeps the preview layout identity stable while the playhead updates", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        remotionPreviewProps={{
+          videoUrl: "/videos/project.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+          layout: { format: "standard" },
+        }}
+      />,
+    );
+
+    const initialLayout = remotionPreviewLayoutMock.mock.lastCall?.[0];
+    expect(initialLayout).toBeDefined();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /emit native media time/i }),
+    );
+
+    await waitFor(() =>
+      expect(remotionPreviewLayoutMock.mock.calls.length).toBeGreaterThan(1),
+    );
+
+    expect(
+      remotionPreviewLayoutMock.mock.calls.every(
+        ([layout]) => layout === initialLayout,
+      ),
+    ).toBe(true);
   });
 
   it("hides unavailable local-only controls for streamed project clips", async () => {

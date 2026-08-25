@@ -121,13 +121,13 @@ const normalizeSegments = (
   return normalized;
 };
 
-export const resolveLayoutAtFrame = (
-  layout: LayoutConfig | null | undefined,
+export const normalizeLayoutSegments = normalizeSegments;
+
+export const resolveLayoutAtNormalizedSegments = (
+  segments: ResolvedLayoutSegment[],
   frame: number,
-  durationInFrames: number,
   fps: number,
 ): ResolvedLayout => {
-  const segments = normalizeSegments(layout, durationInFrames, fps);
   const timeMs = Math.max(0, ((Number(frame) || 0) / Number(fps || 30)) * 1000);
   let activeIndex = segments.findIndex(
     (segment) => timeMs >= segment.startMs && timeMs < segment.endMs,
@@ -149,6 +149,18 @@ export const resolveLayoutAtFrame = (
     : 1;
   return { active, previous, transitionProgress };
 };
+
+export const resolveLayoutAtFrame = (
+  layout: LayoutConfig | null | undefined,
+  frame: number,
+  durationInFrames: number,
+  fps: number,
+): ResolvedLayout =>
+  resolveLayoutAtNormalizedSegments(
+    normalizeSegments(layout, durationInFrames, fps),
+    frame,
+    fps,
+  );
 
 export const layoutSegmentInput = (
   segment: LayoutSegmentConfig,
