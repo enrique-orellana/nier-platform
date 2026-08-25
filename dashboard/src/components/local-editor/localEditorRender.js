@@ -64,6 +64,56 @@ const captionText = (captions) =>
     .filter(Boolean)
     .join(" ")
     .trim();
+
+export const normalizeCueCaptions = (cue) => {
+  if (!Array.isArray(cue?.captions) || !cue.captions.length) return cue;
+
+  const cueStart = Number(cue.startMs);
+  const cueEnd = Number(cue.endMs);
+  const captions = cue.captions.map((caption) => ({
+    ...caption,
+    startMs: Number(caption.startMs),
+    endMs: Number(caption.endMs),
+  }));
+  if (
+    !Number.isFinite(cueStart) ||
+    !Number.isFinite(cueEnd) ||
+    cueEnd <= cueStart ||
+    captions.some(
+      (caption) =>
+        !Number.isFinite(caption.startMs) ||
+        !Number.isFinite(caption.endMs) ||
+        caption.endMs <= caption.startMs,
+    )
+  )
+    return cue;
+
+  const captionsStart = Math.min(...captions.map((caption) => caption.startMs));
+  const captionsEnd = Math.max(...captions.map((caption) => caption.endMs));
+  if (captionsStart === cueStart && captionsEnd === cueEnd) return cue;
+
+  const captionsDuration = Math.max(1, captionsEnd - captionsStart);
+  const cueDuration = cueEnd - cueStart;
+  return {
+    ...cue,
+    captions: captions.map((caption) => {
+      const startMs = Math.round(
+        cueStart +
+          ((caption.startMs - captionsStart) / captionsDuration) * cueDuration,
+      );
+      const endMs = Math.round(
+        cueStart +
+          ((caption.endMs - captionsStart) / captionsDuration) * cueDuration,
+      );
+      return {
+        ...caption,
+        startMs,
+        endMs: Math.max(startMs + 1, endMs),
+      };
+    }),
+  };
+};
+
 const sameCaptions = (left = [], right = []) =>
   left.length === right.length &&
   left.every((caption, index) => {
@@ -92,8 +142,12 @@ const distributeCueWords = (text, startMs, endMs) => {
 };
 
 export const syncSubtitleCue = (previousCue, nextCue) => {
+  const normalizedPreviousCue = normalizeCueCaptions(previousCue);
   const nextText = cueText(nextCue);
-  if (!Array.isArray(previousCue?.captions) || !previousCue.captions.length) {
+  if (
+    !Array.isArray(normalizedPreviousCue?.captions) ||
+    !normalizedPreviousCue.captions.length
+  ) {
     return nextText
       ? {
           ...nextCue,
@@ -105,11 +159,11 @@ export const syncSubtitleCue = (previousCue, nextCue) => {
         }
       : nextCue;
   }
-  const previousText = captionText(previousCue.captions);
+  const previousText = captionText(normalizedPreviousCue.captions);
   if (
     Array.isArray(nextCue.captions) &&
     nextCue.captions.length &&
-    !sameCaptions(previousCue.captions, nextCue.captions)
+    !sameCaptions(normalizedPreviousCue.captions, nextCue.captions)
   ) {
     return captionText(nextCue.captions) === nextText
       ? nextCue
@@ -129,10 +183,10 @@ export const syncSubtitleCue = (previousCue, nextCue) => {
     };
   }
 
-  const previousStart = Number(previousCue.startMs) || 0;
+  const previousStart = Number(normalizedPreviousCue.startMs) || 0;
   const previousDuration = Math.max(
     1,
-    (Number(previousCue.endMs) || previousStart + 1) - previousStart,
+    (Number(normalizedPreviousCue.endMs) || previousStart + 1) - previousStart,
   );
   const nextStart = Number(nextCue.startMs) || 0;
   const nextDuration = Math.max(
@@ -141,7 +195,7 @@ export const syncSubtitleCue = (previousCue, nextCue) => {
   );
   return {
     ...nextCue,
-    captions: previousCue.captions.map((caption) => ({
+    captions: normalizedPreviousCue.captions.map((caption) => ({
       ...caption,
       startMs: Math.round(
         nextStart +
@@ -168,22 +222,30 @@ export const syncSubtitleCue = (previousCue, nextCue) => {
 };
 
 export const cueCaptionsForRender = (cue) => {
-  if (!Array.isArray(cue?.captions) || !cue.captions.length) {
+  const normalizedCue = normalizeCueCaptions(cue);
+  if (
+    !Array.isArray(normalizedCue?.captions) ||
+    !normalizedCue.captions.length
+  ) {
     return [
       {
-        text: cueText(cue),
-        startMs: Number(cue?.startMs),
-        endMs: Number(cue?.endMs),
+        text: cueText(normalizedCue),
+        startMs: Number(normalizedCue?.startMs),
+        endMs: Number(normalizedCue?.endMs),
       },
     ];
   }
-  return captionText(cue.captions) === cueText(cue)
-    ? cue.captions.map((caption) => ({
+  return captionText(normalizedCue.captions) === cueText(normalizedCue)
+    ? normalizedCue.captions.map((caption) => ({
         text: String(caption.text || ""),
         startMs: Number(caption.startMs),
         endMs: Number(caption.endMs),
       }))
-    : distributeCueWords(cueText(cue), cue.startMs, cue.endMs);
+    : distributeCueWords(
+        cueText(normalizedCue),
+        normalizedCue.startMs,
+        normalizedCue.endMs,
+      );
 };
 
 export const buildRemotionRenderProps = ({

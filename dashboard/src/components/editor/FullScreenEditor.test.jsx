@@ -132,6 +132,37 @@ describe("FullScreenEditor", () => {
     );
   });
 
+  it("normalizes stale nested caption timings when loading an edited cue range", () => {
+    const source = {
+      ...manifest,
+      subtitle_tracks: [
+        {
+          id: "original",
+          language: "es",
+          label: "Original",
+          cues: [
+            {
+              text: "Oh,",
+              startMs: 16678,
+              endMs: 17078,
+              captions: [{ text: "Oh,", startMs: 17500, endMs: 17900 }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const state = manifestToLocalEditorState(source, "original");
+
+    expect(state.subtitleCues[0].captions).toEqual([
+      { text: "Oh,", startMs: 16678, endMs: 17078 },
+    ]);
+    expect(
+      localEditorStateToManifest(source, state, "original").subtitle_tracks[0]
+        .cues[0].captions,
+    ).toEqual([{ text: "Oh,", startMs: 16678, endMs: 17078 }]);
+  });
+
   it("creates a full-duration segment from a legacy layout format", () => {
     const source = {
       ...manifest,

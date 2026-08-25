@@ -23,6 +23,7 @@ import { DEFAULT_SUBTITLE_STYLE } from "../local-editor/localEditorStyles";
 import { HOOK_FONT_FAMILY } from "../../remotion/lib/hookVisual";
 import { useRenewableMediaUrl } from "../../lib/videoUrls";
 import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
+import { normalizeCueCaptions } from "../local-editor/localEditorRender";
 import {
   createLayoutSegments,
   normalizeLayoutSegments,
@@ -123,15 +124,17 @@ const publishingMetadataFrom = (sourceManifest, clip) => {
 const localCuesFromTrack = (track) => {
   const cues = Array.isArray(track?.cues) ? track.cues : [];
   const captions = Array.isArray(track?.captions) ? track.captions : [];
-  return (cues.length ? cues : captions).map((cue, index) => ({
-    id: cue.id || `${track?.id || "subtitle"}-${index}`,
-    type: "subtitle",
-    label: cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
-    text: cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
-    startMs: Number(cue.startMs || 0),
-    endMs: Number(cue.endMs || cue.startMs || 0),
-    captions: Array.isArray(cue.captions) ? cue.captions : undefined,
-  }));
+  return (cues.length ? cues : captions).map((cue, index) =>
+    normalizeCueCaptions({
+      id: cue.id || `${track?.id || "subtitle"}-${index}`,
+      type: "subtitle",
+      label: cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
+      text: cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
+      startMs: Number(cue.startMs || 0),
+      endMs: Number(cue.endMs || cue.startMs || 0),
+      captions: Array.isArray(cue.captions) ? cue.captions : undefined,
+    }),
+  );
 };
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -231,14 +234,19 @@ export const localEditorStateToManifest = (
     : [];
   const existingTrack =
     existingTracks.find((track) => track.id === nextTrackId) || {};
-  const cues = (state.subtitleCues || []).map((cue) => ({
-    text: cue.text || cue.label || "",
-    startMs: Math.round(Number(cue.startMs || 0)),
-    endMs: Math.round(Number(cue.endMs || cue.startMs || 0)),
-    ...(Array.isArray(cue.captions) && cue.captions.length
-      ? { captions: cue.captions }
-      : {}),
-  }));
+  const cues = (state.subtitleCues || []).map((cue) => {
+    const normalizedCue = normalizeCueCaptions(cue);
+    return {
+      text: normalizedCue.text || normalizedCue.label || "",
+      startMs: Math.round(Number(normalizedCue.startMs || 0)),
+      endMs: Math.round(
+        Number(normalizedCue.endMs || normalizedCue.startMs || 0),
+      ),
+      ...(Array.isArray(normalizedCue.captions) && normalizedCue.captions.length
+        ? { captions: normalizedCue.captions }
+        : {}),
+    };
+  });
   const nextTrack = {
     ...existingTrack,
     id: nextTrackId,

@@ -4,6 +4,7 @@ import {
   buildRemotionRenderProps,
   burnLocalEditorSubtitles,
   cleanSubtitleCue,
+  cueCaptionsForRender,
   renderLocalVideoOnBackend,
   renderLocalVideoOnBrowser,
   resolveProjectExportStartSeconds,
@@ -250,6 +251,17 @@ describe("local editor Remotion rendering", () => {
       { text: "Move", startMs: 600, endMs: 800 },
       { text: "this", startMs: 800, endMs: 1000 },
     ]);
+  });
+
+  it("moves stale nested caption timings into the edited cue range", () => {
+    expect(
+      cueCaptionsForRender({
+        text: "Oh,",
+        startMs: 16678,
+        endMs: 17078,
+        captions: [{ text: "Oh,", startMs: 17500, endMs: 17900 }],
+      }),
+    ).toEqual([{ text: "Oh,", startMs: 16678, endMs: 17078 }]);
   });
 
   it("keeps manually edited word timings when the cue text matches them", () => {
