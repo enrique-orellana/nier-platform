@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const remotionVideoPropsMock = vi.hoisted(() => vi.fn());
 const subtitlesPropsMock = vi.hoisted(() => vi.fn());
 const remotionEnvironmentMock = vi.hoisted(() => ({ isRendering: false }));
+const currentFrameMock = vi.hoisted(() => ({ value: 0 }));
 const timelineContextMock = vi.hoisted(() => ({
   playing: false,
   imperativePlaying: { current: false },
@@ -14,8 +15,8 @@ const timelineContextMock = vi.hoisted(() => ({
 vi.mock("remotion", () => ({
   AbsoluteFill: ({ children }) => <div>{children}</div>,
   useRemotionEnvironment: () => remotionEnvironmentMock,
-  useCurrentFrame: () => 0,
-  useVideoConfig: () => ({ fps: 30 }),
+  useCurrentFrame: () => currentFrameMock.value,
+  useVideoConfig: () => ({ fps: 30, durationInFrames: 300 }),
   Internals: {
     Timeline: {
       useTimelineContext: () => timelineContextMock,
@@ -53,6 +54,7 @@ describe("ShortVideo media source", () => {
 
   afterEach(() => {
     remotionEnvironmentMock.isRendering = false;
+    currentFrameMock.value = 0;
     timelineContextMock.playing = false;
     timelineContextMock.imperativePlaying.current = false;
     timelineContextMock.audioAndVideoTags.current = [];
@@ -121,6 +123,86 @@ describe("ShortVideo media source", () => {
     act(() => animationFrames[0]?.());
 
     expect(onMediaTimeChange).toHaveBeenCalledWith(750);
+  });
+
+  it("keeps the active native video mounted when a cut layout segment starts", () => {
+    currentFrameMock.value = 149;
+    const props = {
+      videoUrl: "/videos/master.mp4",
+      fps: 30,
+      layout: {
+        format: "standard",
+        segments: [
+          {
+            id: "standard",
+            startMs: 0,
+            endMs: 5000,
+            format: "standard",
+            transition: "cut",
+          },
+          {
+            id: "streamer",
+            startMs: 5000,
+            endMs: 10000,
+            format: "streamer_stack",
+            transition: "cut",
+          },
+        ],
+      },
+    };
+
+    const { rerender } = render(<ShortVideo {...props} />);
+    const videoBeforeBoundary = screen.getByTestId("native-browser-video");
+
+    currentFrameMock.value = 150;
+    rerender(<ShortVideo {...props} />);
+
+    expect(screen.getByTestId("native-browser-video")).toBe(
+      videoBeforeBoundary,
+    );
+  });
+
+  it("lets only the active crossfade layer publish the native media clock", () => {
+    const animationFrames = [];
+    const onMediaTimeChange = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", (callback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    timelineContextMock.playing = true;
+    currentFrameMock.value = 150;
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        fps={30}
+        onMediaTimeChange={onMediaTimeChange}
+        layout={{
+          format: "standard",
+          segments: [
+            {
+              id: "standard",
+              startMs: 0,
+              endMs: 5000,
+              format: "standard",
+              transition: "cut",
+            },
+            {
+              id: "streamer",
+              startMs: 5000,
+              endMs: 10000,
+              format: "streamer_stack",
+              transition: "crossfade",
+              transitionDurationMs: 1000,
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getAllByTestId("native-browser-video")).toHaveLength(2);
+    expect(animationFrames).toHaveLength(1);
   });
 
   it("renders the standard layout with a blurred background and contained foreground", () => {

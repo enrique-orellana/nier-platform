@@ -234,7 +234,9 @@ const LayoutVideoLayer: React.FC<{
           videoStartSeconds={videoStartSeconds}
           playbackRate={playbackRate}
           onAutoPlayError={onAutoPlayError}
-          onMediaTimeChange={reportMediaTime ? onMediaTimeChange : undefined}
+          onMediaTimeChange={
+            reportMediaTime && !muted ? onMediaTimeChange : undefined
+          }
           fps={fps}
           objectFit={usesStandardLayout ? "contain" : videoFit || "cover"}
           muted={muted}
@@ -321,7 +323,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
       <VideoEffects config={effects}>
         {layoutLayers.map(({ segment, opacity, muted }) => (
           <LayoutVideoLayer
-            key={`${segment.id}-${muted ? "previous" : "active"}`}
+            key={muted ? "layout-previous" : "layout-active"}
             segment={segment}
             videoUrl={videoUrl}
             videoStartFrame={videoStartFrame}
