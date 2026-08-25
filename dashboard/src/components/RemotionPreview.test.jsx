@@ -73,6 +73,34 @@ describe("RemotionPreview", () => {
     expect(onPlayingChange).toHaveBeenCalledWith(false);
   });
 
+  it("waits for the native media clock before stopping at the range end", () => {
+    pauseMock.mockClear();
+    const onPlayingChange = vi.fn();
+    render(
+      <RemotionPreview
+        videoUrl="/video.mp4"
+        durationInSeconds={1}
+        fps={30}
+        playing={true}
+        loop={false}
+        onPlayingChange={onPlayingChange}
+        onMediaTimeChange={vi.fn()}
+      />,
+    );
+
+    const playerProps = playerPropsMock.mock.lastCall[0];
+    act(() => {
+      playerEmitMock("frameupdate", { frame: 29 });
+      playerProps.inputProps.onMediaTimeChange(950);
+    });
+    expect(pauseMock).not.toHaveBeenCalled();
+
+    act(() => playerProps.inputProps.onMediaTimeChange(970));
+
+    expect(pauseMock).toHaveBeenCalledTimes(1);
+    expect(onPlayingChange).toHaveBeenCalledWith(false);
+  });
+
   it("plays immediately when the editor transport requests playback", () => {
     render(<RemotionPreview videoUrl="/video.mp4" playing={false} />);
     window.dispatchEvent(

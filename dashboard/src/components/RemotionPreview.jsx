@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Player } from "@remotion/player";
 import { ShortVideo } from "../remotion/compositions/ShortVideo";
 import { useRenewableMediaUrl } from "../lib/videoUrls";
@@ -46,6 +46,23 @@ function RemotionPreview({
   const playerRef = useRef(null);
   const playerFrameRef = useRef(null);
   const wasPlayingRef = useRef(playing);
+  const handleMediaTimeChange = useCallback(
+    (mediaTimeMs) => {
+      onMediaTimeChange?.(mediaTimeMs);
+      const durationMs = durationInSeconds * 1000;
+      const finalFrameToleranceMs = 1000 / Math.max(1, Number(fps) || 30);
+      if (
+        wasPlayingRef.current &&
+        !loop &&
+        Number.isFinite(mediaTimeMs) &&
+        mediaTimeMs >= durationMs - finalFrameToleranceMs
+      ) {
+        playerRef.current?.pause?.();
+        onPlayingChange?.(false);
+      }
+    },
+    [durationInSeconds, fps, loop, onMediaTimeChange, onPlayingChange],
+  );
 
   useEffect(() => {
     const player = playerRef.current;
@@ -100,7 +117,12 @@ function RemotionPreview({
       const frame = event.detail.frame;
       playerFrameRef.current = frame;
       onFrameChange?.(frame);
-      if (wasPlayingRef.current && !loop && frame >= durationInFrames - 1) {
+      if (
+        wasPlayingRef.current &&
+        !onMediaTimeChange &&
+        !loop &&
+        frame >= durationInFrames - 1
+      ) {
         player.pause?.();
         onPlayingChange?.(false);
       }
@@ -116,7 +138,14 @@ function RemotionPreview({
       player.removeEventListener("pause", onPause);
       onPlayerReady?.(null);
     };
-  }, [durationInFrames, loop, onFrameChange, onPlayingChange, onPlayerReady]);
+  }, [
+    durationInFrames,
+    loop,
+    onFrameChange,
+    onMediaTimeChange,
+    onPlayingChange,
+    onPlayerReady,
+  ]);
 
   const inputProps = useMemo(
     () => ({
@@ -133,7 +162,7 @@ function RemotionPreview({
       layout,
       hook,
       effects,
-      onMediaTimeChange,
+      onMediaTimeChange: onMediaTimeChange ? handleMediaTimeChange : undefined,
     }),
     [
       resolvedVideoUrl,
@@ -149,6 +178,7 @@ function RemotionPreview({
       layout,
       hook,
       effects,
+      handleMediaTimeChange,
       onMediaTimeChange,
     ],
   );
