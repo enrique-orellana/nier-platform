@@ -6,6 +6,7 @@ const remotionVideoPropsMock = vi.hoisted(() => vi.fn());
 const subtitlesPropsMock = vi.hoisted(() => vi.fn());
 const remotionEnvironmentMock = vi.hoisted(() => ({ isRendering: false }));
 const currentFrameMock = vi.hoisted(() => ({ value: 0 }));
+const playerMutedMock = vi.hoisted(() => ({ value: false }));
 const timelineContextMock = vi.hoisted(() => ({
   playing: false,
   imperativePlaying: { current: false },
@@ -18,6 +19,7 @@ vi.mock("remotion", () => ({
   useCurrentFrame: () => currentFrameMock.value,
   useVideoConfig: () => ({ fps: 30, durationInFrames: 300 }),
   Internals: {
+    usePlayerMutedState: () => [playerMutedMock.value, vi.fn()],
     Timeline: {
       useTimelineContext: () => timelineContextMock,
     },
@@ -55,6 +57,7 @@ describe("ShortVideo media source", () => {
   afterEach(() => {
     remotionEnvironmentMock.isRendering = false;
     currentFrameMock.value = 0;
+    playerMutedMock.value = false;
     timelineContextMock.playing = false;
     timelineContextMock.imperativePlaying.current = false;
     timelineContextMock.audioAndVideoTags.current = [];
@@ -208,6 +211,19 @@ describe("ShortVideo media source", () => {
     expect(screen.getAllByTestId("native-browser-video")[0]).toHaveStyle({
       objectFit: "contain",
     });
+  });
+
+  it("applies the player mute state to the persistent audio clock", () => {
+    const props = { videoUrl: "/videos/master.mp4", fps: 30 };
+    const { rerender } = render(<ShortVideo {...props} />);
+    const audio = screen.getByTestId("native-browser-audio");
+
+    expect(audio.muted).toBe(false);
+
+    playerMutedMock.value = true;
+    rerender(<ShortVideo {...props} />);
+
+    expect(audio.muted).toBe(true);
   });
 
   it("keeps the outgoing native video mounted when a crossfade starts", () => {

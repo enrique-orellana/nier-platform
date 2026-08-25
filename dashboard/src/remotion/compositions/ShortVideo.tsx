@@ -146,10 +146,12 @@ const BrowserVideo: React.FC<{
   const videoId = useId();
   const frame = useCurrentFrame();
   const videoConfig = useVideoConfig();
+  const [playerMuted] = Internals.usePlayerMutedState();
   const timeline = Internals.Timeline.useTimelineContext();
   const lastFrameRef = useRef(frame);
   const lastSourceKeyRef = useRef("");
   const sourceKey = `${videoUrl}:${videoStartSeconds}:${videoConfig.fps || fps}`;
+  const effectiveMuted = muted || playerMuted;
 
   const playVideo = useCallback(() => {
     const video = videoRef.current;
@@ -176,8 +178,8 @@ const BrowserVideo: React.FC<{
     const video = videoRef.current;
     if (!video) return;
     video.playbackRate = playbackRate;
-    video.muted = muted;
-  }, [muted, playbackRate, videoUrl]);
+    video.muted = effectiveMuted;
+  }, [effectiveMuted, playbackRate, videoUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -244,7 +246,7 @@ const BrowserVideo: React.FC<{
       src={videoUrl}
       preload="auto"
       playsInline
-      muted={muted}
+      muted={effectiveMuted}
       aria-hidden={audioOnly || undefined}
       onLoadedMetadata={() => {
         lastSourceKeyRef.current = "";
