@@ -218,7 +218,8 @@ const BrowserVideo: React.FC<{
     if (!video) return;
     const frameDelta = Math.abs(frame - lastFrameRef.current);
     const sourceChanged = sourceKey !== lastSourceKeyRef.current;
-    const shouldSync = sourceChanged || !timeline.playing || frameDelta > 3;
+    const shouldSync =
+      sourceChanged || !timeline.playing || (!audioOnly && frameDelta > 3);
     if (shouldSync) {
       const targetTime =
         Number(videoStartSeconds) + frame / Number(videoConfig.fps || fps);

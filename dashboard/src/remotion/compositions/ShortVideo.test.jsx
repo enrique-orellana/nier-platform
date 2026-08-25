@@ -226,6 +226,25 @@ describe("ShortVideo media source", () => {
     expect(audio.muted).toBe(true);
   });
 
+  it("does not seek the persistent audio clock to a delayed frame while playing", () => {
+    timelineContextMock.playing = true;
+    currentFrameMock.value = 100;
+    const props = { videoUrl: "/videos/master.mp4", fps: 30 };
+    const { rerender } = render(<ShortVideo {...props} />);
+    const audio = screen.getByTestId("native-browser-audio");
+
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      value: 10,
+      writable: true,
+    });
+
+    currentFrameMock.value = 120;
+    rerender(<ShortVideo {...props} />);
+
+    expect(audio.currentTime).toBe(10);
+  });
+
   it("keeps the outgoing native video mounted when a crossfade starts", () => {
     currentFrameMock.value = 149;
     const props = {
