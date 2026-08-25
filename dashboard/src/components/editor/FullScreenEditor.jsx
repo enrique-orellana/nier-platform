@@ -21,38 +21,12 @@ import EditorActionToolbar from "./EditorActionToolbar";
 import LocalEditorTab from "../local-editor/LocalEditorTab";
 import { DEFAULT_SUBTITLE_STYLE } from "../local-editor/localEditorStyles";
 import { HOOK_FONT_FAMILY } from "../../remotion/lib/hookVisual";
-import {
-  resolvePreviewStartSeconds,
-  useRenewableMediaUrl,
-} from "../../lib/videoUrls";
+import { useRenewableMediaUrl } from "../../lib/videoUrls";
 import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
 import {
   createLayoutSegments,
   normalizeLayoutSegments,
 } from "../../editor/layoutTimelineModel";
-
-const videoPath = (url) => {
-  if (!url) return "";
-  try {
-    return new URL(url, window.location.origin).pathname;
-  } catch {
-    return String(url).split("?")[0].split("#")[0];
-  }
-};
-
-const generatedClipVideoUrl = (clip, projectManifest) => {
-  const candidate = clip?.video_url || clip?.url || "";
-  if (!candidate) return "";
-  const sourcePaths = [
-    clip?.source_video_url,
-    clip?.original_video_url,
-    projectManifest?.timeline?.source_video_url,
-  ]
-    .map(videoPath)
-    .filter(Boolean);
-  if (!sourcePaths.length) return candidate;
-  return sourcePaths.includes(videoPath(candidate)) ? "" : candidate;
-};
 
 const defaultSubtitleTrackId = (nextManifest) =>
   nextManifest?.active_subtitle_track_id ||
@@ -608,37 +582,39 @@ export default function FullScreenEditor({
     currentManifest,
     localDraft,
   ]);
-  const generatedClipUrl = generatedClipVideoUrl(clip, projectManifest);
-  const versionSourceVideoUrl = version?.version_id
-    ? projectManifest.timeline?.source_video_url || ""
-    : "";
-  const { url: refreshedVersionSourceVideoUrl } = useRenewableMediaUrl(
-    versionSourceVideoUrl,
-  );
-  const selectedVersionSourceVideoUrl =
-    refreshedVersionSourceVideoUrl || versionSourceVideoUrl;
   const masterSourceVideoUrl =
     clip.source_video_url ||
     clip.original_video_url ||
     clip.source_url ||
     clip.video_url ||
     "";
-  const hasIndependentVersionSource = Boolean(
-    selectedVersionSourceVideoUrl &&
-    videoPath(selectedVersionSourceVideoUrl) !==
-      videoPath(masterSourceVideoUrl),
+  // Always render the editable timeline from the original master. Generated
+  // source_clip files already contain a baked layout and cannot switch back
+  // to Standard when a timeline segment changes layout.
+  const projectVideoUrl =
+    refreshedMasterVideoUrl ||
+    masterSourceVideoUrl ||
+    projectManifest.timeline?.source_video_url ||
+    clip.video_url ||
+    "";
+  const projectManifestForRender = useMemo(
+    () => ({
+      ...projectManifest,
+      timeline: {
+        ...(projectManifest.timeline || {}),
+        source_video_url: projectVideoUrl,
+      },
+    }),
+    [projectManifest, projectVideoUrl],
   );
   const projectInputProps = useMemo(
     () => ({
-      ...manifestToRenderProps(projectManifest, {
+      ...manifestToRenderProps(projectManifestForRender, {
         activeSubtitleTrackId: activeTrackId,
       }),
-      videoUrl:
-        refreshedMasterVideoUrl ||
-        projectManifest.timeline?.source_video_url ||
-        clip.video_url,
+      videoUrl: projectVideoUrl,
     }),
-    [activeTrackId, clip.video_url, projectManifest, refreshedMasterVideoUrl],
+    [activeTrackId, projectManifestForRender, projectVideoUrl],
   );
   const fallbackDurationSeconds = Math.max(
     1,
@@ -675,26 +651,22 @@ export default function FullScreenEditor({
   );
   const selectedRenderSpec =
     !renderSpecDirty && normalizeRenderSpec(projectManifest.render_spec)
-      ? normalizeRenderSpec(projectManifest.render_spec)
+      ? {
+          ...normalizeRenderSpec(projectManifest.render_spec),
+          // Older versions may have stored 0 here because they rendered a
+          // generated clip. The master source must use the clip's trim start.
+          video_start_seconds: projectInputProps.videoStartSeconds,
+        }
       : fallbackRenderSpec;
   const selectedRenderProps = renderSpecToProps(selectedRenderSpec);
   const durationSeconds =
     selectedRenderSpec.duration_in_frames / selectedRenderSpec.fps;
-  const projectVideoUrl =
-    selectedVersionSourceVideoUrl ||
-    generatedClipUrl ||
-    refreshedMasterVideoUrl ||
-    projectInputProps.videoUrl;
   const versionManifest = useMemo(
     () => ({
-      ...projectManifest,
-      timeline: {
-        ...(projectManifest.timeline || {}),
-        source_video_url: projectVideoUrl,
-      },
+      ...projectManifestForRender,
       active_subtitle_track_id: activeTrackId,
     }),
-    [activeTrackId, projectManifest, projectVideoUrl],
+    [activeTrackId, projectManifestForRender],
   );
   useEffect(() => {
     versionManifestRef.current = versionManifest;
@@ -733,7 +705,10 @@ export default function FullScreenEditor({
     });
     const latestRenderSpec =
       !renderSpecDirty && normalizeRenderSpec(baseManifest.render_spec)
-        ? normalizeRenderSpec(baseManifest.render_spec)
+        ? {
+            ...normalizeRenderSpec(baseManifest.render_spec),
+            video_start_seconds: renderProps.videoStartSeconds,
+          }
         : {
             video_start_seconds: Math.max(
               0,
@@ -772,29 +747,10 @@ export default function FullScreenEditor({
     versionManifest,
   ]);
   const previewVideoUrl = projectVideoUrl;
-  const previewVideoStartSeconds =
-    hasIndependentVersionSource || generatedClipUrl
-      ? 0
-      : selectedRenderProps.videoStartSeconds;
+  const previewVideoStartSeconds = selectedRenderProps.videoStartSeconds;
   const localEditorPreviewUrl = useMemo(() => {
-    return (
-      resolveLocalEditorSourceUrl({
-        refreshedMasterVideoUrl,
-        clip,
-        projectManifest,
-        preferVersionSource: Boolean(version?.version_id),
-      }) ||
-      selectedVersionSourceVideoUrl ||
-      projectVideoUrl
-    );
-  }, [
-    clip,
-    projectManifest,
-    projectVideoUrl,
-    refreshedMasterVideoUrl,
-    selectedVersionSourceVideoUrl,
-    version?.version_id,
-  ]);
+    return refreshedMasterVideoUrl || masterSourceVideoUrl || projectVideoUrl;
+  }, [projectVideoUrl, refreshedMasterVideoUrl, masterSourceVideoUrl]);
   const currentManifestRef = useRef(currentManifest);
   useEffect(() => {
     currentManifestRef.current = projectManifest;
@@ -1206,14 +1162,7 @@ export default function FullScreenEditor({
       <LocalEditorTab
         initialVideoUrl={localEditorPreviewUrl}
         initialExportVideoUrl={
-          resolveLocalEditorSourceUrl({
-            refreshedMasterVideoUrl,
-            clip,
-            projectManifest,
-            preferVersionSource: Boolean(version?.version_id),
-          }) ||
-          selectedVersionSourceVideoUrl ||
-          projectInputProps.videoUrl
+          refreshedMasterVideoUrl || masterSourceVideoUrl || projectVideoUrl
         }
         initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
         initialProjectId={jobId}
@@ -1221,10 +1170,7 @@ export default function FullScreenEditor({
         onExport={exportVersion}
         initialPlaybackStartMs={Math.max(
           0,
-          (!renderSpecDirty && normalizeRenderSpec(projectManifest.render_spec)
-            ? normalizeRenderSpec(projectManifest.render_spec)
-                .video_start_seconds
-            : resolvePreviewStartSeconds(clip)) * 1000,
+          selectedRenderSpec.video_start_seconds * 1000,
         )}
         initialPlaybackDurationMs={Math.max(
           1,

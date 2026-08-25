@@ -244,7 +244,7 @@ describe("FullScreenEditor", () => {
     ).toBe(generatedVersionUrl);
   });
 
-  it("previews a saved version from its source video instead of the master", () => {
+  it("previews a saved version from the master source", () => {
     const versionSourceUrl =
       "https://minio.example/openshorts-media/job/clips/clip-1/source_clip_7.mp4";
     const masterUrl =
@@ -273,11 +273,11 @@ describe("FullScreenEditor", () => {
 
     expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
       "data-video-url",
-      versionSourceUrl,
+      masterUrl,
     );
   });
 
-  it("exports the generated clip source used by the preview", async () => {
+  it("exports the master source used by the preview", async () => {
     const generatedClipUrl =
       "https://minio.example/openshorts-media/job/clips/clip-1/source_clip_14.mp4";
     const masterUrl =
@@ -322,10 +322,91 @@ describe("FullScreenEditor", () => {
         expect.objectContaining({
           manifest: expect.objectContaining({
             timeline: expect.objectContaining({
-              source_video_url: generatedClipUrl,
+              source_video_url: masterUrl,
             }),
           }),
-          props: expect.objectContaining({ videoUrl: generatedClipUrl }),
+          props: expect.objectContaining({ videoUrl: masterUrl }),
+        }),
+      ),
+    );
+  });
+
+  it("exports mixed layouts from the master source", async () => {
+    const generatedClipUrl =
+      "https://minio.example/openshorts-media/job/clips/clip-1/source_clip_14.mp4";
+    const masterUrl =
+      "https://minio.example/openshorts-media/job/master/source.mp4";
+    let session = null;
+    renderVersionMocks.saveAndRenderVersion.mockResolvedValue({
+      status: "done",
+      outputUrl: "/videos/job/v3.mp4",
+      version: { version_id: "v3", status: "done" },
+    });
+
+    render(
+      <FullScreenEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          start: 490.78,
+          end: 549.34,
+          video_url: generatedClipUrl,
+          source_video_url: masterUrl,
+        }}
+        initialManifest={{
+          ...manifest,
+          timeline: {
+            ...manifest.timeline,
+            source_video_url: generatedClipUrl,
+            trim: { start_sec: 490.78, end_sec: 549.34 },
+          },
+          layers: {
+            ...manifest.layers,
+            layout: {
+              format: "streamer_stack",
+              segments: [
+                {
+                  id: "standard",
+                  startMs: 0,
+                  endMs: 5000,
+                  format: "standard",
+                  transition: "cut",
+                },
+                {
+                  id: "streamer",
+                  startMs: 5000,
+                  endMs: 10000,
+                  format: "streamer_stack",
+                  transition: "cut",
+                },
+              ],
+            },
+          },
+        }}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        onSessionReady={(nextSession) => {
+          if (nextSession) session = nextSession;
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(session).toBeTruthy());
+    await session.export();
+
+    await waitFor(() =>
+      expect(renderVersionMocks.saveAndRenderVersion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          manifest: expect.objectContaining({
+            timeline: expect.objectContaining({
+              source_video_url: masterUrl,
+            }),
+          }),
+          props: expect.objectContaining({
+            videoUrl: masterUrl,
+            videoStartSeconds: 490.78,
+          }),
         }),
       ),
     );
@@ -1035,7 +1116,7 @@ describe("FullScreenEditor", () => {
     );
   });
 
-  it("streams the rendered clip instead of downloading the source video", async () => {
+  it("streams the master source instead of the generated clip", async () => {
     const fetchMock = vi.fn(async (url) => {
       if (String(url).includes("/api/projects/clips/job?refresh=true")) {
         return {
@@ -1084,11 +1165,11 @@ describe("FullScreenEditor", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
       "data-video-url",
-      "/videos/job/source_clip_1.mp4",
+      "/videos/job/source.mp4",
     );
     expect(screen.getByTestId("remotion-player-frame")).toHaveAttribute(
       "data-video-start-seconds",
-      "0",
+      "34.2",
     );
     expect(
       screen.getByRole("button", { name: /generate subtitles/i }),
