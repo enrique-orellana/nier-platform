@@ -1417,6 +1417,10 @@ export default function LocalEditorTab({
     handleSeek(playheadMs + deltaMs);
   };
 
+  const seekByFrame = (direction) => {
+    seekBy((Number(direction) || 0) * (1000 / remotionFps));
+  };
+
   const togglePlayback = async (event) => {
     const remotionPlayer = remotionPlayerRef.current;
     if (remotionPlayer) {
@@ -1491,10 +1495,10 @@ export default function LocalEditorTab({
       togglePlayback(event);
     } else if (event.key === "ArrowLeft") {
       event.preventDefault();
-      seekBy(-5000);
+      seekByFrame(-1);
     } else if (event.key === "ArrowRight") {
       event.preventDefault();
-      seekBy(5000);
+      seekByFrame(1);
     } else if (event.key === "Home") {
       event.preventDefault();
       handleSeek(0);
@@ -2062,7 +2066,7 @@ export default function LocalEditorTab({
               data-testid="local-editor-player"
               tabIndex={0}
               role="region"
-              aria-label="Video preview. Use Space or K to play or pause, arrow keys to seek, M to mute, and F for fullscreen."
+              aria-label="Video preview. Use Space or K to play or pause, arrow keys to step one frame, M to mute, and F for fullscreen."
               aria-keyshortcuts="Space K ArrowLeft ArrowRight Home End M F"
               className={
                 isFullscreen

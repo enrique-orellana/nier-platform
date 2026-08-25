@@ -2303,7 +2303,7 @@ describe("LocalEditorTab", () => {
     const player = screen.getByTestId("local-editor-player");
     const video = player.querySelector("video");
     fireEvent.keyDown(player, { key: "ArrowRight" });
-    expect(video.currentTime).toBe(5);
+    expect(video.currentTime).toBeCloseTo(1 / 30, 5);
     fireEvent.keyDown(player, { key: "Home" });
     expect(video.currentTime).toBe(0);
     fireEvent.keyDown(player, { key: "m" });
@@ -2325,15 +2325,23 @@ describe("LocalEditorTab", () => {
       expect(screen.getByTestId("local-editor-workspace")).toBeInTheDocument(),
     );
 
-    fireEvent.keyDown(screen.getByTestId("local-editor-workspace"), {
+    const workspace = screen.getByTestId("local-editor-workspace");
+    const video = screen.getByTestId("local-editor-native-video");
+
+    fireEvent.keyDown(workspace, {
+      key: "ArrowRight",
+    });
+    expect(video.currentTime).toBeCloseTo(1 / 30, 5);
+    fireEvent.keyDown(workspace, {
+      key: "ArrowLeft",
+    });
+    expect(video.currentTime).toBeCloseTo(0, 5);
+
+    fireEvent.keyDown(workspace, {
       key: " ",
     });
 
-    await waitFor(() =>
-      expect(
-        screen.getByTestId("local-editor-native-video").play,
-      ).toHaveBeenCalled(),
-    );
+    await waitFor(() => expect(video.play).toHaveBeenCalled());
   });
 
   it("imports an SRT file", async () => {
