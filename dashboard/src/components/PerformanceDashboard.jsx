@@ -268,7 +268,9 @@ const TrendChart = ({ trend }) => {
               })}
               <text
                 x={-chart.margin.left + 12}
-                y={-2}
+                y={chart.plotHeight / 2}
+                textAnchor="middle"
+                transform={`rotate(-90 ${-chart.margin.left + 12} ${chart.plotHeight / 2})`}
                 className="fill-zinc-600 text-[10px]"
               >
                 Duration

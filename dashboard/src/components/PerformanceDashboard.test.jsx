@@ -69,6 +69,10 @@ describe("PerformanceDashboard", () => {
     expect(screen.getByText("Compositing")).toBeInTheDocument();
     expect(screen.getByText("0ms")).toBeInTheDocument();
     expect(screen.getByText("Aug 25")).toBeInTheDocument();
+    expect(screen.getByText("Duration", { selector: "text" })).toHaveAttribute(
+      "transform",
+      expect.stringContaining("rotate(-90"),
+    );
     expect(screen.getByLabelText(/Average on 2026-08-25/)).toBeInTheDocument();
     expect(screen.getByText("1–10 of 21")).toBeInTheDocument();
   });
