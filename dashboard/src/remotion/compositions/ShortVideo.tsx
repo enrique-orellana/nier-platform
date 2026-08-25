@@ -148,7 +148,6 @@ const BrowserVideo: React.FC<{
   const videoConfig = useVideoConfig();
   const [playerMuted] = Internals.usePlayerMutedState();
   const timeline = Internals.Timeline.useTimelineContext();
-  const lastFrameRef = useRef(frame);
   const lastSourceKeyRef = useRef("");
   const sourceKey = `${videoUrl}:${videoStartSeconds}:${videoConfig.fps || fps}`;
   const effectiveMuted = muted || playerMuted;
@@ -216,10 +215,8 @@ const BrowserVideo: React.FC<{
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const frameDelta = Math.abs(frame - lastFrameRef.current);
     const sourceChanged = sourceKey !== lastSourceKeyRef.current;
-    const shouldSync =
-      sourceChanged || !timeline.playing || (!audioOnly && frameDelta > 3);
+    const shouldSync = sourceChanged || !timeline.playing;
     if (shouldSync) {
       const targetTime =
         Number(videoStartSeconds) + frame / Number(videoConfig.fps || fps);
@@ -229,7 +226,6 @@ const BrowserVideo: React.FC<{
       )
         video.currentTime = Math.max(0, targetTime);
     }
-    lastFrameRef.current = frame;
     lastSourceKeyRef.current = sourceKey;
   }, [
     frame,

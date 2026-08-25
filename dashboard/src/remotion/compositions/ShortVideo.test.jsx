@@ -245,6 +245,46 @@ describe("ShortVideo media source", () => {
     expect(audio.currentTime).toBe(10);
   });
 
+  it("does not seek visual layout clocks to a delayed frame while playing", () => {
+    timelineContextMock.playing = true;
+    currentFrameMock.value = 149;
+    const props = {
+      videoUrl: "/videos/master.mp4",
+      fps: 30,
+      layout: {
+        format: "standard",
+        segments: [
+          {
+            id: "standard",
+            startMs: 0,
+            endMs: 5000,
+            format: "standard",
+            transition: "cut",
+          },
+          {
+            id: "streamer",
+            startMs: 5000,
+            endMs: 10000,
+            format: "streamer_stack",
+            transition: "cut",
+          },
+        ],
+      },
+    };
+    const { rerender } = render(<ShortVideo {...props} />);
+    const video = screen.getByTestId("native-browser-video");
+    Object.defineProperty(video, "currentTime", {
+      configurable: true,
+      value: 10,
+      writable: true,
+    });
+
+    currentFrameMock.value = 180;
+    rerender(<ShortVideo {...props} />);
+
+    expect(video.currentTime).toBe(10);
+  });
+
   it("keeps the outgoing native video mounted when a crossfade starts", () => {
     currentFrameMock.value = 149;
     const props = {
