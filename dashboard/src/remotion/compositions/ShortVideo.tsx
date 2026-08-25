@@ -508,9 +508,11 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
   const [previewMediaTimeMs, setPreviewMediaTimeMs] = useState<number | null>(
     null,
   );
-  const previewMediaTimeRef = useRef<number | null>(null);
-  const previewMediaTimeTimerRef = useRef<number | null>(null);
+  const previewMediaTimePublishedAtRef = useRef<number | null>(null);
+  const previewMediaTimeValueRef = useRef<number | null>(null);
   const frame = useCurrentFrame();
+  const frameRef = useRef(frame);
+  frameRef.current = frame;
   const videoConfig = useVideoConfig();
   const compositionFps = Number(videoConfig.fps || fps);
   const videoStartFrame = Math.max(
@@ -546,30 +548,35 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     },
     [hasActiveSubtitles, onMediaTimeChange],
   );
-  const schedulePreviewMediaTime = useCallback(
-    (nextMediaTimeMs: number | null) => {
-      previewMediaTimeRef.current = nextMediaTimeMs;
-      if (previewMediaTimeTimerRef.current !== null) return;
-      previewMediaTimeTimerRef.current = window.setTimeout(() => {
-        previewMediaTimeTimerRef.current = null;
-        setPreviewMediaTimeMs(previewMediaTimeRef.current);
-      }, PREVIEW_LAYOUT_CLOCK_UPDATE_MS);
-    },
-    [],
-  );
   const handleAudioMediaTimeChange = useCallback(
     (nextMediaTimeMs: number | null) => {
-      schedulePreviewMediaTime(nextMediaTimeMs);
+      // A newly mounted native element reports 0 before it has applied the
+      // current seek. Do not let that bootstrap value overwrite a paused or
+      // delayed Remotion frame.
+      if (nextMediaTimeMs === 0 && frameRef.current > 0) {
+        handleMediaTimeChange(nextMediaTimeMs);
+        return;
+      }
+      const now = performance.now();
+      const lastPublishedAt = previewMediaTimePublishedAtRef.current;
+      const lastPublishedValue = previewMediaTimeValueRef.current;
+      const isSeek =
+        nextMediaTimeMs !== null &&
+        lastPublishedValue !== null &&
+        Math.abs(nextMediaTimeMs - lastPublishedValue) > 100;
+      if (
+        nextMediaTimeMs === null ||
+        lastPublishedAt === null ||
+        now - lastPublishedAt >= PREVIEW_LAYOUT_CLOCK_UPDATE_MS ||
+        isSeek
+      ) {
+        previewMediaTimePublishedAtRef.current = now;
+        previewMediaTimeValueRef.current = nextMediaTimeMs;
+        setPreviewMediaTimeMs(nextMediaTimeMs);
+      }
       handleMediaTimeChange(nextMediaTimeMs);
     },
-    [handleMediaTimeChange, schedulePreviewMediaTime],
-  );
-  useEffect(
-    () => () => {
-      if (previewMediaTimeTimerRef.current !== null)
-        window.clearTimeout(previewMediaTimeTimerRef.current);
-    },
-    [],
+    [handleMediaTimeChange],
   );
   const environment = useRemotionEnvironment();
   const layoutFrame =

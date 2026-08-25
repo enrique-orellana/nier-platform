@@ -131,7 +131,6 @@ describe("ShortVideo media source", () => {
 
   it("switches preview layouts from the uninterrupted native media clock", () => {
     const animationFrames = [];
-    vi.useFakeTimers();
     vi.stubGlobal("requestAnimationFrame", (callback) => {
       animationFrames.push(callback);
       return animationFrames.length;
@@ -173,7 +172,6 @@ describe("ShortVideo media source", () => {
       writable: true,
     });
     act(() => animationFrames[0]?.());
-    act(() => vi.advanceTimersByTime(60));
 
     expect(screen.getAllByTestId("native-browser-video")).toHaveLength(1);
     expect(screen.getByTestId("native-browser-video")).toHaveStyle({
