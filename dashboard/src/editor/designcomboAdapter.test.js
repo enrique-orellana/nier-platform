@@ -385,6 +385,27 @@ describe("designcomboAdapter", () => {
     });
   });
 
+  it("adds the source dimensions needed for selected streamer regions", () => {
+    const props = manifestToRenderProps({
+      timeline: { source_asset_id: "master" },
+      assets: {
+        master: { probe: { width: 1920, height: 1080 } },
+      },
+      layers: {
+        layout: {
+          format: "streamer_stack",
+          webcam_region: { x: 0.05, y: 0.1, width: 0.25, height: 0.3 },
+        },
+      },
+    });
+
+    expect(props.layout).toMatchObject({
+      source_width: 1920,
+      source_height: 1080,
+      webcam_region: { x: 0.05, y: 0.1, width: 0.25, height: 0.3 },
+    });
+  });
+
   it("preserves segmented layout data in render props", () => {
     const segments = [
       {

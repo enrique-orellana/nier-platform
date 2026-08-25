@@ -94,6 +94,22 @@ export function manifestToVersionRenderProps(
           style: subtitleStyle || undefined,
         }
       : null;
+  const sourceLayout = clone(manifest.layers?.layout || null);
+  const sourceProbe =
+    manifest.assets?.[manifest.timeline?.source_asset_id]?.probe || null;
+  const sourceWidth = Number(sourceProbe?.width);
+  const sourceHeight = Number(sourceProbe?.height);
+  const layout = sourceLayout
+    ? {
+        ...sourceLayout,
+        ...(Number.isFinite(sourceWidth) && sourceWidth > 0
+          ? { source_width: sourceWidth }
+          : {}),
+        ...(Number.isFinite(sourceHeight) && sourceHeight > 0
+          ? { source_height: sourceHeight }
+          : {}),
+      }
+    : null;
 
   return {
     videoUrl,
@@ -102,7 +118,7 @@ export function manifestToVersionRenderProps(
     subtitles,
     subtitleTracks,
     activeSubtitleTrackId: subtitles ? activeSubtitleTrackId : null,
-    layout: clone(manifest.layers?.layout || null),
+    layout,
     hook: clone(manifest.layers?.hook || null),
     effects: clone(manifest.layers?.effects || null),
     audio: clone(manifest.layers?.audio || null),

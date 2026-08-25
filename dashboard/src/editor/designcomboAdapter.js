@@ -49,7 +49,22 @@ export function manifestToRenderProps(
           style: activeTrack.style || manifest.layers?.subtitles?.style,
         }
       : null;
-  const layout = manifest.layers?.layout || null;
+  const sourceLayout = manifest.layers?.layout || null;
+  const sourceProbe =
+    manifest.assets?.[manifest.timeline?.source_asset_id]?.probe || null;
+  const sourceWidth = Number(sourceProbe?.width);
+  const sourceHeight = Number(sourceProbe?.height);
+  const layout = sourceLayout
+    ? {
+        ...sourceLayout,
+        ...(Number.isFinite(sourceWidth) && sourceWidth > 0
+          ? { source_width: sourceWidth }
+          : {}),
+        ...(Number.isFinite(sourceHeight) && sourceHeight > 0
+          ? { source_height: sourceHeight }
+          : {}),
+      }
+    : null;
   return {
     videoUrl,
     // Generated source clips are already trimmed to the clip range. Applying

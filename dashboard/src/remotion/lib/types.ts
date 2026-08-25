@@ -91,6 +91,13 @@ export interface EffectsConfig {
 export type LayoutFormat = "standard" | "streamer_stack";
 export type LayoutTransition = "cut" | "crossfade";
 
+export interface SourceRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface LayoutSegmentConfig {
   id: string;
   startMs: number;
@@ -103,6 +110,12 @@ export interface LayoutSegmentConfig {
 export interface LayoutConfig {
   format: LayoutFormat;
   facecam_size?: "small" | "medium" | "large";
+  source_width?: number;
+  source_height?: number;
+  webcam_region?: SourceRegion;
+  gameplay_region?: SourceRegion;
+  gameplay_zoom?: number;
+  streamer_tracking_enabled?: boolean;
   segments?: LayoutSegmentConfig[];
 }
 

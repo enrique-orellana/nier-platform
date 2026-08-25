@@ -7,7 +7,7 @@ import {
   useRemotionEnvironment,
   useVideoConfig,
 } from "remotion";
-import type { ShortVideoProps } from "../lib/types";
+import type { LayoutConfig, ShortVideoProps, SourceRegion } from "../lib/types";
 import { Subtitles } from "./Subtitles";
 import { HookOverlay } from "./HookOverlay";
 import { VideoEffects } from "./VideoEffects";
@@ -23,6 +23,90 @@ export const getMediaTimeMs = (
   return Math.max(0, (mediaTime - startTime) * 1000);
 };
 
+const FACECAM_HEIGHT_RATIOS = {
+  small: 0.3,
+  medium: 0.38,
+  large: 0.46,
+} as const;
+
+const clamp = (value: number, minimum: number, maximum: number) =>
+  Math.max(minimum, Math.min(maximum, value));
+
+const normalizeRegion = (region: SourceRegion | null | undefined) => {
+  if (!region) return null;
+  const values = [region.x, region.y, region.width, region.height].map(Number);
+  if (values.some((value) => !Number.isFinite(value))) return null;
+  const [x, y, width, height] = values;
+  if (x < 0 || y < 0 || width <= 0 || height <= 0) return null;
+  if (x + width > 1 || y + height > 1) return null;
+  return { x, y, width, height };
+};
+
+const sourceAspectRatio = (layout: LayoutConfig | null | undefined) => {
+  const width = Number(layout?.source_width);
+  const height = Number(layout?.source_height);
+  return width > 0 && height > 0 && Number.isFinite(width / height)
+    ? width / height
+    : 16 / 9;
+};
+
+const cropRegionToPanel = ({
+  region,
+  sourceAspect,
+  panelAspect,
+  zoom = 1,
+  focus,
+}: {
+  region: SourceRegion;
+  sourceAspect: number;
+  panelAspect: number;
+  zoom?: number;
+  focus?: { x: number; y: number };
+}) => {
+  const selectedAspect = (region.width * sourceAspect) / region.height;
+  let width = region.width;
+  let height = region.height;
+  if (selectedAspect >= panelAspect) {
+    width = (height * panelAspect) / sourceAspect;
+  } else {
+    height = (width * sourceAspect) / panelAspect;
+  }
+
+  const normalizedZoom = clamp(Number(zoom) || 1, 0.6, 2);
+  width = Math.min(region.width, width / normalizedZoom);
+  height = Math.min(region.height, height / normalizedZoom);
+  const focusX = clamp(
+    Number(focus?.x ?? region.x + region.width / 2),
+    region.x,
+    region.x + region.width,
+  );
+  const focusY = clamp(
+    Number(focus?.y ?? region.y + region.height / 2),
+    region.y,
+    region.y + region.height,
+  );
+  const x = clamp(
+    focusX - width / 2,
+    region.x,
+    region.x + region.width - width,
+  );
+  const y = clamp(
+    focusY - height / 2,
+    region.y,
+    region.y + region.height - height,
+  );
+  return { x, y, width, height };
+};
+
+const cropVideoStyle = (crop: SourceRegion): React.CSSProperties => ({
+  position: "absolute",
+  width: `${(1 / crop.width) * 100}%`,
+  height: `${(1 / crop.height) * 100}%`,
+  left: `${(-crop.x / crop.width) * 100}%`,
+  top: `${(-crop.y / crop.height) * 100}%`,
+  objectFit: "fill",
+});
+
 const BrowserVideo: React.FC<{
   videoUrl: string;
   videoStartSeconds: number;
@@ -31,6 +115,7 @@ const BrowserVideo: React.FC<{
   onMediaTimeChange?: (mediaTimeMs: number | null) => void;
   fps: number;
   objectFit: string;
+  style?: React.CSSProperties;
   muted: boolean;
 }> = ({
   videoUrl,
@@ -40,6 +125,7 @@ const BrowserVideo: React.FC<{
   onMediaTimeChange,
   fps,
   objectFit,
+  style,
   muted,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -155,8 +241,112 @@ const BrowserVideo: React.FC<{
         width: "100%",
         height: "100%",
         objectFit,
+        ...style,
       }}
     />
+  );
+};
+
+const StreamerPanel: React.FC<{
+  videoUrl: string;
+  videoStartFrame: number;
+  videoStartSeconds: number;
+  playbackRate: number;
+  fps: number;
+  outputWidth: number;
+  outputHeight: number;
+  heightRatio: number;
+  topRatio?: number;
+  region?: SourceRegion;
+  sourceAspect: number;
+  zoom?: number;
+  standardLayout?: boolean;
+  muted: boolean;
+  isRendering: boolean;
+  onAutoPlayError?: () => void;
+  onMediaTimeChange?: (mediaTimeMs: number | null) => void;
+  reportMediaTime: boolean;
+}> = ({
+  videoUrl,
+  videoStartFrame,
+  videoStartSeconds,
+  playbackRate,
+  fps,
+  outputWidth,
+  outputHeight,
+  heightRatio,
+  topRatio = 0,
+  region,
+  sourceAspect,
+  zoom = 1,
+  standardLayout = false,
+  muted,
+  isRendering,
+  onAutoPlayError,
+  onMediaTimeChange,
+  reportMediaTime,
+}) => {
+  const style: React.CSSProperties = standardLayout
+    ? {
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        objectFit: "contain",
+      }
+    : cropVideoStyle(
+        cropRegionToPanel({
+          region: normalizeRegion(region) || {
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+          },
+          sourceAspect,
+          panelAspect: outputWidth / (outputHeight * heightRatio),
+          zoom,
+          focus:
+            region === undefined && heightRatio < 1
+              ? { x: 0.5, y: 0.58 }
+              : undefined,
+        }),
+      );
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 0,
+        top: `${topRatio * 100}%`,
+        width: "100%",
+        height: `${heightRatio * 100}%`,
+        overflow: "hidden",
+      }}
+    >
+      {isRendering ? (
+        <Video
+          key="main-video"
+          src={videoUrl}
+          trimBefore={videoStartFrame}
+          objectFit={standardLayout ? "contain" : undefined}
+          muted={muted}
+          style={style}
+        />
+      ) : (
+        <BrowserVideo
+          key="main-video"
+          videoUrl={videoUrl}
+          videoStartSeconds={videoStartSeconds}
+          playbackRate={playbackRate}
+          onAutoPlayError={onAutoPlayError}
+          onMediaTimeChange={reportMediaTime ? onMediaTimeChange : undefined}
+          fps={fps}
+          objectFit={standardLayout ? "contain" : "fill"}
+          style={style}
+          muted={muted}
+        />
+      )}
+    </div>
   );
 };
 
@@ -165,7 +355,6 @@ const LayoutVideoLayer: React.FC<{
   videoUrl: string;
   videoStartFrame: number;
   videoStartSeconds: number;
-  videoFit?: "cover" | "contain";
   playbackRate: number;
   fps: number;
   opacity: number;
@@ -174,12 +363,14 @@ const LayoutVideoLayer: React.FC<{
   onAutoPlayError?: () => void;
   onMediaTimeChange?: (mediaTimeMs: number | null) => void;
   reportMediaTime: boolean;
+  layout?: LayoutConfig | null;
+  outputWidth: number;
+  outputHeight: number;
 }> = ({
   segment,
   videoUrl,
   videoStartFrame,
   videoStartSeconds,
-  videoFit,
   playbackRate,
   fps,
   opacity,
@@ -188,8 +379,15 @@ const LayoutVideoLayer: React.FC<{
   onAutoPlayError,
   onMediaTimeChange,
   reportMediaTime,
+  layout,
+  outputWidth,
+  outputHeight,
 }) => {
   const usesStandardLayout = segment.format === "standard";
+  const facecamHeightRatio =
+    FACECAM_HEIGHT_RATIOS[layout?.facecam_size || "medium"];
+  const gameplayHeightRatio = 1 - facecamHeightRatio;
+  const sourceAspect = sourceAspectRatio(layout);
   return (
     <div
       style={{
@@ -197,6 +395,7 @@ const LayoutVideoLayer: React.FC<{
         inset: 0,
         opacity,
         pointerEvents: opacity > 0 ? "auto" : "none",
+        background: "#000",
       }}
     >
       {usesStandardLayout && isRendering && (
@@ -215,31 +414,44 @@ const LayoutVideoLayer: React.FC<{
           }}
         />
       )}
-      {isRendering ? (
-        <Video
-          src={videoUrl}
-          trimBefore={videoStartFrame}
-          objectFit={usesStandardLayout ? "contain" : videoFit || "cover"}
-          muted={muted}
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-          }}
-        />
-      ) : (
-        <BrowserVideo
+      <StreamerPanel
+        key="main-panel"
+        videoUrl={videoUrl}
+        videoStartFrame={videoStartFrame}
+        videoStartSeconds={videoStartSeconds}
+        playbackRate={playbackRate}
+        fps={fps}
+        outputWidth={outputWidth}
+        outputHeight={outputHeight}
+        heightRatio={usesStandardLayout ? 1 : gameplayHeightRatio}
+        topRatio={usesStandardLayout ? 0 : facecamHeightRatio}
+        region={usesStandardLayout ? undefined : layout?.gameplay_region}
+        sourceAspect={sourceAspect}
+        zoom={usesStandardLayout ? 1 : layout?.gameplay_zoom}
+        standardLayout={usesStandardLayout}
+        muted={muted}
+        isRendering={isRendering}
+        onAutoPlayError={onAutoPlayError}
+        onMediaTimeChange={onMediaTimeChange}
+        reportMediaTime={reportMediaTime && !muted}
+      />
+      {!usesStandardLayout && (
+        <StreamerPanel
+          key="facecam-panel"
           videoUrl={videoUrl}
+          videoStartFrame={videoStartFrame}
           videoStartSeconds={videoStartSeconds}
           playbackRate={playbackRate}
-          onAutoPlayError={onAutoPlayError}
-          onMediaTimeChange={
-            reportMediaTime && !muted ? onMediaTimeChange : undefined
-          }
           fps={fps}
-          objectFit={usesStandardLayout ? "contain" : videoFit || "cover"}
-          muted={muted}
+          outputWidth={outputWidth}
+          outputHeight={outputHeight}
+          heightRatio={facecamHeightRatio}
+          region={layout?.webcam_region}
+          sourceAspect={sourceAspect}
+          muted
+          isRendering={isRendering}
+          onAutoPlayError={onAutoPlayError}
+          reportMediaTime={false}
         />
       )}
     </div>
@@ -254,7 +466,6 @@ const LayoutVideoLayer: React.FC<{
 export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
   const {
     videoUrl,
-    videoFit,
     videoStartSeconds = 0,
     playbackRate = 1,
     onAutoPlayError,
@@ -328,7 +539,6 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             videoUrl={videoUrl}
             videoStartFrame={videoStartFrame}
             videoStartSeconds={videoStartSeconds}
-            videoFit={videoFit}
             playbackRate={playbackRate}
             fps={Number(fps)}
             opacity={opacity}
@@ -337,6 +547,9 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             onAutoPlayError={onAutoPlayError}
             onMediaTimeChange={handleMediaTimeChange}
             reportMediaTime={hasActiveSubtitles || Boolean(onMediaTimeChange)}
+            layout={layout}
+            outputWidth={Number(videoConfig.width || 1080)}
+            outputHeight={Number(videoConfig.height || 1920)}
           />
         ))}
       </VideoEffects>

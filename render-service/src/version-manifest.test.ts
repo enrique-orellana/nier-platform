@@ -229,4 +229,34 @@ describe("manifestToVersionRenderProps", () => {
 
     expect(props.layout?.segments).toEqual(segments);
   });
+
+  it("adds source dimensions to selected streamer regions", () => {
+    const props = manifestToVersionRenderProps(
+      {
+        timeline: { source_asset_id: "master", source_video_url: "/videos/master.mp4" },
+        assets: { master: { probe: { width: 1920, height: 1080 } } },
+        render_spec: {
+          video_start_seconds: 0,
+          duration_in_frames: 300,
+          fps: 30,
+          width: 1080,
+          height: 1920,
+          video_fit: "contain",
+        },
+        layers: {
+          layout: {
+            format: "streamer_stack",
+            webcam_region: { x: 0.05, y: 0.1, width: 0.25, height: 0.3 },
+          },
+        },
+      },
+      { versionId: "v6", manifestRevision: "rev-6" },
+    );
+
+    expect(props.layout).toMatchObject({
+      source_width: 1920,
+      source_height: 1080,
+      webcam_region: { x: 0.05, y: 0.1, width: 0.25, height: 0.3 },
+    });
+  });
 });

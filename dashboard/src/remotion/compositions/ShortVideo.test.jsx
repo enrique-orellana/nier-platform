@@ -152,12 +152,14 @@ describe("ShortVideo media source", () => {
     };
 
     const { rerender } = render(<ShortVideo {...props} />);
-    const videoBeforeBoundary = screen.getByTestId("native-browser-video");
+    const videoBeforeBoundary = screen.getAllByTestId(
+      "native-browser-video",
+    )[0];
 
     currentFrameMock.value = 150;
     rerender(<ShortVideo {...props} />);
 
-    expect(screen.getByTestId("native-browser-video")).toBe(
+    expect(screen.getAllByTestId("native-browser-video")[0]).toBe(
       videoBeforeBoundary,
     );
   });
@@ -201,7 +203,7 @@ describe("ShortVideo media source", () => {
       />,
     );
 
-    expect(screen.getAllByTestId("native-browser-video")).toHaveLength(2);
+    expect(screen.getAllByTestId("native-browser-video")).toHaveLength(3);
     expect(animationFrames).toHaveLength(1);
   });
 
@@ -224,6 +226,44 @@ describe("ShortVideo media source", () => {
     expect(screen.getByTestId("native-browser-video")).toHaveStyle({
       objectFit: "contain",
     });
+  });
+
+  it("renders the selected webcam and gameplay regions in a streamer stack", () => {
+    remotionEnvironmentMock.isRendering = true;
+    remotionVideoPropsMock.mockClear();
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        fps={60}
+        width={1080}
+        height={1920}
+        layout={{
+          format: "streamer_stack",
+          facecam_size: "medium",
+          source_width: 1920,
+          source_height: 1080,
+          webcam_region: { x: 0.05, y: 0.1, width: 0.25, height: 0.3 },
+          gameplay_region: { x: 0.3, y: 0.05, width: 0.65, height: 0.9 },
+          gameplay_zoom: 1,
+        }}
+      />,
+    );
+
+    expect(screen.queryAllByTestId("remotion-video")).toHaveLength(2);
+    expect(remotionVideoPropsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        style: expect.objectContaining({
+          width: expect.stringContaining("%"),
+          height: expect.stringContaining("%"),
+        }),
+      }),
+    );
+    expect(
+      remotionVideoPropsMock.mock.calls.some(
+        ([props]) => props.style?.left !== "0%" || props.style?.top !== "0%",
+      ),
+    ).toBe(true);
   });
 
   it("uses the browser-compatible video decoder in the Player", () => {
