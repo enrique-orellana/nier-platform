@@ -61,6 +61,7 @@ describe("ShortVideo media source", () => {
     timelineContextMock.playing = false;
     timelineContextMock.imperativePlaying.current = false;
     timelineContextMock.audioAndVideoTags.current = [];
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -126,6 +127,58 @@ describe("ShortVideo media source", () => {
     act(() => animationFrames[0]?.());
 
     expect(onMediaTimeChange).toHaveBeenCalledWith(750);
+  });
+
+  it("switches preview layouts from the uninterrupted native media clock", () => {
+    const animationFrames = [];
+    vi.useFakeTimers();
+    vi.stubGlobal("requestAnimationFrame", (callback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    timelineContextMock.playing = true;
+    currentFrameMock.value = 0;
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        fps={30}
+        layout={{
+          format: "streamer_stack",
+          segments: [
+            {
+              id: "streamer",
+              startMs: 0,
+              endMs: 5000,
+              format: "streamer_stack",
+              transition: "cut",
+            },
+            {
+              id: "standard",
+              startMs: 5000,
+              endMs: 10000,
+              format: "standard",
+              transition: "cut",
+            },
+          ],
+        }}
+      />,
+    );
+
+    const audio = screen.getByTestId("native-browser-audio");
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      value: 5.25,
+      writable: true,
+    });
+    act(() => animationFrames[0]?.());
+    act(() => vi.advanceTimersByTime(60));
+
+    expect(screen.getAllByTestId("native-browser-video")).toHaveLength(1);
+    expect(screen.getByTestId("native-browser-video")).toHaveStyle({
+      objectFit: "contain",
+    });
   });
 
   it("keeps the active native video mounted when a cut layout segment starts", () => {

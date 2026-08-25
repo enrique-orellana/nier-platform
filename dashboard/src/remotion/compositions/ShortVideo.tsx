@@ -39,6 +39,8 @@ const FACECAM_HEIGHT_RATIOS = {
   large: 0.46,
 } as const;
 
+const PREVIEW_LAYOUT_CLOCK_UPDATE_MS = 50;
+
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.max(minimum, Math.min(maximum, value));
 
@@ -503,6 +505,11 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     onAutoPlayError?: () => void;
   };
   const [mediaTimeMs, setMediaTimeMs] = useState<number | null>(null);
+  const [previewMediaTimeMs, setPreviewMediaTimeMs] = useState<number | null>(
+    null,
+  );
+  const previewMediaTimeRef = useRef<number | null>(null);
+  const previewMediaTimeTimerRef = useRef<number | null>(null);
   const frame = useCurrentFrame();
   const videoConfig = useVideoConfig();
   const compositionFps = Number(videoConfig.fps || fps);
@@ -539,12 +546,41 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     },
     [hasActiveSubtitles, onMediaTimeChange],
   );
-  const resolvedLayout = resolveLayoutAtNormalizedSegments(
-    normalizedLayoutSegments,
-    frame,
-    compositionFps,
+  const schedulePreviewMediaTime = useCallback(
+    (nextMediaTimeMs: number | null) => {
+      previewMediaTimeRef.current = nextMediaTimeMs;
+      if (previewMediaTimeTimerRef.current !== null) return;
+      previewMediaTimeTimerRef.current = window.setTimeout(() => {
+        previewMediaTimeTimerRef.current = null;
+        setPreviewMediaTimeMs(previewMediaTimeRef.current);
+      }, PREVIEW_LAYOUT_CLOCK_UPDATE_MS);
+    },
+    [],
+  );
+  const handleAudioMediaTimeChange = useCallback(
+    (nextMediaTimeMs: number | null) => {
+      schedulePreviewMediaTime(nextMediaTimeMs);
+      handleMediaTimeChange(nextMediaTimeMs);
+    },
+    [handleMediaTimeChange, schedulePreviewMediaTime],
+  );
+  useEffect(
+    () => () => {
+      if (previewMediaTimeTimerRef.current !== null)
+        window.clearTimeout(previewMediaTimeTimerRef.current);
+    },
+    [],
   );
   const environment = useRemotionEnvironment();
+  const layoutFrame =
+    !environment.isRendering && previewMediaTimeMs !== null
+      ? (previewMediaTimeMs / 1000) * compositionFps
+      : frame;
+  const resolvedLayout = resolveLayoutAtNormalizedSegments(
+    normalizedLayoutSegments,
+    layoutFrame,
+    compositionFps,
+  );
   const layoutLayers = resolvedLayout.previous
     ? [
         {
@@ -569,7 +605,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             videoStartSeconds={videoStartSeconds}
             playbackRate={playbackRate}
             onAutoPlayError={onAutoPlayError}
-            onMediaTimeChange={handleMediaTimeChange}
+            onMediaTimeChange={handleAudioMediaTimeChange}
             fps={Number(fps)}
             objectFit="contain"
             style={{ opacity: 0, pointerEvents: "none" }}
