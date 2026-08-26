@@ -42,10 +42,11 @@ class LinuxKubernetesDeploymentConfigTests(unittest.TestCase):
         self.assertIn("path: /output", self.manifest)
 
     def test_public_nip_io_hosts_cover_ui_api_and_renderer(self):
+        self.assertIn("ingressClassName: public", self.manifest)
         public_hosts = (
-            "openshorts.192.168.1.189.nip.io",
-            "api.openshorts.192.168.1.189.nip.io",
-            "renderer.openshorts.192.168.1.189.nip.io",
+            "openshorts.192.168.50.2.nip.io",
+            "api.openshorts.192.168.50.2.nip.io",
+            "renderer.openshorts.192.168.50.2.nip.io",
         )
         for host in public_hosts:
             self.assertIn(f"host: {host}", self.manifest)

@@ -79,8 +79,8 @@ data:
   AWS_S3_BUCKET: openshorts-media
   AWS_S3_PUBLIC_BUCKET: openshorts-media
   AWS_S3_ENDPOINT_URL: http://minio-standalone.minio-system.svc.cluster.local:9000
-  AWS_S3_PUBLIC_URL_BASE: http://minio.192.168.1.189.nip.io:32280
-  AWS_S3_PUBLIC_ENDPOINT_URL: http://minio.192.168.1.189.nip.io:32280
+  AWS_S3_PUBLIC_URL_BASE: http://minio.192.168.50.2.nip.io:32280
+  AWS_S3_PUBLIC_ENDPOINT_URL: http://minio.192.168.50.2.nip.io:32280
   AWS_S3_FORCE_PATH_STYLE: "true"
   MINIO_VIDEO_CACHE_CONTROL: public, max-age=31536000, immutable
   RENDER_SERVICE_URL: http://openshorts-renderer.openshorts.svc.cluster.local:3100
@@ -359,11 +359,11 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-body-size: "0"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/upstream-vhost: "openshorts.192.168.1.189.nip.io"
+    nginx.ingress.kubernetes.io/upstream-vhost: "openshorts.192.168.50.2.nip.io"
 spec:
-  ingressClassName: nginx
+  ingressClassName: public
   rules:
-    - host: openshorts.192.168.1.189.nip.io
+    - host: openshorts.192.168.50.2.nip.io
       http:
         paths:
           - path: /api
@@ -422,7 +422,7 @@ spec:
                 name: openshorts-frontend
                 port:
                   number: 5173
-    - host: api.openshorts.192.168.1.189.nip.io
+    - host: api.openshorts.192.168.50.2.nip.io
       http:
         paths:
           - path: /
@@ -432,7 +432,7 @@ spec:
                 name: openshorts-backend
                 port:
                   number: 8000
-    - host: renderer.openshorts.192.168.1.189.nip.io
+    - host: renderer.openshorts.192.168.50.2.nip.io
       http:
         paths:
           - path: /

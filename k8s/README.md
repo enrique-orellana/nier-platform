@@ -108,10 +108,10 @@ records. The original source object in MinIO is preserved.
 
 OpenShorts is exposed through nip.io on the Hinzky node address:
 
-- UI and combined app routes: `http://openshorts.192.168.1.189.nip.io`
-- Backend API directly: `http://api.openshorts.192.168.1.189.nip.io`
-- Renderer directly: `http://renderer.openshorts.192.168.1.189.nip.io`
-- MinIO S3 API: `http://minio.192.168.1.189.nip.io:32280`
+- UI and combined app routes: `http://openshorts.192.168.50.2.nip.io`
+- Backend API directly: `http://api.openshorts.192.168.50.2.nip.io`
+- Renderer directly: `http://renderer.openshorts.192.168.50.2.nip.io`
+- MinIO S3 API: `http://minio.192.168.50.2.nip.io:32280`
 
 The combined app host routes `/api`, `/videos`, `/thumbnails`, `/gallery`,
 and `/video` to the backend, `/render` and `/output` to the renderer, and
