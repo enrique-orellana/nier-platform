@@ -41,6 +41,19 @@ class LinuxKubernetesDeploymentConfigTests(unittest.TestCase):
         self.assertIn("path: /render", self.manifest)
         self.assertIn("path: /output", self.manifest)
 
+    def test_public_nip_io_hosts_cover_ui_api_and_renderer(self):
+        public_hosts = (
+            "openshorts.192.168.1.189.nip.io",
+            "api.openshorts.192.168.1.189.nip.io",
+            "renderer.openshorts.192.168.1.189.nip.io",
+        )
+        for host in public_hosts:
+            self.assertIn(f"host: {host}", self.manifest)
+
+        self.assertIn("name: openshorts-backend\n                port:\n                  number: 8000", self.manifest)
+        self.assertIn("name: openshorts-renderer\n                port:\n                  number: 3100", self.manifest)
+        self.assertNotIn("name: openshorts-postgres\n                port:", self.manifest)
+
 
 if __name__ == "__main__":
     unittest.main()

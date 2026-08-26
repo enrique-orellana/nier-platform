@@ -106,12 +106,17 @@ kubectl -n openshorts get secret openshorts-postgres
 Deleting a Highlights project removes only its generated output and database
 records. The original source object in MinIO is preserved.
 
-OpenShorts is exposed on one host and uses path routing:
+OpenShorts is exposed through nip.io on the Hinzky node address:
 
-- UI: `http://openshorts.127.0.0.1.nip.io`
-- API: `http://openshorts.127.0.0.1.nip.io/api`
-- MinIO: `http://minio-standalone.openshorts.127.0.0.1.nip.io`
-- MinIO console: `http://console.minio-standalone.127.0.0.1.nip.io`
+- UI and combined app routes: `http://openshorts.192.168.1.189.nip.io`
+- Backend API directly: `http://api.openshorts.192.168.1.189.nip.io`
+- Renderer directly: `http://renderer.openshorts.192.168.1.189.nip.io`
+- MinIO S3 API: `http://minio.192.168.1.189.nip.io:32280`
+
+The combined app host routes `/api`, `/videos`, `/thumbnails`, `/gallery`,
+and `/video` to the backend, `/render` and `/output` to the renderer, and
+everything else to the frontend. PostgreSQL remains an internal ClusterIP
+service and is not exposed through nip.io.
 
 The backend talks to MinIO inside the cluster, and gallery/video URLs are
 served back through the MinIO ingress host above. The recovered buckets remain:

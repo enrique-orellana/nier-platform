@@ -422,3 +422,23 @@ spec:
                 name: openshorts-frontend
                 port:
                   number: 5173
+    - host: api.openshorts.192.168.1.189.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openshorts-backend
+                port:
+                  number: 8000
+    - host: renderer.openshorts.192.168.1.189.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openshorts-renderer
+                port:
+                  number: 3100
