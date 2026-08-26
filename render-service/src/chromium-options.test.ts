@@ -32,14 +32,14 @@ describe("Chromium acceleration options", () => {
     ).toEqual({ gl: null });
   });
 
-  it("uses Chrome for Testing for GPU-enabled browser sessions", () => {
+  it("keeps the render-safe headless shell for GPU-enabled sessions", () => {
     expect(
       getRenderBrowserOptions(
         { RENDER_HARDWARE_ACCELERATION: "if-possible" },
         "win32",
       ),
     ).toEqual({
-      chromeMode: "chrome-for-testing",
+      chromeMode: "headless-shell",
       chromiumOptions: { gl: null },
     });
   });

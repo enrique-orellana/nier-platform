@@ -22,13 +22,10 @@ export function getRenderBrowserOptions(
   environment: Environment = process.env,
   platform: NodeJS.Platform = process.platform,
 ): RenderBrowserOptions {
-  const hardwareAccelerationEnabled =
-    environment.RENDER_HARDWARE_ACCELERATION === "if-possible";
-
   return {
-    chromeMode: hardwareAccelerationEnabled
-      ? "chrome-for-testing"
-      : "headless-shell",
+    // Chrome Headless Shell is the render-safe browser for @remotion/media.
+    // Hardware encoding is still selected independently by the AMF/NVENC probe.
+    chromeMode: "headless-shell",
     chromiumOptions: getChromiumOptions(environment, platform),
   };
 }
