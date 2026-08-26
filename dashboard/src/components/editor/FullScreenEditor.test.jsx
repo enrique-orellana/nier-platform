@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FullScreenEditor, {
   localEditorStateToManifest,
   manifestToLocalEditorState,
+  manifestWithClipLayout,
 } from "./FullScreenEditor";
 import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
 import { SUBTITLE_STYLE_TEMPLATES } from "../local-editor/localEditorStyles";
@@ -177,6 +178,38 @@ describe("FullScreenEditor", () => {
         format: "streamer_stack",
       }),
     ]);
+  });
+
+  it("hydrates saved camera regions into a version layout", () => {
+    const source = {
+      ...manifest,
+      layers: {
+        ...manifest.layers,
+        layout: {
+          format: "streamer_stack",
+          facecam_size: "medium",
+          segments: [{ startMs: 0, endMs: 10000, format: "streamer_stack" }],
+        },
+      },
+    };
+    const webcamRegion = { x: 0.01, y: 0.42, width: 0.15, height: 0.25 };
+    const gameplayRegion = { x: 0.17, y: 0, width: 0.83, height: 1 };
+
+    const hydrated = manifestWithClipLayout(source, {
+      webcam_region: webcamRegion,
+      gameplay_region: gameplayRegion,
+      gameplay_zoom: 1.25,
+    });
+
+    expect(hydrated.layers.layout).toMatchObject({
+      format: "streamer_stack",
+      webcam_region: webcamRegion,
+      gameplay_region: gameplayRegion,
+      gameplay_zoom: 1.25,
+    });
+    expect(hydrated.layers.layout.segments).toEqual(
+      source.layers.layout.segments,
+    );
   });
 
   it("shows a loading screen while a direct-link editor is loading", async () => {

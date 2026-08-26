@@ -61,6 +61,38 @@ const manifestFromClip = (clip = {}) => {
   };
 };
 
+const clipLayoutFromMetadata = (clip = {}) => ({
+  ...(clip.layout_format ? { format: clip.layout_format } : {}),
+  ...(clip.facecam_size ? { facecam_size: clip.facecam_size } : {}),
+  ...(clip.webcam_region ? { webcam_region: clip.webcam_region } : {}),
+  ...(clip.gameplay_region ? { gameplay_region: clip.gameplay_region } : {}),
+  ...(clip.gameplay_zoom != null ? { gameplay_zoom: clip.gameplay_zoom } : {}),
+  ...(typeof clip.streamer_tracking_enabled === "boolean"
+    ? { streamer_tracking_enabled: clip.streamer_tracking_enabled }
+    : {}),
+});
+
+// Clip-region selections live in the generated clip metadata, while editor
+// versions store the render layout in the manifest. Keep both sources in sync
+// when opening older versions that predate camera-region persistence.
+// eslint-disable-next-line react-refresh/only-export-components
+export const manifestWithClipLayout = (sourceManifest, clip = {}) => {
+  if (!sourceManifest) return sourceManifest;
+  const source = sourceManifest;
+  const clipLayout = clipLayoutFromMetadata(clip);
+  if (!Object.keys(clipLayout).length) return source;
+  return {
+    ...source,
+    layers: {
+      ...(source.layers || {}),
+      layout: {
+        ...clipLayout,
+        ...(source.layers?.layout || {}),
+      },
+    },
+  };
+};
+
 const manifestDurationMs = (manifest) => {
   const trim = manifest?.timeline?.trim || {};
   const durationSec = Math.max(
@@ -358,8 +390,11 @@ export default function FullScreenEditor({
   editorActions = null,
   onSessionReady,
 }) {
+  const clipManifest = manifestWithClipLayout(manifestFromClip(clip), clip);
   const [version, setVersion] = useState(initialVersion);
-  const [manifest, setManifest] = useState(initialManifest);
+  const [manifest, setManifest] = useState(() =>
+    manifestWithClipLayout(initialManifest, clip),
+  );
   const [publishingMetadata, setPublishingMetadata] = useState(() =>
     publishingMetadataFrom(initialManifest, clip),
   );
@@ -379,7 +414,7 @@ export default function FullScreenEditor({
   const [error, setError] = useState(null);
   const [localDraft, setLocalDraft] = useState(() =>
     manifestToLocalEditorState(
-      initialManifest || manifestFromClip(clip),
+      manifestWithClipLayout(initialManifest || clipManifest, clip),
       defaultSubtitleTrackId(initialManifest),
       clip?.viral_hook_text,
       clip?.layout_format || "standard",
@@ -505,7 +540,10 @@ export default function FullScreenEditor({
         }
       }
       if (cancelled) return;
-      const hydratedManifest = await hydrateManifest(payload.manifest);
+      const hydratedManifest = manifestWithClipLayout(
+        await hydrateManifest(payload.manifest),
+        clip,
+      );
       if (cancelled) return;
       setVersions(history.versions || []);
       const nextVersion = payload.version || null;
@@ -558,11 +596,21 @@ export default function FullScreenEditor({
 
   const currentManifest = useMemo(
     () => ({
-      ...(manifest || initialManifest || manifestFromClip(clip)),
+      ...manifestWithClipLayout(
+        manifest || initialManifest || clipManifest,
+        clip,
+      ),
       active_subtitle_track_id: activeTrackId || null,
       publishing_metadata: publishingMetadata,
     }),
-    [activeTrackId, clip, initialManifest, manifest, publishingMetadata],
+    [
+      activeTrackId,
+      clip,
+      clipManifest,
+      initialManifest,
+      manifest,
+      publishingMetadata,
+    ],
   );
   const projectManifest = useMemo(() => {
     const layout =
@@ -772,22 +820,23 @@ export default function FullScreenEditor({
   const replaceManifest = useCallback(
     (nextManifest, nextTrackId, { dirty = false } = {}) => {
       const trackId = nextTrackId || defaultSubtitleTrackId(nextManifest);
+      const hydratedManifest = manifestWithClipLayout(nextManifest, clip);
       const nextDraft = manifestToLocalEditorState(
-        nextManifest,
+        hydratedManifest,
         trackId,
         clip?.viral_hook_text,
         clip?.layout_format || "standard",
       );
-      currentManifestRef.current = nextManifest;
+      currentManifestRef.current = hydratedManifest;
       activeTrackIdRef.current = trackId;
       localDraftRef.current = nextDraft;
-      setManifest(nextManifest);
+      setManifest(hydratedManifest);
       setActiveTrackId(trackId);
       setLocalDraft(nextDraft);
       setLocalDraftRevision((current) => current + 1);
       setRenderSpecDirty(dirty);
     },
-    [clip?.layout_format, clip?.viral_hook_text],
+    [clip],
   );
 
   const applyLayer = useCallback(
