@@ -295,6 +295,7 @@ overrides = {
     "OPENSHORTS_GPU_RUNTIME": os.environ.get("GPU_RUNTIME", ""),
     "OPENSHORTS_NODE_NAME": os.environ.get("NODE_NAME", ""),
     "OPENSHORTS_STORAGE_PATH": os.environ.get("STORAGE_PATH", ""),
+    "OPENSHORTS_DEVICE": "cpu" if os.environ.get("GPU_RUNTIME") == "cpu" else "auto",
     "RENDER_ACCELERATOR": os.environ.get("RENDER_ACCELERATOR", ""),
     "RENDER_HARDWARE_ACCELERATION": os.environ.get("RENDER_HARDWARE_ACCELERATION", "if-possible"),
 }

@@ -49,7 +49,9 @@ RUN wget -q "https://github.com/ROCm/librocdxg/releases/download/v${ROCDXG_VERSI
     && ldconfig \
     && rm -f /tmp/rocdxg-roct.deb
 
+ARG OPENSHORTS_DEVICE=auto
 ENV PYTHONUNBUFFERED=1 \
+    OPENSHORTS_DEVICE=${OPENSHORTS_DEVICE} \
     OPENSHORTS_GPU_RUNTIME=rocm-wsl
 
 # The ROCm base already provides UID/GID 1000 as `ubuntu`; reuse that

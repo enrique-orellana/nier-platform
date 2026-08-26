@@ -13,6 +13,8 @@ class CudaDeploymentConfigTests(unittest.TestCase):
         self.assertIn("OPENSHORTS_GPU_RUNTIME=cuda", dockerfile)
         self.assertIn("NVIDIA_VISIBLE_DEVICES=all", dockerfile)
         self.assertIn("NVIDIA_DRIVER_CAPABILITIES=compute,utility,video", dockerfile)
+        self.assertIn("ARG OPENSHORTS_DEVICE=auto", dockerfile)
+        self.assertIn("OPENSHORTS_DEVICE=${OPENSHORTS_DEVICE}", dockerfile)
 
     def test_cuda_backend_has_no_wsl2_dxg_dependencies(self):
         dockerfile = (ROOT / "Dockerfile.cuda").read_text(encoding="utf-8").lower()

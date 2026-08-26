@@ -34,8 +34,10 @@ COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install -r requirements.txt
 
+ARG OPENSHORTS_DEVICE=auto
 ENV PYTHONUNBUFFERED=1 \
     OPENSHORTS_GPU_RUNTIME=rocm-linux
+ENV OPENSHORTS_DEVICE=${OPENSHORTS_DEVICE}
 
 RUN groupmod --new-name appuser ubuntu \
     && usermod --login appuser --home /app ubuntu

@@ -202,6 +202,7 @@ try {
         "OPENSHORTS_GPU_RUNTIME" = $GpuRuntime
         "OPENSHORTS_NODE_NAME" = $NodeName
         "OPENSHORTS_STORAGE_PATH" = $StoragePath
+        "OPENSHORTS_DEVICE" = if ($GpuRuntime -eq "cpu") { "cpu" } else { "auto" }
         "RENDER_ACCELERATOR" = if ($GpuRuntime -eq "cpu") { "cpu" } else { "auto" }
         "RENDER_HARDWARE_ACCELERATION" = "if-possible"
     }

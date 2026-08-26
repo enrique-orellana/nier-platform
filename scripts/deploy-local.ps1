@@ -255,6 +255,7 @@ try {
         "RENDER_SERVICE_URL" = (Get-EnvValue "RENDER_SERVICE_URL")
         "TRANSLATION_SERVICE_URL" = (Get-EnvValue "TRANSLATION_SERVICE_URL")
         "OPENSHORTS_GPU_RUNTIME" = $GpuRuntime
+        "OPENSHORTS_DEVICE" = if ($GpuRuntime -eq "cpu") { "cpu" } else { "auto" }
         "RENDER_ACCELERATOR" = if ($GpuRuntime -eq "cpu") { "cpu" } else { "auto" }
         "RENDER_HARDWARE_ACCELERATION" = "if-possible"
     }

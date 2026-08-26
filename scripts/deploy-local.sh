@@ -224,6 +224,7 @@ text = replace_line("VITE_AI_BASE_URL", vite_base, text)
 text = replace_line("AWS_S3_PUBLIC_URL_BASE", s3_public, text)
 text = replace_line("AWS_S3_PUBLIC_ENDPOINT_URL", s3_endpoint, text)
 text = replace_line("OPENSHORTS_GPU_RUNTIME", os.environ.get("GPU_RUNTIME", ""), text)
+text = replace_line("OPENSHORTS_DEVICE", "cpu" if os.environ.get("GPU_RUNTIME") == "cpu" else "auto", text)
 text = replace_line("RENDER_ACCELERATOR", os.environ.get("RENDER_ACCELERATOR", ""), text)
 text = replace_line("RENDER_HARDWARE_ACCELERATION", os.environ.get("RENDER_HARDWARE_ACCELERATION", "if-possible"), text)
 
