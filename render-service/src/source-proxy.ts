@@ -105,7 +105,9 @@ export function prepareRangeProxy(options: RangeProxyOptions): Promise<RangeProx
     return Promise.resolve({ videoUrl, videoStartSeconds: 0 });
   }
   const sourceStat = fs.statSync(sourcePath);
-  const cacheDir = path.join(outputDir, jobId, "render-cache");
+  // Keep range proxies outside the job directory so identical source ranges
+  // can be reused by later renders and by different jobs.
+  const cacheDir = path.join(outputDir, "render-cache");
   const cachePath = path.join(cacheDir, rangeProxyCacheName(sourcePath, startSeconds, durationSeconds, sourceStat.size, sourceStat.mtimeMs));
   const existing = inFlightProxies.get(cachePath);
   if (existing) return existing;

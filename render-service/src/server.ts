@@ -9,6 +9,7 @@ import { renderRequestSchema } from "./render-request.js";
 import { manifestToVersionRenderProps } from "./version-manifest.js";
 import { RenderQueue } from "./render-queue.js";
 import { getRenderBrowserOptions } from "./chromium-options.js";
+import { warmRenderBrowser } from "./render-browser.js";
 
 // --- Render status types ---
 
@@ -191,7 +192,9 @@ async function main() {
   console.log(
     `[render-service] Chromium mode: ${chromeMode}; GL backend: ${chromiumOptions.gl ?? "default"}`,
   );
-  setRenderBrowser(await openBrowser("chrome", { chromeMode, chromiumOptions }));
+  const browser = await openBrowser("chrome", { chromeMode, chromiumOptions });
+  await warmRenderBrowser(browser);
+  setRenderBrowser(browser);
   console.log("[render-service] Reusable Remotion browser ready.");
 
   httpServer = app.listen(PORT, () => {

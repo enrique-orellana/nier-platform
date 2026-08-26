@@ -18,6 +18,19 @@ const X264_PRESETS = new Set<X264Preset>([
   "superfast", "fast", "faster", "medium", "placebo", "slow", "slower", "ultrafast", "veryfast", "veryslow",
 ]);
 
+const BYTES_PER_MEGABYTE = 1024 * 1024;
+export const DEFAULT_MEDIA_CACHE_SIZE_MB = 1024;
+
+export function resolveMediaCacheSizeInBytes(
+  configured: string | undefined = process.env.RENDER_MEDIA_CACHE_SIZE_MB,
+): number {
+  const parsed = Number.parseInt(configured ?? "", 10);
+  const megabytes = Number.isInteger(parsed) && parsed >= 256
+    ? Math.min(parsed, 8192)
+    : DEFAULT_MEDIA_CACHE_SIZE_MB;
+  return megabytes * BYTES_PER_MEGABYTE;
+}
+
 export interface MasterPolicy {
   version: number;
   container: "mp4";
@@ -107,6 +120,7 @@ export function buildRenderOptions(
     gopSize,
     everyNthFrame: 1,
     concurrency: null,
+    mediaCacheSizeInBytes: resolveMediaCacheSizeInBytes(),
   } as const;
 
   if (hardware) {

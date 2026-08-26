@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { buildRenderOptions, loadMasterPolicy, parseMasterPolicy } from "./master-policy.js";
+import {
+  buildRenderOptions,
+  loadMasterPolicy,
+  parseMasterPolicy,
+  resolveMediaCacheSizeInBytes,
+} from "./master-policy.js";
 
 describe("master policy", () => {
+  it("uses a bounded media frame cache with an environment override", () => {
+    expect(resolveMediaCacheSizeInBytes(undefined)).toBe(1024 * 1024 * 1024);
+    expect(resolveMediaCacheSizeInBytes("2048")).toBe(2048 * 1024 * 1024);
+    expect(resolveMediaCacheSizeInBytes("invalid")).toBe(1024 * 1024 * 1024);
+  });
+
   it("uses the mandatory H.264 contract", () => {
     const policy = loadMasterPolicy();
     expect(buildRenderOptions(policy)).toEqual({
@@ -16,6 +27,7 @@ describe("master policy", () => {
       everyNthFrame: 1,
       concurrency: null,
       sampleRate: policy.audio_sample_rate,
+      mediaCacheSizeInBytes: 1024 * 1024 * 1024,
     });
   });
 

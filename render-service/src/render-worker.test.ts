@@ -11,6 +11,7 @@ vi.mock("./bundle.js", () => ({ getBundleLocation: vi.fn(() => "bundle") }));
 vi.mock("./master-policy.js", () => ({
   buildRenderOptions: vi.fn(() => ({})),
   loadMasterPolicy: vi.fn(() => ({ output_width: 1080, output_height: 1920 })),
+  resolveMediaCacheSizeInBytes: vi.fn(() => 1024 * 1024 * 1024),
 }));
 vi.mock("./hardware-acceleration.js", () => ({
   createAmfFfmpegOverride: vi.fn(),

@@ -3,6 +3,7 @@ param(
     [string]$OutputDir = "D:\openshorts-docker-data\workdir",
     [int]$Port = 13101,
     [string]$HardwareVideoBitrate = "40M",
+    [int]$MediaCacheSizeMb = 1024,
     [string]$MetricsUrl = "http://localhost:18000/api/render-metrics",
     [int]$RenderConcurrency = 2,
     [int]$RenderMaxConcurrency = 1,
@@ -74,6 +75,7 @@ $env:RENDER_HARDWARE_ACCELERATION = $HardwareAcceleration
 $env:RENDER_FFMPEG_PATH = $FfmpegPath
 $env:RENDER_FFMPEG_DIRECTORY = $nativeBinaryRoot
 $env:RENDER_HARDWARE_VIDEO_BITRATE = $HardwareVideoBitrate
+$env:RENDER_MEDIA_CACHE_SIZE_MB = [string]$MediaCacheSizeMb
 $env:RENDER_CONCURRENCY = [string]$RenderConcurrency
 $env:RENDER_MAX_CONCURRENCY = [string]$RenderMaxConcurrency
 $env:OPENSHORTS_HOST_FFMPEG_PATH = $FfmpegPath
@@ -83,6 +85,7 @@ $env:RENDER_METRICS_URL = $MetricsUrl
 Write-Host "Starting native renderer on http://127.0.0.1:$Port"
 Write-Host "Output directory: $($env:OUTPUT_DIR)"
 Write-Host "Hardware acceleration mode: $HardwareAcceleration"
+Write-Host "Media frame cache: $MediaCacheSizeMb MB"
 Write-Host "Render metrics endpoint: $MetricsUrl"
 Write-Host "Render concurrency: $RenderConcurrency (max jobs: $RenderMaxConcurrency)"
 & node (Join-Path $renderServiceRoot "dist\server.js")

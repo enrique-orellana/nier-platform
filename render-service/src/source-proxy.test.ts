@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { EventEmitter } from "node:events";
+import { describe, expect, it, vi } from "vitest";
+
+const spawnMock = vi.hoisted(() => vi.fn());
+vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 import {
   buildRangeProxyArgs,
   prepareRangeProxy,
@@ -55,6 +59,40 @@ describe("range source proxy", () => {
       });
       expect(fs.existsSync(path.join(outputDir, "job-1", "render-cache"))).toBe(false);
     } finally {
+      fs.rmSync(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it("shares a cached source range across render jobs", async () => {
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "source-proxy-shared-"));
+    const sourcePath = path.join(outputDir, "uploads", "source.mp4");
+    fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+    fs.writeFileSync(sourcePath, "source");
+    spawnMock.mockImplementation((_command, args: string[]) => {
+      const child = new EventEmitter() as EventEmitter & { stderr: EventEmitter };
+      child.stderr = new EventEmitter();
+      fs.writeFileSync(args.at(-1)!, "proxy");
+      queueMicrotask(() => child.emit("close", 0));
+      return child;
+    });
+
+    const baseOptions = {
+      videoUrl: "http://localhost:3100/output/uploads/source.mp4",
+      outputDir,
+      serverPort: 3100,
+      startSeconds: 2,
+      durationSeconds: 4,
+    };
+
+    try {
+      const first = await prepareRangeProxy({ ...baseOptions, jobId: "job-1" });
+      const second = await prepareRangeProxy({ ...baseOptions, jobId: "job-2" });
+
+      expect(second).toEqual(first);
+      expect(first.proxyPath).toContain(`${path.sep}render-cache${path.sep}`);
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+    } finally {
+      spawnMock.mockReset();
       fs.rmSync(outputDir, { recursive: true, force: true });
     }
   });

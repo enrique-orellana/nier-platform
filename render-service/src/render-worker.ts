@@ -5,8 +5,11 @@ import { performance } from "node:perf_hooks";
 import { selectComposition, renderMedia } from "@remotion/renderer";
 import { getBundleLocation } from "./bundle.js";
 import { renderJobs } from "./server.js";
-import { buildRenderOptions } from "./master-policy.js";
-import { loadMasterPolicy } from "./master-policy.js";
+import {
+  buildRenderOptions,
+  loadMasterPolicy,
+  resolveMediaCacheSizeInBytes,
+} from "./master-policy.js";
 import {
   createAmfFfmpegOverride,
   resolveRenderAcceleration,
@@ -174,12 +177,16 @@ export async function executeRender(params: RenderParams): Promise<void> {
     );
 
     const renderAcceleration = await getRenderAcceleration();
+    const mediaCacheSizeInBytes = resolveMediaCacheSizeInBytes();
     accelerationMode = renderAcceleration.mode;
     console.log(
       `[render-worker] ${renderId} encoding mode: ${renderAcceleration.mode}` +
         (renderAcceleration.mode === "cpu"
           ? ` (${renderAcceleration.reason})`
           : ` (${renderAcceleration.videoBitrate})`),
+    );
+    console.log(
+      `[render-worker] ${renderId} media frame cache: ${Math.round(mediaCacheSizeInBytes / 1024 / 1024)}MB`,
     );
 
     const sourceRange = await measureStage("source_prepare", () =>
@@ -202,6 +209,7 @@ export async function executeRender(params: RenderParams): Promise<void> {
         id: "ShortVideo",
         inputProps: renderProps,
         puppeteerInstance: renderBrowser ?? undefined,
+        mediaCacheSizeInBytes,
       });
       return applyRequestedCompositionMetadata(selectedComposition, renderProps);
     });
@@ -231,7 +239,7 @@ export async function executeRender(params: RenderParams): Promise<void> {
                 ...renderAcceleration,
                 ffmpegOverride: createAmfFfmpegOverride(),
               }
-            : undefined,
+          : undefined,
         ),
         concurrency: renderConcurrency,
         enforceAudioTrack: true,
