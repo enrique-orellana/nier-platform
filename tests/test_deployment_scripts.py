@@ -30,6 +30,16 @@ class DeploymentScriptTests(unittest.TestCase):
             self.assertIn("RENDER_ACCELERATOR", script, name)
             self.assertIn("RENDER_HARDWARE_ACCELERATION", script, name)
 
+    def test_remote_scripts_apply_the_postgres_statefulset_bundle(self):
+        for name in ("deploy-remote.ps1", "deploy-remote.sh"):
+            script = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+            self.assertIn("openshorts-postgres.yaml", script, name)
+
+    def test_postgres_rollout_checks_target_the_statefulset(self):
+        for name in ("deploy-local.ps1", "deploy-local.sh", "deploy-remote.ps1", "deploy-remote.sh"):
+            script = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+            self.assertIn("statefulset/openshorts-postgres", script, name)
+
 
 if __name__ == "__main__":
     unittest.main()

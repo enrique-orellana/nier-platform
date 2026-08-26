@@ -210,7 +210,7 @@ if ($KubeContext) {
 
 Write-Step "Applying PostgreSQL"
 Invoke-Kubectl @("apply", "-f", "k8s/openshorts-postgres.yaml")
-Invoke-Kubectl @("rollout", "status", "deployment/openshorts-postgres", "-n", $Namespace, "--timeout=180s")
+Invoke-Kubectl @("rollout", "status", "statefulset/openshorts-postgres", "-n", $Namespace, "--timeout=180s")
 
 Write-Step "Applying bundle"
 if ($KubeContext) {

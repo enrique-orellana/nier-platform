@@ -183,7 +183,7 @@ apply_kubectl create secret generic openshorts-postgres \
 
 log_step "Applying PostgreSQL"
 apply_kubectl apply -f k8s/openshorts-postgres.yaml
-apply_kubectl rollout status deployment/openshorts-postgres -n "$NAMESPACE" --timeout=180s
+apply_kubectl rollout status statefulset/openshorts-postgres -n "$NAMESPACE" --timeout=180s
 
 log_step "Applying bundle"
 apply_kubectl apply -f k8s/openshorts.yaml

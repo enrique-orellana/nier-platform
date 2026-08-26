@@ -10,10 +10,13 @@ def test_postgres_bundle_has_persistent_storage_and_internal_service():
     manifest = POSTGRES_MANIFEST.read_text(encoding="utf-8")
     assert "kind: PersistentVolumeClaim" in manifest
     assert "name: openshorts-postgres-data" in manifest
-    assert "kind: Deployment" in manifest
+    assert "kind: StatefulSet" in manifest
     assert "name: openshorts-postgres" in manifest
+    assert "serviceName: openshorts-postgres" in manifest
+    assert "replicas: 1" in manifest
     assert "kind: Service" in manifest
     assert "type: ClusterIP" in manifest
+    assert "clusterIP: None" in manifest
     assert "port: 5432" in manifest
 
 
@@ -23,7 +26,6 @@ def test_postgres_uses_secret_and_persistent_volume():
     assert "name: POSTGRES_USER" in manifest
     assert "name: POSTGRES_PASSWORD" in manifest
     assert "secretKeyRef:" in manifest
-    assert "name: openshorts-postgres" in manifest
     assert "claimName: openshorts-postgres-data" in manifest
     assert "pg_isready" in manifest
 

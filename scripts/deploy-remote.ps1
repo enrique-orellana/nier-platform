@@ -134,6 +134,11 @@ $S3PublicEndpointUrl = Get-EffectiveValue -ParameterValue $S3PublicEndpointUrl -
 $GpuRuntime = Get-EffectiveValue -ParameterValue $GpuRuntime -EnvironmentName "OPENSHORTS_GPU_RUNTIME" -Default "cuda"
 $NodeName = Get-EffectiveValue -ParameterValue $NodeName -EnvironmentName "OPENSHORTS_NODE_NAME" -Default "hinzky"
 $StoragePath = Get-EffectiveValue -ParameterValue $StoragePath -EnvironmentName "OPENSHORTS_STORAGE_PATH" -Default "/var/lib/openshorts/workdir"
+$postgresDb = Get-EffectiveValue -ParameterValue "" -EnvironmentName "OPENSHORTS_POSTGRES_DB" -Default "openshorts"
+$postgresUser = Get-EffectiveValue -ParameterValue "" -EnvironmentName "OPENSHORTS_POSTGRES_USER" -Default "openshorts"
+$postgresPassword = Get-EffectiveValue -ParameterValue "" -EnvironmentName "OPENSHORTS_POSTGRES_PASSWORD" -Default "openshorts-local"
+$postgresPasswordURL = [System.Uri]::EscapeDataString($postgresPassword)
+$databaseUrl = "postgres://$postgresUser`:$postgresPasswordURL@openshorts-postgres:5432/$postgresDb"
 
 if ($GpuRuntime -notin @("cuda", "rocm-linux", "rocm-wsl", "cpu")) {
     throw "OPENSHORTS_GPU_RUNTIME must be cuda, rocm-linux, rocm-wsl, or cpu."
@@ -176,6 +181,33 @@ Write-Step "Applying config"
 if (-not (Test-Path $ConfigEnvFile)) {
     throw "Config env file not found: $ConfigEnvFile"
 }
+
+Write-Step "Preparing PostgreSQL Secret"
+if ($KubeContext) {
+    kubectl --context $KubeContext create namespace $Namespace --dry-run=client -o yaml |
+        kubectl --context $KubeContext apply -f -
+    $secretYaml = kubectl --context $KubeContext create secret generic openshorts-postgres -n $Namespace `
+        --from-literal=POSTGRES_DB=$postgresDb `
+        --from-literal=POSTGRES_USER=$postgresUser `
+        --from-literal=POSTGRES_PASSWORD=$postgresPassword `
+        --from-literal=DATABASE_URL=$databaseUrl `
+        --dry-run=client -o yaml
+    $secretYaml | kubectl --context $KubeContext apply -f -
+} else {
+    kubectl create namespace $Namespace --dry-run=client -o yaml |
+        kubectl apply -f -
+    $secretYaml = kubectl create secret generic openshorts-postgres -n $Namespace `
+        --from-literal=POSTGRES_DB=$postgresDb `
+        --from-literal=POSTGRES_USER=$postgresUser `
+        --from-literal=POSTGRES_PASSWORD=$postgresPassword `
+        --from-literal=DATABASE_URL=$databaseUrl `
+        --dry-run=client -o yaml
+    $secretYaml | kubectl apply -f -
+}
+
+Write-Step "Applying PostgreSQL"
+Invoke-Kubectl @("apply", "-f", "k8s/openshorts-postgres.yaml")
+Invoke-Kubectl @("rollout", "status", "statefulset/openshorts-postgres", "-n", $Namespace, "--timeout=180s")
 
 Invoke-Kubectl @("apply", "-f", "k8s/openshorts.yaml")
 

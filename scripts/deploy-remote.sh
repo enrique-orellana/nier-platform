@@ -172,6 +172,10 @@ S3_PUBLIC_ENDPOINT_URL="${S3_PUBLIC_ENDPOINT_URL:-${OPENSHORTS_S3_PUBLIC_ENDPOIN
 GPU_RUNTIME="${GPU_RUNTIME:-${OPENSHORTS_GPU_RUNTIME:-cuda}}"
 NODE_NAME="${NODE_NAME:-${OPENSHORTS_NODE_NAME:-hinzky}}"
 STORAGE_PATH="${STORAGE_PATH:-${OPENSHORTS_STORAGE_PATH:-/var/lib/openshorts/workdir}}"
+POSTGRES_DB="${OPENSHORTS_POSTGRES_DB:-openshorts}"
+POSTGRES_USER="${OPENSHORTS_POSTGRES_USER:-openshorts}"
+POSTGRES_PASSWORD="${OPENSHORTS_POSTGRES_PASSWORD:-openshorts-local}"
+DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@openshorts-postgres:5432/${POSTGRES_DB}"
 
 case "$GPU_RUNTIME" in
   cuda) backend_dockerfile="Dockerfile.cuda"; renderer_accelerator="auto" ;;
@@ -236,6 +240,20 @@ if [[ ! -f "$CONFIG_ENV_FILE" ]]; then
   printf "Config env file not found: %s\n" "$CONFIG_ENV_FILE" >&2
   exit 1
 fi
+
+log_step "Preparing PostgreSQL Secret"
+apply_kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | apply_kubectl apply -f -
+apply_kubectl create secret generic openshorts-postgres \
+  -n "$NAMESPACE" \
+  --from-literal="POSTGRES_DB=$POSTGRES_DB" \
+  --from-literal="POSTGRES_USER=$POSTGRES_USER" \
+  --from-literal="POSTGRES_PASSWORD=$POSTGRES_PASSWORD" \
+  --from-literal="DATABASE_URL=$DATABASE_URL" \
+  --dry-run=client -o yaml | apply_kubectl apply -f -
+
+log_step "Applying PostgreSQL"
+apply_kubectl apply -f k8s/openshorts-postgres.yaml
+apply_kubectl rollout status statefulset/openshorts-postgres -n "$NAMESPACE" --timeout=180s
 
 log_step "Applying config"
 apply_kubectl apply -f k8s/openshorts.yaml

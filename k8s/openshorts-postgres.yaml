@@ -36,11 +36,12 @@ spec:
   volumeName: openshorts-postgres-pv
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: openshorts-postgres
   namespace: openshorts
 spec:
+  serviceName: openshorts-postgres
   replicas: 1
   selector:
     matchLabels:
@@ -97,6 +98,7 @@ metadata:
   namespace: openshorts
 spec:
   type: ClusterIP
+  clusterIP: None
   selector:
     app: openshorts-postgres
   ports:
