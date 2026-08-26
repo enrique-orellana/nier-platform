@@ -5,22 +5,22 @@ import {
 } from "./chromium-options.js";
 
 describe("Chromium acceleration options", () => {
-  it("prefers a hardware-backed ANGLE backend on Windows", () => {
+  it("lets Chrome choose the native GPU backend on Windows", () => {
     expect(
       getChromiumOptions(
         { RENDER_HARDWARE_ACCELERATION: "if-possible" },
         "win32",
       ),
-    ).toEqual({ gl: "angle" });
+    ).toEqual({ gl: null });
   });
 
-  it("prefers EGL on Linux when GPU acceleration is enabled", () => {
+  it("lets Chrome choose the native GPU backend on Linux", () => {
     expect(
       getChromiumOptions(
         { RENDER_HARDWARE_ACCELERATION: "if-possible" },
         "linux",
       ),
-    ).toEqual({ gl: "egl" });
+    ).toEqual({ gl: null });
   });
 
   it("lets disabled acceleration use Chromium defaults", () => {
@@ -40,7 +40,7 @@ describe("Chromium acceleration options", () => {
       ),
     ).toEqual({
       chromeMode: "chrome-for-testing",
-      chromiumOptions: { gl: "angle" },
+      chromiumOptions: { gl: null },
     });
   });
 

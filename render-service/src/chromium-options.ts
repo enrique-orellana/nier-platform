@@ -11,18 +11,10 @@ export function getChromiumOptions(
   environment: Environment = process.env,
   platform: NodeJS.Platform = process.platform,
 ): ChromiumOptions {
-  if (environment.RENDER_HARDWARE_ACCELERATION !== "if-possible") {
-    return { gl: null };
-  }
-
-  if (platform === "win32") {
-    return { gl: "angle" };
-  }
-
-  if (platform === "linux") {
-    return { gl: "egl" };
-  }
-
+  void environment;
+  void platform;
+  // Chrome for Testing selects its native GPU backend when gl is unset.
+  // Forcing ANGLE/EGL breaks media frame extraction on some headless builds.
   return { gl: null };
 }
 
