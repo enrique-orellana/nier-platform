@@ -1,251 +1,131 @@
 # Cross-Platform GPU Deployment Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
 
-**Goal:** Add cross-platform NVIDIA/AMD GPU detection with CPU fallback and deploy the complete OpenShorts stack on the Linux Kubernetes machine `hinzky`.
+**Goal:** Run OpenShorts fully on the Linux Kubernetes machine hinzky while supporting automatic GPU acceleration for Windows/Linux NVIDIA and AMD hosts with CPU fallback.
 
-**Architecture:** The renderer will use a runtime acceleration adapter that probes NVENC, Windows AMF, or Linux VAAPI before enabling hardware encoding. Backend image variants will keep ROCm for supported AMD deployments and add an official CUDA PyTorch image for NVIDIA deployments. Kubernetes will use a Linux shared PVC and NVIDIA GPU resource requests for the `hinzky` profile; all published media remains in S3.
+**Architecture:** Replace the renderer's Windows-AMF-only decision with a probed adapter layer for NVIDIA NVENC, Windows AMD AMF, and Linux AMD VAAPI. Keep backend AI images selectable by runtime profile: CUDA/NVIDIA for hinzky, ROCm for supported AMD Linux/WSL2 environments, and CPU fallback where no accelerator is usable. Make Kubernetes backend and renderer share a Linux PVC and request the NVIDIA GPU through Kubernetes.
 
-**Tech Stack:** TypeScript, Remotion, FFmpeg, Python/PyTorch, Docker, Kubernetes, NVIDIA Container Toolkit, NVIDIA device plugin/GPU Operator, Vitest, pytest, Go tests.
+**Tech Stack:** TypeScript/Remotion, Node.js, FFmpeg, Python/PyTorch, Go, Docker, Kubernetes, NVIDIA Container Toolkit/device plugin, ROCm, pytest, Vitest, Go tests.
 
 ---
 
-## Files and responsibilities
+## File map
 
-- Modify `render-service/src/hardware-acceleration.ts`: define adapter selection, FFmpeg probes, NVENC/AMF/VAAPI argument overrides, and fallback reasons.
-- Modify `render-service/src/hardware-acceleration.test.ts`: cover every OS/vendor path, probe success/failure, and argument rewriting.
-- Modify `render-service/src/render-worker.ts`: pass the selected adapter’s override and report the selected mode without assuming AMF.
-- Modify `render-service/src/render-worker.test.ts`: verify the selected adapter is forwarded to Remotion and metrics preserve CPU/GPU semantics.
-- Modify `render-service/src/master-policy.ts` and `render-service/src/master-policy.test.ts`: make hardware options encoder-neutral while preserving the master output contract.
-- Create `Dockerfile.cuda`: build the backend from `pytorch/pytorch:2.9.1-cuda12.8-cudnn9-runtime` with the existing Go control plane and Python dependencies.
-- Create `Dockerfile.rocm-linux`: build the backend from ROCm without WSL2/DXG-only packages or mounts.
-- Modify `tests/test_rocm_deployment_config.py`: keep ROCm Linux coverage and add CUDA profile assertions.
-- Modify `k8s/openshorts.yaml`: replace Docker Desktop storage and DXG mounts with Linux storage, shared backend/renderer PVC mounts, NVIDIA GPU requests, and Linux renderer settings.
-- Modify `k8s/openshorts.env.example`: document the Linux/NVIDIA defaults and hardware mode controls.
-- Modify `scripts/deploy-remote.ps1` and `scripts/deploy-remote.sh`: build the selected backend profile, apply the Linux manifest, and avoid assuming an AMD/WSL2 backend.
-- Modify `scripts/deploy-local.ps1` and `scripts/deploy-local.sh`: preserve local profile behavior while allowing explicit backend image selection.
-- Create `scripts/verify-gpu-linux.sh`: run host/container/Kubernetes GPU checks and a focused render smoke test without silently treating CPU fallback as GPU success.
-- Modify `k8s/README.md` and `docs/native-windows-amd-renderer.md`: document Linux NVIDIA, Linux AMD, Windows NVIDIA, and Windows AMD deployment profiles.
-- Create or modify focused deployment tests under `tests/`: validate manifest paths, resource requests, shared storage, and profile selection.
+- Modify render-service/src/hardware-acceleration.ts — generic platform/vendor adapter selection and FFmpeg probes.
+- Modify render-service/src/hardware-acceleration.test.ts — adapter and fallback coverage.
+- Modify render-service/src/master-policy.ts and render-service/src/master-policy.test.ts — adapter-neutral hardware options.
+- Modify render-service/src/render-worker.ts and render-service/src/render-worker.test.ts — use the selected adapter and verify metrics.
+- Modify Dockerfile — preserve the current ROCm/WSL2 image profile.
+- Create Dockerfile.cuda — CUDA/PyTorch backend image for NVIDIA hosts.
+- Create Dockerfile.rocm-linux — native Linux ROCm/PyTorch backend image without WSL2/DXG dependencies.
+- Modify tests/test_rocm_deployment_config.py and create tests/test_cuda_deployment_config.py.
+- Modify k8s/openshorts.yaml and k8s/openshorts.env.example — Linux storage, GPU resources, and renderer routing.
+- Modify scripts/deploy-remote.ps1, scripts/deploy-remote.sh, scripts/deploy-local.ps1, and scripts/deploy-local.sh — runtime profile selection.
+- Create tests/test_linux_kubernetes_deployment_config.py and tests/test_deployment_scripts.py.
+- Create scripts/check-gpu-linux.sh and docs/linux-nvidia-kubernetes.md.
+- Modify k8s/README.md.
 
-## Task 1: Add renderer acceleration adapters
+## Task 1: Add the cross-platform renderer acceleration adapter
 
 **Files:**
-- Modify: `render-service/src/hardware-acceleration.ts`
-- Test: `render-service/src/hardware-acceleration.test.ts`
+- Modify: render-service/src/hardware-acceleration.ts
+- Test: render-service/src/hardware-acceleration.test.ts
+- Modify: render-service/src/master-policy.ts
+- Test: render-service/src/master-policy.test.ts
 
-- [ ] **Step 1: Write failing adapter tests.** Add tests for:
-  - Windows AMD selecting AMF and preserving the current `h264_nvenc` → `h264_amf` rewrite.
-  - Windows NVIDIA selecting NVENC without AMF rewriting.
-  - Linux NVIDIA selecting NVENC.
-  - Linux AMD selecting VAAPI only when `/dev/dri/renderD128` and the VAAPI probe succeed.
-  - unknown platforms/vendors and failed probes selecting CPU with a specific reason.
-  - explicit `RENDER_HARDWARE_ACCELERATION=disabled` selecting CPU.
+- [ ] Step 1: Write failing tests for Linux NVIDIA, Windows NVIDIA, Windows AMD AMF, Linux AMD VAAPI, failed-probe CPU fallback, and explicit disable. The tests must inject platform, environment, file-existence, and probe functions; they must not call real FFmpeg or the filesystem.
+- [ ] Step 2: Run from render-service: npm test -- --run src/hardware-acceleration.test.ts src/master-policy.test.ts. Expected: failure because the current resolver supports only Windows AMF.
+- [ ] Step 3: Implement these public contracts in hardware-acceleration.ts:
 
-- [ ] **Step 2: Run the focused tests and confirm failure.**
+    export type RenderEncoder = "h264_nvenc" | "h264_amf" | "h264_vaapi";
+    export type RenderVendor = "nvidia" | "amd";
+    export type AcceleratorPreference = "auto" | "nvidia" | "amd" | "cpu";
 
-Run from `render-service`:
+    export type RenderAcceleration =
+      | { mode: "gpu"; vendor: RenderVendor; encoder: RenderEncoder;
+          hardwareAcceleration: "required"; videoBitrate: `${number}${"k" | "K" | "M"}`;
+          ffmpegOverride: FfmpegOverrideFn; binariesDirectory?: string;
+          vaapiDevice?: string }
+      | { mode: "cpu"; reason: string };
 
-```powershell
-npm test -- --run src/hardware-acceleration.test.ts
-```
+- [ ] Step 4: Implement selection rules: disabled or cpu selects CPU; Windows NVIDIA probes h264_nvenc; Windows AMD probes h264_amf and keeps the existing AMF rewrite; Linux NVIDIA probes h264_nvenc without rewriting it; Linux AMD requires /dev/dri/renderD128 or RENDER_VAAPI_DEVICE and probes h264_vaapi; auto tries visible NVIDIA, then the platform's AMD adapter, then CPU. Every hardware adapter must pass a one-second testsrc2 encode. Linux VAAPI must inject format=nv12,hwupload exactly once and remove x264-only flags.
+- [ ] Step 5: Update master-policy hardware options so binariesDirectory and vaapiDevice are optional adapter fields. Keep output dimensions, audio, color, and validation settings unchanged.
+- [ ] Step 6: Run npm test -- --run src/hardware-acceleration.test.ts src/master-policy.test.ts. Expected: PASS, including the existing AMF tests.
 
-Expected: FAIL because the current implementation only exposes Windows AMF and returns CPU on Linux.
-
-- [ ] **Step 3: Implement the adapter contract.** Replace the AMF-only result with an adapter union containing `vendor`, `encoder`, `hardwareAcceleration`, optional `binariesDirectory`, optional `videoBitrate`, and `ffmpegOverride`. Add injectable command/file probes so unit tests do not require a GPU.
-
-- [ ] **Step 4: Implement probes and overrides.** Probe a one-second synthetic frame with the candidate encoder. Use `h264_nvenc` unchanged for NVIDIA, `h264_amf` for Windows AMD, and `h264_vaapi` with `/dev/dri/renderD128` plus the required `format=nv12,hwupload` filter for Linux AMD. Return CPU when any required executable, device, or encoder check fails.
-
-- [ ] **Step 5: Run the focused tests and verify they pass.**
-
-Run:
-
-```powershell
-npm test -- --run src/hardware-acceleration.test.ts
-```
-
-Expected: PASS for all adapter and fallback cases.
-
-## Task 2: Connect adapters to Remotion rendering and metrics
+## Task 2: Connect adapter selection to rendering and metrics
 
 **Files:**
-- Modify: `render-service/src/render-worker.ts`
-- Test: `render-service/src/render-worker.test.ts`
-- Modify: `render-service/src/master-policy.ts`
-- Test: `render-service/src/master-policy.test.ts`
+- Modify: render-service/src/render-worker.ts
+- Test: render-service/src/render-worker.test.ts
 
-- [ ] **Step 1: Add failing integration assertions.** Extend the worker tests with a mocked NVIDIA adapter and assert `buildRenderOptions` receives the NVENC settings and its override. Assert that the AMF override is used only for the Windows AMD adapter.
-
-- [ ] **Step 2: Remove the AMF-specific worker assumption.** Pass the selected adapter’s generic override into `buildRenderOptions`; preserve `hardwareAcceleration: "required"` only after the adapter probe succeeds. Keep `preserveVideo`, output normalization, and metric values unchanged.
-
-- [ ] **Step 3: Make hardware policy fields encoder-neutral.** Allow `binariesDirectory` and `videoBitrate` to be optional for Linux adapters while retaining the current Windows AMF requirements. Do not alter dimensions, frame rate, color metadata, audio, or the CPU x264 policy.
-
-- [ ] **Step 4: Run renderer tests and build.**
-
-Run from `render-service`:
-
-```powershell
-npm test
-npm run build
-```
-
-Expected: all tests pass and TypeScript compilation succeeds.
+- [ ] Step 1: Add a failing test where the resolver returns a GPU NVIDIA adapter and assert renderMedia receives hardwareAcceleration=required, videoBitrate, and the NVIDIA override; assert the metrics payload reports acceleration_mode=gpu.
+- [ ] Step 2: Run from render-service: npm test -- --run src/render-worker.test.ts. Expected: failure because the worker currently creates the AMF override for every GPU result.
+- [ ] Step 3: Pass the adapter-provided ffmpegOverride, optional binariesDirectory, optional vaapiDevice, and videoBitrate into buildRenderOptions. Log vendor, encoder, and fallback reason without logging credentials or source URLs.
+- [ ] Step 4: Run npm test and npm run build from render-service. Expected: PASS and a successful TypeScript build.
 
 ## Task 3: Add CUDA and native ROCm backend image profiles
 
 **Files:**
-- Create: `Dockerfile.cuda`
-- Create: `Dockerfile.rocm-linux`
-- Modify: `tests/test_rocm_deployment_config.py`
+- Modify: Dockerfile
+- Create: Dockerfile.cuda
+- Modify: tests/test_rocm_deployment_config.py
+- Create: tests/test_cuda_deployment_config.py
 
-- [ ] **Step 1: Add image configuration tests.** Assert that the CUDA image uses `pytorch/pytorch:2.9.1-cuda12.8-cudnn9-runtime`, installs the existing application dependencies without overwriting the base PyTorch build, and does not include WSL2 DXG mounts. Assert that the ROCm Linux image uses the ROCm PyTorch base without installing `rocdxg`.
+- [ ] Step 1: Add failing tests. Dockerfile.cuda must contain pytorch/pytorch:2.9.1-cuda12.6-cudnn9-runtime, OPENSHORTS_GPU_RUNTIME=cuda, NVIDIA_VISIBLE_DEVICES=all, and NVIDIA_DRIVER_CAPABILITIES=compute,utility,video; it must not contain /dev/dxg or libdxcore.so. ROCm tests must preserve the existing WSL2 profile and validate the native rocm-linux profile has no DXG dependency.
+- [ ] Step 2: Run python -m pytest -q tests/test_cuda_deployment_config.py tests/test_rocm_deployment_config.py. Expected: failure because Dockerfile.cuda and native profile handling do not exist.
+- [ ] Step 3: Create Dockerfile.cuda by preserving the Go builder, application dependencies, UID-1000 user, output/uploads/Ultralytics directories, preloaded YOLO model, and openshorts-api command from Dockerfile, using pytorch/pytorch:2.9.1-cuda12.6-cudnn9-runtime as the runtime base. Do not add torch pins to requirements.txt because the base image supplies CUDA PyTorch.
+- [ ] Step 4: Create Dockerfile.rocm-linux from the existing backend build layout with the ROCm PyTorch base, no ROCDXG package, and no WSL2-specific files. Make the deployment profile handling distinguish rocm-wsl, rocm-linux, cuda, and cpu. rocm-wsl alone may install ROCDXG; rocm-linux uses /dev/kfd and /dev/dri; cuda uses NVIDIA runtime injection; cpu uses the CUDA image with OPENSHORTS_DEVICE=cpu but does not request a Kubernetes GPU. Keep OPENSHORTS_DEVICE=auto fallback for accelerator profiles.
+- [ ] Step 5: Run python -m pytest -q tests/test_cuda_deployment_config.py tests/test_rocm_deployment_config.py tests/test_runtime_acceleration.py and python -m compileall -q main.py python_worker.py runtime_acceleration.py. Expected: PASS.
 
-- [ ] **Step 2: Run the configuration tests and confirm failure.**
-
-Run from the repository root:
-
-```powershell
-python -m unittest tests.test_rocm_deployment_config -v
-```
-
-Expected: FAIL because the new profile files do not exist.
-
-- [ ] **Step 3: Create the CUDA Dockerfile.** Copy the existing Go build stage and application setup into `Dockerfile.cuda`, use the official CUDA PyTorch runtime base, install FFmpeg and the existing native libraries, preserve UID 1000, preload `yolov8n.pt`, copy the Go API binary, and start `/usr/local/bin/openshorts-api`.
-
-- [ ] **Step 4: Create the native ROCm Linux Dockerfile.** Reuse the same application layers with the ROCm PyTorch base, omit ROCDXG installation and all WSL2-specific assumptions, retain CPU fallback, and keep the same command and output paths.
-
-- [ ] **Step 5: Run profile tests and build both images.**
-
-Run:
-
-```powershell
-python -m unittest tests.test_rocm_deployment_config -v
-docker build -f Dockerfile.cuda -t openshorts-backend:cuda-local .
-docker build -f Dockerfile.rocm-linux -t openshorts-backend:rocm-linux-local .
-```
-
-Expected: tests pass; both builds complete successfully.
-
-## Task 4: Convert Kubernetes to the Linux shared-storage/NVIDIA profile
+## Task 4: Update Kubernetes for Linux NVIDIA and shared storage
 
 **Files:**
-- Modify: `k8s/openshorts.yaml`
-- Modify: `k8s/openshorts.env.example`
-- Create or modify: `tests/test_linux_kubernetes_deployment.py`
+- Modify: k8s/openshorts.yaml
+- Modify: k8s/openshorts.env.example
+- Create: tests/test_linux_kubernetes_deployment_config.py
 
-- [ ] **Step 1: Add failing manifest tests.** Assert that the backend and renderer mount the same PVC, no active container references `/dev/dxg`, `libdxcore.so`, or Docker Desktop paths, the renderer requests `nvidia.com/gpu: 1`, and `RENDER_SERVICE_URL` points to the in-cluster renderer service.
+- [ ] Step 1: Add failing tests requiring no WSL2 mounts, Linux storage at /var/lib/openshorts/workdir, node affinity for hinzky, shared openshorts-workdir PVC on backend and renderer, nvidia.com/gpu=1 on backend and renderer, NVIDIA runtime environment, renderer RENDER_SERVICE_URL, and ingress routes for /render and /output.
+- [ ] Step 2: Run python -m pytest -q tests/test_linux_kubernetes_deployment_config.py. Expected: failure against the Docker Desktop/WSL2 manifest.
+- [ ] Step 3: Replace the Docker Desktop PV with a local PV using storageClassName openshorts-local, hostPath /var/lib/openshorts/workdir with DirectoryOrCreate, and kubernetes.io/hostname affinity value hinzky. Preserve the existing 50Gi PVC name.
+- [ ] Step 4: Remove backend /dev/dxg, libdxcore.so, privileged, SYS_PTRACE, and HSA_ENABLE_DXG_DETECTION settings. Add nvidia.com/gpu: 1 plus NVIDIA_VISIBLE_DEVICES=all and NVIDIA_DRIVER_CAPABILITIES=compute,utility,video to backend and renderer. Keep frontend CPU-only.
+- [ ] Step 5: Add the renderer /render ingress path while retaining /output. Keep /api/render as the backend proxy endpoint.
+- [ ] Step 6: Run python -m pytest -q tests/test_linux_kubernetes_deployment_config.py and kubectl apply --dry-run=client -f k8s/openshorts.yaml. Expected: PASS and valid Kubernetes YAML.
 
-- [ ] **Step 2: Run the manifest tests and confirm failure.**
-
-Run:
-
-```powershell
-python -m unittest tests.test_linux_kubernetes_deployment -v
-```
-
-Expected: FAIL against the current Docker Desktop/DXG manifest.
-
-- [ ] **Step 3: Replace the storage definition.** Use a Linux hostPath/local volume rooted at `/srv/openshorts/workdir` with node affinity for the `hinzky` node and `DirectoryOrCreate`. Keep the PVC name `openshorts-workdir` so backend and renderer continue sharing all source, manifest, master, and `render-cache` files.
-
-- [ ] **Step 4: Update backend and renderer GPU wiring.** Remove WSL2 DXG mounts and privileged settings from the Linux backend profile. Add `nvidia.com/gpu: 1` to the renderer. Keep the backend GPU request disabled by default so the single GTX 1050 Ti is reserved for rendering; expose a documented optional time-slicing profile if AI inference is later scheduled on the same GPU.
-
-- [ ] **Step 5: Configure Linux renderer defaults.** Set `RENDER_HARDWARE_ACCELERATION=if-possible`, `RENDER_GPU_VENDOR=auto`, `RENDER_HARDWARE_VIDEO_BITRATE=40M`, and preserve the renderer metrics endpoint. Keep frontend `/render` and `/output` routes pointed at `openshorts-renderer`.
-
-- [ ] **Step 6: Run manifest validation.**
-
-Run:
-
-```powershell
-python -m unittest tests.test_linux_kubernetes_deployment -v
-kubectl apply --dry-run=client -f k8s/openshorts.yaml
-```
-
-Expected: tests pass and Kubernetes accepts the manifest syntax.
-
-## Task 5: Update deployment helpers and documentation
+## Task 5: Make deployment scripts select the runtime profile
 
 **Files:**
-- Modify: `scripts/deploy-remote.ps1`
-- Modify: `scripts/deploy-remote.sh`
-- Modify: `scripts/deploy-local.ps1`
-- Modify: `scripts/deploy-local.sh`
-- Modify: `k8s/README.md`
-- Modify: `docs/native-windows-amd-renderer.md`
+- Modify: scripts/deploy-remote.ps1
+- Modify: scripts/deploy-remote.sh
+- Modify: scripts/deploy-local.ps1
+- Modify: scripts/deploy-local.sh
+- Test: tests/test_deployment_scripts.py
 
-- [ ] **Step 1: Add profile selection tests.** Test that remote deployment defaults to `Dockerfile.cuda`, local Windows AMD defaults to the existing ROCm/WSL2-compatible Dockerfile, and an explicit backend Dockerfile override is passed through without changing renderer deployment behavior.
+- [ ] Step 1: Add failing tests for OPENSHORTS_GPU_RUNTIME values cuda, rocm-linux, rocm-wsl, and cpu; remote default cuda; local default preserving the current ROCm/Windows flow; and build selection for Dockerfile.cuda versus Dockerfile.
+- [ ] Step 2: Run python -m pytest -q tests/test_deployment_scripts.py. Expected: failure because the scripts always build the root Dockerfile and assume the Docker Desktop profile.
+- [ ] Step 3: Add explicit validated environment variables OPENSHORTS_GPU_RUNTIME, OPENSHORTS_NODE_NAME, and OPENSHORTS_STORAGE_PATH. Remote defaults are cuda, hinzky, and /var/lib/openshorts/workdir. The remote script must build Dockerfile.cuda for cuda, the root image for rocm-wsl, Dockerfile.rocm-linux for rocm-linux, and Dockerfile.cuda with OPENSHORTS_DEVICE=cpu for cpu.
+- [ ] Step 4: Make scripts set RENDER_ACCELERATOR and RENDER_HARDWARE_ACCELERATION in the generated ConfigMap, preserve S3/AI overrides, and omit GPU resource requests only for cpu. Keep image values and allowed profiles explicit; do not interpolate arbitrary shell commands.
+- [ ] Step 5: Run the script tests and parse PowerShell files with pwsh -NoProfile -Command "[scriptblock]::Create((Get-Content -Raw scripts/deploy-remote.ps1)) | Out-Null" and the equivalent local command. Expected: PASS.
 
-- [ ] **Step 2: Add backend profile selection.** Add `OPENSHORTS_BACKEND_DOCKERFILE` and matching script parameters. Build and tag one backend image using the selected Dockerfile; do not build a renderer image with a Windows-only assumption.
-
-- [ ] **Step 3: Remove unconditional WSL2 assumptions from remote deployment.** Ensure remote deployment updates only the Linux configuration and does not add DXG mounts, Docker Desktop node affinity, or `host.docker.internal` renderer URLs.
-
-- [ ] **Step 4: Document the four platform/vendor profiles.** Document the image/profile selection, required host runtime, expected CPU fallback, shared PVC path, and the fact that Linux AMD video encoding uses VAAPI while ROCm is for supported AI workloads.
-
-- [ ] **Step 5: Run shell/script syntax checks.**
-
-Run:
-
-```powershell
-bash -n scripts/deploy-remote.sh
-bash -n scripts/deploy-local.sh
-```
-
-Expected: both scripts parse successfully.
-
-## Task 6: Add Linux GPU verification and run repository validation
+## Task 6: Validate and document Linux NVIDIA prerequisites
 
 **Files:**
-- Create: `scripts/verify-gpu-linux.sh`
-- Test: `tests/test_linux_gpu_verification.py`
+- Create: scripts/check-gpu-linux.sh
+- Create: docs/linux-nvidia-kubernetes.md
+- Modify: k8s/README.md
 
-- [ ] **Step 1: Add failing verifier tests.** Assert that the verifier checks host `nvidia-smi`, a CUDA container, the Kubernetes `nvidia.com/gpu` capacity, and a renderer health/render request; assert that it exits nonzero when any check fails.
+- [ ] Step 1: Create a read-only smoke script that runs nvidia-smi, a Docker CUDA nvidia-smi container, node GPU allocatable inspection, torch.cuda.is_available() in the backend pod, and ffmpeg -encoders in the renderer pod. It must not install, delete, restart, or reboot anything.
+- [ ] Step 2: Document Ubuntu 24.04 host setup: repair/install the NVIDIA driver and reboot if needed; install NVIDIA Container Toolkit; configure Docker/containerd with nvidia-ctk; install the NVIDIA device plugin or GPU Operator; verify nvidia.com/gpu; create /var/lib/openshorts/workdir owned by UID/GID 1000; then run the smoke script.
+- [ ] Step 3: Document the current hinzky blocker: nvidia-smi fails until the host driver is operational. Include the official NVIDIA Toolkit and device-plugin links and the exact Kubernetes resource request.
+- [ ] Step 4: Document the render canary: submit a short render, poll /api/render/{renderId} until done, verify the S3/output artifact, and confirm /api/render-metrics reports acceleration_mode=gpu.
 
-- [ ] **Step 2: Implement the verifier.** Use strict shell mode, run `nvidia-smi`, run an NVIDIA CUDA sample container with `--gpus all`, inspect the selected Kubernetes node’s GPU capacity, then submit a one-frame render and poll until it is done. Print the selected acceleration mode and fail if the render reports CPU when GPU was required.
-
-- [ ] **Step 3: Run focused repository tests.**
-
-Run:
-
-```powershell
-python -m unittest discover -s tests -p 'test_*gpu*.py' -v
-python -m unittest tests.test_runtime_acceleration -v
-go test ./...
-```
-
-Expected: all focused tests and Go tests pass.
-
-- [ ] **Step 4: Run frontend checks if dashboard files changed.**
-
-Run from `dashboard`:
-
-```powershell
-npm run format
-npm run format:check
-npm run lint
-```
-
-Expected: all commands pass.
-
-## Task 7: Validate and deploy on `hinzky`
+## Task 7: Full verification, commit, and remote rollout
 
 **Files:**
-- No source files; remote host and cluster state only.
+- Review all files from Tasks 1–6.
 
-- [ ] **Step 1: Confirm host prerequisites without mutation.** Check Ubuntu version, GPU model, kernel, `nvidia-smi`, Docker GPU runtime, kubeconfig/context, and cluster node labels/capacity.
-
-- [ ] **Step 2: Repair NVIDIA host support if required.** Install a compatible NVIDIA driver and NVIDIA Container Toolkit, configure the container runtime, restart the runtime, and reboot `hinzky` only if the driver requires it. Follow NVIDIA’s official toolkit and Kubernetes device-plugin procedures.
-
-- [ ] **Step 3: Validate the GPU stack before OpenShorts.** Run `nvidia-smi`, `docker run --rm --gpus all ... nvidia-smi`, deploy/verify the NVIDIA device plugin or GPU Operator, and confirm the node advertises `nvidia.com/gpu`.
-
-- [ ] **Step 4: Build/push the CUDA backend and renderer images.** Use the remote registry/tag configuration, then apply the Linux Kubernetes manifest and config map.
-
-- [ ] **Step 5: Run smoke tests before restart.** Verify backend `/health` and `/ready`, renderer `/health`, shared PVC visibility, `torch.cuda.is_available()`, FFmpeg `h264_nvenc`, and a short end-to-end render.
-
-- [ ] **Step 6: Restart and verify the complete stack.** Restart backend, frontend, renderer, and PostgreSQL only after smoke tests pass. Run rollout status, service health checks, and one final render; record whether the result used GPU or CPU fallback.
-
-## Final GitNexus and handoff checks
-
-- [ ] Run `git diff --check` and inspect the complete diff.
-- [ ] Run GitNexus `detect_changes({repo: "openshorts", scope: "all"})` and investigate unexpected symbols or processes.
-- [ ] Stage only files belonging to this feature and commit with a focused message.
-- [ ] Report the commit, image tags, Kubernetes namespace/context, GPU validation result, and any remaining CPU fallback limitations.
-
+- [ ] Step 1: Run python -m pytest -q tests/test_cuda_deployment_config.py tests/test_rocm_deployment_config.py tests/test_linux_kubernetes_deployment_config.py tests/test_deployment_scripts.py tests/test_runtime_acceleration.py; run npm test and npm run build in render-service; run go test ./... in backend-go; run git diff --check.
+- [ ] Step 2: Run GitNexus detect_changes with repo openshorts and scope all. Review changed symbols and affected processes; investigate anything outside renderer acceleration, image profiles, Kubernetes deployment, and validation.
+- [ ] Step 3: Stage only the implementation files and commit with git commit -m "feat: support cross-platform GPU deployments".
+- [ ] Step 4: Run the read-only Linux GPU smoke checks on hinzky. If nvidia-smi or Kubernetes GPU allocation fails, stop before restarting application deployments and report the exact prerequisite.
+- [ ] Step 5: Deploy all components with OPENSHORTS_GPU_RUNTIME=cuda, wait for backend/frontend/renderer rollouts, run the render canary, and report health, readiness, GPU mode, shared PVC, and artifact publication results.
