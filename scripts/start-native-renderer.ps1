@@ -4,7 +4,7 @@ param(
     [int]$Port = 13101,
     [string]$HardwareVideoBitrate = "40M",
     [string]$MetricsUrl = "http://localhost:18000/api/render-metrics",
-    [int]$RenderConcurrency = 4,
+    [int]$RenderConcurrency = 2,
     [int]$RenderMaxConcurrency = 1,
     [ValidateSet("if-possible", "disabled")]
     [string]$HardwareAcceleration = "if-possible"

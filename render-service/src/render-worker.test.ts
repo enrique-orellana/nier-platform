@@ -33,6 +33,7 @@ vi.mock("./source-proxy.js", () => ({
 }));
 vi.mock("./progress.js", () => ({ shouldLogRenderProgress: vi.fn(() => false) }));
 vi.mock("./render-concurrency.js", () => ({
+  resolveRenderConcurrency: vi.fn(() => 1),
   selectRenderConcurrency: vi.fn(() => 1),
 }));
 

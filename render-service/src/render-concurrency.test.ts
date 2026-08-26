@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { selectRenderConcurrency } from "./render-concurrency.js";
+import {
+  DEFAULT_RENDER_CONCURRENCY,
+  resolveRenderConcurrency,
+  selectRenderConcurrency,
+} from "./render-concurrency.js";
 
 describe("selectRenderConcurrency", () => {
+  it("defaults unset renderer configuration to a CPU-friendly concurrency", () => {
+    expect(DEFAULT_RENDER_CONCURRENCY).toBe(2);
+    expect(resolveRenderConcurrency(undefined)).toBe(2);
+    expect(resolveRenderConcurrency("  ")).toBe(2);
+  });
+
   it("keeps a requested concurrency within the available CPU budget", () => {
     expect(selectRenderConcurrency({ requested: 1, available: 8 })).toBe(1);
     expect(selectRenderConcurrency({ requested: 4, available: 8 })).toBe(4);

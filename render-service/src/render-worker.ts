@@ -19,7 +19,10 @@ import { needsOutputNormalization, normalizeOutputFile } from "./output-normaliz
 import type { RenderRequestProps } from "./render-props.js";
 import { prepareRangeProxy } from "./source-proxy.js";
 import { shouldLogRenderProgress } from "./progress.js";
-import { selectRenderConcurrency } from "./render-concurrency.js";
+import {
+  resolveRenderConcurrency,
+  selectRenderConcurrency,
+} from "./render-concurrency.js";
 import {
   createRenderStageDurations,
   createRenderStageSummary,
@@ -159,9 +162,8 @@ export async function executeRender(params: RenderParams): Promise<void> {
     const outputDir = process.env.OUTPUT_DIR
       ? path.resolve(process.env.OUTPUT_DIR)
       : path.resolve(import.meta.dirname, "../../output");
-    const configuredConcurrency = Number.parseInt(
-      process.env.RENDER_CONCURRENCY || "4",
-      10,
+    const configuredConcurrency = resolveRenderConcurrency(
+      process.env.RENDER_CONCURRENCY,
     );
     renderConcurrency = selectRenderConcurrency({
       requested: configuredConcurrency,
