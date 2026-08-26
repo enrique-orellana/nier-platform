@@ -17,6 +17,12 @@ param(
 
     [string]$S3PublicEndpointUrl = $(if ($env:OPENSHORTS_S3_PUBLIC_ENDPOINT_URL) { $env:OPENSHORTS_S3_PUBLIC_ENDPOINT_URL } else { "" }),
 
+    [string]$GpuRuntime = $(if ($env:OPENSHORTS_GPU_RUNTIME) { $env:OPENSHORTS_GPU_RUNTIME } else { "" }),
+
+    [string]$NodeName = $(if ($env:OPENSHORTS_NODE_NAME) { $env:OPENSHORTS_NODE_NAME } else { "" }),
+
+    [string]$StoragePath = $(if ($env:OPENSHORTS_STORAGE_PATH) { $env:OPENSHORTS_STORAGE_PATH } else { "" }),
+
     [string]$Profile = $(if ($env:OPENSHORTS_ENV_PROFILE) { $env:OPENSHORTS_ENV_PROFILE } else { "" })
 )
 
@@ -72,6 +78,9 @@ $ExplicitEnv = @{
     "OPENSHORTS_FRONTEND_BASE_URL"      = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_FRONTEND_BASE_URL")
     "OPENSHORTS_S3_PUBLIC_URL_BASE"     = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_S3_PUBLIC_URL_BASE")
     "OPENSHORTS_S3_PUBLIC_ENDPOINT_URL" = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_S3_PUBLIC_ENDPOINT_URL")
+    "OPENSHORTS_GPU_RUNTIME"            = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_GPU_RUNTIME")
+    "OPENSHORTS_NODE_NAME"              = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_NODE_NAME")
+    "OPENSHORTS_STORAGE_PATH"           = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_STORAGE_PATH")
     "OPENSHORTS_ENV_PROFILE"            = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_ENV_PROFILE")
 }
 
@@ -122,6 +131,20 @@ $BackendBaseUrl = Get-EffectiveValue -ParameterValue $BackendBaseUrl -Environmen
 $FrontendBaseUrl = Get-EffectiveValue -ParameterValue $FrontendBaseUrl -EnvironmentName "OPENSHORTS_FRONTEND_BASE_URL"
 $S3PublicUrlBase = Get-EffectiveValue -ParameterValue $S3PublicUrlBase -EnvironmentName "OPENSHORTS_S3_PUBLIC_URL_BASE"
 $S3PublicEndpointUrl = Get-EffectiveValue -ParameterValue $S3PublicEndpointUrl -EnvironmentName "OPENSHORTS_S3_PUBLIC_ENDPOINT_URL"
+$GpuRuntime = Get-EffectiveValue -ParameterValue $GpuRuntime -EnvironmentName "OPENSHORTS_GPU_RUNTIME" -Default "cuda"
+$NodeName = Get-EffectiveValue -ParameterValue $NodeName -EnvironmentName "OPENSHORTS_NODE_NAME" -Default "hinzky"
+$StoragePath = Get-EffectiveValue -ParameterValue $StoragePath -EnvironmentName "OPENSHORTS_STORAGE_PATH" -Default "/var/lib/openshorts/workdir"
+
+if ($GpuRuntime -notin @("cuda", "rocm-linux", "rocm-wsl", "cpu")) {
+    throw "OPENSHORTS_GPU_RUNTIME must be cuda, rocm-linux, rocm-wsl, or cpu."
+}
+
+$backendDockerfile = switch ($GpuRuntime) {
+    "cuda" { "Dockerfile.cuda" }
+    "rocm-linux" { "Dockerfile.rocm-linux" }
+    "rocm-wsl" { "Dockerfile" }
+    "cpu" { "Dockerfile.cuda" }
+}
 
 if (-not $Registry -or -not $Tag) {
     throw "Missing required values. Set OPENSHORTS_REGISTRY and OPENSHORTS_TAG or pass -Registry and -Tag."
@@ -135,7 +158,12 @@ $frontendImage = "$Registry/openshorts-frontend:$Tag"
 $rendererImage = "$Registry/openshorts-renderer:$Tag"
 
 Write-Step "Building images"
-docker build -t $backendImage .
+if ($GpuRuntime -eq "cpu") {
+    docker build -t $backendImage -f $backendDockerfile --build-arg OPENSHORTS_DEVICE=cpu .
+}
+else {
+    docker build -t $backendImage -f $backendDockerfile .
+}
 docker build -t $frontendImage -f dashboard/Dockerfile dashboard
 docker build -t $rendererImage -f render-service/Dockerfile .
 
@@ -148,6 +176,8 @@ Write-Step "Applying config"
 if (-not (Test-Path $ConfigEnvFile)) {
     throw "Config env file not found: $ConfigEnvFile"
 }
+
+Invoke-Kubectl @("apply", "-f", "k8s/openshorts.yaml")
 
 $tempEnvFile = Join-Path $env:TEMP ("openshorts-env-" + [guid]::NewGuid().ToString() + ".env")
 Copy-Item $ConfigEnvFile $tempEnvFile -Force
@@ -168,6 +198,22 @@ try {
         $envContent = [regex]::Replace($envContent, '^(AWS_S3_PUBLIC_ENDPOINT_URL=).*$', '${1}' + $S3PublicEndpointUrl, [System.Text.RegularExpressions.RegexOptions]::Multiline)
     }
 
+    $configValues = @{
+        "OPENSHORTS_GPU_RUNTIME" = $GpuRuntime
+        "OPENSHORTS_NODE_NAME" = $NodeName
+        "OPENSHORTS_STORAGE_PATH" = $StoragePath
+        "RENDER_ACCELERATOR" = if ($GpuRuntime -eq "cpu") { "cpu" } else { "auto" }
+        "RENDER_HARDWARE_ACCELERATION" = "if-possible"
+    }
+    foreach ($entry in $configValues.GetEnumerator()) {
+        $envContent = [regex]::Replace(
+            $envContent,
+            "^($($entry.Key)=).*$",
+            '${1}' + $entry.Value,
+            [System.Text.RegularExpressions.RegexOptions]::Multiline
+        )
+    }
+
     Set-Content -Path $tempEnvFile -Value $envContent -NoNewline
 
     if ($KubeContext) {
@@ -185,6 +231,11 @@ try {
 }
 finally {
     Remove-Item $tempEnvFile -Force -ErrorAction SilentlyContinue
+}
+
+if ($GpuRuntime -eq "cpu") {
+    Invoke-Kubectl @("patch", "deployment/openshorts-backend", "--type=json", "-p", '[{"op":"remove","path":"/spec/template/spec/containers/0/resources/requests/nvidia.com~1gpu"},{"op":"remove","path":"/spec/template/spec/containers/0/resources/limits/nvidia.com~1gpu"}]', "-n", $Namespace)
+    Invoke-Kubectl @("patch", "deployment/openshorts-renderer", "--type=json", "-p", '[{"op":"remove","path":"/spec/template/spec/containers/0/resources/requests/nvidia.com~1gpu"},{"op":"remove","path":"/spec/template/spec/containers/0/resources/limits/nvidia.com~1gpu"}]', "-n", $Namespace)
 }
 
 Write-Step "Updating deployment images"

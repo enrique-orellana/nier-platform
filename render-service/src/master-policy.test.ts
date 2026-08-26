@@ -29,14 +29,16 @@ describe("master policy", () => {
   it("uses bitrate-based AMD hardware encoding without x264-only options", () => {
     const options = buildRenderOptions(loadMasterPolicy(), 30, {
       hardwareAcceleration: "required",
-      binariesDirectory: "C:/ffmpeg",
+      encoder: "h264_amf",
+      vendor: "amd",
       videoBitrate: "20M",
       ffmpegOverride: ({ args }) => args,
     });
 
     expect(options).toMatchObject({
       hardwareAcceleration: "required",
-      binariesDirectory: "C:/ffmpeg",
+      encoder: "h264_amf",
+      vendor: "amd",
       videoBitrate: "20M",
     });
     expect(options).not.toHaveProperty("crf");

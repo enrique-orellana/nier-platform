@@ -1,0 +1,57 @@
+# CUDA/PyTorch runtime for native Linux NVIDIA Kubernetes nodes.
+FROM golang:1.26-alpine AS go-builder
+
+WORKDIR /go-src
+COPY backend-go/go.mod ./
+COPY backend-go/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
+COPY backend-go/cmd ./cmd
+COPY backend-go/internal ./internal
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/openshorts-api ./cmd/api
+
+FROM pytorch/pytorch:2.9.1-cuda12.6-cudnn9-runtime
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    ffmpeg \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    nodejs \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install -r requirements.txt
+
+ENV PYTHONUNBUFFERED=1 \
+    OPENSHORTS_GPU_RUNTIME=cuda \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+
+RUN groupadd --gid 1000 appuser \
+    && useradd --uid 1000 --gid 1000 --create-home --home-dir /app appuser
+
+RUN mkdir -p /app/uploads /app/output /tmp/Ultralytics \
+    && chown -R appuser:appuser /app /tmp/Ultralytics
+
+USER appuser
+ENV USER=appuser
+
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+
+COPY --from=go-builder /out/openshorts-api /usr/local/bin/openshorts-api
+COPY --chown=appuser:appuser . .
+
+EXPOSE 8000
+CMD ["/usr/local/bin/openshorts-api"]

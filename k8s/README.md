@@ -1,5 +1,11 @@
 # Kubernetes Notes
 
+The remote Linux deployment target is the Kubernetes node `hinzky`. Its local
+workdir PV uses `/var/lib/openshorts/workdir`; backend and renderer mount the
+same 50Gi PVC so source files, render outputs, and cache metadata stay on one
+node. The Linux NVIDIA prerequisites and read-only validation command are in
+[`docs/linux-nvidia-kubernetes.md`](../docs/linux-nvidia-kubernetes.md).
+
 This folder contains the manifests and helper notes for running OpenShorts
 against the single-replica MinIO deployment.
 

@@ -8,7 +8,6 @@ import { renderJobs } from "./server.js";
 import { buildRenderOptions } from "./master-policy.js";
 import { loadMasterPolicy } from "./master-policy.js";
 import {
-  createAmfFfmpegOverride,
   resolveRenderAcceleration,
   type RenderAcceleration,
 } from "./hardware-acceleration.js";
@@ -95,6 +94,10 @@ export interface RenderParams {
 
 let renderAccelerationPromise: Promise<RenderAcceleration> | null = null;
 
+export function resetRenderAccelerationCache(): void {
+  renderAccelerationPromise = null;
+}
+
 function getRenderAcceleration(): Promise<RenderAcceleration> {
   if (!renderAccelerationPromise) {
     renderAccelerationPromise = resolveRenderAcceleration();
@@ -177,7 +180,7 @@ export async function executeRender(params: RenderParams): Promise<void> {
       `[render-worker] ${renderId} encoding mode: ${renderAcceleration.mode}` +
         (renderAcceleration.mode === "cpu"
           ? ` (${renderAcceleration.reason})`
-          : ` (${renderAcceleration.videoBitrate})`),
+          : ` (${renderAcceleration.vendor}/${renderAcceleration.encoder}, ${renderAcceleration.videoBitrate})`),
     );
 
     const sourceRange = await measureStage("source_prepare", () =>
@@ -225,10 +228,7 @@ export async function executeRender(params: RenderParams): Promise<void> {
           policy,
           renderProps.fps,
           renderAcceleration.mode === "gpu"
-            ? {
-                ...renderAcceleration,
-                ffmpegOverride: createAmfFfmpegOverride(),
-              }
+            ? renderAcceleration
             : undefined,
         ),
         concurrency: renderConcurrency,

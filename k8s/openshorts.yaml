@@ -6,18 +6,18 @@ metadata:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: docker-openshorts-workdir
+  name: openshorts-workdir-pv
 spec:
   capacity:
     storage: 50Gi
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: docker-migration
+  storageClassName: openshorts-local
   volumeMode: Filesystem
   hostPath:
-    path: /run/desktop/mnt/host/d/openshorts-docker-data/workdir
-    type: Directory
+    path: /var/lib/openshorts/workdir
+    type: DirectoryOrCreate
   nodeAffinity:
     required:
       nodeSelectorTerms:
@@ -25,7 +25,7 @@ spec:
             - key: kubernetes.io/hostname
               operator: In
               values:
-                - docker-desktop
+                - hinzky
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -38,9 +38,9 @@ spec:
   resources:
     requests:
       storage: 50Gi
-  storageClassName: docker-migration
+  storageClassName: openshorts-local
   volumeMode: Filesystem
-  volumeName: docker-openshorts-workdir
+  volumeName: openshorts-workdir-pv
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -54,6 +54,9 @@ data:
   SCENE_STRATEGY_SAMPLE_COUNT: "1"
   SCENE_STRATEGY_WORKERS: "8"
   OPENSHORTS_DEVICE: "auto"
+  OPENSHORTS_GPU_RUNTIME: cuda
+  RENDER_ACCELERATOR: auto
+  RENDER_HARDWARE_ACCELERATION: if-possible
   AI_PROVIDER: openrouter
   AI_BASE_URL: https://openrouter.ai/api/v1
   AI_QUALITY_PRESET: balanced
@@ -99,6 +102,15 @@ spec:
       labels:
         app: openshorts-backend
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - hinzky
       containers:
         - name: backend
           image: openshorts-backend:local
@@ -128,17 +140,15 @@ spec:
                 secretKeyRef:
                   name: openshorts-minio
                   key: AWS_SECRET_ACCESS_KEY
-            - name: HSA_ENABLE_DXG_DETECTION
-              value: "1"
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: compute,utility,video
           volumeMounts:
             - name: workdir
               mountPath: /app/output
             - name: uploads
               mountPath: /app/uploads
-            - name: amd-dxg
-              mountPath: /dev/dxg
-            - name: wsl-dxcore
-              mountPath: /usr/lib/libdxcore.so
           readinessProbe:
             httpGet:
               path: /ready
@@ -155,35 +165,21 @@ spec:
             requests:
               cpu: "4000m"
               memory: "4Gi"
+              nvidia.com/gpu: "1"
             limits:
               cpu: "12000m"
               memory: "12Gi"
+              nvidia.com/gpu: "1"
           securityContext:
-            # Docker Desktop Kubernetes cannot express Docker's --device
-            # cgroup rule for /dev/dxg; privileged is required for ROCm DXG.
-            allowPrivilegeEscalation: true
-            privileged: true
+            allowPrivilegeEscalation: false
             runAsNonRoot: true
             runAsUser: 1000
-            capabilities:
-              add:
-                - SYS_PTRACE
-            seccompProfile:
-              type: Unconfined
       volumes:
         - name: workdir
           persistentVolumeClaim:
             claimName: openshorts-workdir
         - name: uploads
           emptyDir: {}
-        - name: amd-dxg
-          hostPath:
-            path: /dev/dxg
-            type: CharDevice
-        - name: wsl-dxcore
-          hostPath:
-            path: /usr/lib/wsl/lib/libdxcore.so
-            type: File
 ---
 apiVersion: v1
 kind: Service
@@ -213,6 +209,15 @@ spec:
       labels:
         app: openshorts-renderer
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - hinzky
       containers:
         - name: renderer
           image: openshorts-renderer:local
@@ -233,6 +238,10 @@ spec:
               value: "4"
             - name: RENDER_METRICS_URL
               value: http://openshorts-backend:8000/api/render-metrics
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: compute,utility,video
           volumeMounts:
             - name: workdir
               mountPath: /output
@@ -258,9 +267,11 @@ spec:
             requests:
               cpu: "1000m"
               memory: "2Gi"
+              nvidia.com/gpu: "1"
             limits:
               cpu: "4000m"
               memory: "4Gi"
+              nvidia.com/gpu: "1"
           securityContext:
             allowPrivilegeEscalation: false
       terminationGracePeriodSeconds: 60
@@ -370,6 +381,13 @@ spec:
                 port:
                   number: 8000
           - path: /output
+            pathType: Prefix
+            backend:
+              service:
+                name: openshorts-renderer
+                port:
+                  number: 3100
+          - path: /render
             pathType: Prefix
             backend:
               service:

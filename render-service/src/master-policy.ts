@@ -62,9 +62,12 @@ export type RenderVideoBitrate = `${number}${"k" | "K" | "M"}`;
 
 export interface HardwareRenderOptions {
   hardwareAcceleration: "required";
-  binariesDirectory: string;
+  vendor: "nvidia" | "amd";
+  encoder: "h264_nvenc" | "h264_amf" | "h264_vaapi";
   videoBitrate: RenderVideoBitrate;
   ffmpegOverride: FfmpegOverrideFn;
+  binariesDirectory?: string;
+  vaapiDevice?: string;
 }
 
 export function parseMasterPolicy(value: unknown): MasterPolicy {
@@ -113,7 +116,10 @@ export function buildRenderOptions(
     return {
       ...common,
       hardwareAcceleration: hardware.hardwareAcceleration,
-      binariesDirectory: hardware.binariesDirectory,
+      vendor: hardware.vendor,
+      encoder: hardware.encoder,
+      ...(hardware.binariesDirectory ? { binariesDirectory: hardware.binariesDirectory } : {}),
+      ...(hardware.vaapiDevice ? { vaapiDevice: hardware.vaapiDevice } : {}),
       videoBitrate: hardware.videoBitrate,
       ffmpegOverride: hardware.ffmpegOverride,
     } as const;

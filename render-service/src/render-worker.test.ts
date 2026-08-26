@@ -3,18 +3,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   selectComposition: vi.fn(async () => ({ width: 1080, height: 1920 })),
   renderMedia: vi.fn(async () => undefined),
+  buildRenderOptions: vi.fn((_policy, _fps, hardware) => hardware ?? {}),
+  renderAcceleration: { mode: "cpu", reason: "test" } as unknown,
 }));
 
 vi.mock("@remotion/renderer", () => mocks);
 vi.mock("./server.js", () => ({ renderJobs: new Map() }));
 vi.mock("./bundle.js", () => ({ getBundleLocation: vi.fn(() => "bundle") }));
 vi.mock("./master-policy.js", () => ({
-  buildRenderOptions: vi.fn(() => ({})),
+  buildRenderOptions: mocks.buildRenderOptions,
   loadMasterPolicy: vi.fn(() => ({ output_width: 1080, output_height: 1920 })),
 }));
 vi.mock("./hardware-acceleration.js", () => ({
-  createAmfFfmpegOverride: vi.fn(),
-  resolveRenderAcceleration: vi.fn(async () => ({ mode: "cpu", reason: "test" })),
+  resolveRenderAcceleration: vi.fn(async () => mocks.renderAcceleration),
 }));
 vi.mock("./output-validation.js", () => ({ validateOutputFile: vi.fn(async () => undefined) }));
 vi.mock("./composition.js", () => ({
@@ -40,6 +41,7 @@ import { renderJobs } from "./server.js";
 import {
   closeRenderBrowser,
   executeRender,
+  resetRenderAccelerationCache,
   setRenderBrowser,
 } from "./render-worker.js";
 
@@ -48,6 +50,9 @@ describe("executeRender browser lifecycle", () => {
     renderJobs.clear();
     mocks.selectComposition.mockClear();
     mocks.renderMedia.mockClear();
+    mocks.buildRenderOptions.mockClear();
+    mocks.renderAcceleration = { mode: "cpu", reason: "test" };
+    resetRenderAccelerationCache();
     delete process.env.RENDER_METRICS_URL;
     vi.unstubAllGlobals();
     setRenderBrowser(null);
@@ -130,6 +135,64 @@ describe("executeRender browser lifecycle", () => {
     });
 
     expect(renderJobs.get("render-2")?.status).toBe("done");
+    delete process.env.RENDER_METRICS_URL;
+    vi.unstubAllGlobals();
+  });
+
+  it("passes a selected NVIDIA adapter to Remotion and reports GPU metrics", async () => {
+    const override = vi.fn(({ args }: { args: string[] }) => args);
+    mocks.renderAcceleration = {
+      mode: "gpu",
+      vendor: "nvidia",
+      encoder: "h264_nvenc",
+      hardwareAcceleration: "required",
+      videoBitrate: "20M",
+      binariesDirectory: "/usr/bin",
+      ffmpegOverride: override,
+    };
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    process.env.RENDER_METRICS_URL = "http://backend:8000/api/render-metrics";
+    renderJobs.set("render-gpu", {
+      renderId: "render-gpu",
+      jobId: "job-gpu",
+      clipIndex: 0,
+      status: "queued",
+      progress: 0,
+    });
+
+    await executeRender({
+      renderId: "render-gpu",
+      jobId: "job-gpu",
+      clipIndex: 0,
+      props: {
+        videoUrl: "http://renderer/output/source.mp4",
+        durationInFrames: 30,
+        fps: 30,
+        width: 1080,
+        height: 1920,
+        versionId: "version-gpu",
+      } as never,
+    });
+
+    expect(mocks.buildRenderOptions).toHaveBeenCalledWith(
+      expect.anything(),
+      30,
+      expect.objectContaining({
+        vendor: "nvidia",
+        encoder: "h264_nvenc",
+        videoBitrate: "20M",
+        ffmpegOverride: override,
+      }),
+    );
+    expect(mocks.renderMedia).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hardwareAcceleration: "required",
+        videoBitrate: "20M",
+        ffmpegOverride: override,
+      }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).acceleration_mode).toBe("gpu");
     delete process.env.RENDER_METRICS_URL;
     vi.unstubAllGlobals();
   });

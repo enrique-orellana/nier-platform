@@ -1,0 +1,55 @@
+# Native Linux ROCm/PyTorch runtime for supported AMD Kubernetes nodes.
+FROM golang:1.26-alpine AS go-builder
+
+WORKDIR /go-src
+COPY backend-go/go.mod ./
+COPY backend-go/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
+COPY backend-go/cmd ./cmd
+COPY backend-go/internal ./internal
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/openshorts-api ./cmd/api
+
+FROM rocm/pytorch:rocm7.2.1_ubuntu24.04_py3.12_pytorch_release_2.9.1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    ffmpeg \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    nodejs \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install -r requirements.txt
+
+ENV PYTHONUNBUFFERED=1 \
+    OPENSHORTS_GPU_RUNTIME=rocm-linux
+
+RUN groupmod --new-name appuser ubuntu \
+    && usermod --login appuser --home /app ubuntu
+
+RUN mkdir -p /app/uploads /app/output /tmp/Ultralytics \
+    && chown -R appuser:appuser /app /tmp/Ultralytics
+
+USER appuser
+ENV USER=appuser
+
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+
+COPY --from=go-builder /out/openshorts-api /usr/local/bin/openshorts-api
+COPY --chown=appuser:appuser . .
+
+EXPOSE 8000
+CMD ["/usr/local/bin/openshorts-api"]

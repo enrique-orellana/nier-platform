@@ -15,6 +15,15 @@ class RocmDeploymentConfigTests(unittest.TestCase):
         )
         self.assertIn("rocdxg-roct_${ROCDXG_VERSION}_amd64.deb", dockerfile)
 
+    def test_native_linux_rocm_profile_has_no_wsl2_dxg_dependency(self):
+        dockerfile = (ROOT / "Dockerfile.rocm-linux").read_text(encoding="utf-8").lower()
+
+        self.assertIn("rocm/pytorch:rocm7.2.1_ubuntu24.04_py3.12_pytorch_release_2.9.1", dockerfile)
+        self.assertIn("openshorts_gpu_runtime=rocm-linux", dockerfile)
+        self.assertNotIn("/dev/dxg", dockerfile)
+        self.assertNotIn("libdxcore.so", dockerfile)
+        self.assertNotIn("rocdxg-roct", dockerfile)
+
     def test_requirements_do_not_replace_rocm_with_nvidia_torch_packages(self):
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
         dependency_lines = [
@@ -35,20 +44,6 @@ class RocmDeploymentConfigTests(unittest.TestCase):
             any(line.startswith("torchvision==") for line in dependency_lines),
             "A pip torchvision pin could mismatch the ROCm-provided torch build",
         )
-
-    def test_backend_deployment_exposes_wsl2_amd_gpu_runtime(self):
-        manifest = (ROOT / "k8s" / "openshorts.yaml").read_text(encoding="utf-8")
-        backend = manifest.split("name: openshorts-backend", 1)[1].split(
-            "name: openshorts-backend", 1
-        )[0]
-
-        self.assertIn("/dev/dxg", backend)
-        self.assertIn("/usr/lib/wsl/lib/libdxcore.so", backend)
-        self.assertIn("HSA_ENABLE_DXG_DETECTION", backend)
-        self.assertIn("SYS_PTRACE", backend)
-        self.assertIn("type: Unconfined", backend)
-        self.assertIn("privileged: true", backend)
-
 
 if __name__ == "__main__":
     unittest.main()

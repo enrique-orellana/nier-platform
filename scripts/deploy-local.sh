@@ -37,6 +37,7 @@ EXPLICIT_BACKEND_BASE_URL="${AI_BASE_URL:-${OPENSHORTS_AI_BASE_URL-}}"
 EXPLICIT_FRONTEND_BASE_URL="${VITE_AI_BASE_URL:-${OPENSHORTS_VITE_AI_BASE_URL-}}"
 EXPLICIT_S3_PUBLIC_URL_BASE="${AWS_S3_PUBLIC_URL_BASE:-${OPENSHORTS_S3_PUBLIC_URL_BASE-}}"
 EXPLICIT_S3_PUBLIC_ENDPOINT_URL="${AWS_S3_PUBLIC_ENDPOINT_URL:-${OPENSHORTS_S3_PUBLIC_ENDPOINT_URL-}}"
+EXPLICIT_GPU_RUNTIME="${OPENSHORTS_GPU_RUNTIME-}"
 
 load_env_file() {
   local env_file="$1"
@@ -88,6 +89,7 @@ if [[ -n "$EXPLICIT_BACKEND_BASE_URL" ]]; then export OPENSHORTS_AI_BASE_URL="$E
 if [[ -n "$EXPLICIT_FRONTEND_BASE_URL" ]]; then export OPENSHORTS_VITE_AI_BASE_URL="$EXPLICIT_FRONTEND_BASE_URL"; fi
 if [[ -n "$EXPLICIT_S3_PUBLIC_URL_BASE" ]]; then export OPENSHORTS_S3_PUBLIC_URL_BASE="$EXPLICIT_S3_PUBLIC_URL_BASE"; fi
 if [[ -n "$EXPLICIT_S3_PUBLIC_ENDPOINT_URL" ]]; then export OPENSHORTS_S3_PUBLIC_ENDPOINT_URL="$EXPLICIT_S3_PUBLIC_ENDPOINT_URL"; fi
+if [[ -n "$EXPLICIT_GPU_RUNTIME" ]]; then export OPENSHORTS_GPU_RUNTIME="$EXPLICIT_GPU_RUNTIME"; fi
 
 KUBE_CONTEXT="${OPENSHORTS_KUBE_CONTEXT:-}"
 NAMESPACE="${OPENSHORTS_NAMESPACE:-openshorts}"
@@ -96,6 +98,15 @@ AI_BASE_URL="${AI_BASE_URL:-${OPENSHORTS_AI_BASE_URL:-}}"
 VITE_AI_BASE_URL="${VITE_AI_BASE_URL:-${OPENSHORTS_VITE_AI_BASE_URL:-}}"
 S3_PUBLIC_URL_BASE="${AWS_S3_PUBLIC_URL_BASE:-${OPENSHORTS_S3_PUBLIC_URL_BASE:-}}"
 S3_PUBLIC_ENDPOINT_URL="${AWS_S3_PUBLIC_ENDPOINT_URL:-${OPENSHORTS_S3_PUBLIC_ENDPOINT_URL:-}}"
+GPU_RUNTIME="${OPENSHORTS_GPU_RUNTIME:-rocm-wsl}"
+case "$GPU_RUNTIME" in
+  cuda) backend_dockerfile="Dockerfile.cuda"; renderer_accelerator="auto" ;;
+  rocm-linux) backend_dockerfile="Dockerfile.rocm-linux"; renderer_accelerator="auto" ;;
+  rocm-wsl) backend_dockerfile="Dockerfile"; renderer_accelerator="auto" ;;
+  cpu) backend_dockerfile="Dockerfile.cuda"; renderer_accelerator="cpu" ;;
+  *) printf 'OPENSHORTS_GPU_RUNTIME must be cuda, rocm-linux, rocm-wsl, or cpu.\n' >&2; exit 1 ;;
+esac
+export GPU_RUNTIME RENDER_ACCELERATOR="$renderer_accelerator" RENDER_HARDWARE_ACCELERATION="if-possible"
 POSTGRES_DB="${OPENSHORTS_POSTGRES_DB:-openshorts}"
 POSTGRES_USER="${OPENSHORTS_POSTGRES_USER:-openshorts}"
 POSTGRES_PASSWORD="${OPENSHORTS_POSTGRES_PASSWORD:-openshorts-local}"
@@ -136,8 +147,17 @@ apply_kubectl() {
   "${kubectl_cmd[@]}" "$@"
 }
 
+remove_gpu_requests() {
+  apply_kubectl patch deployment/openshorts-backend -n "$NAMESPACE" --type=json -p='[{"op":"remove","path":"/spec/template/spec/containers/0/resources/requests/nvidia.com~1gpu"},{"op":"remove","path":"/spec/template/spec/containers/0/resources/limits/nvidia.com~1gpu"}]'
+  apply_kubectl patch deployment/openshorts-renderer -n "$NAMESPACE" --type=json -p='[{"op":"remove","path":"/spec/template/spec/containers/0/resources/requests/nvidia.com~1gpu"},{"op":"remove","path":"/spec/template/spec/containers/0/resources/limits/nvidia.com~1gpu"}]'
+}
+
 log_step "Building local images"
-docker build -t "$backend_image" .
+if [[ "$GPU_RUNTIME" == "cpu" ]]; then
+  docker build -t "$backend_image" -f "$backend_dockerfile" --build-arg OPENSHORTS_DEVICE=cpu .
+else
+  docker build -t "$backend_image" -f "$backend_dockerfile" .
+fi
 docker build -t "$frontend_image" -f dashboard/Dockerfile dashboard
 docker build -t "$renderer_image" -f render-service/Dockerfile .
 
@@ -203,6 +223,9 @@ text = replace_line("AI_BASE_URL", ai_base, text)
 text = replace_line("VITE_AI_BASE_URL", vite_base, text)
 text = replace_line("AWS_S3_PUBLIC_URL_BASE", s3_public, text)
 text = replace_line("AWS_S3_PUBLIC_ENDPOINT_URL", s3_endpoint, text)
+text = replace_line("OPENSHORTS_GPU_RUNTIME", os.environ.get("GPU_RUNTIME", ""), text)
+text = replace_line("RENDER_ACCELERATOR", os.environ.get("RENDER_ACCELERATOR", ""), text)
+text = replace_line("RENDER_HARDWARE_ACCELERATION", os.environ.get("RENDER_HARDWARE_ACCELERATION", "if-possible"), text)
 
 path.write_text(text)
 PY
@@ -212,6 +235,10 @@ apply_kubectl create configmap openshorts-config \
   --from-env-file="$temp_env_file" \
   --dry-run=client -o yaml | apply_kubectl apply -f -
 rm -f "$temp_env_file"
+
+if [[ "$GPU_RUNTIME" == "cpu" ]]; then
+  remove_gpu_requests
+fi
 
 log_step "Updating deployment images"
 apply_kubectl set image deployment/openshorts-backend backend="$backend_image" -n "$NAMESPACE"

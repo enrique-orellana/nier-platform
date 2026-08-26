@@ -49,7 +49,8 @@ RUN wget -q "https://github.com/ROCm/librocdxg/releases/download/v${ROCDXG_VERSI
     && ldconfig \
     && rm -f /tmp/rocdxg-roct.deb
 
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    OPENSHORTS_GPU_RUNTIME=rocm-wsl
 
 # The ROCm base already provides UID/GID 1000 as `ubuntu`; reuse that
 # identity so Kubernetes can continue running the worker as UID 1000.

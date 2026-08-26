@@ -2,7 +2,8 @@ param(
     [string]$Namespace = "",
     [string]$KubeContext = "",
     [string]$ConfigEnvFile = "",
-    [string]$Profile = ""
+    [string]$Profile = "",
+    [string]$GpuRuntime = $(if ($env:OPENSHORTS_GPU_RUNTIME) { $env:OPENSHORTS_GPU_RUNTIME } else { "" })
 )
 
 $ErrorActionPreference = "Stop"
@@ -105,6 +106,7 @@ $ExplicitAiBaseUrl = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_AI
 $ExplicitViteAiBaseUrl = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_VITE_AI_BASE_URL")
 $ExplicitS3PublicUrlBase = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_S3_PUBLIC_URL_BASE")
 $ExplicitS3PublicEndpointUrl = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_S3_PUBLIC_ENDPOINT_URL")
+$ExplicitGpuRuntime = [System.Environment]::GetEnvironmentVariable("OPENSHORTS_GPU_RUNTIME")
 
 $Profile = if ($Profile) { $Profile } elseif ($ExplicitProfile) { $ExplicitProfile } else { "" }
 
@@ -132,12 +134,24 @@ if ($ExplicitAiBaseUrl) { Set-Item -Path "Env:OPENSHORTS_AI_BASE_URL" -Value $Ex
 if ($ExplicitViteAiBaseUrl) { Set-Item -Path "Env:OPENSHORTS_VITE_AI_BASE_URL" -Value $ExplicitViteAiBaseUrl }
 if ($ExplicitS3PublicUrlBase) { Set-Item -Path "Env:OPENSHORTS_S3_PUBLIC_URL_BASE" -Value $ExplicitS3PublicUrlBase }
 if ($ExplicitS3PublicEndpointUrl) { Set-Item -Path "Env:OPENSHORTS_S3_PUBLIC_ENDPOINT_URL" -Value $ExplicitS3PublicEndpointUrl }
+if ($ExplicitGpuRuntime) { Set-Item -Path "Env:OPENSHORTS_GPU_RUNTIME" -Value $ExplicitGpuRuntime }
 
 $Namespace = if ($Namespace) { $Namespace } else { Get-EnvValue "OPENSHORTS_NAMESPACE" }
 if (-not $Namespace) { $Namespace = "openshorts" }
 $KubeContext = if ($KubeContext) { $KubeContext } else { Get-EnvValue "OPENSHORTS_KUBE_CONTEXT" }
 $ConfigEnvFile = if ($ConfigEnvFile) { $ConfigEnvFile } else { Get-EnvValue "OPENSHORTS_CONFIG_ENV_FILE" }
 if (-not $ConfigEnvFile) { $ConfigEnvFile = "k8s/openshorts.env.example" }
+$GpuRuntime = if ($GpuRuntime) { $GpuRuntime } else { Get-EnvValue "OPENSHORTS_GPU_RUNTIME" }
+if (-not $GpuRuntime) { $GpuRuntime = "rocm-wsl" }
+if ($GpuRuntime -notin @("cuda", "rocm-linux", "rocm-wsl", "cpu")) {
+    throw "OPENSHORTS_GPU_RUNTIME must be cuda, rocm-linux, rocm-wsl, or cpu."
+}
+$backendDockerfile = switch ($GpuRuntime) {
+    "cuda" { "Dockerfile.cuda" }
+    "rocm-linux" { "Dockerfile.rocm-linux" }
+    "rocm-wsl" { "Dockerfile" }
+    "cpu" { "Dockerfile.cuda" }
+}
 
 Test-Command docker
 Test-Command kubectl
@@ -165,7 +179,11 @@ $postgresPasswordURL = [System.Uri]::EscapeDataString($postgresPassword)
 $databaseUrl = "postgres://$postgresUser`:$postgresPasswordURL@openshorts-postgres:5432/$postgresDb"
 
 Write-Step "Building local images"
-Invoke-CheckedCommand "docker" @("build", "-t", $backendImage, ".")
+if ($GpuRuntime -eq "cpu") {
+    Invoke-CheckedCommand "docker" @("build", "-t", $backendImage, "-f", $backendDockerfile, "--build-arg", "OPENSHORTS_DEVICE=cpu", ".")
+} else {
+    Invoke-CheckedCommand "docker" @("build", "-t", $backendImage, "-f", $backendDockerfile, ".")
+}
 Invoke-CheckedCommand "docker" @("build", "-t", $frontendImage, "-f", "dashboard/Dockerfile", "dashboard")
 Invoke-CheckedCommand "docker" @("build", "-t", $rendererImage, "-f", "render-service/Dockerfile", ".")
 
@@ -236,6 +254,9 @@ try {
         "AWS_S3_FORCE_PATH_STYLE" = (Get-EnvValue "AWS_S3_FORCE_PATH_STYLE")
         "RENDER_SERVICE_URL" = (Get-EnvValue "RENDER_SERVICE_URL")
         "TRANSLATION_SERVICE_URL" = (Get-EnvValue "TRANSLATION_SERVICE_URL")
+        "OPENSHORTS_GPU_RUNTIME" = $GpuRuntime
+        "RENDER_ACCELERATOR" = if ($GpuRuntime -eq "cpu") { "cpu" } else { "auto" }
+        "RENDER_HARDWARE_ACCELERATION" = "if-possible"
     }
 
     foreach ($entry in $overrides.GetEnumerator()) {
