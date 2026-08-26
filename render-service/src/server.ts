@@ -8,6 +8,7 @@ import type { RenderRequestProps } from "./render-props.js";
 import { renderRequestSchema } from "./render-request.js";
 import { manifestToVersionRenderProps } from "./version-manifest.js";
 import { RenderQueue } from "./render-queue.js";
+import { getChromiumOptions } from "./chromium-options.js";
 
 // --- Render status types ---
 
@@ -186,7 +187,9 @@ async function main() {
   console.log("[render-service] Bundle ready.");
 
   console.log("[render-service] Opening reusable Remotion browser...");
-  setRenderBrowser(await openBrowser("chrome"));
+  const chromiumOptions = getChromiumOptions();
+  console.log(`[render-service] Chromium GL backend: ${chromiumOptions.gl ?? "default"}`);
+  setRenderBrowser(await openBrowser("chrome", { chromiumOptions }));
   console.log("[render-service] Reusable Remotion browser ready.");
 
   httpServer = app.listen(PORT, () => {
