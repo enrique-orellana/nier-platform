@@ -2,6 +2,10 @@ import React from "react";
 
 import { buildVisibleProviders } from "../lib/lmStudio";
 import { codexStatusLabel } from "../lib/openaiCodex";
+import {
+  DEFAULT_TRANSCRIPTION_MODEL,
+  DEFAULT_TRANSCRIPTION_OPENROUTER_PROVIDER,
+} from "../lib/aiDefaults";
 import { SUBTITLE_LANGUAGES } from "./subtitleLanguages";
 
 export default function AISettingsPanel({
@@ -21,11 +25,11 @@ export default function AISettingsPanel({
   setAiVisionModel,
   aiImageModel,
   setAiImageModel,
-  transcriptionModel = "openai/whisper-large-v3",
+  transcriptionModel = DEFAULT_TRANSCRIPTION_MODEL,
   setTranscriptionModel = () => {},
   transcriptionLanguage = "auto",
   setTranscriptionLanguage = () => {},
-  transcriptionOpenRouterProvider = "",
+  transcriptionOpenRouterProvider = DEFAULT_TRANSCRIPTION_OPENROUTER_PROVIDER,
   setTranscriptionOpenRouterProvider = () => {},
   aiTextEffort = "auto",
   setAiTextEffort = () => {},
@@ -519,7 +523,7 @@ export default function AISettingsPanel({
             value={transcriptionModel}
             onChange={(event) => setTranscriptionModel(event.target.value)}
             className="input-field"
-            placeholder="openai/whisper-large-v3"
+            placeholder={DEFAULT_TRANSCRIPTION_MODEL}
           />
           <label className="block">
             <span className="block text-sm text-zinc-300 mb-2">

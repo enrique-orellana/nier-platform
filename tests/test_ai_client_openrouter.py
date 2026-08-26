@@ -174,8 +174,8 @@ class OpenRouterTests(unittest.TestCase):
         self.assertEqual(config.resolved_base_url(), "https://openrouter.ai/api/v1")
         self.assertEqual(config.text_model, "openai/gpt-4o-mini")
         self.assertEqual(config.analyze_model, "openai/gpt-4o-mini")
-        self.assertEqual(config.transcription_model, "openai/whisper-large-v3")
-        self.assertEqual(config.transcription_openrouter_provider, "")
+        self.assertEqual(config.transcription_model, "openai/whisper-large-v3-turbo")
+        self.assertEqual(config.transcription_openrouter_provider, "deepinfra")
 
     def test_load_ai_config_reads_openrouter_transcription_provider(self):
         config = ai_client.load_ai_config({
@@ -302,7 +302,7 @@ class OpenRouterTests(unittest.TestCase):
         )
 
     @patch("ai_client.httpx.Client", DetailedTranscriptionClient)
-    def test_transcription_omits_provider_when_not_configured(self):
+    def test_transcription_uses_the_default_provider_when_not_configured(self):
         config = ai_client.AIConfig(provider="openrouter", api_key="secret")
         with TemporaryDirectory() as directory:
             audio_path = Path(directory) / "audio.wav"
@@ -310,7 +310,10 @@ class OpenRouterTests(unittest.TestCase):
 
             ai_client.transcribe_audio_openrouter(str(audio_path), config)
 
-        self.assertNotIn("provider", DetailedTranscriptionClient.last_json)
+        self.assertEqual(
+            DetailedTranscriptionClient.last_json["provider"],
+            {"only": ["deepinfra"]},
+        )
 
     @patch("ai_client.httpx.Client", VerboseJsonFallbackClient)
     def test_transcription_falls_back_to_json_for_models_without_timestamp_support(self):

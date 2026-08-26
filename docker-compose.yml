@@ -46,7 +46,8 @@ services:
       AI_BASE_URL: ${AI_BASE_URL:-https://openrouter.ai/api/v1}
       AI_MODEL: ${AI_MODEL:-openai/gpt-4o-mini}
       AI_ANALYZE_MODEL: ${AI_ANALYZE_MODEL:-openai/gpt-4o-mini}
-      AI_TRANSCRIPTION_MODEL: ${AI_TRANSCRIPTION_MODEL:-openai/whisper-large-v3}
+      AI_TRANSCRIPTION_MODEL: ${AI_TRANSCRIPTION_MODEL:-openai/whisper-large-v3-turbo}
+      AI_TRANSCRIPTION_OPENROUTER_PROVIDER: ${AI_TRANSCRIPTION_OPENROUTER_PROVIDER:-deepinfra}
       RENDER_SERVICE_URL: ${RENDER_SERVICE_URL:-http://host.docker.internal:13101}
       OPENSHORTS_CODEX_AUTH_FILE: /app/output/.openshorts/codex-auth.json
       NO_PROXY: 192.168.50.2,db,renderer,host.docker.internal,localhost,127.0.0.1
@@ -70,7 +71,7 @@ services:
       - VITE_AI_BASE_URL=https://openrouter.ai/api/v1
       - VITE_AI_MODEL=openai/gpt-4o-mini
       - VITE_AI_ANALYZE_MODEL=openai/gpt-4o-mini
-      - VITE_AI_TRANSCRIPTION_MODEL=openai/whisper-large-v3
+      - VITE_AI_TRANSCRIPTION_MODEL=openai/whisper-large-v3-turbo
       - VITE_BACKEND_PROXY_TARGET=http://backend:8000
       - VITE_RENDERER_PROXY_TARGET=http://host.docker.internal:13101
     restart: unless-stopped

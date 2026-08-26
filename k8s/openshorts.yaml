@@ -64,7 +64,8 @@ data:
   AI_ANALYZE_MODEL: openai/gpt-4o-mini
   AI_VISION_MODEL: openai/gpt-4o-mini
   AI_IMAGE_MODEL: ""
-  AI_TRANSCRIPTION_MODEL: openai/whisper-large-v3
+  AI_TRANSCRIPTION_MODEL: openai/whisper-large-v3-turbo
+  AI_TRANSCRIPTION_OPENROUTER_PROVIDER: deepinfra
   VITE_AI_PROVIDER: openrouter
   VITE_AI_BASE_URL: https://openrouter.ai/api/v1
   VITE_AI_QUALITY_PRESET: balanced
@@ -72,7 +73,7 @@ data:
   VITE_AI_ANALYZE_MODEL: openai/gpt-4o-mini
   VITE_AI_VISION_MODEL: openai/gpt-4o-mini
   VITE_AI_IMAGE_MODEL: ""
-  VITE_AI_TRANSCRIPTION_MODEL: openai/whisper-large-v3
+  VITE_AI_TRANSCRIPTION_MODEL: openai/whisper-large-v3-turbo
   VITE_BACKEND_PROXY_TARGET: http://openshorts-backend:8000
   VITE_RENDERER_PROXY_TARGET: http://openshorts-renderer:3100
   AWS_REGION: eu-west-3

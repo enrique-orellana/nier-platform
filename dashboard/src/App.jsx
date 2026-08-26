@@ -79,6 +79,14 @@ import {
 } from "./routing";
 import { buildProcessRequest } from "./lib/processRequest";
 import { activeClipRenderJobs } from "./lib/clipRenderJobs";
+import {
+  DEFAULT_CODEX_EFFORT,
+  DEFAULT_TRANSCRIPTION_LANGUAGE,
+  DEFAULT_TRANSCRIPTION_MODEL,
+  DEFAULT_TRANSCRIPTION_OPENROUTER_PROVIDER,
+  defaultAiModelForProvider,
+  defaultReasoningEffortForProvider,
+} from "./lib/aiDefaults";
 
 // Enhanced "Encryption" using XOR + Base64 with a Salt
 // This is better than plain Base64 but still client-side.
@@ -228,7 +236,7 @@ const SESSION_MAX_AGE = 3600000; // 1 hour (matches server job retention)
 const GEMINI_TEXT_MODEL = "gemini-2.5-flash";
 const GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview";
 const OPENROUTER_DEFAULT_MODEL = "openai/gpt-4o-mini";
-const OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL = "openai/whisper-large-v3";
+const OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL = DEFAULT_TRANSCRIPTION_MODEL;
 const normalizeQualityPreset = (value) => {
   const preset = (value || "").trim().toLowerCase();
   if (preset === "fast") return "lite";
@@ -272,18 +280,17 @@ const pollJob = async (jobId) => {
 };
 
 function App() {
+  const initialAiProvider =
+    localStorage.getItem("ai_provider_v1") ||
+    import.meta.env.VITE_AI_PROVIDER ||
+    "gemini";
   const [apiKey, setApiKey] = useState(
     () =>
       localStorage.getItem("ai_api_key_v1") ||
       localStorage.getItem("gemini_key") ||
       "",
   );
-  const [aiProvider, setAiProvider] = useState(
-    () =>
-      localStorage.getItem("ai_provider_v1") ||
-      import.meta.env.VITE_AI_PROVIDER ||
-      "gemini",
-  );
+  const [aiProvider, setAiProvider] = useState(() => initialAiProvider);
   const [aiBaseUrl, setAiBaseUrl] = useState(
     () =>
       localStorage.getItem("ai_base_url_v1") ||
@@ -301,19 +308,19 @@ function App() {
     () =>
       localStorage.getItem("ai_text_model_v1") ||
       import.meta.env.VITE_AI_MODEL ||
-      "auto",
+      defaultAiModelForProvider(initialAiProvider),
   );
   const [aiAnalyzeModel, setAiAnalyzeModel] = useState(
     () =>
       localStorage.getItem("ai_analyze_model_v1") ||
       import.meta.env.VITE_AI_ANALYZE_MODEL ||
-      "auto",
+      defaultAiModelForProvider(initialAiProvider),
   );
   const [aiVisionModel, setAiVisionModel] = useState(
     () =>
       localStorage.getItem("ai_vision_model_v1") ||
       import.meta.env.VITE_AI_VISION_MODEL ||
-      "auto",
+      defaultAiModelForProvider(initialAiProvider),
   );
   const [aiImageModel, setAiImageModel] = useState(
     () =>
@@ -322,13 +329,19 @@ function App() {
       "auto",
   );
   const [aiTextEffort, setAiTextEffort] = useState(
-    () => localStorage.getItem("ai_text_effort_v1") || "auto",
+    () =>
+      localStorage.getItem("ai_text_effort_v1") ||
+      defaultReasoningEffortForProvider(initialAiProvider),
   );
   const [aiAnalyzeEffort, setAiAnalyzeEffort] = useState(
-    () => localStorage.getItem("ai_analyze_effort_v1") || "auto",
+    () =>
+      localStorage.getItem("ai_analyze_effort_v1") ||
+      defaultReasoningEffortForProvider(initialAiProvider),
   );
   const [aiVisionEffort, setAiVisionEffort] = useState(
-    () => localStorage.getItem("ai_vision_effort_v1") || "auto",
+    () =>
+      localStorage.getItem("ai_vision_effort_v1") ||
+      defaultReasoningEffortForProvider(initialAiProvider),
   );
   const [transcriptionModel, setTranscriptionModel] = useState(
     () =>
@@ -336,7 +349,9 @@ function App() {
       OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL,
   );
   const [transcriptionLanguage, setTranscriptionLanguage] = useState(
-    () => localStorage.getItem("ai_transcription_language_v1") || "auto",
+    () =>
+      localStorage.getItem("ai_transcription_language_v1") ||
+      DEFAULT_TRANSCRIPTION_LANGUAGE,
   );
   const handleTranscriptionLanguageChange = (nextLanguage) => {
     const normalizedLanguage = nextLanguage || "auto";
@@ -346,7 +361,8 @@ function App() {
   const [transcriptionOpenRouterProvider, setTranscriptionOpenRouterProvider] =
     useState(
       () =>
-        localStorage.getItem("ai_transcription_openrouter_provider_v1") || "",
+        localStorage.getItem("ai_transcription_openrouter_provider_v1") ||
+        DEFAULT_TRANSCRIPTION_OPENROUTER_PROVIDER,
     );
   // Social API State - Load encrypted or plain
   const [uploadPostKey, setUploadPostKey] = useState(() => {
@@ -905,12 +921,12 @@ function App() {
 
     if (aiProvider === "openai-codex") {
       if (previousProvider !== "openai-codex") {
-        setAiTextModel("auto");
-        setAiAnalyzeModel("auto");
-        setAiVisionModel("auto");
-        setAiTextEffort("auto");
-        setAiAnalyzeEffort("auto");
-        setAiVisionEffort("auto");
+        setAiTextModel(defaultAiModelForProvider("openai-codex"));
+        setAiAnalyzeModel(defaultAiModelForProvider("openai-codex"));
+        setAiVisionModel(defaultAiModelForProvider("openai-codex"));
+        setAiTextEffort(DEFAULT_CODEX_EFFORT);
+        setAiAnalyzeEffort(DEFAULT_CODEX_EFFORT);
+        setAiVisionEffort(DEFAULT_CODEX_EFFORT);
       }
       setAiImageModel("");
       return;

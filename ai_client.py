@@ -22,13 +22,14 @@ GEMINI_TEXT_MODEL = "gemini-2.5-flash"
 GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_DEFAULT_MODEL = "openai/gpt-4o-mini"
-OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL = "openai/whisper-large-v3"
+OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL = "openai/whisper-large-v3-turbo"
+OPENROUTER_DEFAULT_TRANSCRIPTION_PROVIDER = "deepinfra"
 OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS = 3
 OPENROUTER_TRANSCRIPTION_RETRY_BACKOFF_SECONDS = 1.0
 CODEX_STREAM_MAX_ATTEMPTS = 3
 CODEX_STREAM_RETRY_BACKOFF_SECONDS = 0.5
 CODEX_MAX_TIMEOUT_SECONDS = 180.0
-CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.4")
+CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.6-luna")
 CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
 AUTO_MODEL_VALUES = {"", "auto", "default"}
 CODEX_DEFAULT_CLIENT_VERSION = "0.144.1"
@@ -54,7 +55,7 @@ class AIConfig:
     analyze_reasoning_effort: str = ""
     vision_reasoning_effort: str = ""
     transcription_model: str = OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL
-    transcription_openrouter_provider: str = ""
+    transcription_openrouter_provider: str = OPENROUTER_DEFAULT_TRANSCRIPTION_PROVIDER
     transcription_language: str = "auto"
 
     def normalized_provider(self) -> str:
@@ -214,7 +215,7 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         source,
         "X-AI-Transcription-OpenRouter-Provider",
         "AI_TRANSCRIPTION_OPENROUTER_PROVIDER",
-        default="",
+        default=OPENROUTER_DEFAULT_TRANSCRIPTION_PROVIDER,
     )
     transcription_language = _pick(
         source,

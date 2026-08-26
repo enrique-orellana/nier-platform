@@ -20,6 +20,14 @@ describe("local editor AI helpers", () => {
     });
   });
 
+  it("uses the default remote transcription preset", () => {
+    expect(getLocalAiHeaders()).toMatchObject({
+      "X-AI-Transcription-Model": "openai/whisper-large-v3-turbo",
+      "X-AI-Transcription-Language": "auto",
+      "X-AI-Transcription-OpenRouter-Provider": "deepinfra",
+    });
+  });
+
   it("does not forward a saved local endpoint for OpenRouter", () => {
     localStorage.setItem("ai_provider_v1", "openrouter");
     localStorage.setItem("ai_base_url_v1", "http://host.docker.internal:1234");
