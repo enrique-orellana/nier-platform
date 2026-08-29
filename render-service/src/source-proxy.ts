@@ -7,6 +7,8 @@ export interface RangeProxyResult {
   videoUrl: string;
   videoStartSeconds: number;
   proxyPath?: string;
+  standardBackgroundVideoUrl?: string;
+  standardBackgroundProxyPath?: string;
 }
 
 interface RangeProxyOptions {
@@ -16,6 +18,7 @@ interface RangeProxyOptions {
   jobId: string;
   startSeconds: number;
   durationSeconds: number;
+  includeStandardBackground?: boolean;
 }
 
 export function rangeProxyCacheName(
@@ -41,6 +44,37 @@ export function buildRangeProxyArgs(
     "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
     "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "192k", "-shortest",
     "-movflags", "+faststart", proxyPath,
+  ];
+}
+
+export function standardBackgroundProxyCacheName(
+  sourcePath: string,
+  startSeconds: number,
+  durationSeconds: number,
+  sourceSize: number,
+  sourceMtimeMs: number,
+): string {
+  return rangeProxyCacheName(
+    sourcePath,
+    startSeconds,
+    durationSeconds,
+    sourceSize,
+    sourceMtimeMs,
+  ).replace(/\.mp4$/i, "-bg.mp4");
+}
+
+export function buildStandardBackgroundProxyArgs(
+  sourcePath: string,
+  proxyPath: string,
+  startSeconds: number,
+  durationSeconds: number,
+): string[] {
+  return [
+    "-y", "-ss", String(startSeconds), "-i", sourcePath, "-t", String(durationSeconds),
+    "-map", "0:v:0",
+    "-vf", "scale=960:-2:flags=fast_bilinear,boxblur=luma_radius=12:luma_power=1",
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+    "-an", "-movflags", "+faststart", proxyPath,
   ];
 }
 
@@ -90,10 +124,34 @@ function runFfmpeg(args: string[]): Promise<void> {
   });
 }
 
+async function ensureCachedProxy(cachePath: string, args: string[]): Promise<void> {
+  if (fs.existsSync(cachePath) && fs.statSync(cachePath).size > 0) return;
+
+  const temporaryPath = rangeProxyTemporaryPath(
+    cachePath,
+    process.pid,
+    Date.now(),
+  );
+  try {
+    await runFfmpeg(args.slice(0, -1).concat(temporaryPath));
+    fs.renameSync(temporaryPath, cachePath);
+  } finally {
+    fs.rmSync(temporaryPath, { force: true });
+  }
+}
+
 const inFlightProxies = new Map<string, Promise<RangeProxyResult>>();
 
 export function prepareRangeProxy(options: RangeProxyOptions): Promise<RangeProxyResult> {
-  const { videoUrl, outputDir, serverPort, jobId, startSeconds, durationSeconds } = options;
+  const {
+    videoUrl,
+    outputDir,
+    serverPort,
+    jobId,
+    startSeconds,
+    durationSeconds,
+    includeStandardBackground = false,
+  } = options;
   if (!Number.isFinite(startSeconds) || startSeconds < 0 || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     return Promise.resolve({ videoUrl, videoStartSeconds: Math.max(0, startSeconds || 0) });
   }
@@ -101,34 +159,70 @@ export function prepareRangeProxy(options: RangeProxyOptions): Promise<RangeProx
   if (!sourcePath || !fs.existsSync(sourcePath)) {
     return Promise.resolve({ videoUrl, videoStartSeconds: startSeconds });
   }
-  if (startSeconds === 0 && isGeneratedClipPath(sourcePath)) {
+  const sourceIsGeneratedClip = startSeconds === 0 && isGeneratedClipPath(sourcePath);
+  if (sourceIsGeneratedClip && !includeStandardBackground) {
     return Promise.resolve({ videoUrl, videoStartSeconds: 0 });
   }
   const sourceStat = fs.statSync(sourcePath);
   // Keep range proxies outside the job directory so identical source ranges
   // can be reused by later renders and by different jobs.
   const cacheDir = path.join(outputDir, "render-cache");
-  const cachePath = path.join(cacheDir, rangeProxyCacheName(sourcePath, startSeconds, durationSeconds, sourceStat.size, sourceStat.mtimeMs));
-  const existing = inFlightProxies.get(cachePath);
+  const cachePath = path.join(
+    cacheDir,
+    rangeProxyCacheName(sourcePath, startSeconds, durationSeconds, sourceStat.size, sourceStat.mtimeMs),
+  );
+  const standardBackgroundPath = includeStandardBackground
+    ? path.join(
+        cacheDir,
+        standardBackgroundProxyCacheName(
+          sourcePath,
+          startSeconds,
+          durationSeconds,
+          sourceStat.size,
+          sourceStat.mtimeMs,
+        ),
+      )
+    : undefined;
+  const inFlightKey = standardBackgroundPath || cachePath;
+  const existing = inFlightProxies.get(inFlightKey);
   if (existing) return existing;
 
   const work = (async (): Promise<RangeProxyResult> => {
     fs.mkdirSync(cacheDir, { recursive: true });
-    if (!fs.existsSync(cachePath) || fs.statSync(cachePath).size === 0) {
-      const temporaryPath = rangeProxyTemporaryPath(
-        cachePath,
-        process.pid,
-        Date.now(),
+    const foregroundProxyPath = sourceIsGeneratedClip ? undefined : cachePath;
+    if (foregroundProxyPath) {
+      await ensureCachedProxy(
+        foregroundProxyPath,
+        buildRangeProxyArgs(sourcePath, foregroundProxyPath, startSeconds, durationSeconds),
       );
-      try {
-        await runFfmpeg(buildRangeProxyArgs(sourcePath, temporaryPath, startSeconds, durationSeconds));
-        fs.renameSync(temporaryPath, cachePath);
-      } finally {
-        fs.rmSync(temporaryPath, { force: true });
-      }
     }
-    return { videoUrl: proxyUrl(outputDir, cachePath, serverPort), videoStartSeconds: 0, proxyPath: cachePath };
+
+    if (standardBackgroundPath) {
+      const backgroundSourcePath = foregroundProxyPath || sourcePath;
+      const backgroundStartSeconds = foregroundProxyPath ? 0 : startSeconds;
+      await ensureCachedProxy(
+        standardBackgroundPath,
+        buildStandardBackgroundProxyArgs(
+          backgroundSourcePath,
+          standardBackgroundPath,
+          backgroundStartSeconds,
+          durationSeconds,
+        ),
+      );
+    }
+
+    return {
+      videoUrl: foregroundProxyPath
+        ? proxyUrl(outputDir, foregroundProxyPath, serverPort)
+        : videoUrl,
+      videoStartSeconds: foregroundProxyPath ? 0 : startSeconds,
+      proxyPath: foregroundProxyPath,
+      standardBackgroundVideoUrl: standardBackgroundPath
+        ? proxyUrl(outputDir, standardBackgroundPath, serverPort)
+        : undefined,
+      standardBackgroundProxyPath: standardBackgroundPath,
+    };
   })();
-  inFlightProxies.set(cachePath, work);
-  return work.finally(() => inFlightProxies.delete(cachePath));
+  inFlightProxies.set(inFlightKey, work);
+  return work.finally(() => inFlightProxies.delete(inFlightKey));
 }

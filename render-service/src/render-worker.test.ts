@@ -30,6 +30,7 @@ vi.mock("./source-proxy.js", () => ({
   prepareRangeProxy: vi.fn(async () => ({
     videoUrl: "http://renderer/output/source.mp4",
     videoStartSeconds: 0,
+    standardBackgroundVideoUrl: "http://renderer/output/render-cache/background.mp4",
   })),
 }));
 vi.mock("./progress.js", () => ({ shouldLogRenderProgress: vi.fn(() => false) }));
@@ -44,12 +45,14 @@ import {
   executeRender,
   setRenderBrowser,
 } from "./render-worker.js";
+import { prepareRangeProxy } from "./source-proxy.js";
 
 describe("executeRender browser lifecycle", () => {
   beforeEach(() => {
     renderJobs.clear();
     mocks.selectComposition.mockClear();
     mocks.renderMedia.mockClear();
+    vi.mocked(prepareRangeProxy).mockClear();
     delete process.env.RENDER_METRICS_URL;
     vi.unstubAllGlobals();
     setRenderBrowser(null);
@@ -134,5 +137,44 @@ describe("executeRender browser lifecycle", () => {
     expect(renderJobs.get("render-2")?.status).toBe("done");
     delete process.env.RENDER_METRICS_URL;
     vi.unstubAllGlobals();
+  });
+
+  it("prepares a cached Standard background only for layouts that contain Standard", async () => {
+    renderJobs.set("render-3", {
+      renderId: "render-3",
+      jobId: "job-3",
+      clipIndex: 0,
+      status: "queued",
+      progress: 0,
+    });
+
+    await executeRender({
+      renderId: "render-3",
+      jobId: "job-3",
+      clipIndex: 0,
+      props: {
+        videoUrl: "http://renderer/output/source.mp4",
+        durationInFrames: 30,
+        fps: 30,
+        width: 1080,
+        height: 1920,
+        layout: {
+          format: "streamer_stack",
+          segments: [{ id: "standard-1", format: "standard", startMs: 0, endMs: 1000 }],
+        },
+        versionId: "version-3",
+      } as never,
+    });
+
+    expect(prepareRangeProxy).toHaveBeenCalledWith(
+      expect.objectContaining({ includeStandardBackground: true }),
+    );
+    expect(mocks.selectComposition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inputProps: expect.objectContaining({
+          standardBackgroundVideoUrl: "http://renderer/output/render-cache/background.mp4",
+        }),
+      }),
+    );
   });
 });

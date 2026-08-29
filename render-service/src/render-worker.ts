@@ -108,6 +108,23 @@ function getRenderAcceleration(): Promise<RenderAcceleration> {
   return renderAccelerationPromise;
 }
 
+function layoutContainsStandardSegment(layout: unknown): boolean {
+  if (!layout || typeof layout !== "object") return false;
+  const candidate = layout as {
+    format?: unknown;
+    segments?: unknown;
+  };
+  if (candidate.format === "standard") return true;
+  return Array.isArray(candidate.segments)
+    && candidate.segments.some(
+      (segment) => (
+        segment
+        && typeof segment === "object"
+        && (segment as { format?: unknown }).format === "standard"
+      ),
+    );
+}
+
 /**
  * Executes a Remotion render in the background.
  * Updates the in-memory render job map with progress and final status.
@@ -197,10 +214,12 @@ export async function executeRender(params: RenderParams): Promise<void> {
         jobId,
         startSeconds: props.videoStartSeconds || 0,
         durationSeconds: props.durationInFrames / props.fps,
+        includeStandardBackground: layoutContainsStandardSegment(props.layout),
       }),
     );
     renderProps.videoUrl = sourceRange.videoUrl;
     renderProps.videoStartSeconds = sourceRange.videoStartSeconds;
+    renderProps.standardBackgroundVideoUrl = sourceRange.standardBackgroundVideoUrl;
 
     // Select the composition with the provided input props
     const composition = await measureStage("composition_select", async () => {

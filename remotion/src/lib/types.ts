@@ -131,6 +131,7 @@ export interface LayoutConfig {
 // --- Main composition props ---
 export interface ShortVideoProps {
   videoUrl: string;
+  standardBackgroundVideoUrl?: string;
   videoStartSeconds?: number;
   durationInFrames: number;
   fps: number;
@@ -256,6 +257,7 @@ export const layoutConfigSchema = z.object({
 
 export const shortVideoPropsSchema = z.object({
   videoUrl: z.string(),
+  standardBackgroundVideoUrl: z.string().optional(),
   videoStartSeconds: z.number().min(0).optional(),
   durationInFrames: z.number().int().positive(),
   fps: z.number().positive(),

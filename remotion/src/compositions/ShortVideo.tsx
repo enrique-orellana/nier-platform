@@ -153,9 +153,11 @@ const LayoutVideoLayer: React.FC<{
   layout?: LayoutConfig | null;
   outputWidth: number;
   outputHeight: number;
+  standardBackgroundVideoUrl?: string;
 }> = ({
   segment,
   videoUrl,
+  standardBackgroundVideoUrl,
   videoStartFrame,
   opacity,
   muted,
@@ -185,7 +187,7 @@ const LayoutVideoLayer: React.FC<{
     >
       {usesStandardLayout && isRendering && (
         <Video
-          src={videoUrl}
+          src={standardBackgroundVideoUrl || videoUrl}
           trimBefore={videoStartFrame}
           objectFit="cover"
           muted
@@ -194,7 +196,7 @@ const LayoutVideoLayer: React.FC<{
             inset: 0,
             width: "100%",
             height: "100%",
-            filter: "blur(24px)",
+            ...(standardBackgroundVideoUrl ? {} : { filter: "blur(24px)" }),
             transform: "scale(1.08)",
           }}
         />
@@ -245,6 +247,7 @@ const LayoutVideoLayer: React.FC<{
 export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
   const {
     videoUrl,
+    standardBackgroundVideoUrl,
     videoStartSeconds = 0,
     onAutoPlayError,
     fps = 30,
@@ -305,6 +308,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             key={`${segment.id}-${muted ? "previous" : "active"}`}
             segment={segment}
             videoUrl={videoUrl}
+            standardBackgroundVideoUrl={standardBackgroundVideoUrl}
             videoStartFrame={videoStartFrame}
             opacity={opacity}
             muted={muted}

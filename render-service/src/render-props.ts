@@ -1,5 +1,6 @@
 export interface RenderRequestProps {
   videoUrl: string;
+  standardBackgroundVideoUrl?: string;
   videoStartSeconds?: number;
   durationInFrames: number;
   fps: number;

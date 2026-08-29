@@ -8,9 +8,11 @@ const spawnMock = vi.hoisted(() => vi.fn());
 vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 import {
   buildRangeProxyArgs,
+  buildStandardBackgroundProxyArgs,
   prepareRangeProxy,
   rangeProxyCacheName,
   rangeProxyTemporaryPath,
+  standardBackgroundProxyCacheName,
 } from "./source-proxy.js";
 
 describe("range source proxy", () => {
@@ -63,6 +65,29 @@ describe("range source proxy", () => {
     }
   });
 
+  it("builds a silent low-resolution pre-blurred command for Standard backgrounds", () => {
+    expect(
+      buildStandardBackgroundProxyArgs("source.mp4", "background.mp4", 12.5, 8),
+    ).toEqual([
+      "-y", "-ss", "12.5", "-i", "source.mp4", "-t", "8",
+      "-map", "0:v:0",
+      "-vf", "scale=960:-2:flags=fast_bilinear,boxblur=luma_radius=12:luma_power=1",
+      "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+      "-an", "-movflags", "+faststart", "background.mp4",
+    ]);
+  });
+
+  it("uses a separate stable cache name for the Standard background", () => {
+    const foreground = rangeProxyCacheName("source.mp4", 12.5, 8, 1234, 5678);
+    const background = standardBackgroundProxyCacheName("source.mp4", 12.5, 8, 1234, 5678);
+
+    expect(background).toMatch(/^clip-[a-f0-9]{16}-bg\.mp4$/);
+    expect(background).not.toBe(foreground);
+    expect(background).toBe(
+      standardBackgroundProxyCacheName("source.mp4", 12.5, 8, 1234, 5678),
+    );
+  });
+
   it("shares a cached source range across render jobs", async () => {
     const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "source-proxy-shared-"));
     const sourcePath = path.join(outputDir, "uploads", "source.mp4");
@@ -91,6 +116,48 @@ describe("range source proxy", () => {
       expect(second).toEqual(first);
       expect(first.proxyPath).toContain(`${path.sep}render-cache${path.sep}`);
       expect(spawnMock).toHaveBeenCalledTimes(1);
+    } finally {
+      spawnMock.mockReset();
+      fs.rmSync(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it("caches a Standard background beside the foreground proxy when requested", async () => {
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "source-proxy-background-"));
+    const sourcePath = path.join(outputDir, "uploads", "source.mp4");
+    fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+    fs.writeFileSync(sourcePath, "source");
+    spawnMock.mockImplementation((_command, args: string[]) => {
+      const child = new EventEmitter() as EventEmitter & { stderr: EventEmitter };
+      child.stderr = new EventEmitter();
+      fs.writeFileSync(args.at(-1)!, "proxy");
+      queueMicrotask(() => child.emit("close", 0));
+      return child;
+    });
+
+    try {
+      const result = await prepareRangeProxy({
+        videoUrl: "http://localhost:3100/output/uploads/source.mp4",
+        outputDir,
+        serverPort: 3100,
+        jobId: "job-1",
+        startSeconds: 2,
+        durationSeconds: 4,
+        includeStandardBackground: true,
+      });
+
+      expect(result.proxyPath).toMatch(/render-cache[\\/]clip-[a-f0-9]{16}\.mp4$/);
+      expect(result.standardBackgroundProxyPath).toMatch(
+        /render-cache[\\/]clip-[a-f0-9]{16}-bg\.mp4$/,
+      );
+      expect(result.standardBackgroundVideoUrl).toMatch(
+        /\/output\/render-cache\/clip-[a-f0-9]{16}-bg\.mp4$/,
+      );
+      expect(spawnMock).toHaveBeenCalledTimes(2);
+      expect(spawnMock.mock.calls[1][1]).toContain("-an");
+      expect(spawnMock.mock.calls[1][1]).toContain(
+        "scale=960:-2:flags=fast_bilinear,boxblur=luma_radius=12:luma_power=1",
+      );
     } finally {
       spawnMock.mockReset();
       fs.rmSync(outputDir, { recursive: true, force: true });
