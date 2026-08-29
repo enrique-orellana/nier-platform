@@ -253,13 +253,13 @@ export default function GameplayCropEditor({
       className="absolute inset-0 z-30 touch-none"
       aria-label="Gameplay framing editor"
     >
-      <div className="absolute right-2 top-2 z-20 flex items-center gap-1 rounded-md border border-white/20 bg-black/75 p-1 text-[10px] text-white shadow-lg">
-        <span className="px-1 text-zinc-300">Drag to frame</span>
+      <div className="absolute right-4 top-4 z-20 flex items-center gap-3 rounded-xl border-2 border-white/20 bg-black/80 p-3 text-[36px] leading-none text-white shadow-2xl">
+        <span className="px-2 text-zinc-300">Drag to frame</span>
         <button
           type="button"
           aria-label="Reset gameplay framing"
           onClick={reset}
-          className="rounded px-1.5 py-1 text-zinc-300 hover:bg-white/15 hover:text-white"
+          className="min-h-[96px] min-w-[132px] rounded-lg px-4 py-3 text-[36px] text-zinc-300 hover:bg-white/15 hover:text-white"
         >
           Reset
         </button>
@@ -267,7 +267,7 @@ export default function GameplayCropEditor({
           type="button"
           aria-label="Done editing gameplay framing"
           onClick={onDone}
-          className="rounded bg-cyan-300 px-1.5 py-1 font-semibold text-slate-950 hover:bg-cyan-200"
+          className="min-h-[96px] min-w-[132px] rounded-lg bg-cyan-300 px-4 py-3 text-[36px] font-semibold text-slate-950 hover:bg-cyan-200"
         >
           Done
         </button>
@@ -281,7 +281,7 @@ export default function GameplayCropEditor({
         className="absolute cursor-move border-2 border-cyan-200 bg-cyan-200/10 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
         style={frameStyle(crop, region)}
       >
-        <span className="pointer-events-none absolute left-1 top-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-semibold text-cyan-100">
+        <span className="pointer-events-none absolute left-3 top-3 rounded-lg bg-black/60 px-2 py-1 text-[28px] font-semibold leading-none text-cyan-100">
           {framing.zoom.toFixed(2)}×
         </span>
         {Object.keys(handleLabels).map((handle) => (
@@ -290,7 +290,7 @@ export default function GameplayCropEditor({
             type="button"
             aria-label={`Resize gameplay crop ${handleLabels[handle]}`}
             onPointerDown={(event) => beginInteraction(event, "resize", handle)}
-            className={`absolute h-3 w-3 rounded-sm border border-white bg-cyan-300 shadow ${handle.includes("n") ? "top-[-7px]" : "bottom-[-7px]"} ${handle.includes("w") ? "left-[-7px]" : "right-[-7px]"}`}
+            className={`absolute h-10 w-10 rounded-md border-2 border-white bg-cyan-300 shadow-lg ${handle.includes("n") ? "top-[-20px]" : "bottom-[-20px]"} ${handle.includes("w") ? "left-[-20px]" : "right-[-20px]"}`}
           />
         ))}
       </div>

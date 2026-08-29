@@ -85,4 +85,21 @@ describe("GameplayCropEditor", () => {
     expect(onReset).toHaveBeenCalledTimes(1);
     expect(onDone).toHaveBeenCalledTimes(1);
   });
+
+  it("renders readable controls at the scaled preview size", () => {
+    render(
+      <GameplayCropEditor
+        region={{ x: 0, y: 0, width: 1, height: 1 }}
+        sourceAspect={16 / 9}
+        panelAspect={9 / 16}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Reset gameplay framing" }),
+    ).toHaveClass("min-h-[96px]", "min-w-[132px]", "text-[36px]");
+    expect(
+      screen.getByRole("button", { name: "Resize gameplay crop northwest" }),
+    ).toHaveClass("h-10", "w-10");
+  });
 });
