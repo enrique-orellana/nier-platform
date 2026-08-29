@@ -91,7 +91,7 @@ export const Subtitles: React.FC<SubtitlesProps> = ({
     : groupCaptionsIntoBlocks(normalizedConfig.captions);
 
   return (
-    <AbsoluteFill>
+    <AbsoluteFill style={{ pointerEvents: "none" }}>
       <style>{subtitleFontFace}</style>
       {blocks.map((block, i) => {
         const { startFrame, durationFrames } = getSubtitleFrameRange(

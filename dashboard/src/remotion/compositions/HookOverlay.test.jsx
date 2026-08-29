@@ -3,7 +3,11 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("remotion", () => ({
-  AbsoluteFill: ({ children }) => <div>{children}</div>,
+  AbsoluteFill: ({ children, ...props }) => (
+    <div data-testid="hook-overlay-root" {...props}>
+      {children}
+    </div>
+  ),
   Sequence: ({ children }) => <div>{children}</div>,
   interpolate: vi.fn(),
   spring: vi.fn(),
@@ -16,6 +20,24 @@ import { HookOverlay } from "./HookOverlay";
 
 describe("HookOverlay visual contract", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("keeps the full-screen hook layer from intercepting editor input", () => {
+    render(
+      <HookOverlay
+        config={{
+          text: "Watch this",
+          position: "top",
+          size: "M",
+          entranceAnimation: "none",
+          displayDurationSec: 2,
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("hook-overlay-root")).toHaveStyle({
+      pointerEvents: "none",
+    });
+  });
 
   it("renders the same editable hook appearance used by the local preview", () => {
     render(

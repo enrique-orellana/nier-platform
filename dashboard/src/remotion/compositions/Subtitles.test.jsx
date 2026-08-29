@@ -1,5 +1,21 @@
-import { describe, expect, it } from "vitest";
+import React from "react";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("remotion", () => ({
+  AbsoluteFill: ({ children, ...props }) => (
+    <div data-testid="subtitle-overlay-root" {...props}>
+      {children}
+    </div>
+  ),
+  Sequence: ({ children }) => <>{children}</>,
+  staticFile: (file) => `/${file}`,
+  useCurrentFrame: () => 0,
+  useVideoConfig: () => ({ fps: 30 }),
+}));
+
 import {
+  Subtitles,
   getSubtitleFrameRange,
   getSubtitleTimeMs,
   getSubtitleWordsForDisplay,
@@ -8,6 +24,14 @@ import {
 } from "./Subtitles";
 
 describe("subtitle rendering defaults", () => {
+  it("keeps the full-screen subtitle layer from intercepting editor input", () => {
+    render(<Subtitles config={{ captions: [] }} />);
+
+    expect(screen.getByTestId("subtitle-overlay-root")).toHaveStyle({
+      pointerEvents: "none",
+    });
+  });
+
   it("fills missing style data before rendering legacy subtitle configs", () => {
     const normalized = normalizeSubtitleConfig({
       captions: [{ text: "Ciao", startMs: 0, endMs: 500 }],

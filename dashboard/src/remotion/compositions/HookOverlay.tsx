@@ -36,7 +36,7 @@ export const HookOverlay: React.FC<HookOverlayProps> = ({ config }) => {
   );
 
   return (
-    <AbsoluteFill>
+    <AbsoluteFill style={{ pointerEvents: "none" }}>
       <style>{notoSerifFontFace}</style>
       <Sequence
         from={fromFrames}
