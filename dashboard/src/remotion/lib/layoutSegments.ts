@@ -49,7 +49,10 @@ const normalizeGameplayZoom = (zoom: unknown) => {
 const segmentFraming = (
   segment: LayoutSegmentConfig,
 ): Pick<ResolvedLayoutSegment, "gameplay_focus" | "gameplay_zoom"> => {
-  const framing: Pick<ResolvedLayoutSegment, "gameplay_focus" | "gameplay_zoom"> = {};
+  const framing: Pick<
+    ResolvedLayoutSegment,
+    "gameplay_focus" | "gameplay_zoom"
+  > = {};
   const focus = normalizeGameplayFocus(segment.gameplay_focus);
   const zoom = normalizeGameplayZoom(segment.gameplay_zoom);
   if (focus) framing.gameplay_focus = focus;

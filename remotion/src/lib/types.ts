@@ -115,6 +115,7 @@ export interface LayoutSegmentConfig {
 }
 
 export interface LayoutConfig {
+  [key: string]: unknown;
   format: LayoutFormat;
   facecam_size?: "small" | "medium" | "large";
   source_width?: number;

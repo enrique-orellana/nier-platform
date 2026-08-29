@@ -15,6 +15,10 @@ import { useRenewableMediaUrl } from "../lib/videoUrls";
  * @param {object|null} props.effects - EffectsConfig or null
  * @param {number} [props.playbackRate] - Playback speed multiplier
  * @param {(mediaTimeMs: number|null) => void} [props.onMediaTimeChange] - Native video clock callback
+ * @param {boolean} [props.gameplayCropEditing] - Enables the preview-only Streamer framing overlay
+ * @param {(next: {focus: {x: number, y: number}, zoom: number}) => void} [props.onGameplayCropChange] - Persists a completed framing drag
+ * @param {() => void} [props.onGameplayCropReset] - Clears the selected segment framing override
+ * @param {() => void} [props.onGameplayCropDone] - Closes the framing overlay
  * @param {string} [props.className] - Additional CSS classes
  */
 function RemotionPreview({
@@ -37,6 +41,10 @@ function RemotionPreview({
   controls = true,
   onFrameChange,
   onMediaTimeChange,
+  gameplayCropEditing = false,
+  onGameplayCropChange,
+  onGameplayCropReset,
+  onGameplayCropDone,
   onPlayingChange,
   onPlayerReady,
   className = "",
@@ -162,6 +170,10 @@ function RemotionPreview({
       layout,
       hook,
       effects,
+      gameplayCropEditing,
+      onGameplayCropChange,
+      onGameplayCropReset,
+      onGameplayCropDone,
       onMediaTimeChange: onMediaTimeChange ? handleMediaTimeChange : undefined,
     }),
     [
@@ -178,6 +190,10 @@ function RemotionPreview({
       layout,
       hook,
       effects,
+      gameplayCropEditing,
+      onGameplayCropChange,
+      onGameplayCropReset,
+      onGameplayCropDone,
       handleMediaTimeChange,
       onMediaTimeChange,
     ],

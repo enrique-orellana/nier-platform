@@ -423,6 +423,8 @@ describe("designcomboAdapter", () => {
         format: "streamer_stack",
         transition: "crossfade",
         transitionDurationMs: 250,
+        gameplay_focus: { x: 0.82, y: 0.34 },
+        gameplay_zoom: 1.45,
       },
     ];
     const props = manifestToRenderProps({

@@ -52,6 +52,10 @@ vi.mock("../RemotionPreview", () => ({
     layout = null,
     onPlayerReady,
     onMediaTimeChange,
+    gameplayCropEditing = false,
+    onGameplayCropChange,
+    onGameplayCropReset,
+    onGameplayCropDone,
   }) {
     remotionPreviewLayoutMock(layout);
     useEffect(() => {
@@ -71,10 +75,32 @@ vi.mock("../RemotionPreview", () => ({
         data-subtitle-font-family={subtitles?.style?.fontFamily || ""}
         data-subtitle-font-size={subtitles?.style?.fontSize || ""}
         data-subtitle-border-width={subtitles?.style?.borderWidth || ""}
+        data-gameplay-crop-editing={String(gameplayCropEditing)}
       >
         <button type="button" onClick={() => onMediaTimeChange?.(2000)}>
           Emit native media time
         </button>
+        {gameplayCropEditing && (
+          <>
+            <button
+              type="button"
+              onClick={() =>
+                onGameplayCropChange?.({
+                  focus: { x: 0.8, y: 0.35 },
+                  zoom: 1.4,
+                })
+              }
+            >
+              Apply gameplay framing
+            </button>
+            <button type="button" onClick={onGameplayCropReset}>
+              Reset gameplay framing
+            </button>
+            <button type="button" onClick={onGameplayCropDone}>
+              Done editing gameplay framing
+            </button>
+          </>
+        )}
       </div>
     );
   },
@@ -360,6 +386,77 @@ describe("LocalEditorTab", () => {
         name: "Crossfade transition",
       }),
     ).toBeDisabled();
+  });
+
+  it("frames only the selected Streamer segment and commits once on Done", async () => {
+    const onStateChange = vi.fn();
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        remotionPreviewProps={{
+          videoUrl: "/videos/project.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+          layout: {
+            format: "streamer_stack",
+            source_width: 1920,
+            source_height: 1080,
+            gameplay_region: { x: 0, y: 0, width: 1, height: 1 },
+          },
+        }}
+        initialEditorState={{
+          ...controlledEditorState,
+          layoutSegments: [
+            {
+              id: "streamer-1",
+              startMs: 0,
+              endMs: 5000,
+              format: "streamer_stack",
+              transition: "cut",
+            },
+            {
+              id: "streamer-2",
+              startMs: 5000,
+              endMs: 10000,
+              format: "streamer_stack",
+              transition: "cut",
+            },
+          ],
+        }}
+        initialStateKey="gameplay-framing-test"
+        onStateChange={onStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByTestId("local-editor-layout-segment")[1]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit gameplay framing" }),
+    );
+    expect(screen.getByTestId("local-editor-remotion-preview")).toHaveAttribute(
+      "data-gameplay-crop-editing",
+      "true",
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply gameplay framing" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Done editing gameplay framing" }),
+    );
+
+    await waitFor(() => {
+      const nextState = onStateChange.mock.calls.at(-1)?.[0];
+      expect(nextState?.layoutSegments?.[0]).not.toHaveProperty(
+        "gameplay_focus",
+      );
+      expect(nextState?.layoutSegments?.[1]).toEqual(
+        expect.objectContaining({
+          gameplay_focus: { x: 0.8, y: 0.35 },
+          gameplay_zoom: 1.4,
+        }),
+      );
+    });
   });
 
   it("hides undo and redo actions when editing a project clip", async () => {

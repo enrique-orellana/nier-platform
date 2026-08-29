@@ -219,6 +219,34 @@ describe("RemotionPreview", () => {
     );
   });
 
+  it("forwards preview-only gameplay framing controls to the composition", () => {
+    playerPropsMock.mockClear();
+    const onChange = vi.fn();
+    const onReset = vi.fn();
+    const onDone = vi.fn();
+
+    render(
+      <RemotionPreview
+        videoUrl="/master.mp4"
+        gameplayCropEditing
+        onGameplayCropChange={onChange}
+        onGameplayCropReset={onReset}
+        onGameplayCropDone={onDone}
+      />,
+    );
+
+    expect(playerPropsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        inputProps: expect.objectContaining({
+          gameplayCropEditing: true,
+          onGameplayCropChange: onChange,
+          onGameplayCropReset: onReset,
+          onGameplayCropDone: onDone,
+        }),
+      }),
+    );
+  });
+
   it("does not render an audio recovery overlay", () => {
     playerPropsMock.mockClear();
     render(<RemotionPreview videoUrl="/video.mp4" />);

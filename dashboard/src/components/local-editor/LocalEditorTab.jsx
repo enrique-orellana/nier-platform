@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Bookmark,
   Blend,
+  Crop,
   Download,
   PanelLeftClose,
   PanelRightClose,
@@ -83,6 +84,7 @@ import {
 } from "../../editor/timelineModel";
 import {
   createLayoutSegments,
+  clearLayoutSegmentFraming,
   normalizeLayoutSegments,
   splitLayoutSegment,
   updateLayoutSegment,
@@ -223,6 +225,9 @@ export default function LocalEditorTab({
   });
   const [selected, setSelected] = useState(null);
   const [selectedLayoutSegmentId, setSelectedLayoutSegmentId] = useState(null);
+  const [gameplayFramingSegmentId, setGameplayFramingSegmentId] =
+    useState(null);
+  const [gameplayFramingDraft, setGameplayFramingDraft] = useState(null);
   const [selectedMarkerId, setSelectedMarkerId] = useState(null);
   const [editingSubtitle, setEditingSubtitle] = useState(null);
   const [pendingSubtitle, setPendingSubtitle] = useState(null);
@@ -365,13 +370,22 @@ export default function LocalEditorTab({
       ),
     [durationMs, layoutSegments],
   );
-  const previewLayout = useMemo(
-    () => ({
+  const previewLayout = useMemo(() => {
+    const segments = effectiveLayoutSegments.map((segment) =>
+      segment.id === gameplayFramingSegmentId && gameplayFramingDraft
+        ? { ...segment, ...gameplayFramingDraft }
+        : segment,
+    );
+    return {
       ...(remotionPreviewProps?.layout || {}),
-      segments: effectiveLayoutSegments,
-    }),
-    [effectiveLayoutSegments, remotionPreviewProps?.layout],
-  );
+      segments,
+    };
+  }, [
+    effectiveLayoutSegments,
+    gameplayFramingDraft,
+    gameplayFramingSegmentId,
+    remotionPreviewProps?.layout,
+  ]);
   const selectedLayoutSegment = effectiveLayoutSegments.find(
     (segment) => segment.id === selectedLayoutSegmentId,
   );
@@ -804,17 +818,91 @@ export default function LocalEditorTab({
   };
 
   const handleTimelineSelect = (cue, type, { openEditor = true } = {}) => {
+    finishGameplayFraming();
     setSelected({ id: cue.id, type });
     setSelectedLayoutSegmentId(null);
     if (type === "subtitle" && openEditor) setEditingSubtitle(cue);
   };
   const handleLayoutSelect = (segment) => {
+    if (gameplayFramingSegmentId && gameplayFramingSegmentId !== segment?.id)
+      finishGameplayFraming();
     setSelectedLayoutSegmentId(segment?.id || null);
     setSelectedMarkerId(null);
     setActiveFeature("details");
   };
+  const beginGameplayFraming = () => {
+    if (
+      !selectedLayoutSegment ||
+      selectedLayoutSegment.format !== "streamer_stack" ||
+      !remotionPreviewProps
+    )
+      return;
+    setIsPlaying(false);
+    const frameStepMs = 1000 / Math.max(1, remotionFps);
+    const transitionPreviewOffsetMs =
+      selectedLayoutSegment.transition === "crossfade"
+        ? selectedLayoutSegment.transitionDurationMs || 0
+        : frameStepMs;
+    setPlayheadMs(
+      Math.min(
+        Math.max(
+          selectedLayoutSegment.startMs,
+          selectedLayoutSegment.endMs - frameStepMs,
+        ),
+        selectedLayoutSegment.startMs + transitionPreviewOffsetMs,
+      ),
+    );
+    setGameplayFramingSegmentId(selectedLayoutSegment.id);
+    setGameplayFramingDraft(null);
+  };
+  const handleGameplayCropChange = (next) => {
+    if (!gameplayFramingSegmentId || !next) return;
+    setGameplayFramingDraft({
+      gameplay_focus: {
+        x: Number(next.focus?.x),
+        y: Number(next.focus?.y),
+      },
+      gameplay_zoom: Number(next.zoom),
+    });
+  };
+  const finishGameplayFraming = () => {
+    const segmentId = gameplayFramingSegmentId;
+    const draft = gameplayFramingDraft;
+    if (segmentId && draft) {
+      commitEdit((current) => ({
+        ...current,
+        layoutSegments: updateLayoutSegment(
+          Array.isArray(current.layoutSegments) && current.layoutSegments.length
+            ? current.layoutSegments
+            : createLayoutSegments(durationMs),
+          segmentId,
+          draft,
+        ),
+      }));
+    }
+    setGameplayFramingSegmentId(null);
+    setGameplayFramingDraft(null);
+  };
+  const resetGameplayFraming = () => {
+    if (!gameplayFramingSegmentId) return;
+    commitEdit((current) => ({
+      ...current,
+      layoutSegments: clearLayoutSegmentFraming(
+        Array.isArray(current.layoutSegments) && current.layoutSegments.length
+          ? current.layoutSegments
+          : createLayoutSegments(durationMs),
+        gameplayFramingSegmentId,
+      ),
+    }));
+    setGameplayFramingDraft(null);
+  };
+  const handleLayoutFormatChange = (format) => {
+    finishGameplayFraming();
+    updateSelectedLayout({ format });
+  };
   const splitLayoutAtPlayhead = () => {
     if (!selectedLayoutSegmentId) return;
+    finishGameplayFraming();
     const replacement = splitLayoutSegment(
       effectiveLayoutSegments,
       selectedLayoutSegmentId,
@@ -2103,6 +2191,15 @@ export default function LocalEditorTab({
                       onMediaTimeChange={handleRemotionMediaTimeChange}
                       onPlayingChange={setIsPlaying}
                       onPlayerReady={handleRemotionPlayerReady}
+                      gameplayCropEditing={Boolean(
+                        gameplayFramingSegmentId &&
+                        selectedLayoutSegment?.id ===
+                          gameplayFramingSegmentId &&
+                        selectedLayoutSegment.format === "streamer_stack",
+                      )}
+                      onGameplayCropChange={handleGameplayCropChange}
+                      onGameplayCropReset={resetGameplayFraming}
+                      onGameplayCropDone={finishGameplayFraming}
                     />
                   ) : (
                     <>
@@ -2565,9 +2662,7 @@ export default function LocalEditorTab({
                         aria-pressed={
                           selectedLayoutSegment.format === "standard"
                         }
-                        onClick={() =>
-                          updateSelectedLayout({ format: "standard" })
-                        }
+                        onClick={() => handleLayoutFormatChange("standard")}
                         disabled={busy}
                         className={`inline-flex h-6 items-center rounded px-1.5 transition-colors hover:bg-white/10 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.format === "standard" ? "bg-cyan-300/20 text-cyan-100" : "text-zinc-400"}`}
                       >
@@ -2583,13 +2678,26 @@ export default function LocalEditorTab({
                           selectedLayoutSegment.format === "streamer_stack"
                         }
                         onClick={() =>
-                          updateSelectedLayout({ format: "streamer_stack" })
+                          handleLayoutFormatChange("streamer_stack")
                         }
                         disabled={busy}
                         className={`inline-flex h-6 items-center rounded px-1.5 transition-colors hover:bg-white/10 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.format === "streamer_stack" ? "bg-cyan-300/20 text-cyan-100" : "text-zinc-400"}`}
                       >
                         Streamer
                       </button>
+                      {selectedLayoutSegment.format === "streamer_stack" && (
+                        <button
+                          type="button"
+                          aria-label="Edit gameplay framing"
+                          title="Edit gameplay framing in preview"
+                          onClick={beginGameplayFraming}
+                          disabled={busy || !remotionPreviewProps}
+                          className="ml-1 inline-flex h-6 items-center gap-1 rounded border border-cyan-300/30 px-1.5 text-cyan-200 transition-colors hover:bg-cyan-300/15 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <Crop size={12} aria-hidden="true" />
+                          Frame
+                        </button>
+                      )}
                     </div>
                   )}
                   {selectedLayoutSegment && (
@@ -2838,7 +2946,10 @@ export default function LocalEditorTab({
                     layoutSegments={effectiveLayoutSegments}
                     selectedLayoutSegmentId={selectedLayoutSegmentId}
                     onLayoutSelect={handleLayoutSelect}
-                    onLayoutDeselect={() => setSelectedLayoutSegmentId(null)}
+                    onLayoutDeselect={() => {
+                      finishGameplayFraming();
+                      setSelectedLayoutSegmentId(null);
+                    }}
                     selectedId={selected?.id}
                     onSelect={(cue, type) =>
                       handleTimelineSelect(cue, type, { openEditor: false })

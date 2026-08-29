@@ -226,31 +226,33 @@ const sourcePointSchema = z.object({
 
 const gameplayZoomSchema = z.number().min(0.6).max(2);
 
-export const layoutConfigSchema = z.object({
-  format: z.enum(["standard", "streamer_stack"]),
-  facecam_size: z.enum(["small", "medium", "large"]).optional(),
-  source_width: z.number().positive().optional(),
-  source_height: z.number().positive().optional(),
-  webcam_region: sourceRegionSchema.optional(),
-  gameplay_region: sourceRegionSchema.optional(),
-  gameplay_focus: sourcePointSchema.optional(),
-  gameplay_zoom: gameplayZoomSchema.optional(),
-  streamer_tracking_enabled: z.boolean().optional(),
-  segments: z
-    .array(
-      z.object({
-        id: z.string(),
-        startMs: z.number().min(0),
-        endMs: z.number().positive(),
-        format: z.enum(["standard", "streamer_stack"]),
-        transition: z.enum(["cut", "crossfade"]).optional(),
-        transitionDurationMs: z.number().min(0).optional(),
-        gameplay_focus: sourcePointSchema.optional(),
-        gameplay_zoom: gameplayZoomSchema.optional(),
-      }),
-    )
-    .optional(),
-}).passthrough();
+export const layoutConfigSchema = z
+  .object({
+    format: z.enum(["standard", "streamer_stack"]),
+    facecam_size: z.enum(["small", "medium", "large"]).optional(),
+    source_width: z.number().positive().optional(),
+    source_height: z.number().positive().optional(),
+    webcam_region: sourceRegionSchema.optional(),
+    gameplay_region: sourceRegionSchema.optional(),
+    gameplay_focus: sourcePointSchema.optional(),
+    gameplay_zoom: gameplayZoomSchema.optional(),
+    streamer_tracking_enabled: z.boolean().optional(),
+    segments: z
+      .array(
+        z.object({
+          id: z.string(),
+          startMs: z.number().min(0),
+          endMs: z.number().positive(),
+          format: z.enum(["standard", "streamer_stack"]),
+          transition: z.enum(["cut", "crossfade"]).optional(),
+          transitionDurationMs: z.number().min(0).optional(),
+          gameplay_focus: sourcePointSchema.optional(),
+          gameplay_zoom: gameplayZoomSchema.optional(),
+        }),
+      )
+      .optional(),
+  })
+  .passthrough();
 
 export const shortVideoPropsSchema = z.object({
   videoUrl: z.string(),

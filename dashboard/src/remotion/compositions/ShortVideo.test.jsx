@@ -521,6 +521,40 @@ describe("ShortVideo media source", () => {
     expect(gameplayVideo.style.width).toContain("%");
   });
 
+  it("shows the crop editor over the active streamer gameplay panel without another video", () => {
+    remotionEnvironmentMock.isRendering = false;
+    remotionVideoPropsMock.mockClear();
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        fps={30}
+        width={1080}
+        height={1920}
+        gameplayCropEditing
+        layout={{
+          format: "streamer_stack",
+          source_width: 1920,
+          source_height: 1080,
+          gameplay_region: { x: 0.1, y: 0.05, width: 0.8, height: 0.9 },
+          segments: [
+            {
+              id: "streamer",
+              startMs: 0,
+              endMs: 10000,
+              format: "streamer_stack",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("gameplay-crop-editor-stage"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByTestId("native-browser-video")).toHaveLength(2);
+  });
+
   it("uses the browser-compatible video decoder in the Player", () => {
     render(
       <ShortVideo

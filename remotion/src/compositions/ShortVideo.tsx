@@ -7,7 +7,12 @@ import {
   useVideoConfig,
 } from "remotion";
 import { Video } from "@remotion/media";
-import type { LayoutConfig, ShortVideoProps, SourceRegion } from "../lib/types";
+import type {
+  LayoutConfig,
+  ShortVideoProps,
+  SourcePoint,
+  SourceRegion,
+} from "../lib/types";
 import { Subtitles } from "./Subtitles";
 import { HookOverlay } from "./HookOverlay";
 import { VideoEffects } from "./VideoEffects";
@@ -131,7 +136,11 @@ const StreamerPanel: React.FC<{
 };
 
 const LayoutVideoLayer: React.FC<{
-  segment: { format: "standard" | "streamer_stack" };
+  segment: {
+    format: "standard" | "streamer_stack";
+    gameplay_focus?: SourcePoint;
+    gameplay_zoom?: number;
+  };
   videoUrl: string;
   videoStartFrame: number;
   opacity: number;

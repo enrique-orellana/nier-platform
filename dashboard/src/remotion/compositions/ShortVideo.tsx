@@ -14,7 +14,12 @@ import {
   useRemotionEnvironment,
   useVideoConfig,
 } from "remotion";
-import type { LayoutConfig, ShortVideoProps, SourceRegion } from "../lib/types";
+import type {
+  LayoutConfig,
+  ShortVideoProps,
+  SourcePoint,
+  SourceRegion,
+} from "../lib/types";
 import { Subtitles } from "./Subtitles";
 import { HookOverlay } from "./HookOverlay";
 import { VideoEffects } from "./VideoEffects";
@@ -27,6 +32,7 @@ import {
   normalizeRegion,
   resolveGameplayCrop,
 } from "../lib/gameplayFraming";
+import GameplayCropEditor from "../components/GameplayCropEditor";
 
 export const getMediaTimeMs = (
   mediaCurrentTimeSeconds: number,
@@ -211,6 +217,10 @@ const StreamerPanel: React.FC<{
   sourceAspect: number;
   zoom?: number;
   focus?: { x: number; y: number };
+  gameplayCropEditing?: boolean;
+  onGameplayCropChange?: (next: { focus: SourcePoint; zoom: number }) => void;
+  onGameplayCropReset?: () => void;
+  onGameplayCropDone?: () => void;
   standardLayout?: boolean;
   muted: boolean;
   isRendering: boolean;
@@ -231,6 +241,10 @@ const StreamerPanel: React.FC<{
   sourceAspect,
   zoom = 1,
   focus,
+  gameplayCropEditing = false,
+  onGameplayCropChange,
+  onGameplayCropReset,
+  onGameplayCropDone,
   standardLayout = false,
   muted,
   isRendering,
@@ -238,6 +252,26 @@ const StreamerPanel: React.FC<{
   onMediaTimeChange,
   reportMediaTime,
 }) => {
+  const gameplayRegion = normalizeRegion(region) || {
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 1,
+  };
+  const panelAspect = outputWidth / (outputHeight * heightRatio);
+  const editorRegionAspect =
+    (gameplayRegion.width * sourceAspect) / gameplayRegion.height;
+  const gameplayCrop = resolveGameplayCrop({
+    region: gameplayRegion,
+    sourceAspect,
+    panelAspect,
+    zoom,
+    focus:
+      focus ||
+      (region === undefined && heightRatio < 1
+        ? { x: 0.5, y: 0.58 }
+        : undefined),
+  });
   const style: React.CSSProperties = standardLayout
     ? {
         position: "absolute",
@@ -246,24 +280,32 @@ const StreamerPanel: React.FC<{
         height: "100%",
         objectFit: "contain",
       }
-    : cropVideoStyle(
-        resolveGameplayCrop({
-          region: normalizeRegion(region) || {
-            x: 0,
-            y: 0,
-            width: 1,
-            height: 1,
-          },
-          sourceAspect,
-          panelAspect: outputWidth / (outputHeight * heightRatio),
-          zoom,
-          focus:
-            focus ||
-            (region === undefined && heightRatio < 1
-              ? { x: 0.5, y: 0.58 }
-              : undefined),
-        }),
-      );
+    : cropVideoStyle(gameplayCropEditing ? gameplayRegion : gameplayCrop);
+  const contentStyle: React.CSSProperties =
+    !standardLayout && gameplayCropEditing
+      ? editorRegionAspect >= panelAspect
+        ? {
+            position: "absolute",
+            left: 0,
+            top: "50%",
+            width: "100%",
+            height: `${(panelAspect / editorRegionAspect) * 100}%`,
+            transform: "translateY(-50%)",
+            overflow: "hidden",
+          }
+        : {
+            position: "absolute",
+            left: "50%",
+            top: 0,
+            width: `${(editorRegionAspect / panelAspect) * 100}%`,
+            height: "100%",
+            transform: "translateX(-50%)",
+            overflow: "hidden",
+          }
+      : {
+          position: "absolute",
+          inset: 0,
+        };
 
   return (
     <div
@@ -276,29 +318,43 @@ const StreamerPanel: React.FC<{
         overflow: "hidden",
       }}
     >
-      {isRendering ? (
-        <Video
-          key="main-video"
-          src={videoUrl}
-          trimBefore={videoStartFrame}
-          objectFit={standardLayout ? "contain" : undefined}
-          muted={muted}
-          style={style}
-        />
-      ) : (
-        <BrowserVideo
-          key="main-video"
-          videoUrl={videoUrl}
-          videoStartSeconds={videoStartSeconds}
-          playbackRate={playbackRate}
-          onAutoPlayError={onAutoPlayError}
-          onMediaTimeChange={reportMediaTime ? onMediaTimeChange : undefined}
-          fps={fps}
-          objectFit={standardLayout ? "contain" : "fill"}
-          style={style}
-          muted={muted}
-        />
-      )}
+      <div style={contentStyle}>
+        {isRendering ? (
+          <Video
+            key="main-video"
+            src={videoUrl}
+            trimBefore={videoStartFrame}
+            objectFit={standardLayout ? "contain" : undefined}
+            muted={muted}
+            style={style}
+          />
+        ) : (
+          <BrowserVideo
+            key="main-video"
+            videoUrl={videoUrl}
+            videoStartSeconds={videoStartSeconds}
+            playbackRate={playbackRate}
+            onAutoPlayError={onAutoPlayError}
+            onMediaTimeChange={reportMediaTime ? onMediaTimeChange : undefined}
+            fps={fps}
+            objectFit={standardLayout ? "contain" : "fill"}
+            style={style}
+            muted={muted}
+          />
+        )}
+        {!standardLayout && gameplayCropEditing && !isRendering && (
+          <GameplayCropEditor
+            region={gameplayRegion}
+            sourceAspect={sourceAspect}
+            panelAspect={panelAspect}
+            focus={focus}
+            zoom={zoom}
+            onChange={onGameplayCropChange}
+            onReset={onGameplayCropReset}
+            onDone={onGameplayCropDone}
+          />
+        )}
+      </div>
     </div>
   );
 };
@@ -324,6 +380,10 @@ const LayoutVideoLayer: React.FC<{
   layout?: LayoutConfig | null;
   outputWidth: number;
   outputHeight: number;
+  gameplayCropEditing?: boolean;
+  onGameplayCropChange?: (next: { focus: SourcePoint; zoom: number }) => void;
+  onGameplayCropReset?: () => void;
+  onGameplayCropDone?: () => void;
 }> = ({
   segment,
   videoUrl,
@@ -340,6 +400,10 @@ const LayoutVideoLayer: React.FC<{
   layout,
   outputWidth,
   outputHeight,
+  gameplayCropEditing = false,
+  onGameplayCropChange,
+  onGameplayCropReset,
+  onGameplayCropDone,
 }) => {
   const usesStandardLayout = segment.format === "standard";
   const facecamHeightRatio =
@@ -389,6 +453,14 @@ const LayoutVideoLayer: React.FC<{
         sourceAspect={sourceAspect}
         zoom={usesStandardLayout ? 1 : gameplayZoom}
         focus={usesStandardLayout ? undefined : gameplayFocus}
+        gameplayCropEditing={usesStandardLayout ? false : gameplayCropEditing}
+        onGameplayCropChange={
+          usesStandardLayout ? undefined : onGameplayCropChange
+        }
+        onGameplayCropReset={
+          usesStandardLayout ? undefined : onGameplayCropReset
+        }
+        onGameplayCropDone={usesStandardLayout ? undefined : onGameplayCropDone}
         standardLayout={usesStandardLayout}
         muted={muted}
         isRendering={isRendering}
@@ -440,8 +512,16 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     layout,
     hook,
     effects,
+    gameplayCropEditing,
+    onGameplayCropChange,
+    onGameplayCropReset,
+    onGameplayCropDone,
   } = rawProps as unknown as ShortVideoProps & {
     onAutoPlayError?: () => void;
+    gameplayCropEditing?: boolean;
+    onGameplayCropChange?: (next: { focus: SourcePoint; zoom: number }) => void;
+    onGameplayCropReset?: () => void;
+    onGameplayCropDone?: () => void;
   };
   const [mediaTimeMs, setMediaTimeMs] = useState<number | null>(null);
   const [previewMediaTimeMs, setPreviewMediaTimeMs] = useState<number | null>(
@@ -577,6 +657,10 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             layout={layout}
             outputWidth={Number(videoConfig.width || 1080)}
             outputHeight={Number(videoConfig.height || 1920)}
+            gameplayCropEditing={Boolean(gameplayCropEditing)}
+            onGameplayCropChange={onGameplayCropChange}
+            onGameplayCropReset={onGameplayCropReset}
+            onGameplayCropDone={onGameplayCropDone}
           />
         ))}
       </VideoEffects>
