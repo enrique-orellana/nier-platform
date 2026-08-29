@@ -25,6 +25,22 @@ export const getUrlFilename = (url) => {
   }
 };
 
+export const isGeneratedRenderUrl = (url) => {
+  if (!url) return false;
+  const filename = getUrlFilename(url).toLowerCase();
+  if (filename.startsWith("source_clip_") || filename.startsWith("version_")) {
+    return true;
+  }
+  try {
+    const pathname = decodeURIComponent(
+      new URL(url, window.location.origin).pathname,
+    ).toLowerCase();
+    return /\/clips\/[^/]+\/(?:source_clip_|version_)/.test(pathname);
+  } catch {
+    return false;
+  }
+};
+
 export const isSignedMediaUrl = (url) => {
   if (!url) return false;
   try {
@@ -192,7 +208,12 @@ export const resolveClipVideoUrl = (clip) => {
 };
 
 export const resolveMasterVideoUrl = (clip) =>
-  clip?.source_video_url || clip?.original_video_url || clip?.video_url || "";
+  [
+    clip?.source_video_url,
+    clip?.original_video_url,
+    clip?.source_url,
+    clip?.video_url,
+  ].find((url) => url && !isGeneratedRenderUrl(url)) || "";
 
 export const resolvePreviewStartSeconds = (clip) =>
   clip?.source_preview

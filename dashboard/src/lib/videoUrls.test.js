@@ -78,6 +78,15 @@ describe("resolveMasterVideoUrl", () => {
       }),
     ).toBe("https://s3.test/master.mp4");
   });
+
+  it("does not use a generated source clip as the master fallback", () => {
+    expect(
+      resolveMasterVideoUrl({
+        video_url:
+          "https://s3.test/job/clips/render-1/source_clip_1.mp4?signature=rendered",
+      }),
+    ).toBe("");
+  });
 });
 
 describe("resolvePreviewStartSeconds", () => {

@@ -308,6 +308,25 @@ describe("FullScreenEditor", () => {
     ).toBe(generatedVersionUrl);
   });
 
+  it("keeps a generated source URL out of the editable master preview", () => {
+    const generatedSourceUrl =
+      "https://minio.example/openshorts-media/job/clips/clip-1/source_clip_1.mp4";
+    const masterUrl =
+      "https://minio.example/openshorts-media/job/master/source.mp4";
+
+    expect(
+      resolveLocalEditorSourceUrl({
+        clip: {
+          source_video_url: generatedSourceUrl,
+          video_url: generatedSourceUrl,
+        },
+        projectManifest: {
+          timeline: { source_video_url: masterUrl },
+        },
+      }),
+    ).toBe(masterUrl);
+  });
+
   it("previews a saved version from the master source", () => {
     const versionSourceUrl =
       "https://minio.example/openshorts-media/job/clips/clip-1/source_clip_7.mp4";

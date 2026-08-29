@@ -21,7 +21,10 @@ import EditorActionToolbar from "./EditorActionToolbar";
 import LocalEditorTab from "../local-editor/LocalEditorTab";
 import { DEFAULT_SUBTITLE_STYLE } from "../local-editor/localEditorStyles";
 import { HOOK_FONT_FAMILY } from "../../remotion/lib/hookVisual";
-import { useRenewableMediaUrl } from "../../lib/videoUrls";
+import {
+  resolveMasterVideoUrl,
+  useRenewableMediaUrl,
+} from "../../lib/videoUrls";
 import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
 import { normalizeCueCaptions } from "../local-editor/localEditorRender";
 import {
@@ -53,7 +56,7 @@ const manifestFromClip = (clip = {}) => {
       : startSec + (Number.isFinite(duration) && duration > 0 ? duration : 30);
   return {
     timeline: {
-      source_video_url: clip.source_video_url || clip.video_url || "",
+      source_video_url: resolveMasterVideoUrl(clip),
       trim: { start_sec: startSec, end_sec: endSec },
     },
     layers: {},
@@ -639,20 +642,14 @@ export default function FullScreenEditor({
     currentManifest,
     localDraft,
   ]);
-  const masterSourceVideoUrl =
-    clip.source_video_url ||
-    clip.original_video_url ||
-    clip.source_url ||
-    clip.video_url ||
-    "";
+  const masterSourceVideoUrl = resolveMasterVideoUrl(clip);
   // Always render the editable timeline from the original master. Generated
   // source_clip files already contain a baked layout and cannot switch back
   // to Standard when a timeline segment changes layout.
   const projectVideoUrl =
     refreshedMasterVideoUrl ||
     masterSourceVideoUrl ||
-    projectManifest.timeline?.source_video_url ||
-    clip.video_url ||
+    currentMasterVideoUrl ||
     "";
   const projectManifestForRender = useMemo(
     () => ({

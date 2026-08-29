@@ -152,9 +152,7 @@ export default function ResultCard({
   const hasVideo = Boolean(originalVideoUrl);
   const effectiveRenderStatus =
     renderStatus || clip.render_status || (hasVideo ? "ready" : "found");
-  const webcamSourceCandidate = getApiUrl(
-    clip.source_video_url || clip.original_video_url || clip.video_url,
-  );
+  const webcamSourceCandidate = getApiUrl(resolveMasterVideoUrl(clip));
   const { url: webcamSourceUrl } = useRenewableMediaUrl(webcamSourceCandidate);
 
   const handleSaveWebcamRegion = async (region, facecamSize) => {

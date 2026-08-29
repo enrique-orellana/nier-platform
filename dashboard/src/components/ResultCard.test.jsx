@@ -1,10 +1,11 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ResultCard from "./ResultCard";
 
 const testDoubles = vi.hoisted(() => ({
   webcamSelectorProps: vi.fn(),
+  gameplaySelectorProps: vi.fn(),
   fullScreenEditorProps: vi.fn(),
 }));
 
@@ -49,7 +50,12 @@ vi.mock("./ResultCard/WebcamRegionSelector", () => ({
     return <div data-testid="webcam-region-selector" />;
   },
 }));
-vi.mock("./ResultCard/GameplayRegionSelector", () => ({ default: () => null }));
+vi.mock("./ResultCard/GameplayRegionSelector", () => ({
+  default: (props) => {
+    testDoubles.gameplaySelectorProps(props);
+    return <div data-testid="gameplay-region-selector" />;
+  },
+}));
 vi.mock("./ResultCard/Standard916Preview", () => ({ default: () => null }));
 vi.mock("./ResultCard/CardContent", () => ({ default: () => null }));
 vi.mock("./ResultCard/PostModal", () => ({ default: () => null }));
@@ -60,10 +66,15 @@ vi.mock("./SubtitleModal", () => ({ default: () => null }));
 vi.mock("./TranslateModal", () => ({ default: () => null }));
 vi.mock("./ClipWorkflowStatus", () => ({ default: () => null }));
 vi.mock("./ClipRenderControls", () => ({
-  default: ({ onSelectWebcamRegion }) => (
-    <button type="button" onClick={onSelectWebcamRegion}>
-      Select Webcam Area
-    </button>
+  default: ({ onSelectWebcamRegion, onSelectGameplayRegion }) => (
+    <>
+      <button type="button" onClick={onSelectWebcamRegion}>
+        Select Webcam Area
+      </button>
+      <button type="button" onClick={onSelectGameplayRegion}>
+        Edit Gameplay Area
+      </button>
+    </>
   ),
 }));
 
@@ -147,6 +158,38 @@ describe("ResultCard editor lifecycle", () => {
 
     expect(testDoubles.webcamSelectorProps).toHaveBeenLastCalledWith(
       expect.objectContaining({ initialFacecamSize: undefined }),
+    );
+  });
+
+  it("uses the master source for gameplay selection after a render", async () => {
+    const masterUrl = "https://s3.test/job/master/source.mp4";
+    render(
+      <ResultCard
+        clip={{
+          source_video_url:
+            "https://s3.test/job/clips/render-1/source_clip_1.mp4",
+          original_video_url: masterUrl,
+          video_url: "https://s3.test/job/clips/render-1/source_clip_1.mp4",
+          layout_format: "streamer_stack",
+          gameplay_region: { x: 0, y: 0, width: 1, height: 1 },
+        }}
+        index={0}
+        jobId="job-1"
+        renderStatus="ready"
+        onRenderClip={vi.fn()}
+        onSaveGameplayRegion={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Clip Controls & Actions" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit Gameplay Area" }));
+
+    await waitFor(() =>
+      expect(testDoubles.gameplaySelectorProps).toHaveBeenLastCalledWith(
+        expect.objectContaining({ videoUrl: masterUrl }),
+      ),
     );
   });
 
