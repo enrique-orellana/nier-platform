@@ -479,6 +479,48 @@ describe("ShortVideo media source", () => {
     ).toBe(true);
   });
 
+  it("uses the active segment framing instead of the clip-level gameplay defaults", () => {
+    remotionEnvironmentMock.isRendering = true;
+    remotionVideoPropsMock.mockClear();
+
+    const layout = {
+      format: "streamer_stack",
+      facecam_size: "medium",
+      source_width: 1920,
+      source_height: 1080,
+      webcam_region: { x: 0.05, y: 0.1, width: 0.25, height: 0.3 },
+      gameplay_region: { x: 0.3, y: 0.05, width: 0.65, height: 0.9 },
+      gameplay_focus: { x: 0.45, y: 0.5 },
+      gameplay_zoom: 1,
+      segments: [
+        {
+          id: "streamer",
+          startMs: 0,
+          endMs: 10000,
+          format: "streamer_stack",
+          gameplay_focus: { x: 0.8, y: 0.35 },
+          gameplay_zoom: 1.6,
+        },
+      ],
+    };
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        fps={60}
+        width={1080}
+        height={1920}
+        layout={layout}
+      />,
+    );
+
+    const gameplayVideo = remotionVideoPropsMock.mock.calls
+      .map(([props]) => props)
+      .find((props) => Number.parseFloat(props.style?.height) < 200);
+    expect(gameplayVideo.style.left).not.toBe("0%");
+    expect(gameplayVideo.style.width).toContain("%");
+  });
+
   it("uses the browser-compatible video decoder in the Player", () => {
     render(
       <ShortVideo

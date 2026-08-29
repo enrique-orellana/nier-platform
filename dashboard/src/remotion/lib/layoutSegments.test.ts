@@ -75,4 +75,30 @@ describe("dashboard layout segment resolver", () => {
       resolveLayoutAtFrame(layout, 160, 300, 30),
     );
   });
+
+  it("keeps framing overrides on normalized resolved segments", () => {
+    const segments = normalizeLayoutSegments(
+      {
+        format: "standard",
+        gameplay_zoom: 1,
+        segments: [
+          {
+            id: "streamer",
+            startMs: 0,
+            endMs: 5000,
+            format: "streamer_stack",
+            gameplay_focus: { x: 0.7, y: 0.35 },
+            gameplay_zoom: 1.4,
+          },
+        ],
+      },
+      150,
+      30,
+    );
+
+    expect(segments[0]).toMatchObject({
+      gameplay_focus: { x: 0.7, y: 0.35 },
+      gameplay_zoom: 1.4,
+    });
+  });
 });

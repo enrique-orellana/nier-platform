@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createLayoutSegments,
+  clearLayoutSegmentFraming,
   getLayoutSegmentAt,
   normalizeLayoutSegments,
   splitLayoutSegment,
@@ -37,6 +38,28 @@ describe("layoutTimelineModel", () => {
       { ...source[0], endMs: 5000 },
       { ...source[0], id: "layout-1-split-1", startMs: 5000 },
     ]);
+  });
+
+  it("preserves and clears per-segment gameplay framing", () => {
+    const source = [
+      {
+        id: "layout-1",
+        startMs: 0,
+        endMs: 12000,
+        format: "streamer_stack",
+        gameplay_focus: { x: 0.62, y: 0.44 },
+        gameplay_zoom: 1.18,
+      },
+    ];
+
+    expect(normalizeLayoutSegments(source, 12000)[0]).toMatchObject({
+      gameplay_focus: { x: 0.62, y: 0.44 },
+      gameplay_zoom: 1.18,
+    });
+
+    const cleared = clearLayoutSegmentFraming(source, "layout-1");
+    expect(cleared[0]).not.toHaveProperty("gameplay_focus");
+    expect(cleared[0]).not.toHaveProperty("gameplay_zoom");
   });
 
   it("rejects splits at segment boundaries or for an unknown segment", () => {

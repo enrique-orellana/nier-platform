@@ -1,4 +1,10 @@
-import type { LayoutConfig, LayoutFormat, LayoutTransition } from "./types";
+import type {
+  LayoutConfig,
+  LayoutFormat,
+  LayoutSegmentConfig,
+  LayoutTransition,
+  SourcePoint,
+} from "./types";
 
 export interface LayoutSegment {
   id: string;
@@ -7,6 +13,8 @@ export interface LayoutSegment {
   format: LayoutFormat;
   transition: LayoutTransition;
   transitionDurationMs: number;
+  gameplay_focus?: SourcePoint;
+  gameplay_zoom?: number;
 }
 
 export interface ResolvedLayout {
@@ -41,6 +49,31 @@ const normalizeDuration = (
   return transition === "crossfade"
     ? Math.min(requested, Math.max(0, segmentDurationMs))
     : requested;
+};
+
+const normalizeGameplayFocus = (focus: unknown): SourcePoint | undefined => {
+  const point = focus as Partial<SourcePoint> | null | undefined;
+  const x = Number(point?.x);
+  const y = Number(point?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined;
+  return { x: clamp(x, 0, 1), y: clamp(y, 0, 1) };
+};
+
+const normalizeGameplayZoom = (zoom: unknown) => {
+  if (zoom == null || zoom === "") return undefined;
+  const value = Number(zoom);
+  return Number.isFinite(value) ? clamp(value, 0.6, 2) : undefined;
+};
+
+const segmentFraming = (
+  segment: LayoutSegmentConfig,
+): Pick<LayoutSegment, "gameplay_focus" | "gameplay_zoom"> => {
+  const framing: Pick<LayoutSegment, "gameplay_focus" | "gameplay_zoom"> = {};
+  const focus = normalizeGameplayFocus(segment.gameplay_focus);
+  const zoom = normalizeGameplayZoom(segment.gameplay_zoom);
+  if (focus) framing.gameplay_focus = focus;
+  if (zoom !== undefined) framing.gameplay_zoom = zoom;
+  return framing;
 };
 
 export const normalizeLayoutSegments = (
@@ -93,6 +126,7 @@ export const normalizeLayoutSegments = (
     const format = normalizeFormat(segment.format, fallbackFormat);
     const transition = normalizeTransition(segment.transition);
     normalized.push({
+      ...segmentFraming(segment),
       id,
       startMs: cursor,
       endMs: nextEnd,

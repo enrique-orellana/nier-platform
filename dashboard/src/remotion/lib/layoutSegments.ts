@@ -3,6 +3,7 @@ import type {
   LayoutFormat,
   LayoutSegmentConfig,
   LayoutTransition,
+  SourcePoint,
 } from "./types";
 
 export interface ResolvedLayoutSegment {
@@ -13,6 +14,8 @@ export interface ResolvedLayoutSegment {
   transition: LayoutTransition;
   transitionDurationMs: number;
   layoutSlot: 0 | 1;
+  gameplay_focus?: SourcePoint;
+  gameplay_zoom?: number;
 }
 
 export interface ResolvedLayout {
@@ -27,6 +30,31 @@ const clamp = (value: number, minimum: number, maximum: number) =>
 const numberOr = (value: unknown, fallback: number) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+};
+
+const normalizeGameplayFocus = (focus: unknown): SourcePoint | undefined => {
+  const point = focus as Partial<SourcePoint> | null | undefined;
+  const x = Number(point?.x);
+  const y = Number(point?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined;
+  return { x: clamp(x, 0, 1), y: clamp(y, 0, 1) };
+};
+
+const normalizeGameplayZoom = (zoom: unknown) => {
+  if (zoom == null || zoom === "") return undefined;
+  const value = Number(zoom);
+  return Number.isFinite(value) ? clamp(value, 0.6, 2) : undefined;
+};
+
+const segmentFraming = (
+  segment: LayoutSegmentConfig,
+): Pick<ResolvedLayoutSegment, "gameplay_focus" | "gameplay_zoom"> => {
+  const framing: Pick<ResolvedLayoutSegment, "gameplay_focus" | "gameplay_zoom"> = {};
+  const focus = normalizeGameplayFocus(segment.gameplay_focus);
+  const zoom = normalizeGameplayZoom(segment.gameplay_zoom);
+  if (focus) framing.gameplay_focus = focus;
+  if (zoom !== undefined) framing.gameplay_zoom = zoom;
+  return framing;
 };
 
 const normalizeSegments = (
@@ -89,6 +117,7 @@ const normalizeSegments = (
     if (transition === "crossfade") layoutSlot = layoutSlot === 0 ? 1 : 0;
     const rawTransitionDuration = numberOr(segment.transitionDurationMs, 250);
     normalized.push({
+      ...segmentFraming(segment),
       id,
       startMs: cursor,
       endMs: nextEnd,
@@ -170,6 +199,7 @@ export const resolveLayoutAtFrame = (
 export const layoutSegmentInput = (
   segment: LayoutSegmentConfig,
 ): ResolvedLayoutSegment => ({
+  ...segmentFraming(segment),
   id: segment.id,
   startMs: segment.startMs,
   endMs: segment.endMs,

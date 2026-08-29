@@ -22,6 +22,11 @@ import {
   normalizeLayoutSegments,
   resolveLayoutAtNormalizedSegments,
 } from "../lib/layoutSegments";
+import {
+  cropVideoStyle,
+  normalizeRegion,
+  resolveGameplayCrop,
+} from "../lib/gameplayFraming";
 
 export const getMediaTimeMs = (
   mediaCurrentTimeSeconds: number,
@@ -41,19 +46,6 @@ const FACECAM_HEIGHT_RATIOS = {
 
 const PREVIEW_LAYOUT_CLOCK_UPDATE_MS = 50;
 
-const clamp = (value: number, minimum: number, maximum: number) =>
-  Math.max(minimum, Math.min(maximum, value));
-
-const normalizeRegion = (region: SourceRegion | null | undefined) => {
-  if (!region) return null;
-  const values = [region.x, region.y, region.width, region.height].map(Number);
-  if (values.some((value) => !Number.isFinite(value))) return null;
-  const [x, y, width, height] = values;
-  if (x < 0 || y < 0 || width <= 0 || height <= 0) return null;
-  if (x + width > 1 || y + height > 1) return null;
-  return { x, y, width, height };
-};
-
 const sourceAspectRatio = (layout: LayoutConfig | null | undefined) => {
   const width = Number(layout?.source_width);
   const height = Number(layout?.source_height);
@@ -61,65 +53,6 @@ const sourceAspectRatio = (layout: LayoutConfig | null | undefined) => {
     ? width / height
     : 16 / 9;
 };
-
-const cropRegionToPanel = ({
-  region,
-  sourceAspect,
-  panelAspect,
-  zoom = 1,
-  focus,
-}: {
-  region: SourceRegion;
-  sourceAspect: number;
-  panelAspect: number;
-  zoom?: number;
-  focus?: { x: number; y: number };
-}) => {
-  const selectedAspect = (region.width * sourceAspect) / region.height;
-  let width = region.width;
-  let height = region.height;
-  if (selectedAspect >= panelAspect) {
-    width = (height * panelAspect) / sourceAspect;
-  } else {
-    height = (width * sourceAspect) / panelAspect;
-  }
-
-  const normalizedZoom = clamp(Number(zoom) || 1, 0.6, 2);
-  width = Math.min(region.width, width / normalizedZoom);
-  height = Math.min(region.height, height / normalizedZoom);
-  const focusX = clamp(
-    Number(focus?.x ?? region.x + region.width / 2),
-    region.x,
-    region.x + region.width,
-  );
-  const focusY = clamp(
-    Number(focus?.y ?? region.y + region.height / 2),
-    region.y,
-    region.y + region.height,
-  );
-  const x = clamp(
-    focusX - width / 2,
-    region.x,
-    region.x + region.width - width,
-  );
-  const y = clamp(
-    focusY - height / 2,
-    region.y,
-    region.y + region.height - height,
-  );
-  return { x, y, width, height };
-};
-
-const cropVideoStyle = (crop: SourceRegion): React.CSSProperties => ({
-  position: "absolute",
-  width: `${(1 / crop.width) * 100}%`,
-  height: `${(1 / crop.height) * 100}%`,
-  left: `${(-crop.x / crop.width) * 100}%`,
-  top: `${(-crop.y / crop.height) * 100}%`,
-  maxWidth: "none",
-  maxHeight: "none",
-  objectFit: "fill",
-});
 
 const BrowserVideo: React.FC<{
   videoUrl: string;
@@ -277,6 +210,7 @@ const StreamerPanel: React.FC<{
   region?: SourceRegion;
   sourceAspect: number;
   zoom?: number;
+  focus?: { x: number; y: number };
   standardLayout?: boolean;
   muted: boolean;
   isRendering: boolean;
@@ -296,6 +230,7 @@ const StreamerPanel: React.FC<{
   region,
   sourceAspect,
   zoom = 1,
+  focus,
   standardLayout = false,
   muted,
   isRendering,
@@ -312,7 +247,7 @@ const StreamerPanel: React.FC<{
         objectFit: "contain",
       }
     : cropVideoStyle(
-        cropRegionToPanel({
+        resolveGameplayCrop({
           region: normalizeRegion(region) || {
             x: 0,
             y: 0,
@@ -323,9 +258,10 @@ const StreamerPanel: React.FC<{
           panelAspect: outputWidth / (outputHeight * heightRatio),
           zoom,
           focus:
-            region === undefined && heightRatio < 1
+            focus ||
+            (region === undefined && heightRatio < 1
               ? { x: 0.5, y: 0.58 }
-              : undefined,
+              : undefined),
         }),
       );
 
@@ -410,6 +346,8 @@ const LayoutVideoLayer: React.FC<{
     FACECAM_HEIGHT_RATIOS[layout?.facecam_size || "medium"];
   const gameplayHeightRatio = 1 - facecamHeightRatio;
   const sourceAspect = sourceAspectRatio(layout);
+  const gameplayFocus = segment.gameplay_focus ?? layout?.gameplay_focus;
+  const gameplayZoom = segment.gameplay_zoom ?? layout?.gameplay_zoom;
   return (
     <div
       style={{
@@ -449,7 +387,8 @@ const LayoutVideoLayer: React.FC<{
         topRatio={usesStandardLayout ? 0 : facecamHeightRatio}
         region={usesStandardLayout ? undefined : layout?.gameplay_region}
         sourceAspect={sourceAspect}
-        zoom={usesStandardLayout ? 1 : layout?.gameplay_zoom}
+        zoom={usesStandardLayout ? 1 : gameplayZoom}
+        focus={usesStandardLayout ? undefined : gameplayFocus}
         standardLayout={usesStandardLayout}
         muted={muted}
         isRendering={isRendering}

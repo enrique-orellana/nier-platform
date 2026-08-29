@@ -41,10 +41,27 @@ const normalizeTransitionDuration = (
 const normalizeId = (id, fallback) =>
   typeof id === "string" && id.trim() ? id : fallback;
 
+const normalizeGameplayFocus = (focus) => {
+  const x = Number(focus?.x);
+  const y = Number(focus?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined;
+  return {
+    x: Math.max(0, Math.min(1, x)),
+    y: Math.max(0, Math.min(1, y)),
+  };
+};
+
+const normalizeGameplayZoom = (zoom) => {
+  if (zoom == null || zoom === "") return undefined;
+  const value = Number(zoom);
+  if (!Number.isFinite(value)) return undefined;
+  return Math.max(0.6, Math.min(2, value));
+};
+
 const normalizeSegment = (segment, startMs, endMs, fallbackId) => {
   const format = normalizeFormat(segment?.format);
   const transition = normalizeTransition(segment?.transition);
-  return {
+  const normalized = {
     ...segment,
     id: normalizeId(segment?.id, fallbackId),
     startMs,
@@ -57,6 +74,13 @@ const normalizeSegment = (segment, startMs, endMs, fallbackId) => {
       transition,
     ),
   };
+  const gameplayFocus = normalizeGameplayFocus(segment?.gameplay_focus);
+  const gameplayZoom = normalizeGameplayZoom(segment?.gameplay_zoom);
+  if (gameplayFocus) normalized.gameplay_focus = gameplayFocus;
+  else delete normalized.gameplay_focus;
+  if (gameplayZoom !== undefined) normalized.gameplay_zoom = gameplayZoom;
+  else delete normalized.gameplay_zoom;
+  return normalized;
 };
 
 export function createLayoutSegments(
@@ -192,6 +216,17 @@ export function updateLayoutSegment(segments, segmentId, changes = {}) {
         transition,
       ),
     };
+  });
+}
+
+export function clearLayoutSegmentFraming(segments, segmentId) {
+  if (!Array.isArray(segments)) return segments;
+  return segments.map((segment) => {
+    if (segment?.id !== segmentId) return segment;
+    const next = { ...segment };
+    delete next.gameplay_focus;
+    delete next.gameplay_zoom;
+    return next;
   });
 }
 
