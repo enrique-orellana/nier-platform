@@ -14,6 +14,7 @@ import FullScreenEditor, {
 } from "./FullScreenEditor";
 import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
 import { SUBTITLE_STYLE_TEMPLATES } from "../local-editor/localEditorStyles";
+import { EDITOR_PREFERENCES_STORAGE_KEY } from "../local-editor/localEditorPreferences";
 
 const renderVersionMocks = vi.hoisted(() => ({
   saveDraftVersion: vi.fn(),
@@ -62,6 +63,7 @@ const manifest = {
 
 describe("FullScreenEditor", () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.stubGlobal(
       "open",
       vi.fn(() => null),
@@ -69,9 +71,61 @@ describe("FullScreenEditor", () => {
   });
 
   afterEach(() => {
+    localStorage.clear();
     vi.unstubAllGlobals();
     renderVersionMocks.saveDraftVersion.mockReset();
     renderVersionMocks.saveAndRenderVersion.mockReset();
+  });
+
+  it("uses remembered settings when a clip has no saved subtitle style or hook", () => {
+    const state = manifestToLocalEditorState(
+      {
+        timeline: {
+          source_video_url: "/videos/clip.mp4",
+          trim: { start_sec: 0, end_sec: 10 },
+        },
+        layers: {},
+        subtitle_tracks: [
+          {
+            id: "original",
+            cues: [{ text: "Hola", startMs: 0, endMs: 1000 }],
+          },
+        ],
+      },
+      "original",
+      "Remembered hook",
+      "standard",
+      {
+        subtitleStyle: { fontSize: 42, fontFamily: "Impact" },
+        subtitleLanguage: "fr",
+        hookDefaults: {
+          position: "center",
+          size: "L",
+          entranceAnimation: "fade",
+          durationMs: 4000,
+          color: "#ff0000",
+          fontSize: 60,
+          background: "#000000",
+          fontFamily: "Arial",
+        },
+      },
+    );
+
+    expect(state.subtitleStyle).toMatchObject({
+      fontSize: 42,
+      fontFamily: "Impact",
+    });
+    expect(state.subtitleLanguage).toBe("fr");
+    expect(state.hook).toMatchObject({
+      text: "Remembered hook",
+      position: "center",
+      size: "L",
+      entranceAnimation: "fade",
+      endMs: 4000,
+      color: "#ff0000",
+      fontSize: 60,
+      fontFamily: "Arial",
+    });
   });
 
   it("round-trips layout segments without dropping existing clip layers", () => {
@@ -2458,6 +2512,71 @@ describe("FullScreenEditor", () => {
     );
     expect(screen.getByLabelText("Hook text")).toHaveValue(
       "The moment everything changed",
+    );
+  });
+
+  it("applies remembered defaults when the project clip has no saved settings", async () => {
+    localStorage.setItem(
+      EDITOR_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        subtitleStyle: { fontSize: 42 },
+        subtitleLanguage: "fr",
+        hookDefaults: {
+          position: "center",
+          size: "L",
+          entranceAnimation: "fade",
+          durationMs: 4000,
+        },
+      }),
+    );
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          video_url: "/videos/clip.mp4",
+          viral_hook_text: "Remembered hook",
+        }}
+        initialManifest={{
+          timeline: {
+            source_video_url: "/videos/clip.mp4",
+            trim: { start_sec: 0, end_sec: 4 },
+          },
+          layers: {},
+          subtitle_tracks: [
+            {
+              id: "original",
+              cues: [{ text: "Hola", startMs: 0, endMs: 1000 }],
+            },
+          ],
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /toggle subtitles settings/i,
+      }),
+    );
+    expect(screen.getByLabelText("Subtitle font size")).toHaveValue(42);
+    expect(screen.getByLabelText("Subtitle source language")).toHaveValue("fr");
+
+    fireEvent.click(screen.getByRole("button", { name: "Viral Hook" }));
+    expect(screen.getByLabelText("Hook text")).toHaveValue("Remembered hook");
+    const hookPanel = document.getElementById("viral-hook-settings-panel");
+    expect(
+      within(hookPanel).getByRole("button", { name: "Center" }),
+    ).toHaveClass("border-primary");
+    expect(
+      within(hookPanel).getByRole("button", { name: "Large" }),
+    ).toHaveClass("border-primary");
+    expect(within(hookPanel).getByRole("button", { name: "Fade" })).toHaveClass(
+      "border-primary",
     );
   });
 

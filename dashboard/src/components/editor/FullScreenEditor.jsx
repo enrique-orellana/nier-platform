@@ -20,6 +20,7 @@ import {
 import EditorActionToolbar from "./EditorActionToolbar";
 import LocalEditorTab from "../local-editor/LocalEditorTab";
 import { DEFAULT_SUBTITLE_STYLE } from "../local-editor/localEditorStyles";
+import { readEditorPreferences } from "../local-editor/localEditorPreferences";
 import { HOOK_FONT_FAMILY } from "../../remotion/lib/hookVisual";
 import {
   resolveMasterVideoUrl,
@@ -178,6 +179,7 @@ export const manifestToLocalEditorState = (
   trackId,
   fallbackHookText = "",
   fallbackLayoutFormat = "standard",
+  editorPreferences = null,
 ) => {
   const source = manifestWithTranscriptCaptions(sourceManifest || {}, null);
   const legacySubtitles = source.layers?.subtitles;
@@ -199,10 +201,17 @@ export const manifestToLocalEditorState = (
           ]
         : [];
   const activeTrack = tracks.find((track) => track.id === trackId) || tracks[0];
+  const rememberedHookDefaults = editorPreferences?.hookDefaults || {};
+  const rememberedHookText = String(fallbackHookText || "").trim();
   const hook =
     source.layers?.hook ||
-    (String(fallbackHookText || "").trim()
-      ? { text: String(fallbackHookText).trim() }
+    (rememberedHookText
+      ? {
+          ...rememberedHookDefaults,
+          text: rememberedHookText,
+          startMs: 0,
+          endMs: Number(rememberedHookDefaults.durationMs) || 2000,
+        }
       : null);
   const layout = source.layers?.layout || {};
   const layoutSegments = Array.isArray(layout.segments)
@@ -224,9 +233,13 @@ export const manifestToLocalEditorState = (
     subtitleStyle:
       activeTrack?.style ||
       source.layers?.subtitles?.style ||
+      editorPreferences?.subtitleStyle ||
       DEFAULT_SUBTITLE_STYLE,
     subtitleLanguage:
-      activeTrack?.language || source.layers?.subtitles?.language || "en",
+      activeTrack?.language ||
+      source.layers?.subtitles?.language ||
+      editorPreferences?.subtitleLanguage ||
+      "en",
     hook: hook
       ? {
           id: "hook",
@@ -394,6 +407,7 @@ export default function FullScreenEditor({
   onSessionReady,
 }) {
   const clipManifest = manifestWithClipLayout(manifestFromClip(clip), clip);
+  const editorPreferences = useMemo(() => readEditorPreferences(), []);
   const [version, setVersion] = useState(initialVersion);
   const [manifest, setManifest] = useState(() =>
     manifestWithClipLayout(initialManifest, clip),
@@ -421,6 +435,7 @@ export default function FullScreenEditor({
       defaultSubtitleTrackId(initialManifest),
       clip?.viral_hook_text,
       clip?.layout_format || "standard",
+      editorPreferences,
     ),
   );
   const [localDraftRevision, setLocalDraftRevision] = useState(0);
@@ -556,6 +571,7 @@ export default function FullScreenEditor({
         nextTrackId,
         clip?.viral_hook_text,
         clip?.layout_format || "standard",
+        editorPreferences,
       );
       versionRef.current = nextVersion;
       activeTrackIdRef.current = nextTrackId;
@@ -587,6 +603,7 @@ export default function FullScreenEditor({
     isOpen,
     initialVersionId,
     jobId,
+    editorPreferences,
   ]);
 
   const currentMasterVideoUrl = resolveLocalEditorSourceUrl({
@@ -823,6 +840,7 @@ export default function FullScreenEditor({
         trackId,
         clip?.viral_hook_text,
         clip?.layout_format || "standard",
+        editorPreferences,
       );
       currentManifestRef.current = hydratedManifest;
       activeTrackIdRef.current = trackId;
@@ -833,7 +851,7 @@ export default function FullScreenEditor({
       setLocalDraftRevision((current) => current + 1);
       setRenderSpecDirty(dirty);
     },
-    [clip],
+    [clip, editorPreferences],
   );
 
   const applyLayer = useCallback(
