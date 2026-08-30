@@ -9,9 +9,9 @@ Add a source-centric Video Memory workflow that can inspect a long video once, c
 
 ## Phase-one decisions
 
-- OpenRouter is the only remote provider for transcription and bulk visual analysis.
-- Codex is the reasoning provider for semantic transcript segmentation, evidence fusion, candidate ranking, and clip-boundary selection.
-- Provider routing is stage-specific: transcription and vision use OpenRouter, while reasoning uses the connected Codex provider. A Codex selection must not accidentally route bulk vision work through Codex, and a missing provider credential must fail the affected stage clearly.
+- OpenRouter is the remote provider for transcription.
+- Codex is the reasoning and visual-analysis provider for scene evidence, semantic transcript segmentation, evidence fusion, candidate ranking, and clip-boundary selection.
+- Provider routing is stage-specific: transcription uses OpenRouter, while vision and reasoning use the connected Codex provider. A missing provider credential must fail the affected stage clearly.
 - FFmpeg, PySceneDetect, keyframe extraction, person/face metadata, caching, and rendering remain local in the existing worker environment.
 - Phase one uses transcript segments and scene boundaries. It does not include WhisperX, pyannote, word-level timestamps, speaker labels, or audio-event classification.
 - Visual analysis uses sampled keyframes, not the full source video. Codex receives only candidate evidence and selected keyframes, never the full video.
@@ -22,7 +22,7 @@ Add a source-centric Video Memory workflow that can inspect a long video once, c
 
 1. The user creates a Video Memory project from a source video.
 2. The system creates or loads a cached source analysis.
-3. The worker detects scenes, extracts keyframes, transcribes the source through OpenRouter in bounded chunks, and asks an OpenRouter vision model for concise scene evidence.
+3. The worker detects scenes, extracts keyframes, transcribes the source through OpenRouter in bounded chunks, and asks Codex for concise scene evidence from the timestamped keyframes.
 4. Codex converts the transcript and visual evidence into semantic timeline segments and stores baseline candidate metadata.
 5. The user enters a request such as “find three short moments where the speaker makes a surprising claim and reacts strongly.”
 6. The system retrieves relevant timeline segments, sends their transcript, evidence, and selected keyframes to Codex, and receives ranked clip plans.
@@ -39,7 +39,7 @@ Source video
     └── FFmpeg audio extraction
              │
              ├── OpenRouter STT ── transcript + segment timestamps
-             └── OpenRouter vision ── scene descriptions + OCR/evidence
+             └── Codex vision ── scene descriptions + OCR/evidence
                          │
                          ▼
               Cached Video Memory manifest
@@ -99,9 +99,9 @@ Only segment timestamps are required. The schema must leave room for a future `w
 
 A transcription failure marks the analysis job failed and leaves any prior valid manifest untouched. A later retry may reuse completed local scene/keyframe work.
 
-### 4. OpenRouter visual evidence
+### 4. Codex visual evidence
 
-The default vision model is configurable and initially set to `qwen/qwen3-vl-32b-instruct`. It receives a small group of keyframes for one scene together with timestamps and a strict JSON-output instruction. The prompt asks for observable evidence only:
+The connected Codex model receives a small group of keyframes for one scene together with timestamps and a strict JSON-output instruction. The prompt asks for observable evidence only:
 
 - people and important objects
 - visible actions or state changes
@@ -110,9 +110,9 @@ The default vision model is configurable and initially set to `qwen/qwen3-vl-32b
 - whether the scene appears visually useful for a short clip
 - uncertainty when the frames are insufficient to establish an event
 
-The result is stored per scene and linked to the exact keyframes used. Descriptions must not invent motion between frames. Claims such as “scores a goal” require either enough temporal evidence or an explicit uncertainty marker.
+The result is stored per scene and linked to the exact keyframes used. Descriptions must not invent motion between frames. Claims such as “scores a goal” require multiple frames showing the event or an explicit uncertainty marker. Codex may receive several neighboring frames to reason about visible change, but it must not be asked to process the full source video in one request.
 
-The vision stage is independently retryable. If it fails, transcript-only ranking remains available and the UI reports that visual evidence is incomplete.
+The visual stage is independently retryable. If it fails, transcript-only ranking remains available and the UI reports that visual evidence is incomplete.
 
 ### 5. Codex semantic segmentation
 
@@ -187,7 +187,7 @@ The API needs these operations:
 
 The Go layer should persist project identity, source identity, latest analysis job, latest query job, and artifact references. Large transcripts, keyframe manifests, visual descriptions, and semantic segments remain worker artifacts rather than being copied into job rows.
 
-AI settings must carry separate effective provider/model values for transcription, vision, and reasoning. The initial defaults are OpenRouter for transcription, `qwen/qwen3-vl-32b-instruct` through OpenRouter for vision, and the user’s connected Codex model for reasoning. The settings response should expose which stage is configured and whether its credential is available.
+AI settings must carry separate effective provider/model values for transcription, vision, and reasoning. The initial defaults are OpenRouter for transcription and the user’s connected Codex model for both vision and reasoning. The settings response should expose which stage is configured and whether its credential is available.
 
 The dashboard should use a separate Video Memory tab or route. It should show source-analysis progress, a query form, candidate cards, timestamped evidence thumbnails, the Codex reason, and actions for preview/render. Existing Highlights UI and job behavior remain unchanged.
 
@@ -195,7 +195,7 @@ The dashboard should use a separate Video Memory tab or route. It should show so
 
 - Source probe or scene extraction failure: fail analysis with a user-visible error; no new manifest is published.
 - OpenRouter transcription failure: retry the failed chunk; if retries fail, preserve the previous manifest and mark the new analysis failed.
-- OpenRouter vision failure: record scene-level incomplete evidence and continue with transcript-only analysis.
+- Codex visual-analysis failure: record scene-level incomplete evidence and continue with transcript-only analysis.
 - Codex segmentation failure: preserve transcript and visual evidence; allow segmentation retry without repeating upstream work.
 - Codex ranking failure: preserve the query and allow retry; do not create render jobs without validated candidates.
 - Render failure: use existing deferred-render failure and retry behavior.
@@ -204,16 +204,16 @@ The dashboard should use a separate Video Memory tab or route. It should show so
 ## Cost and performance controls
 
 - Transcribe the source once and cache it.
-- Caption only representative keyframes, grouped by scene.
-- Keep visual prompts concise and request compact JSON.
+- Analyze only representative keyframes, grouped by scene.
+- Keep Codex visual prompts concise and request compact JSON.
 - Use local retrieval to cap Codex ranking context.
-- Send keyframe images to Codex only for the strongest candidate windows.
+- Send several keyframe images to Codex for each scene and candidate window, never the full source video.
 - Record provider, model, request count, processed audio duration, frame count, and usage/cost metadata in the analysis manifest and query result.
 - Make frame density, maximum frames, vision model, and ranking model configurable per analysis.
 
 ## Security and privacy
 
-OpenRouter receives extracted audio and keyframe images. Codex receives transcript text, metadata, visual descriptions, and selected keyframes. API keys and Codex credentials remain server-side and are never written into manifests, job metadata, or dashboard payloads. Artifact URLs exposed to the dashboard must use the repository’s existing authenticated/download mechanism. The worker records provider and model identifiers, but never records secret values.
+OpenRouter receives extracted audio. Codex receives transcript text, metadata, and selected keyframe images. API keys and Codex credentials remain server-side and are never written into manifests, job metadata, or dashboard payloads. Artifact URLs exposed to the dashboard must use the repository’s existing authenticated/download mechanism. The worker records provider and model identifiers, but never records secret values.
 
 ## Deferred phases
 
