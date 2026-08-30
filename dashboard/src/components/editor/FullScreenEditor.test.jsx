@@ -2298,6 +2298,48 @@ describe("FullScreenEditor", () => {
     expect(screen.getByRole("button", { name: "Ciao" })).toBeInTheDocument();
   });
 
+  it("does not let a truncated subtitle track hide the transcript tail", () => {
+    const partialTrackManifest = {
+      timeline: {
+        source_video_url: "https://example.test/video.mp4",
+        trim: { start_sec: 100, end_sec: 110 },
+        transcript: {
+          language: "es",
+          segments: [
+            {
+              start: 0,
+              end: 1,
+              text: "Inicio",
+              words: [{ start: 0, end: 1, word: "Inicio" }],
+            },
+            {
+              start: 8,
+              end: 9,
+              text: "Final",
+              words: [{ start: 8, end: 9, word: "Final" }],
+            },
+          ],
+        },
+      },
+      layers: {},
+      subtitle_tracks: [
+        {
+          id: "original",
+          label: "Original",
+          language: "es",
+          cues: [{ text: "Inicio", startMs: 0, endMs: 1000 }],
+        },
+      ],
+    };
+
+    const state = manifestToLocalEditorState(partialTrackManifest, "original");
+
+    expect(state.subtitleCues.map((cue) => cue.text)).toEqual([
+      "Inicio",
+      "Final",
+    ]);
+  });
+
   it("preloads generated transcript subtitles in the local editor timeline", async () => {
     vi.stubGlobal(
       "fetch",

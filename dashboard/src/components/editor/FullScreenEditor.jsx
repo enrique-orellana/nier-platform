@@ -174,19 +174,121 @@ const publishingMetadataFrom = (sourceManifest, clip) => {
   };
 };
 
-const localCuesFromTrack = (track) => {
+const transcriptCuesRelativeToClip = (manifest) => {
+  const transcript = manifest?.timeline?.transcript;
+  if (!transcript?.segments?.length) return [];
+  const trimStart = Number(manifest.timeline?.trim?.start_sec || 0);
+  const trimEnd = Number(
+    manifest.timeline?.trim?.end_sec ?? Number.POSITIVE_INFINITY,
+  );
+  return transcript.segments.flatMap((segment) => {
+    const segmentStart = Number(segment.start || 0);
+    const segmentEnd = Number(segment.end ?? segment.start ?? 0);
+    const start = Math.max(segmentStart, trimStart);
+    const end = Math.min(segmentEnd, trimEnd);
+    if (end <= start) return [];
+    const captions = (segment.words || []).flatMap((word) => {
+      const wordStart = Math.max(Number(word.start || 0), trimStart);
+      const wordEnd = Math.min(Number(word.end ?? word.start ?? 0), trimEnd);
+      if (wordEnd <= wordStart) return [];
+      return [
+        {
+          text: word.word || word.text || "",
+          startMs: Math.round((wordStart - trimStart) * 1000),
+          endMs: Math.round((wordEnd - trimStart) * 1000),
+        },
+      ];
+    });
+    return [
+      {
+        text: segment.text || captions.map((caption) => caption.text).join(" "),
+        startMs: Math.round((start - trimStart) * 1000),
+        endMs: Math.round((end - trimStart) * 1000),
+        ...(captions.length ? { captions } : {}),
+      },
+    ];
+  });
+};
+
+const transcriptCuesForEditor = (manifest) => {
+  const transcript = manifest?.timeline?.transcript;
+  const segments = Array.isArray(transcript?.segments)
+    ? transcript.segments
+    : [];
+  if (!segments.length) return [];
+
+  const trimStart = Number(manifest.timeline?.trim?.start_sec || 0);
+  const trimEnd = Number(
+    manifest.timeline?.trim?.end_sec ?? Number.POSITIVE_INFINITY,
+  );
+  const duration = Math.max(0, trimEnd - trimStart);
+  const latestEnd = Math.max(
+    ...segments.map((segment) => Number(segment?.end ?? segment?.start ?? 0)),
+  );
+  if (trimStart <= 0 || latestEnd > duration + 0.001)
+    return transcriptCuesRelativeToClip(manifest);
+
+  return segments.flatMap((segment) => {
+    const start = Math.max(0, Number(segment?.start || 0));
+    const end = Math.min(duration, Number(segment?.end ?? segment?.start ?? 0));
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start)
+      return [];
+    const captions = (segment.words || []).flatMap((word) => {
+      const wordStart = Math.max(0, Number(word?.start || 0));
+      const wordEnd = Math.min(duration, Number(word?.end ?? word?.start ?? 0));
+      if (
+        !Number.isFinite(wordStart) ||
+        !Number.isFinite(wordEnd) ||
+        wordEnd <= wordStart
+      )
+        return [];
+      return [
+        {
+          text: word.word || word.text || "",
+          startMs: Math.round(wordStart * 1000),
+          endMs: Math.round(wordEnd * 1000),
+        },
+      ];
+    });
+    return [
+      {
+        text: segment.text || captions.map((caption) => caption.text).join(" "),
+        startMs: Math.round(start * 1000),
+        endMs: Math.round(end * 1000),
+        ...(captions.length ? { captions } : {}),
+      },
+    ];
+  });
+};
+
+const localCuesFromTrack = (track, fallbackCues = []) => {
   const cues = Array.isArray(track?.cues) ? track.cues : [];
   const captions = Array.isArray(track?.captions) ? track.captions : [];
-  return (cues.length ? cues : captions).map((cue, index) =>
-    normalizeCueCaptions({
-      id: cue.id || `${track?.id || "subtitle"}-${index}`,
-      type: "subtitle",
-      label: cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
-      text: cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
-      startMs: Number(cue.startMs || 0),
-      endMs: Number(cue.endMs || cue.startMs || 0),
-      captions: Array.isArray(cue.captions) ? cue.captions : undefined,
-    }),
+  const toLocalCues = (items, indexOffset = 0) =>
+    items.map((cue, index) =>
+      normalizeCueCaptions({
+        id: cue.id || `${track?.id || "subtitle"}-${index + indexOffset}`,
+        type: "subtitle",
+        label:
+          cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
+        text:
+          cue.text || cue.captions?.map((word) => word.text).join(" ") || "",
+        startMs: Number(cue.startMs || 0),
+        endMs: Number(cue.endMs || cue.startMs || 0),
+        captions: Array.isArray(cue.captions) ? cue.captions : undefined,
+      }),
+    );
+  const primary = toLocalCues(cues.length ? cues : captions);
+  const missing = toLocalCues(fallbackCues, primary.length).filter(
+    (candidate) =>
+      !primary.some(
+        (existing) =>
+          Number(existing.startMs) < Number(candidate.endMs) &&
+          Number(candidate.startMs) < Number(existing.endMs),
+      ),
+  );
+  return [...primary, ...missing].sort(
+    (left, right) => left.startMs - right.startMs || left.endMs - right.endMs,
   );
 };
 
@@ -246,7 +348,10 @@ export const manifestToLocalEditorState = (
           fallbackLayoutFormat,
       );
   return {
-    subtitleCues: localCuesFromTrack(activeTrack),
+    subtitleCues: localCuesFromTrack(
+      activeTrack,
+      transcriptCuesForEditor(source),
+    ),
     subtitleStyle:
       activeTrack?.style ||
       source.layers?.subtitles?.style ||
