@@ -1,5 +1,5 @@
 import React from "react";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const remotionVideoPropsMock = vi.hoisted(() => vi.fn());
@@ -98,6 +98,34 @@ describe("ShortVideo media source", () => {
     expect(subtitlesPropsMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ mediaTimeMs: 750 }),
     );
+  });
+
+  it("reports source dimensions when the preview media metadata is ready", () => {
+    const onSourceDimensionsChange = vi.fn();
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        onSourceDimensionsChange={onSourceDimensionsChange}
+      />,
+    );
+
+    const video = screen.getByTestId("native-browser-audio");
+    Object.defineProperty(video, "videoWidth", {
+      configurable: true,
+      value: 1920,
+    });
+    Object.defineProperty(video, "videoHeight", {
+      configurable: true,
+      value: 1080,
+    });
+
+    fireEvent.loadedMetadata(video);
+
+    expect(onSourceDimensionsChange).toHaveBeenCalledWith({
+      width: 1920,
+      height: 1080,
+    });
   });
 
   it("forwards the native media clock to the editor", () => {

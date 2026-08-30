@@ -28,6 +28,7 @@ vi.mock("../../components/RemotionPreview", () => ({
     videoUrl,
     videoStartSeconds = 0,
     layout = null,
+    onSourceDimensionsChange,
   }) => (
     <div
       data-testid="remotion-player-frame"
@@ -37,6 +38,15 @@ vi.mock("../../components/RemotionPreview", () => ({
       data-layout-format={layout?.format || ""}
     >
       {currentFrame}
+      <button
+        type="button"
+        data-testid="mock-report-source-dimensions"
+        onClick={() =>
+          onSourceDimensionsChange?.({ width: 1920, height: 1080 })
+        }
+      >
+        report source dimensions
+      </button>
     </div>
   ),
 }));
@@ -647,6 +657,90 @@ describe("FullScreenEditor", () => {
         }),
       }),
     );
+  });
+
+  it("uses preview media dimensions when clip metadata omits source dimensions", async () => {
+    const trackingResponse = {
+      cache_key: "track-1",
+      algorithm_version: "yolo-standard-v1",
+      source_fingerprint: "source:1:2",
+      source_start_seconds: 0,
+      source_end_seconds: 10,
+      source_width: 1920,
+      source_height: 1080,
+      track: {
+        scenes: [
+          {
+            start_sec: 0,
+            end_sec: 10,
+            strategy: "TRACK",
+            keyframes: [
+              { time_sec: 0, rect: { x: 0.2, y: 0, width: 0.5, height: 1 } },
+            ],
+          },
+        ],
+      },
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => trackingResponse,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          start: 0,
+          end: 10,
+          source_video_url: manifest.timeline.source_video_url,
+        }}
+        initialManifest={{
+          ...manifest,
+          layers: {
+            ...manifest.layers,
+            layout: {
+              format: "standard",
+              segments: [
+                {
+                  id: "standard",
+                  startMs: 0,
+                  endMs: 10000,
+                  format: "standard",
+                },
+              ],
+            },
+          },
+        }}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("local-editor-layout-segment"));
+    const faceTrackingButton = await screen.findByRole("button", {
+      name: "Face tracking Off",
+    });
+    expect(faceTrackingButton).toBeDisabled();
+
+    fireEvent.click(screen.getByTestId("mock-report-source-dimensions"));
+
+    await waitFor(() => expect(faceTrackingButton).not.toBeDisabled());
+    fireEvent.click(faceTrackingButton);
+
+    await waitFor(() => {
+      const faceTrackingRequest = fetchMock.mock.calls.find(([url]) =>
+        String(url).includes("/face-tracking"),
+      );
+      expect(faceTrackingRequest).toBeTruthy();
+      expect(JSON.parse(faceTrackingRequest[1].body)).toMatchObject({
+        source_width: 1920,
+        source_height: 1080,
+      });
+    });
   });
 
   it("prefers a project source URL over the generated clip URL", () => {

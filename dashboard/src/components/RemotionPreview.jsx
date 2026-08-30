@@ -15,6 +15,7 @@ import { useRenewableMediaUrl } from "../lib/videoUrls";
  * @param {object|null} props.effects - EffectsConfig or null
  * @param {number} [props.playbackRate] - Playback speed multiplier
  * @param {(mediaTimeMs: number|null) => void} [props.onMediaTimeChange] - Native video clock callback
+ * @param {(dimensions: {width: number, height: number}) => void} [props.onSourceDimensionsChange] - Native source video dimensions callback
  * @param {boolean} [props.gameplayCropEditing] - Enables the preview-only Streamer framing overlay
  * @param {(next: {focus: {x: number, y: number}, zoom: number}) => void} [props.onGameplayCropChange] - Persists a completed framing drag
  * @param {() => void} [props.onGameplayCropReset] - Clears the selected segment framing override
@@ -41,6 +42,7 @@ function RemotionPreview({
   controls = true,
   onFrameChange,
   onMediaTimeChange,
+  onSourceDimensionsChange,
   gameplayCropEditing = false,
   onGameplayCropChange,
   onGameplayCropReset,
@@ -175,6 +177,7 @@ function RemotionPreview({
       onGameplayCropReset,
       onGameplayCropDone,
       onMediaTimeChange: onMediaTimeChange ? handleMediaTimeChange : undefined,
+      onSourceDimensionsChange,
     }),
     [
       resolvedVideoUrl,
@@ -196,6 +199,7 @@ function RemotionPreview({
       onGameplayCropDone,
       handleMediaTimeChange,
       onMediaTimeChange,
+      onSourceDimensionsChange,
     ],
   );
 

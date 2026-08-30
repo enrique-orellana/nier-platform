@@ -111,6 +111,19 @@ const manifestDurationMs = (manifest) => {
   return Math.round(durationSec * 1000);
 };
 
+const normalizeSourceDimensions = (source) => {
+  const width = Number(source?.width);
+  const height = Number(source?.height);
+  if (
+    !Number.isFinite(width) ||
+    width < 1 ||
+    !Number.isFinite(height) ||
+    height < 1
+  )
+    return null;
+  return { width: Math.round(width), height: Math.round(height) };
+};
+
 const normalizeRenderSpec = (source) => {
   if (!source) return null;
   const durationInFrames = Number(source.duration_in_frames);
@@ -444,6 +457,12 @@ export default function FullScreenEditor({
   );
   const [localDraftRevision, setLocalDraftRevision] = useState(0);
   const [renderSpecDirty, setRenderSpecDirty] = useState(false);
+  const [detectedSourceDimensions, setDetectedSourceDimensions] = useState(() =>
+    normalizeSourceDimensions({
+      width: clip.source_width,
+      height: clip.source_height,
+    }),
+  );
   const localDraftRef = useRef(localDraft);
   const versionRef = useRef(version);
   const activeTrackIdRef = useRef(activeTrackId);
@@ -691,23 +710,45 @@ export default function FullScreenEditor({
     }),
     [activeTrackId, projectManifestForRender, projectVideoUrl],
   );
+  const projectSourceDimensions = useMemo(
+    () =>
+      normalizeSourceDimensions({
+        width:
+          projectInputProps.layout?.source_width ??
+          clip.source_width ??
+          detectedSourceDimensions?.width,
+        height:
+          projectInputProps.layout?.source_height ??
+          clip.source_height ??
+          detectedSourceDimensions?.height,
+      }),
+    [
+      clip.source_height,
+      clip.source_width,
+      detectedSourceDimensions?.height,
+      detectedSourceDimensions?.width,
+      projectInputProps.layout?.source_height,
+      projectInputProps.layout?.source_width,
+    ],
+  );
+  const handleSourceDimensionsChange = useCallback((dimensions) => {
+    const normalized = normalizeSourceDimensions(dimensions);
+    if (!normalized) return;
+    setDetectedSourceDimensions((current) =>
+      current?.width === normalized.width &&
+      current?.height === normalized.height
+        ? current
+        : normalized,
+    );
+  }, []);
   const requestProjectFaceTracking = useCallback(
     async (segment) => {
       const clipStartSeconds = Number(
         projectManifest.timeline?.trim?.start_sec ?? clip.start ?? 0,
       );
-      const sourceWidth = Number(
-        projectInputProps.layout?.source_width || clip.source_width,
-      );
-      const sourceHeight = Number(
-        projectInputProps.layout?.source_height || clip.source_height,
-      );
-      if (
-        !Number.isFinite(sourceWidth) ||
-        !Number.isFinite(sourceHeight) ||
-        sourceWidth < 1 ||
-        sourceHeight < 1
-      )
+      const sourceWidth = projectSourceDimensions?.width;
+      const sourceHeight = projectSourceDimensions?.height;
+      if (!sourceWidth || !sourceHeight)
         throw new Error("Source dimensions are not ready for face tracking.");
       return requestFaceTracking({
         jobId,
@@ -719,13 +760,10 @@ export default function FullScreenEditor({
       });
     },
     [
-      clip.source_height,
-      clip.source_width,
       clip.start,
       clipIndex,
       jobId,
-      projectInputProps.layout?.source_height,
-      projectInputProps.layout?.source_width,
+      projectSourceDimensions,
       projectManifest.timeline?.trim?.start_sec,
     ],
   );
@@ -792,23 +830,15 @@ export default function FullScreenEditor({
     const clipStartSeconds = Number(
       projectManifest.timeline?.trim?.start_sec ?? clip.start ?? 0,
     );
-    const sourceWidth = Number(
-      projectInputProps.layout?.source_width || clip.source_width,
-    );
-    const sourceHeight = Number(
-      projectInputProps.layout?.source_height || clip.source_height,
-    );
+    const sourceWidth = projectSourceDimensions?.width;
+    const sourceHeight = projectSourceDimensions?.height;
     if (
       segments.some(
         (segment) =>
           segment.format === "standard" &&
           segment.face_tracking_enabled === true,
       ) &&
-      (!Number.isFinite(clipStartSeconds) ||
-        !Number.isFinite(sourceWidth) ||
-        !Number.isFinite(sourceHeight) ||
-        sourceWidth < 1 ||
-        sourceHeight < 1)
+      (!Number.isFinite(clipStartSeconds) || !sourceWidth || !sourceHeight)
     )
       throw new Error("Source dimensions are not ready for face tracking.");
 
@@ -863,11 +893,8 @@ export default function FullScreenEditor({
     }
     return localDraftRef.current;
   }, [
-    clip.source_height,
-    clip.source_width,
     clip.start,
-    projectInputProps.layout?.source_height,
-    projectInputProps.layout?.source_width,
+    projectSourceDimensions,
     projectManifest.timeline?.trim?.start_sec,
     requestProjectFaceTracking,
   ]);
@@ -1394,6 +1421,7 @@ export default function FullScreenEditor({
           layout: projectInputProps.layout,
           hook: projectInputProps.hook,
           effects: projectInputProps.effects,
+          onSourceDimensionsChange: handleSourceDimensionsChange,
         }}
         initialEditorState={localDraft}
         initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}:${localDraftRevision}`}
@@ -1403,6 +1431,7 @@ export default function FullScreenEditor({
         onClipInfoChange={saveGeneratedClipInfo}
         onStateChange={handleLocalDraftChange}
         onFaceTracking={requestProjectFaceTracking}
+        faceTrackingReady={Boolean(projectSourceDimensions)}
         persistHistory={false}
         allowLocalUpload={false}
         onClose={onClose}

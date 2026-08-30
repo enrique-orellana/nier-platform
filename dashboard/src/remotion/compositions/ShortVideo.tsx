@@ -68,6 +68,10 @@ const BrowserVideo: React.FC<{
   playbackRate: number;
   onAutoPlayError?: () => void;
   onMediaTimeChange?: (mediaTimeMs: number | null) => void;
+  onSourceDimensionsChange?: (dimensions: {
+    width: number;
+    height: number;
+  }) => void;
   fps: number;
   objectFit: string;
   style?: React.CSSProperties;
@@ -79,6 +83,7 @@ const BrowserVideo: React.FC<{
   playbackRate,
   onAutoPlayError,
   onMediaTimeChange,
+  onSourceDimensionsChange,
   fps,
   objectFit,
   style,
@@ -190,6 +195,10 @@ const BrowserVideo: React.FC<{
       aria-hidden={audioOnly || undefined}
       onLoadedMetadata={() => {
         lastSourceKeyRef.current = "";
+        const width = Number(videoRef.current?.videoWidth);
+        const height = Number(videoRef.current?.videoHeight);
+        if (width > 0 && height > 0 && Number.isFinite(width + height))
+          onSourceDimensionsChange?.({ width, height });
       }}
       onCanPlay={playVideo}
       style={{
@@ -526,6 +535,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     playbackRate = 1,
     onAutoPlayError,
     onMediaTimeChange,
+    onSourceDimensionsChange,
     fps = 30,
     subtitles,
     subtitleTracks,
@@ -539,6 +549,10 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     onGameplayCropDone,
   } = rawProps as unknown as ShortVideoProps & {
     onAutoPlayError?: () => void;
+    onSourceDimensionsChange?: (dimensions: {
+      width: number;
+      height: number;
+    }) => void;
     gameplayCropEditing?: boolean;
     onGameplayCropChange?: (next: { focus: SourcePoint; zoom: number }) => void;
     onGameplayCropReset?: () => void;
@@ -653,6 +667,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             playbackRate={playbackRate}
             onAutoPlayError={onAutoPlayError}
             onMediaTimeChange={handleAudioMediaTimeChange}
+            onSourceDimensionsChange={onSourceDimensionsChange}
             fps={Number(fps)}
             objectFit="contain"
             style={{ opacity: 0, pointerEvents: "none" }}

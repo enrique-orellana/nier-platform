@@ -177,6 +177,7 @@ export default function LocalEditorTab({
   onClipInfoChange = null,
   onExport = null,
   onFaceTracking = null,
+  faceTrackingReady = true,
 }) {
   const projectClipIndex = Number(initialClipIndex);
   const hasProjectClipSource = Boolean(
@@ -2763,7 +2764,12 @@ export default function LocalEditorTab({
                         <button
                           type="button"
                           aria-label={`Face tracking ${selectedLayoutSegment.face_tracking_enabled === true ? "On" : "Off"}`}
-                          title="Analyze and follow the main speaker in this Standard section"
+                          title={
+                            faceTrackingReady === false &&
+                            selectedLayoutSegment.face_tracking_enabled !== true
+                              ? "Waiting for source video metadata"
+                              : "Analyze and follow the main speaker in this Standard section"
+                          }
                           aria-pressed={
                             selectedLayoutSegment.face_tracking_enabled === true
                           }
@@ -2776,7 +2782,10 @@ export default function LocalEditorTab({
                           disabled={
                             busy ||
                             faceTrackingStatus[selectedLayoutSegment.id]
-                              ?.status === "pending"
+                              ?.status === "pending" ||
+                            (selectedLayoutSegment.face_tracking_enabled !==
+                              true &&
+                              faceTrackingReady === false)
                           }
                           className={`ml-1 inline-flex h-6 items-center gap-1 rounded border border-cyan-300/20 px-1.5 transition-colors hover:bg-cyan-300/15 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.face_tracking_enabled === true ? "text-cyan-100" : "text-zinc-400"}`}
                         >
