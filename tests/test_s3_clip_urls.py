@@ -45,6 +45,10 @@ class S3ClipUrlTests(unittest.TestCase):
             "job-1/master/source.mp4",
         )
         self.assertEqual(
+            s3_uploader.artifact_object_key("job-1", "source.MP4"),
+            "job-1/master/source.MP4",
+        )
+        self.assertEqual(
             s3_uploader.artifact_object_key("job-1", "source_metadata.json"),
             "job-1/master/source_metadata.json",
         )
@@ -131,6 +135,18 @@ class S3ClipUrlTests(unittest.TestCase):
         self.assertIn("job-1/clips/job-1/clip.mp4", uploaded_names)
         self.assertIn("job-1/clips/job-1/metadata.json", uploaded_names)
         self.assertNotIn("job-1/clips/job-1/clip_temp_video.mp4", uploaded_names)
+
+    def test_upload_job_artifacts_publishes_uppercase_video_sources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "source.MP4").write_bytes(b"source")
+
+            with patch.object(s3_uploader, "upload_file_to_s3", return_value=True) as upload:
+                self.assertTrue(s3_uploader.upload_job_artifacts(directory, "job-1"))
+
+        self.assertEqual(
+            [call.args[2] for call in upload.call_args_list],
+            ["job-1/master/source.MP4"],
+        )
 
     def test_upload_job_artifacts_does_not_publish_clip_status_sidecar(self):
         with tempfile.TemporaryDirectory() as directory:
