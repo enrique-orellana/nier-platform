@@ -2,6 +2,27 @@
 
 The Docker containers remain the backend and UI. The render worker can run natively on Windows so FFmpeg can use AMD AMF. GPU mode is opt-in and falls back to CPU when the AMF probe fails.
 
+## Portable Bash workflow
+
+On Linux, macOS, WSL, or Git Bash, use the portable Docker-based manager:
+
+```bash
+./scripts/manage-local.sh --action Restart
+./scripts/manage-local.sh --action Status
+./scripts/manage-local.sh --action Restart --component frontend
+```
+
+The Bash manager supports `Update`, `Start`, `Stop`, `Restart`, and `Status`,
+with `all`, `db`, `backend`, `frontend`, and `renderer` components. Its
+renderer runs in Docker using CPU/software rendering. `renderer` includes the
+backend so renderer metrics can reach the API. The `native-renderer` component
+is intentionally rejected by the portable manager; use the PowerShell workflow
+below for Windows AMD AMF acceleration.
+
+Persistent data defaults to `.local-data` in the repository. Set
+`OPENSHORTS_DATA_ROOT` or pass `--data-root /path/to/data` to choose another
+location.
+
 From the repository root, manage all components with:
 
 ```powershell

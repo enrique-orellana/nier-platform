@@ -1,0 +1,34 @@
+services:
+  db:
+    volumes:
+      - ${OPENSHORTS_DATA_ROOT:-./.local-data}/postgres:/var/lib/postgresql/data
+
+  backend:
+    volumes:
+      - ${OPENSHORTS_DATA_ROOT:-./.local-data}/workdir:/app/output
+    environment:
+      RENDER_SERVICE_URL: ${RENDER_SERVICE_URL:-http://host.docker.internal:13101}
+
+  frontend:
+    environment:
+      VITE_RENDERER_PROXY_TARGET: ${VITE_RENDERER_PROXY_TARGET:-http://host.docker.internal:13101}
+
+  renderer:
+    build:
+      context: .
+      dockerfile: render-service/Dockerfile
+    container_name: openshorts-renderer
+    ports:
+      - "13100:3100"
+    volumes:
+      - ${OPENSHORTS_DATA_ROOT:-./.local-data}/workdir:/output
+    environment:
+      REMOTION_BUNDLE_PATH: /app/remotion
+      OUTPUT_DIR: /output
+      PORT: 3100
+      RENDER_MAX_CONCURRENCY: ${RENDER_MAX_CONCURRENCY:-1}
+      RENDER_CONCURRENCY: ${RENDER_CONCURRENCY:-2}
+      RENDER_METRICS_URL: ${RENDER_METRICS_URL:-http://backend:8000/api/render-metrics}
+    restart: unless-stopped
+    depends_on:
+      - backend

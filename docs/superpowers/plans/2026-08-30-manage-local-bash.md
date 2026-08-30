@@ -15,7 +15,7 @@
 **Files:**
 - Create: `tests/test-manage-local.sh`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create a Bash test harness that prepends a temporary fake `docker` executable to
 `PATH`, then checks help output, invalid input rejection, and the exact Compose
@@ -59,7 +59,7 @@ grep -q -- 'ps db' "$FAKE_DOCKER_LOG"
 printf 'manage-local.sh parser tests passed\n'
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bash tests/test-manage-local.sh`
 
@@ -70,7 +70,7 @@ Expected: FAIL because `scripts/manage-local.sh` does not exist yet.
 **Files:**
 - Create: `docker-compose.portable.yml`
 
-- [ ] **Step 1: Define portable service overrides**
+- [x] **Step 1: Define portable service overrides**
 
 Add overrides for the `db` and `backend` data mounts, the backend renderer URL,
 the frontend renderer proxy, and a `renderer` service built from
@@ -78,7 +78,7 @@ the frontend renderer proxy, and a `renderer` service built from
 port `3100` inside the Compose network, and a configurable
 `${OPENSHORTS_DATA_ROOT:-./.local-data}/workdir` output mount.
 
-- [ ] **Step 2: Validate the Compose model**
+- [x] **Step 2: Validate the Compose model**
 
 Run: `docker compose --project-directory . --file docker-compose.yml --file docker-compose.portable.yml config`
 
@@ -90,33 +90,33 @@ no `D:/openshorts-docker-data` volume paths in the rendered portable config.
 **Files:**
 - Create: `scripts/manage-local.sh`
 
-- [ ] **Step 1: Implement validation and root resolution**
+- [x] **Step 1: Implement validation and root resolution**
 
 Use `set -euo pipefail`, resolve `repo_root` from `BASH_SOURCE[0]`, validate the
 Compose files and Docker/Docker Compose availability, and parse `--action`,
 `--component`, `--data-root`, `--help`, plus positional action/component forms.
 
-- [ ] **Step 2: Implement component expansion**
+- [x] **Step 2: Implement component expansion**
 
 Accept `all`, `db`, `backend`, `frontend`, and `renderer`. Expand `all` to all
 four services and expand `renderer` to include `backend`. Reject
 `native-renderer` with a message directing users to the PowerShell workflow.
 
-- [ ] **Step 3: Implement lifecycle actions**
+- [x] **Step 3: Implement lifecycle actions**
 
 Invoke the two Compose files with `build`, `up -d --force-recreate
 --remove-orphans`, `stop`, or `ps`. Make `Restart` run those operations in
 Stop, Update, Start order. Build only buildable selected services and preserve
 Docker volumes.
 
-- [ ] **Step 4: Implement renderer routing and readiness verification**
+- [x] **Step 4: Implement renderer routing and readiness verification**
 
 When `renderer` is selected, export `RENDER_SERVICE_URL` and
 `VITE_RENDERER_PROXY_TARGET` as `http://renderer:3100`, create the selected data
 directories, and retry a backend-container Python health request to
 `http://renderer:3100/health` for up to 90 seconds.
 
-- [ ] **Step 5: Run the focused test to verify it passes**
+- [x] **Step 5: Run the focused test to verify it passes**
 
 Run: `bash tests/test-manage-local.sh`
 
@@ -127,7 +127,7 @@ Expected: PASS with `manage-local.sh parser tests passed`.
 **Files:**
 - Modify: `docs/native-windows-amd-renderer.md`
 
-- [ ] **Step 1: Add portable Bash usage**
+- [x] **Step 1: Add portable Bash usage**
 
 Document the Bash commands, supported component behavior, portable CPU
 renderer limitation, `OPENSHORTS_DATA_ROOT`/`--data-root`, and the distinction
@@ -141,7 +141,7 @@ from the Windows-only native AMD workflow.
 - Verify: `docker-compose.portable.yml`
 - Verify: `docs/native-windows-amd-renderer.md`
 
-- [ ] **Step 1: Run shell and Compose checks**
+- [x] **Step 1: Run shell and Compose checks**
 
 Run:
 
@@ -155,13 +155,13 @@ git diff --check
 
 Expected: all commands exit 0.
 
-- [ ] **Step 2: Review GitNexus scope**
+- [x] **Step 2: Review GitNexus scope**
 
 Run GitNexus `detect_changes({scope: "staged"})` after staging only the files
 for this feature. Confirm no unexpected symbols or execution flows are
 affected.
 
-- [ ] **Step 3: Commit the implementation**
+- [x] **Step 3: Commit the implementation**
 
 ```bash
 git add scripts/manage-local.sh tests/test-manage-local.sh docker-compose.portable.yml docs/native-windows-amd-renderer.md
