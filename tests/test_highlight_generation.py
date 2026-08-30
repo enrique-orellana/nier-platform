@@ -30,7 +30,7 @@ def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch
     })
     monkeypatch.setattr(highlight_generation, "transcribe_audio_openrouter", transcribe)
 
-    result = highlight_generation.transcribe_video_with_config(source, 60.0, headers={"X-AI-Provider": "openrouter"})
+    result = highlight_generation.transcribe_video_with_config(source, 20.0, headers={"X-AI-Provider": "openrouter"})
 
     assert result["text"] == "Cloud text"
     assert result["segments"] == [{
@@ -41,7 +41,7 @@ def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch
     }]
 
 
-def test_openrouter_transcription_uses_single_chunk_for_short_source(monkeypatch, tmp_path):
+def test_openrouter_transcription_uses_single_chunk_for_source_shorter_than_window(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
     config = Mock()
@@ -63,10 +63,10 @@ def test_openrouter_transcription_uses_single_chunk_for_short_source(monkeypatch
         },
     )
 
-    result = highlight_generation.transcribe_video_with_config(source, 240.0, headers={"X-AI-Provider": "openrouter"})
+    result = highlight_generation.transcribe_video_with_config(source, 20.0, headers={"X-AI-Provider": "openrouter"})
 
     assert result["text"] == "Cloud text"
-    assert extracted == [(0.0, 240.0)]
+    assert extracted == [(0.0, 20.0)]
 
 
 def test_openrouter_transcription_uses_selected_clip_range(monkeypatch, tmp_path):
@@ -130,10 +130,10 @@ def test_openrouter_transcription_reports_failed_chunk(monkeypatch, tmp_path):
     )
 
     with pytest.raises(RuntimeError, match=r"OpenRouter transcription failed for chunk 1/1.*could not connect"):
-        highlight_generation.transcribe_video_with_config(source, 60.0, headers={"X-AI-Provider": "openrouter"})
+        highlight_generation.transcribe_video_with_config(source, 20.0, headers={"X-AI-Provider": "openrouter"})
 
 
-def test_openrouter_transcription_uses_five_minute_overlapping_chunks(monkeypatch, tmp_path):
+def test_openrouter_transcription_uses_short_overlapping_chunks(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
     config = Mock()
@@ -161,13 +161,10 @@ def test_openrouter_transcription_uses_five_minute_overlapping_chunks(monkeypatc
         headers={"X-AI-Provider": "openrouter"},
     )
 
-    assert result["text"] == " ".join(["Cloud text"] * 5)
+    assert result["text"] == " ".join(["Cloud text"] * 48)
     assert extracted == [
-        (0.0, 300.0, ".mp3"),
-        (295.0, 595.0, ".mp3"),
-        (590.0, 890.0, ".mp3"),
-        (885.0, 1185.0, ".mp3"),
-        (1180.0, 1200.0, ".mp3"),
+        *[(float(start), float(start + 30), ".mp3") for start in range(0, 1175, 25)],
+        (1175.0, 1200.0, ".mp3"),
     ]
 
 
