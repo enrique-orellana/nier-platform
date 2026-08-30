@@ -1770,6 +1770,7 @@ describe("LocalEditorTab", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /toggle subtitles settings/i }),
     );
+    fireEvent.click(screen.getByRole("tab", { name: "Timeline view" }));
     expect(
       screen.getByRole("button", { name: /import subtitles/i }),
     ).toBeInTheDocument();
@@ -1843,13 +1844,13 @@ describe("LocalEditorTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Viral Hook" }));
     expect(screen.getByLabelText("Hook text")).toHaveValue("Your viral hook");
     expect(screen.getByRole("button", { name: "Center" })).toHaveClass(
-      "border-white",
+      "border-primary",
     );
     expect(screen.getByRole("button", { name: "Large" })).toHaveClass(
-      "border-white",
+      "border-primary",
     );
     expect(screen.getByRole("button", { name: "Fade" })).toHaveClass(
-      "border-white",
+      "border-primary",
     );
   });
 
@@ -1960,20 +1961,19 @@ describe("LocalEditorTab", () => {
     expect(screen.getByLabelText("Subtitle font size")).toHaveValue(18);
     expect(screen.getByLabelText("Subtitle source language")).toHaveValue("it");
 
+    fireEvent.click(screen.getByRole("tab", { name: "Timeline view" }));
     fireEvent.click(screen.getByRole("button", { name: "Existing hook" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: /toggle viral hook settings/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Viral Hook" }));
     expect(screen.getByLabelText("Hook text")).toHaveValue("Existing hook");
     const hookPanel = document.getElementById("viral-hook-settings-panel");
     expect(
       within(hookPanel).getByRole("button", { name: "Bottom" }),
-    ).toHaveClass("border-white");
+    ).toHaveClass("border-primary");
     expect(
       within(hookPanel).getByRole("button", { name: "Small" }),
-    ).toHaveClass("border-white");
+    ).toHaveClass("border-primary");
     expect(within(hookPanel).getByRole("button", { name: "None" })).toHaveClass(
-      "border-white",
+      "border-primary",
     );
   });
 
@@ -1990,9 +1990,6 @@ describe("LocalEditorTab", () => {
         }}
       />,
     );
-    fireEvent.change(screen.getByLabelText(/upload video/i), {
-      target: { files: [makeVideoFile()] },
-    });
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: /add cue to timeline/i }),
@@ -2610,9 +2607,7 @@ describe("LocalEditorTab", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getAllByText("Generated caption").length).toBeGreaterThan(
-        0,
-      ),
+      expect(screen.getByDisplayValue("Generated caption")).toBeInTheDocument(),
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/local-editor/transcribe",
@@ -2622,7 +2617,9 @@ describe("LocalEditorTab", () => {
       screen.getByRole("button", { name: "Undo", exact: true }),
     ).not.toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
-    expect(screen.queryByText("Generated caption")).not.toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue("Generated caption"),
+    ).not.toBeInTheDocument();
   });
 
   it("generates subtitles for a streamed project clip from the cached master", async () => {
@@ -2663,8 +2660,8 @@ describe("LocalEditorTab", () => {
 
     await waitFor(() =>
       expect(
-        screen.getAllByText("Generated project caption").length,
-      ).toBeGreaterThan(0),
+        screen.getByDisplayValue("Generated project caption"),
+      ).toBeInTheDocument(),
     );
     const request = fetchMock.mock.calls.find(([url]) =>
       String(url).includes("/api/projects/job-1/clips/2/transcribe"),
@@ -3088,6 +3085,7 @@ describe("LocalEditorTab", () => {
     await waitFor(() =>
       expect(screen.getAllByText("Hello").length).toBeGreaterThan(0),
     );
+    fireEvent.click(screen.getByRole("tab", { name: "Timeline view" }));
     fireEvent.doubleClick(screen.getAllByRole("button", { name: "Hello" })[0]);
     fireEvent.change(screen.getByLabelText("Subtitle text"), {
       target: { value: "Changed" },
@@ -3128,6 +3126,7 @@ describe("LocalEditorTab", () => {
     await waitFor(() =>
       expect(screen.getAllByText("Hello").length).toBeGreaterThan(0),
     );
+    fireEvent.click(screen.getByRole("tab", { name: "Timeline view" }));
     fireEvent.doubleClick(screen.getAllByRole("button", { name: "Hello" })[0]);
     fireEvent.change(screen.getByLabelText("Subtitle text"), {
       target: { value: "Changed" },
@@ -3260,6 +3259,7 @@ describe("LocalEditorTab", () => {
     await waitFor(() =>
       expect(screen.getAllByText("Hello").length).toBeGreaterThan(0),
     );
+    fireEvent.click(screen.getByRole("tab", { name: "Timeline view" }));
 
     const cue = screen.getByRole("button", { name: "Hello" });
     act(() =>
@@ -3339,6 +3339,7 @@ describe("LocalEditorTab", () => {
     await waitFor(() =>
       expect(screen.getAllByText("First").length).toBeGreaterThan(0),
     );
+    fireEvent.click(screen.getByRole("tab", { name: "Timeline view" }));
 
     const dragCue = (name, clientX) => {
       const cue = screen.getByRole("button", { name });
@@ -3568,6 +3569,7 @@ describe("LocalEditorTab", () => {
     await waitFor(() =>
       expect(screen.getAllByText("Hello").length).toBeGreaterThan(0),
     );
+    fireEvent.click(screen.getByRole("tab", { name: "Timeline view" }));
     fireEvent.click(screen.getAllByRole("button", { name: "Hello" })[0]);
     expect(screen.getByLabelText("Subtitle font")).toBeInTheDocument();
     expect(screen.getByLabelText("Subtitle position")).toBeInTheDocument();

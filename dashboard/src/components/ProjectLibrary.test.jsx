@@ -10,6 +10,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ProjectLibrary from "./ProjectLibrary";
 
+const openClipControls = async () => {
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Clip Controls & Actions" }),
+  );
+};
+
 describe("ProjectLibrary", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -312,6 +318,7 @@ describe("ProjectLibrary", () => {
 
     render(<ProjectLibrary projectId="job-recovery" />);
 
+    await openClipControls();
     expect(await screen.findByText(/Rendering/)).toBeInTheDocument();
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -462,6 +469,7 @@ describe("ProjectLibrary", () => {
 
     render(<ProjectLibrary projectId="job-range" />);
 
+    await openClipControls();
     fireEvent.click(await screen.findByRole("button", { name: "Trim Range" }));
     fireEvent.change(screen.getByTestId("clip-range-start"), {
       target: { value: "150" },
@@ -739,6 +747,7 @@ describe("ProjectLibrary", () => {
       () => expect(screen.getByText("Generated Clips")).toBeInTheDocument(),
       { timeout: 5000 },
     );
+    await openClipControls();
     await waitFor(
       () =>
         expect(
@@ -789,6 +798,7 @@ describe("ProjectLibrary", () => {
 
     render(<ProjectLibrary projectId="job-4" />);
 
+    await openClipControls();
     const button = await screen.findByRole("button", {
       name: "Analyze & Render",
     });
@@ -847,6 +857,7 @@ describe("ProjectLibrary", () => {
 
     render(<ProjectLibrary projectId="job-missing-render" />);
 
+    await openClipControls();
     const button = await screen.findByRole("button", {
       name: "Analyze & Render",
     });
@@ -905,6 +916,7 @@ describe("ProjectLibrary", () => {
 
     render(<ProjectLibrary projectId="job-status-error" />);
 
+    await openClipControls();
     const button = await screen.findByRole("button", {
       name: "Analyze & Render",
     });
@@ -960,6 +972,7 @@ describe("ProjectLibrary", () => {
 
       render(<ProjectLibrary projectId="job-status-timeout" />);
 
+      await openClipControls();
       const button = await screen.findByRole("button", {
         name: "Analyze & Render",
       });
@@ -1050,6 +1063,7 @@ describe("ProjectLibrary", () => {
 
     render(<ProjectLibrary projectId="job-stale" />);
 
+    await openClipControls();
     expect(
       await screen.findByRole("button", { name: "Retry" }),
     ).toBeInTheDocument();
@@ -1144,6 +1158,7 @@ describe("ProjectLibrary", () => {
 
     render(<ProjectLibrary projectId="job-5" />);
 
+    await openClipControls();
     fireEvent.click(
       await screen.findByRole("button", { name: "Select Webcam Area" }),
     );
