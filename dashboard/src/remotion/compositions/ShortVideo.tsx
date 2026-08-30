@@ -15,6 +15,7 @@ import {
   useVideoConfig,
 } from "remotion";
 import type {
+  FaceTrackingCache,
   LayoutConfig,
   ShortVideoProps,
   SourcePoint,
@@ -32,6 +33,7 @@ import {
   normalizeRegion,
   resolveGameplayCrop,
 } from "../lib/gameplayFraming";
+import { faceTrackingRectangleAt } from "../lib/faceTracking";
 import GameplayCropEditor from "../components/GameplayCropEditor";
 
 export const getMediaTimeMs = (
@@ -227,6 +229,7 @@ const StreamerPanel: React.FC<{
   onAutoPlayError?: () => void;
   onMediaTimeChange?: (mediaTimeMs: number | null) => void;
   reportMediaTime: boolean;
+  cropOverride?: SourceRegion;
 }> = ({
   videoUrl,
   videoStartFrame,
@@ -251,6 +254,7 @@ const StreamerPanel: React.FC<{
   onAutoPlayError,
   onMediaTimeChange,
   reportMediaTime,
+  cropOverride,
 }) => {
   const gameplayRegion = normalizeRegion(region) || {
     x: 0,
@@ -272,15 +276,17 @@ const StreamerPanel: React.FC<{
         ? { x: 0.5, y: 0.58 }
         : undefined),
   });
-  const style: React.CSSProperties = standardLayout
-    ? {
-        position: "absolute",
-        inset: 0,
-        width: "100%",
-        height: "100%",
-        objectFit: "contain",
-      }
-    : cropVideoStyle(gameplayCropEditing ? gameplayRegion : gameplayCrop);
+  const style: React.CSSProperties = cropOverride
+    ? cropVideoStyle(cropOverride)
+    : standardLayout
+      ? {
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+        }
+      : cropVideoStyle(gameplayCropEditing ? gameplayRegion : gameplayCrop);
   const contentStyle: React.CSSProperties =
     !standardLayout && gameplayCropEditing
       ? editorRegionAspect >= panelAspect
@@ -324,7 +330,7 @@ const StreamerPanel: React.FC<{
             key="main-video"
             src={videoUrl}
             trimBefore={videoStartFrame}
-            objectFit={standardLayout ? "contain" : undefined}
+            objectFit={standardLayout && !cropOverride ? "contain" : undefined}
             muted={muted}
             style={style}
           />
@@ -337,7 +343,7 @@ const StreamerPanel: React.FC<{
             onAutoPlayError={onAutoPlayError}
             onMediaTimeChange={reportMediaTime ? onMediaTimeChange : undefined}
             fps={fps}
-            objectFit={standardLayout ? "contain" : "fill"}
+            objectFit={standardLayout && !cropOverride ? "contain" : "fill"}
             style={style}
             muted={muted}
           />
@@ -365,6 +371,11 @@ const LayoutVideoLayer: React.FC<{
   segment: {
     format: "standard" | "streamer_stack";
     layoutSlot: 0 | 1;
+    startMs: number;
+    gameplay_focus?: SourcePoint;
+    gameplay_zoom?: number;
+    face_tracking_enabled?: boolean;
+    face_tracking_cache?: FaceTrackingCache;
   };
   videoUrl: string;
   videoStartFrame: number;
@@ -377,6 +388,7 @@ const LayoutVideoLayer: React.FC<{
   onAutoPlayError?: () => void;
   onMediaTimeChange?: (mediaTimeMs: number | null) => void;
   reportMediaTime: boolean;
+  currentTimeSeconds: number;
   layout?: LayoutConfig | null;
   outputWidth: number;
   outputHeight: number;
@@ -397,6 +409,7 @@ const LayoutVideoLayer: React.FC<{
   onAutoPlayError,
   onMediaTimeChange,
   reportMediaTime,
+  currentTimeSeconds,
   layout,
   outputWidth,
   outputHeight,
@@ -412,6 +425,13 @@ const LayoutVideoLayer: React.FC<{
   const sourceAspect = sourceAspectRatio(layout);
   const gameplayFocus = segment.gameplay_focus ?? layout?.gameplay_focus;
   const gameplayZoom = segment.gameplay_zoom ?? layout?.gameplay_zoom;
+  const faceTrackingCrop =
+    usesStandardLayout && segment.face_tracking_enabled === true
+      ? faceTrackingRectangleAt(
+          segment.face_tracking_cache,
+          Math.max(0, currentTimeSeconds - segment.startMs / 1000),
+        )
+      : undefined;
   return (
     <div
       style={{
@@ -467,6 +487,7 @@ const LayoutVideoLayer: React.FC<{
         onAutoPlayError={onAutoPlayError}
         onMediaTimeChange={onMediaTimeChange}
         reportMediaTime={reportMediaTime && !muted}
+        cropOverride={faceTrackingCrop}
       />
       {!usesStandardLayout && (
         <MemoizedStreamerPanel
@@ -661,6 +682,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             onGameplayCropChange={onGameplayCropChange}
             onGameplayCropReset={onGameplayCropReset}
             onGameplayCropDone={onGameplayCropDone}
+            currentTimeSeconds={layoutFrame / compositionFps}
           />
         ))}
       </VideoEffects>

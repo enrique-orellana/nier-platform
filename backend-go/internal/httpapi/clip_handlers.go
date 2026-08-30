@@ -26,11 +26,13 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 		return
 	}
-	if len(segments) < 1 || (segments[0] != "versions" && segments[0] != "manifest" && segments[0] != "transcript" && segments[0] != "video-url" && segments[0] != "persist-subtitles") {
+	if len(segments) < 1 || (segments[0] != "versions" && segments[0] != "manifest" && segments[0] != "transcript" && segments[0] != "video-url" && segments[0] != "persist-subtitles" && segments[0] != "face-tracking") {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 		return
 	}
 	switch {
+	case len(segments) == 1 && segments[0] == "face-tracking" && r.Method != http.MethodPost:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
 	case r.Method == http.MethodPost && len(segments) == 1 && segments[0] == "video-url":
 		s.legacyJSONRouteWithExtras("clip_video_url", map[string]any{"job_id": jobID, "clip_index": clipIndex})(w, r)
 	case r.Method == http.MethodPost && len(segments) == 1 && segments[0] == "persist-subtitles":
@@ -77,6 +79,8 @@ func (s *Server) clipRoutes(w http.ResponseWriter, r *http.Request) {
 		s.patchManifest(w, r, jobID, clipIndex)
 	case r.Method == http.MethodGet && len(segments) == 1 && segments[0] == "transcript":
 		s.clipTranscript(w, r.Context(), jobID, clipIndex)
+	case r.Method == http.MethodPost && len(segments) == 1 && segments[0] == "face-tracking":
+		s.analyzeFaceTracking(w, r, jobID, clipIndex)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 	}

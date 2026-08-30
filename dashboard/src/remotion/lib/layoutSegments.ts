@@ -5,6 +5,7 @@ import type {
   LayoutTransition,
   SourcePoint,
 } from "./types";
+import { normalizeFaceTrackingCache } from "./faceTracking";
 
 export interface ResolvedLayoutSegment {
   id: string;
@@ -16,6 +17,8 @@ export interface ResolvedLayoutSegment {
   layoutSlot: 0 | 1;
   gameplay_focus?: SourcePoint;
   gameplay_zoom?: number;
+  face_tracking_enabled?: boolean;
+  face_tracking_cache?: LayoutSegmentConfig["face_tracking_cache"];
 }
 
 export interface ResolvedLayout {
@@ -48,15 +51,34 @@ const normalizeGameplayZoom = (zoom: unknown) => {
 
 const segmentFraming = (
   segment: LayoutSegmentConfig,
-): Pick<ResolvedLayoutSegment, "gameplay_focus" | "gameplay_zoom"> => {
+  durationSeconds?: number,
+): Pick<
+  ResolvedLayoutSegment,
+  | "gameplay_focus"
+  | "gameplay_zoom"
+  | "face_tracking_enabled"
+  | "face_tracking_cache"
+> => {
   const framing: Pick<
     ResolvedLayoutSegment,
-    "gameplay_focus" | "gameplay_zoom"
+    | "gameplay_focus"
+    | "gameplay_zoom"
+    | "face_tracking_enabled"
+    | "face_tracking_cache"
   > = {};
   const focus = normalizeGameplayFocus(segment.gameplay_focus);
   const zoom = normalizeGameplayZoom(segment.gameplay_zoom);
   if (focus) framing.gameplay_focus = focus;
   if (zoom !== undefined) framing.gameplay_zoom = zoom;
+  if (segment.format === "standard") {
+    if (segment.face_tracking_enabled === true)
+      framing.face_tracking_enabled = true;
+    const cache = normalizeFaceTrackingCache(
+      segment.face_tracking_cache,
+      durationSeconds,
+    );
+    if (cache) framing.face_tracking_cache = cache;
+  }
   return framing;
 };
 
@@ -120,7 +142,7 @@ const normalizeSegments = (
     if (transition === "crossfade") layoutSlot = layoutSlot === 0 ? 1 : 0;
     const rawTransitionDuration = numberOr(segment.transitionDurationMs, 250);
     normalized.push({
-      ...segmentFraming(segment),
+      ...segmentFraming(segment, (nextEnd - cursor) / 1000),
       id,
       startMs: cursor,
       endMs: nextEnd,

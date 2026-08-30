@@ -230,6 +230,68 @@ describe("manifestToVersionRenderProps", () => {
     expect(props.layout?.segments).toEqual(segments);
   });
 
+  it("preserves a tracked Standard section and its source metadata", () => {
+    const cache = {
+      cache_key: "track-1",
+      algorithm_version: "yolo-standard-v1",
+      source_fingerprint: "source:1:2",
+      source_start_seconds: 0,
+      source_end_seconds: 10,
+      source_width: 1920,
+      source_height: 1080,
+      track: {
+        scenes: [
+          {
+            start_sec: 0,
+            end_sec: 10,
+            strategy: "TRACK",
+            keyframes: [
+              { time_sec: 0, rect: { x: 0.2, y: 0, width: 0.5, height: 1 } },
+            ],
+          },
+        ],
+      },
+    };
+    const props = manifestToVersionRenderProps(
+      {
+        timeline: {
+          source_asset_id: "master",
+          source_video_url: "/videos/master.mp4",
+        },
+        assets: { master: { probe: { width: 1920, height: 1080 } } },
+        render_spec: {
+          video_start_seconds: 0,
+          duration_in_frames: 300,
+          fps: 30,
+          width: 1080,
+          height: 1920,
+        },
+        layers: {
+          layout: {
+            format: "standard",
+            segments: [
+              {
+                id: "standard",
+                startMs: 0,
+                endMs: 10000,
+                format: "standard",
+                face_tracking_enabled: true,
+                face_tracking_cache: cache,
+              },
+            ],
+          },
+        },
+      },
+      { versionId: "v7", manifestRevision: "rev-7" },
+    );
+
+    expect(props.layout).toMatchObject({
+      source_width: 1920,
+      source_height: 1080,
+      segments: [{ face_tracking_enabled: true, face_tracking_cache: cache }],
+    });
+  });
+
   it("adds source dimensions to selected streamer regions", () => {
     const props = manifestToVersionRenderProps(
       {

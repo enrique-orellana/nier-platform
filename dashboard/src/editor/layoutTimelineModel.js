@@ -1,3 +1,5 @@
+import { normalizeFaceTrackingCache } from "./faceTracking";
+
 export const DEFAULT_LAYOUT_FORMAT = "standard";
 export const DEFAULT_LAYOUT_TRANSITION = "cut";
 export const DEFAULT_LAYOUT_TRANSITION_DURATION_MS = 250;
@@ -80,6 +82,18 @@ const normalizeSegment = (segment, startMs, endMs, fallbackId) => {
   else delete normalized.gameplay_focus;
   if (gameplayZoom !== undefined) normalized.gameplay_zoom = gameplayZoom;
   else delete normalized.gameplay_zoom;
+  if (format === "standard") {
+    if (segment?.face_tracking_enabled === true)
+      normalized.face_tracking_enabled = true;
+    const cache = normalizeFaceTrackingCache(segment?.face_tracking_cache, {
+      durationMs: endMs - startMs,
+    });
+    if (cache) normalized.face_tracking_cache = cache;
+    else delete normalized.face_tracking_cache;
+  } else {
+    delete normalized.face_tracking_enabled;
+    delete normalized.face_tracking_cache;
+  }
   return normalized;
 };
 
@@ -183,8 +197,16 @@ export function splitLayoutSegment(segments, segmentId, playheadMs) {
   next.splice(
     index,
     1,
-    { ...segment, endMs: splitMs },
-    { ...segment, id: splitId, startMs: splitMs },
+    (() => {
+      const left = { ...segment, endMs: splitMs };
+      delete left.face_tracking_cache;
+      return left;
+    })(),
+    (() => {
+      const right = { ...segment, id: splitId, startMs: splitMs };
+      delete right.face_tracking_cache;
+      return right;
+    })(),
   );
   return next;
 }
@@ -203,7 +225,15 @@ export function updateLayoutSegment(segments, segmentId, changes = {}) {
       startMs,
       Math.min(duration, numberOr(next.endMs, startMs)),
     );
+    const sourceRangeChanged =
+      startMs !== numberOr(segment.startMs, 0) ||
+      endMs !== numberOr(segment.endMs, startMs);
+    if (sourceRangeChanged) delete next.face_tracking_cache;
     const transition = normalizeTransition(next.transition);
+    if (normalizeFormat(next.format) !== "standard") {
+      delete next.face_tracking_enabled;
+      delete next.face_tracking_cache;
+    }
     return {
       ...next,
       startMs,

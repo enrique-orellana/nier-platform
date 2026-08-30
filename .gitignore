@@ -52,3 +52,4 @@ skills-lock.json
 .native-*/
 render-service/.native-renderer/
 .remotion/
+dist/

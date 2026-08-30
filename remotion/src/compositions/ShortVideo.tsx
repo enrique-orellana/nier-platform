@@ -8,6 +8,7 @@ import {
 } from "remotion";
 import { Video } from "@remotion/media";
 import type {
+  FaceTrackingCache,
   LayoutConfig,
   ShortVideoProps,
   SourcePoint,
@@ -22,6 +23,7 @@ import {
   normalizeRegion,
   resolveGameplayCrop,
 } from "../lib/gameplayFraming";
+import { faceTrackingRectangleAt } from "../lib/faceTracking";
 
 const FACECAM_HEIGHT_RATIOS = {
   small: 0.3,
@@ -51,6 +53,7 @@ const StreamerPanel: React.FC<{
   zoom?: number;
   focus?: { x: number; y: number };
   standardLayout?: boolean;
+  cropOverride?: SourceRegion;
   onAutoPlayError?: () => void;
   seekBrowserVideoToMasterOffset?: (
     event: React.SyntheticEvent<HTMLVideoElement>,
@@ -69,18 +72,21 @@ const StreamerPanel: React.FC<{
   zoom = 1,
   focus,
   standardLayout = false,
+  cropOverride,
   onAutoPlayError,
   seekBrowserVideoToMasterOffset,
 }) => {
-  const style: React.CSSProperties = standardLayout
-    ? {
+  const style: React.CSSProperties = cropOverride
+    ? cropVideoStyle(cropOverride)
+    : standardLayout
+      ? {
         position: "absolute",
         inset: 0,
         width: "100%",
         height: "100%",
         objectFit: "contain",
-      }
-    : cropVideoStyle(
+        }
+      : cropVideoStyle(
         resolveGameplayCrop({
           region: normalizeRegion(region) || {
             x: 0,
@@ -115,7 +121,7 @@ const StreamerPanel: React.FC<{
           key="main-video"
           src={videoUrl}
           trimBefore={videoStartFrame}
-          objectFit={standardLayout ? "contain" : undefined}
+          objectFit={standardLayout && !cropOverride ? "contain" : undefined}
           muted={muted}
           style={style}
         />
@@ -140,6 +146,9 @@ const LayoutVideoLayer: React.FC<{
     format: "standard" | "streamer_stack";
     gameplay_focus?: SourcePoint;
     gameplay_zoom?: number;
+    startMs: number;
+    face_tracking_enabled?: boolean;
+    face_tracking_cache?: FaceTrackingCache;
   };
   videoUrl: string;
   videoStartFrame: number;
@@ -154,6 +163,7 @@ const LayoutVideoLayer: React.FC<{
   outputWidth: number;
   outputHeight: number;
   standardBackgroundVideoUrl?: string;
+  currentTimeSeconds: number;
 }> = ({
   segment,
   videoUrl,
@@ -167,6 +177,7 @@ const LayoutVideoLayer: React.FC<{
   layout,
   outputWidth,
   outputHeight,
+  currentTimeSeconds,
 }) => {
   const usesStandardLayout = segment.format === "standard";
   const facecamHeightRatio =
@@ -175,6 +186,13 @@ const LayoutVideoLayer: React.FC<{
   const sourceAspect = sourceAspectRatio(layout);
   const gameplayFocus = segment.gameplay_focus ?? layout?.gameplay_focus;
   const gameplayZoom = segment.gameplay_zoom ?? layout?.gameplay_zoom;
+  const faceTrackingCrop =
+    usesStandardLayout && segment.face_tracking_enabled === true
+      ? faceTrackingRectangleAt(
+          segment.face_tracking_cache,
+          Math.max(0, currentTimeSeconds - segment.startMs / 1000),
+        )
+      : undefined;
   return (
     <div
       style={{
@@ -220,6 +238,7 @@ const LayoutVideoLayer: React.FC<{
         seekBrowserVideoToMasterOffset={
           muted ? undefined : seekBrowserVideoToMasterOffset
         }
+        cropOverride={faceTrackingCrop}
       />
       {!usesStandardLayout && (
         <StreamerPanel
@@ -318,6 +337,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             layout={layout}
             outputWidth={Number(videoConfig.width || 1080)}
             outputHeight={Number(videoConfig.height || 1920)}
+            currentTimeSeconds={frame / Number(videoConfig.fps || fps)}
           />
         ))}
       </VideoEffects>

@@ -35,6 +35,8 @@ type Server struct {
 	versionRepository   versions.Repository
 	highlightMu         sync.Mutex
 	highlightRuntime    map[string]map[string]any
+	faceTrackingMu      sync.Mutex
+	faceTrackingRunning map[string]*faceTrackingCall
 }
 
 func NewServer(cfg config.Config) *Server {
@@ -61,7 +63,7 @@ func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, 
 			versionRepository = repository
 		}
 	}
-	server := &Server{config: cfg, mux: mux, store: store, runner: runner, scheduler: scheduler, translationRunner: translationRunner, publishedOutputs: make(map[string]string), versionRepository: versionRepository, highlightRuntime: make(map[string]map[string]any)}
+	server := &Server{config: cfg, mux: mux, store: store, runner: runner, scheduler: scheduler, translationRunner: translationRunner, publishedOutputs: make(map[string]string), versionRepository: versionRepository, highlightRuntime: make(map[string]map[string]any), faceTrackingRunning: make(map[string]*faceTrackingCall)}
 	if runner != nil {
 		runner.RuntimeMetadata = server.highlightRuntimeMetadata
 		runner.ReleaseRuntimeMetadata = server.releaseHighlightRuntimeMetadata

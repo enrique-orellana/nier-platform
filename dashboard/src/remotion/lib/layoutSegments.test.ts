@@ -101,4 +101,47 @@ describe("dashboard layout segment resolver", () => {
       gameplay_zoom: 1.4,
     });
   });
+
+  it("keeps valid standard face tracking caches on resolved segments", () => {
+    const cache = {
+      cache_key: "abc123",
+      algorithm_version: "yolo-standard-v1",
+      source_fingerprint: "source:1:2",
+      source_start_seconds: 10,
+      source_end_seconds: 22,
+      source_width: 1920,
+      source_height: 1080,
+      track: {
+        scenes: [
+          {
+            start_sec: 0,
+            end_sec: 12,
+            strategy: "TRACK" as const,
+            keyframes: [
+              { time_sec: 0, rect: { x: 0, y: 0, width: 0.5, height: 1 } },
+            ],
+          },
+        ],
+      },
+    };
+    const [segment] = normalizeLayoutSegments(
+      {
+        format: "standard",
+        segments: [
+          {
+            id: "standard",
+            startMs: 0,
+            endMs: 12000,
+            format: "standard",
+            face_tracking_enabled: true,
+            face_tracking_cache: cache,
+          },
+        ],
+      },
+      360,
+      30,
+    );
+    expect(segment.face_tracking_enabled).toBe(true);
+    expect(segment.face_tracking_cache).toEqual(cache);
+  });
 });

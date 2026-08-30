@@ -32,6 +32,10 @@ import {
   createLayoutSegments,
   normalizeLayoutSegments,
 } from "../../editor/layoutTimelineModel";
+import {
+  normalizeFaceTrackingCache,
+  requestFaceTracking,
+} from "../../editor/faceTracking";
 
 const defaultSubtitleTrackId = (nextManifest) =>
   nextManifest?.active_subtitle_track_id ||
@@ -687,6 +691,44 @@ export default function FullScreenEditor({
     }),
     [activeTrackId, projectManifestForRender, projectVideoUrl],
   );
+  const requestProjectFaceTracking = useCallback(
+    async (segment) => {
+      const clipStartSeconds = Number(
+        projectManifest.timeline?.trim?.start_sec ?? clip.start ?? 0,
+      );
+      const sourceWidth = Number(
+        projectInputProps.layout?.source_width || clip.source_width,
+      );
+      const sourceHeight = Number(
+        projectInputProps.layout?.source_height || clip.source_height,
+      );
+      if (
+        !Number.isFinite(sourceWidth) ||
+        !Number.isFinite(sourceHeight) ||
+        sourceWidth < 1 ||
+        sourceHeight < 1
+      )
+        throw new Error("Source dimensions are not ready for face tracking.");
+      return requestFaceTracking({
+        jobId,
+        clipIndex,
+        startSeconds: clipStartSeconds + Number(segment.startMs || 0) / 1000,
+        endSeconds: clipStartSeconds + Number(segment.endMs || 0) / 1000,
+        sourceWidth,
+        sourceHeight,
+      });
+    },
+    [
+      clip.source_height,
+      clip.source_width,
+      clip.start,
+      clipIndex,
+      jobId,
+      projectInputProps.layout?.source_height,
+      projectInputProps.layout?.source_width,
+      projectManifest.timeline?.trim?.start_sec,
+    ],
+  );
   const fallbackDurationSeconds = Math.max(
     1,
     Number(projectManifest.timeline?.trim?.end_sec || 0) -
@@ -742,6 +784,93 @@ export default function FullScreenEditor({
   useEffect(() => {
     versionManifestRef.current = versionManifest;
   }, [versionManifest]);
+  const ensureFaceTrackingCaches = useCallback(async () => {
+    const draft = localDraftRef.current || {};
+    const segments = Array.isArray(draft.layoutSegments)
+      ? draft.layoutSegments
+      : [];
+    const clipStartSeconds = Number(
+      projectManifest.timeline?.trim?.start_sec ?? clip.start ?? 0,
+    );
+    const sourceWidth = Number(
+      projectInputProps.layout?.source_width || clip.source_width,
+    );
+    const sourceHeight = Number(
+      projectInputProps.layout?.source_height || clip.source_height,
+    );
+    if (
+      segments.some(
+        (segment) =>
+          segment.format === "standard" &&
+          segment.face_tracking_enabled === true,
+      ) &&
+      (!Number.isFinite(clipStartSeconds) ||
+        !Number.isFinite(sourceWidth) ||
+        !Number.isFinite(sourceHeight) ||
+        sourceWidth < 1 ||
+        sourceHeight < 1)
+    )
+      throw new Error("Source dimensions are not ready for face tracking.");
+
+    let changed = false;
+    const nextSegments = [];
+    for (const segment of segments) {
+      if (
+        segment.format !== "standard" ||
+        segment.face_tracking_enabled !== true
+      ) {
+        nextSegments.push(segment);
+        continue;
+      }
+      const durationMs = Math.max(1, segment.endMs - segment.startMs);
+      const sourceStartSeconds =
+        clipStartSeconds + Number(segment.startMs || 0) / 1000;
+      const sourceEndSeconds =
+        clipStartSeconds + Number(segment.endMs || 0) / 1000;
+      const cached = normalizeFaceTrackingCache(segment.face_tracking_cache, {
+        durationMs,
+        sourceStartSeconds,
+        sourceEndSeconds,
+        sourceWidth,
+        sourceHeight,
+      });
+      if (cached) {
+        nextSegments.push({ ...segment, face_tracking_cache: cached });
+        continue;
+      }
+      const response = await requestProjectFaceTracking(segment);
+      const cache = normalizeFaceTrackingCache(response, {
+        durationMs,
+        sourceStartSeconds,
+        sourceEndSeconds,
+        sourceWidth,
+        sourceHeight,
+      });
+      if (!cache) throw new Error("Face tracking returned an invalid cache.");
+      changed = true;
+      nextSegments.push({
+        ...segment,
+        face_tracking_enabled: true,
+        face_tracking_cache: cache,
+      });
+    }
+    if (changed) {
+      const nextDraft = { ...draft, layoutSegments: nextSegments };
+      localDraftRef.current = nextDraft;
+      setLocalDraft(nextDraft);
+      setLocalDraftRevision((current) => current + 1);
+      setRenderSpecDirty(true);
+    }
+    return localDraftRef.current;
+  }, [
+    clip.source_height,
+    clip.source_width,
+    clip.start,
+    projectInputProps.layout?.source_height,
+    projectInputProps.layout?.source_width,
+    projectManifest.timeline?.trim?.start_sec,
+    requestProjectFaceTracking,
+  ]);
   const getLatestVersionPayload = useCallback(() => {
     const trackId = activeTrackIdRef.current || activeTrackId;
     const baseManifest = versionManifestRef.current || versionManifest;
@@ -1135,6 +1264,7 @@ export default function FullScreenEditor({
       setBusy(true);
       setError(null);
       try {
+        await ensureFaceTrackingCaches();
         const { manifest: manifestToRender, props: renderProps } =
           getLatestVersionPayload();
         const result = await saveAndRenderVersion({
@@ -1181,6 +1311,7 @@ export default function FullScreenEditor({
     [
       busy,
       clipIndex,
+      ensureFaceTrackingCaches,
       getLatestVersionPayload,
       jobId,
       onRendered,
@@ -1271,6 +1402,7 @@ export default function FullScreenEditor({
         onHashtagsChange={saveGeneratedHashtags}
         onClipInfoChange={saveGeneratedClipInfo}
         onStateChange={handleLocalDraftChange}
+        onFaceTracking={requestProjectFaceTracking}
         persistHistory={false}
         allowLocalUpload={false}
         onClose={onClose}

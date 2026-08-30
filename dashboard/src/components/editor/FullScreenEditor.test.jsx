@@ -549,6 +549,106 @@ describe("FullScreenEditor", () => {
     );
   });
 
+  it("fills a missing Standard face tracking cache before export", async () => {
+    let session = null;
+    const trackingResponse = {
+      cache_key: "track-1",
+      algorithm_version: "yolo-standard-v1",
+      source_fingerprint: "source:1:2",
+      source_start_seconds: 0,
+      source_end_seconds: 10,
+      source_width: 1920,
+      source_height: 1080,
+      track: {
+        scenes: [
+          {
+            start_sec: 0,
+            end_sec: 10,
+            strategy: "TRACK",
+            keyframes: [
+              { time_sec: 0, rect: { x: 0.2, y: 0, width: 0.5, height: 1 } },
+            ],
+          },
+        ],
+      },
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => trackingResponse,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderVersionMocks.saveAndRenderVersion.mockResolvedValue({
+      status: "done",
+      outputUrl: "/videos/job/v4.mp4",
+      version: { version_id: "v4", status: "done" },
+    });
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          start: 0,
+          end: 10,
+          source_width: 1920,
+          source_height: 1080,
+          source_video_url: manifest.timeline.source_video_url,
+        }}
+        initialManifest={{
+          ...manifest,
+          layers: {
+            ...manifest.layers,
+            layout: {
+              format: "standard",
+              segments: [
+                {
+                  id: "standard",
+                  startMs: 0,
+                  endMs: 10000,
+                  format: "standard",
+                  face_tracking_enabled: true,
+                },
+              ],
+            },
+          },
+        }}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        onSessionReady={(nextSession) => {
+          if (nextSession) session = nextSession;
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(session).toBeTruthy());
+    await session.export();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/face-tracking"),
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(renderVersionMocks.saveAndRenderVersion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manifest: expect.objectContaining({
+          layers: expect.objectContaining({
+            layout: expect.objectContaining({
+              segments: [
+                expect.objectContaining({
+                  face_tracking_enabled: true,
+                  face_tracking_cache: expect.objectContaining({
+                    cache_key: "track-1",
+                  }),
+                }),
+              ],
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it("prefers a project source URL over the generated clip URL", () => {
     expect(
       resolveLocalEditorSourceUrl({

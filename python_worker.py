@@ -907,6 +907,31 @@ def handle_request(request: Mapping[str, Any]) -> None:
             finally:
                 srt_path.unlink(missing_ok=True)
             return
+        if operation == "face_tracking":
+            from main import FACE_TRACKING_ALGORITHM_VERSION, analyze_face_tracking
+
+            payload = request.get("payload") or {}
+            source_path = str(payload.get("source_path") or "").strip()
+            if not source_path:
+                raise ValueError("face tracking source path is required")
+            start_seconds = float(payload.get("start_seconds", 0))
+            end_value = payload.get("end_seconds")
+            end_seconds = None if end_value in (None, "") else float(end_value)
+            if start_seconds < 0 or (end_seconds is not None and end_seconds <= start_seconds):
+                raise ValueError("face tracking range must be increasing")
+            result = analyze_face_tracking(
+                source_path,
+                start_seconds=start_seconds,
+                end_seconds=end_seconds,
+                source_width=payload.get("source_width"),
+                source_height=payload.get("source_height"),
+            )
+            source = Path(source_path).resolve()
+            stat = source.stat()
+            result["algorithm_version"] = FACE_TRACKING_ALGORITHM_VERSION
+            result["source_fingerprint"] = f"{source}:{stat.st_size}:{stat.st_mtime_ns}"
+            _emit({"id": request_id, "type": "result", "result": result})
+            return
         if operation == "legacy_api":
             _emit({"id": request_id, "type": "result", "result": _legacy_api(request)})
             return

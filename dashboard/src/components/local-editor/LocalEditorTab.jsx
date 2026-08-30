@@ -89,6 +89,7 @@ import {
   splitLayoutSegment,
   updateLayoutSegment,
 } from "../../editor/layoutTimelineModel";
+import { normalizeFaceTrackingCache } from "../../editor/faceTracking";
 import {
   getHookAnimationStyle,
   getHookBoxStyle,
@@ -175,6 +176,7 @@ export default function LocalEditorTab({
   onHashtagsChange = null,
   onClipInfoChange = null,
   onExport = null,
+  onFaceTracking = null,
 }) {
   const projectClipIndex = Number(initialClipIndex);
   const hasProjectClipSource = Boolean(
@@ -225,6 +227,7 @@ export default function LocalEditorTab({
   });
   const [selected, setSelected] = useState(null);
   const [selectedLayoutSegmentId, setSelectedLayoutSegmentId] = useState(null);
+  const [faceTrackingStatus, setFaceTrackingStatus] = useState({});
   const [gameplayFramingSegmentId, setGameplayFramingSegmentId] =
     useState(null);
   const [gameplayFramingDraft, setGameplayFramingDraft] = useState(null);
@@ -937,6 +940,94 @@ export default function LocalEditorTab({
         changes,
       ),
     }));
+  };
+  const toggleFaceTracking = async (enabled) => {
+    const segment = selectedLayoutSegment;
+    if (!segment || segment.format !== "standard") return;
+    if (enabled && faceTrackingStatus[segment.id]?.status === "pending") return;
+    const segmentId = segment.id;
+    const segmentDurationMs = Math.max(1, segment.endMs - segment.startMs);
+    if (!enabled) {
+      updateSelectedLayout({ face_tracking_enabled: false });
+      setFaceTrackingStatus((current) => ({
+        ...current,
+        [segmentId]: { status: "off" },
+      }));
+      return;
+    }
+
+    updateSelectedLayout({ face_tracking_enabled: true });
+    const cached = normalizeFaceTrackingCache(segment.face_tracking_cache, {
+      durationMs: segmentDurationMs,
+    });
+    if (cached) {
+      setFaceTrackingStatus((current) => ({
+        ...current,
+        [segmentId]: { status: "ready" },
+      }));
+      return;
+    }
+    if (!onFaceTracking) {
+      setFaceTrackingStatus((current) => ({
+        ...current,
+        [segmentId]: {
+          status: "error",
+          message: "Face tracking is unavailable for this editor source.",
+        },
+      }));
+      setError("Face tracking is unavailable for this editor source.");
+      return;
+    }
+    setFaceTrackingStatus((current) => ({
+      ...current,
+      [segmentId]: { status: "pending" },
+    }));
+    try {
+      const response = await onFaceTracking(segment);
+      const cache = normalizeFaceTrackingCache(response, {
+        durationMs: segmentDurationMs,
+      });
+      if (!cache) throw new Error("Face tracking returned an invalid cache.");
+      commitEdit((current) => {
+        const currentSegment = (current.layoutSegments || []).find(
+          (item) => item.id === segmentId,
+        );
+        if (
+          !currentSegment ||
+          currentSegment.format !== "standard" ||
+          currentSegment.startMs !== segment.startMs ||
+          currentSegment.endMs !== segment.endMs
+        )
+          return current;
+        return {
+          ...current,
+          layoutSegments: updateLayoutSegment(
+            Array.isArray(current.layoutSegments) &&
+              current.layoutSegments.length
+              ? current.layoutSegments
+              : createLayoutSegments(durationMs),
+            segmentId,
+            {
+              face_tracking_enabled:
+                currentSegment.face_tracking_enabled === true,
+              face_tracking_cache: cache,
+            },
+          ),
+        };
+      });
+      setFaceTrackingStatus((current) => ({
+        ...current,
+        [segmentId]: { status: "ready" },
+      }));
+    } catch (trackingError) {
+      const message =
+        trackingError?.message || "Face tracking analysis failed.";
+      setFaceTrackingStatus((current) => ({
+        ...current,
+        [segmentId]: { status: "error", message },
+      }));
+      setError(message);
+    }
   };
   const beginTimelineEdit = () => {
     timelineDragRef.current = { recorded: false };
@@ -2668,6 +2759,37 @@ export default function LocalEditorTab({
                       >
                         Standard
                       </button>
+                      {selectedLayoutSegment.format === "standard" && (
+                        <button
+                          type="button"
+                          aria-label={`Face tracking ${selectedLayoutSegment.face_tracking_enabled === true ? "On" : "Off"}`}
+                          title="Analyze and follow the main speaker in this Standard section"
+                          aria-pressed={
+                            selectedLayoutSegment.face_tracking_enabled === true
+                          }
+                          onClick={() =>
+                            void toggleFaceTracking(
+                              selectedLayoutSegment.face_tracking_enabled !==
+                                true,
+                            )
+                          }
+                          disabled={
+                            busy ||
+                            faceTrackingStatus[selectedLayoutSegment.id]
+                              ?.status === "pending"
+                          }
+                          className={`ml-1 inline-flex h-6 items-center gap-1 rounded border border-cyan-300/20 px-1.5 transition-colors hover:bg-cyan-300/15 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.face_tracking_enabled === true ? "text-cyan-100" : "text-zinc-400"}`}
+                        >
+                          <span aria-hidden="true">Face</span>
+                          {faceTrackingStatus[selectedLayoutSegment.id]
+                            ?.status === "pending"
+                            ? "Analyzing..."
+                            : selectedLayoutSegment.face_tracking_enabled ===
+                                true
+                              ? "On"
+                              : "Off"}
+                        </button>
+                      )}
                       <span className="text-zinc-600" aria-hidden="true">
                         |
                       </span>

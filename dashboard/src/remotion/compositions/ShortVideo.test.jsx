@@ -179,6 +179,61 @@ describe("ShortVideo media source", () => {
     });
   });
 
+  it("applies the cached face crop to a tracked Standard section in preview", () => {
+    currentFrameMock.value = 60;
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        fps={30}
+        layout={{
+          format: "standard",
+          segments: [
+            {
+              id: "standard",
+              startMs: 0,
+              endMs: 10000,
+              format: "standard",
+              face_tracking_enabled: true,
+              face_tracking_cache: {
+                cache_key: "track-1",
+                algorithm_version: "yolo-standard-v1",
+                source_fingerprint: "source:1:2",
+                source_start_seconds: 0,
+                source_end_seconds: 10,
+                source_width: 1920,
+                source_height: 1080,
+                track: {
+                  scenes: [
+                    {
+                      start_sec: 0,
+                      end_sec: 10,
+                      strategy: "TRACK",
+                      keyframes: [
+                        {
+                          time_sec: 0,
+                          rect: { x: 0.1, y: 0, width: 0.5, height: 1 },
+                        },
+                        {
+                          time_sec: 10,
+                          rect: { x: 0.3, y: 0, width: 0.5, height: 1 },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    const trackedVideo = screen.getByTestId("native-browser-video");
+    expect(trackedVideo.style.width).toBe("200%");
+    expect(Number.parseFloat(trackedVideo.style.left)).toBeCloseTo(-28);
+  });
+
   it("keeps the active native video mounted when a cut layout segment starts", () => {
     currentFrameMock.value = 149;
     const props = {

@@ -103,6 +103,36 @@ export interface SourcePoint {
   y: number;
 }
 
+export interface FaceTrackingRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface FaceTrackingKeyframe {
+  time_sec: number;
+  rect: FaceTrackingRect;
+}
+
+export interface FaceTrackingScene {
+  start_sec: number;
+  end_sec: number;
+  strategy: "TRACK" | "GENERAL";
+  keyframes: FaceTrackingKeyframe[];
+}
+
+export interface FaceTrackingCache {
+  cache_key: string;
+  algorithm_version: string;
+  source_fingerprint: string;
+  source_start_seconds: number;
+  source_end_seconds: number;
+  source_width: number;
+  source_height: number;
+  track: { scenes: FaceTrackingScene[] };
+}
+
 export interface LayoutSegmentConfig {
   id: string;
   startMs: number;
@@ -112,6 +142,8 @@ export interface LayoutSegmentConfig {
   transitionDurationMs?: number;
   gameplay_focus?: SourcePoint;
   gameplay_zoom?: number;
+  face_tracking_enabled?: boolean;
+  face_tracking_cache?: FaceTrackingCache;
 }
 
 export interface LayoutConfig {
@@ -229,6 +261,35 @@ const sourcePointSchema = z.object({
 
 const gameplayZoomSchema = z.number().min(0.6).max(2);
 
+const faceTrackingRectSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  width: z.number().positive().max(1),
+  height: z.number().positive().max(1),
+});
+
+const faceTrackingCacheSchema = z.object({
+  cache_key: z.string().min(1),
+  algorithm_version: z.string().min(1),
+  source_fingerprint: z.string().min(1),
+  source_start_seconds: z.number().min(0),
+  source_end_seconds: z.number().positive(),
+  source_width: z.number().positive(),
+  source_height: z.number().positive(),
+  track: z.object({
+    scenes: z.array(
+      z.object({
+        start_sec: z.number().min(0),
+        end_sec: z.number().positive(),
+        strategy: z.enum(["TRACK", "GENERAL"]),
+        keyframes: z.array(
+          z.object({ time_sec: z.number().min(0), rect: faceTrackingRectSchema }),
+        ),
+      }),
+    ),
+  }),
+});
+
 export const layoutConfigSchema = z.object({
   format: z.enum(["standard", "streamer_stack"]),
   facecam_size: z.enum(["small", "medium", "large"]).optional(),
@@ -250,6 +311,8 @@ export const layoutConfigSchema = z.object({
         transitionDurationMs: z.number().min(0).optional(),
         gameplay_focus: sourcePointSchema.optional(),
         gameplay_zoom: gameplayZoomSchema.optional(),
+        face_tracking_enabled: z.boolean().optional(),
+        face_tracking_cache: faceTrackingCacheSchema.optional(),
       }),
     )
     .optional(),

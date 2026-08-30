@@ -88,6 +88,8 @@ DEFAULT_SCENE_STRATEGY_SAMPLE_COUNT = 1
 MAX_SCENE_STRATEGY_SAMPLE_COUNT = 3
 DEFAULT_SCENE_STRATEGY_WORKERS = max(1, min(8, os.cpu_count() or 1))
 MAX_SCENE_STRATEGY_WORKERS = 32
+FACE_TRACKING_ALGORITHM_VERSION = "yolo-standard-v1"
+DEFAULT_FACE_TRACKING_INTERVAL_SECONDS = 0.5
 
 
 def should_run_person_detection(
@@ -468,6 +470,133 @@ def detect_person_yolo(frame):
             best_box = [x, y, width, max(1, int(height * 0.4))]
 
     return best_box
+
+
+def analyze_face_tracking(
+    source_path,
+    *,
+    start_seconds=0.0,
+    end_seconds=None,
+    source_width=None,
+    source_height=None,
+    sample_interval_seconds=DEFAULT_FACE_TRACKING_INTERVAL_SECONDS,
+):
+    """Analyze a source range into a normalized Standard-layout crop track.
+
+    Candidates come from the existing YOLO person detector, with the same
+    sticky speaker selection and periodic person fallback used by the legacy
+    renderer. The result is section-relative and safe to consume directly in
+    a Remotion composition.
+    """
+    source = Path(source_path).resolve()
+    if not source.is_file():
+        raise FileNotFoundError(f"face tracking source was not found: {source}")
+    media = probe_media(str(source))
+    width = int(media.width)
+    height = int(media.height)
+    if source_width is not None and int(source_width) != width:
+        raise ValueError("face tracking source width does not match the master")
+    if source_height is not None and int(source_height) != height:
+        raise ValueError("face tracking source height does not match the master")
+    fps = float(media.fps)
+    total_frames = int(media.frame_count or round(media.duration_seconds * fps))
+    if width <= 0 or height <= 0 or fps <= 0 or total_frames <= 0:
+        raise ValueError("face tracking source metadata is incomplete")
+    requested_start = float(start_seconds)
+    requested_end = None if end_seconds is None else float(end_seconds)
+    if requested_start < 0 or (
+        requested_end is not None and requested_end <= requested_start
+    ):
+        raise ValueError("face tracking range must be increasing")
+
+    try:
+        sample_interval = float(sample_interval_seconds)
+    except (TypeError, ValueError):
+        sample_interval = DEFAULT_FACE_TRACKING_INTERVAL_SECONDS
+    sample_interval = min(2.0, max(0.1, sample_interval))
+    trim = resolve_clip_frame_range(
+        requested_start,
+        requested_end,
+        source_fps=fps,
+        total_frames=total_frames,
+    )
+    duration_seconds = trim.duration_sec
+    cameraman = SmoothedCameraman(1080, 1920, width, height)
+    speaker_tracker = SpeakerTracker(cooldown_frames=max(1, round(fps)))
+    sample_step = max(1, round(fps * sample_interval))
+    sample_frames = list(range(trim.start_frame, trim.end_frame, sample_step))
+    if not sample_frames or sample_frames[-1] != trim.end_frame - 1:
+        sample_frames.append(trim.end_frame - 1)
+
+    keyframes = []
+    cap = FFmpegVideoStream(
+        str(source),
+        width=width,
+        height=height,
+        fps=fps,
+        total_frames=total_frames,
+        start_frame=trim.start_frame,
+        end_frame=trim.end_frame,
+    )
+    try:
+        for index, frame_number in enumerate(sample_frames):
+            cap.seek(frame_number)
+            frame = cap.read()
+            if frame is False:
+                continue
+            candidates = detect_face_candidates(frame)
+            target_box = speaker_tracker.get_target(candidates, frame_number, width)
+            if target_box is None:
+                target_box = detect_person_yolo(frame)
+            if target_box:
+                cameraman.update_target(target_box)
+            x1, y1, x2, y2 = cameraman.get_crop_box(force_snap=index == 0)
+            rect = CropRect(
+                max(0.0, min(1.0, x1 / width)),
+                max(0.0, min(1.0, y1 / height)),
+                max(0.000001, min(1.0, (x2 - x1) / width)),
+                max(0.000001, min(1.0, (y2 - y1) / height)),
+            )
+            keyframes.append(
+                CropKeyframe(
+                    max(0.0, min(duration_seconds, (frame_number - trim.start_frame) / fps)),
+                    rect,
+                )
+            )
+    finally:
+        cap.close()
+
+    if not keyframes:
+        x1, _y1, x2, _y2 = cameraman.get_crop_box(force_snap=True)
+        keyframes = [
+            CropKeyframe(
+                0.0,
+                CropRect(
+                    x1 / width,
+                    0.0,
+                    (x2 - x1) / width,
+                    1.0,
+                ),
+            )
+        ]
+    track = CropTrack(
+        (
+            CropScene(
+                0.0,
+                duration_seconds,
+                "TRACK",
+                tuple(keyframes),
+            ),
+        )
+    )
+    return {
+        "algorithm_version": FACE_TRACKING_ALGORITHM_VERSION,
+        "source_start_seconds": trim.start_sec,
+        "source_end_seconds": trim.end_sec,
+        "source_width": width,
+        "source_height": height,
+        "track": track.to_dict(),
+    }
 
 def create_general_frame(frame, output_width, output_height):
     """
@@ -1278,7 +1407,7 @@ def process_video_to_vertical(
     streamer_tracking_enabled: bool = False,
 ):
     """
-    Core logic to convert horizontal video to vertical using scene detection and Active Speaker Tracking (MediaPipe).
+    Core logic to convert horizontal video to vertical using scene detection and YOLO-based speaker tracking.
     """
     script_start_time = time.time()
     layout_options = normalize_clip_layout(layout_format, facecam_size)

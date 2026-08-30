@@ -459,6 +459,79 @@ describe("LocalEditorTab", () => {
     });
   });
 
+  it("offers optional face tracking for Standard sections and caches the result", async () => {
+    const onStateChange = vi.fn();
+    const onFaceTracking = vi.fn(async () => ({
+      cache_key: "track-1",
+      algorithm_version: "yolo-standard-v1",
+      source_fingerprint: "source:1:2",
+      source_start_seconds: 0,
+      source_end_seconds: 10,
+      source_width: 1920,
+      source_height: 1080,
+      track: {
+        scenes: [
+          {
+            start_sec: 0,
+            end_sec: 10,
+            strategy: "TRACK",
+            keyframes: [
+              { time_sec: 0, rect: { x: 0.25, y: 0, width: 0.5, height: 1 } },
+            ],
+          },
+        ],
+      },
+    }));
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        remotionPreviewProps={{
+          videoUrl: "/videos/project.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+          width: 1080,
+          height: 1920,
+          layout: {
+            format: "standard",
+            source_width: 1920,
+            source_height: 1080,
+          },
+        }}
+        initialEditorState={{
+          ...controlledEditorState,
+          layoutSegments: [
+            { id: "standard-1", startMs: 0, endMs: 10000, format: "standard" },
+          ],
+        }}
+        initialStateKey="face-tracking-test"
+        onStateChange={onStateChange}
+        onFaceTracking={onFaceTracking}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("local-editor-layout-segment"));
+    expect(
+      screen.getByRole("button", { name: "Face tracking Off" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Face tracking Off" }));
+
+    await waitFor(() => {
+      expect(onFaceTracking).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByRole("button", { name: "Face tracking On" }),
+      ).toBeInTheDocument();
+      expect(onStateChange.mock.calls.at(-1)?.[0]?.layoutSegments?.[0]).toEqual(
+        expect.objectContaining({
+          face_tracking_enabled: true,
+          face_tracking_cache: expect.objectContaining({
+            cache_key: "track-1",
+          }),
+        }),
+      );
+    });
+  });
+
   it("hides undo and redo actions when editing a project clip", async () => {
     const history = createEmptyEditorHistory();
     localStorage.setItem(
