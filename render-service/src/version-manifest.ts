@@ -4,6 +4,9 @@ type VersionManifest = Record<string, any>;
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value ?? null));
 
+const finiteCoordinate = (value: unknown): number | null =>
+  Number.isFinite(Number(value)) ? Number(value) : null;
+
 const isGeneratedSourceClip = (url: string) => {
   try {
     return /(?:^|\/)source_clip_[^/]+\.mp4$/i.test(
@@ -82,6 +85,8 @@ export function manifestToVersionRenderProps(
     activeTrack?.style ||
     manifest.layers?.subtitles?.style ||
     null;
+  const subtitlePositionX = finiteCoordinate(subtitleStyle?.positionX);
+  const subtitlePositionY = finiteCoordinate(subtitleStyle?.positionY);
   const subtitles =
     activeTrack && activeCaptions.length
       ? {
@@ -91,6 +96,12 @@ export function manifestToVersionRenderProps(
             subtitleStyle?.position ||
             manifest.layers?.subtitles?.position ||
             "bottom",
+          ...(subtitlePositionX !== null
+            ? { positionX: subtitlePositionX }
+            : {}),
+          ...(subtitlePositionY !== null
+            ? { positionY: subtitlePositionY }
+            : {}),
           style: subtitleStyle || undefined,
         }
       : null;

@@ -8,17 +8,56 @@ import {
   normalizeSubtitleStyle,
 } from "./localEditorStyles";
 import { cleanChoiceClass, cleanLabelClass } from "./localEditorUtils";
+import {
+  clampSubtitleCoordinate,
+  getSubtitlePositionCoordinates,
+} from "../../remotion/lib/subtitleVisual";
 
 export default function LocalEditorSubtitleStyleInspector({
   style,
   onChange,
   onRemove,
   hasCues,
+  renderWidth = 1080,
+  renderHeight = 1920,
 }) {
   const current = normalizeSubtitleStyle(style);
   const update = (key, value) => onChange({ ...current, [key]: value });
-  const applyTemplate = (template) =>
-    onChange({ ...current, ...template.style });
+  const applyTemplate = (template) => {
+    const nextStyle = { ...current, ...template.style };
+    delete nextStyle.positionX;
+    delete nextStyle.positionY;
+    onChange(nextStyle);
+  };
+  const resolvedPosition = getSubtitlePositionCoordinates(
+    current,
+    renderWidth,
+    renderHeight,
+  );
+  const updateCoordinate = (key, rawValue) => {
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) return;
+    onChange({
+      ...current,
+      position: "custom",
+      positionX: clampSubtitleCoordinate(
+        key === "positionX" ? value : resolvedPosition.x,
+        renderWidth,
+        resolvedPosition.x,
+      ),
+      positionY: clampSubtitleCoordinate(
+        key === "positionY" ? value : resolvedPosition.y,
+        renderHeight,
+        resolvedPosition.y,
+      ),
+    });
+  };
+  const selectPresetPosition = (position) => {
+    const styleWithoutCoordinates = { ...current };
+    delete styleWithoutCoordinates.positionX;
+    delete styleWithoutCoordinates.positionY;
+    onChange({ ...styleWithoutCoordinates, position });
+  };
   return (
     <div className="space-y-5">
       <div className="border-b border-white/10 pb-4">
@@ -62,7 +101,14 @@ export default function LocalEditorSubtitleStyleInspector({
         </div>
       </div>
       <div>
-        <span className={cleanLabelClass}>Position</span>
+        <div className="mb-2 flex items-center justify-between">
+          <span className={cleanLabelClass.replace("mb-2 ", "")}>Position</span>
+          <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            {current.position === "custom"
+              ? "Custom position"
+              : "Preset position"}
+          </span>
+        </div>
         <div
           role="group"
           aria-label="Subtitle position"
@@ -72,13 +118,48 @@ export default function LocalEditorSubtitleStyleInspector({
             <button
               key={position}
               type="button"
-              onClick={() => update("position", position)}
+              onClick={() => selectPresetPosition(position)}
               className={cleanChoiceClass(current.position === position)}
             >
               {position.charAt(0).toUpperCase() + position.slice(1)}
             </button>
           ))}
         </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <label className="text-xs text-zinc-400">
+            X (px)
+            <input
+              aria-label="Subtitle X position"
+              type="number"
+              min="0"
+              max={renderWidth}
+              step="1"
+              value={resolvedPosition.x}
+              onChange={(event) =>
+                updateCoordinate("positionX", event.target.value)
+              }
+              className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white"
+            />
+          </label>
+          <label className="text-xs text-zinc-400">
+            Y (px)
+            <input
+              aria-label="Subtitle Y position"
+              type="number"
+              min="0"
+              max={renderHeight}
+              step="1"
+              value={resolvedPosition.y}
+              onChange={(event) =>
+                updateCoordinate("positionY", event.target.value)
+              }
+              className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white"
+            />
+          </label>
+        </div>
+        <p className="mt-2 text-[10px] text-zinc-500">
+          Center point in a {renderWidth} × {renderHeight} px video.
+        </p>
       </div>
       <div>
         <span className={cleanLabelClass}>Animation</span>

@@ -1,6 +1,7 @@
 import { getApiUrl } from "../../config";
 import { renderInBrowser } from "../../lib/renderInBrowser";
 import { getHookPositionCoordinates } from "../../remotion/lib/hookVisual";
+import { getSubtitlePositionCoordinates } from "../../remotion/lib/subtitleVisual";
 import { normalizeSubtitleStyle } from "./localEditorStyles";
 
 const wait = (milliseconds) =>
@@ -260,6 +261,14 @@ export const buildRemotionRenderProps = ({
   hook = null,
   layout = null,
 }) => {
+  const normalizedSubtitleStyle = normalizeSubtitleStyle(
+    subtitleStyle || undefined,
+  );
+  const subtitlePosition = normalizedSubtitleStyle.position || "bottom";
+  const subtitleCoordinates =
+    subtitlePosition === "custom"
+      ? getSubtitlePositionCoordinates(normalizedSubtitleStyle, width, height)
+      : null;
   const normalizedHook = hook
     ? (() => {
         const hookWithoutCoordinates = { ...hook };
@@ -308,8 +317,14 @@ export const buildRemotionRenderProps = ({
     subtitles: subtitleCues.length
       ? {
           captions: subtitleCues.flatMap((cue) => cueCaptionsForRender(cue)),
-          position: subtitleStyle?.position || "bottom",
-          style: normalizeSubtitleStyle(subtitleStyle || undefined),
+          position: subtitlePosition,
+          ...(subtitleCoordinates
+            ? {
+                positionX: subtitleCoordinates.x,
+                positionY: subtitleCoordinates.y,
+              }
+            : {}),
+          style: normalizedSubtitleStyle,
         }
       : null,
     hook: normalizedHook,

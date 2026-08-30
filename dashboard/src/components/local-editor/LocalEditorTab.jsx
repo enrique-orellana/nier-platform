@@ -95,6 +95,7 @@ import {
   getHookBoxStyle,
   getHookPositionStyle,
 } from "../../remotion/lib/hookVisual";
+import { getSubtitlePositionStyle } from "../../remotion/lib/subtitleVisual";
 import LocalEditorProjects from "./LocalEditorProjects";
 import { getLocalAiHeaders } from "./localEditorAi";
 import {
@@ -124,7 +125,6 @@ import {
   DEFAULT_SUBTITLE_STYLE,
   hexToRgba,
   normalizeSubtitleStyle,
-  subtitlePositionClass,
 } from "./localEditorStyles";
 import { getFontStack, subtitleFontFace } from "../../remotion/lib/fonts";
 import { SUBTITLE_LANGUAGES } from "../subtitleLanguages";
@@ -2340,8 +2340,13 @@ export default function LocalEditorTab({
                         )}
                         {shouldShowPreviewSubtitle && (
                           <div
-                            className={`absolute left-1/2 flex w-[88%] -translate-x-1/2 flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-bold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`}
+                            className={`absolute flex w-[88%] flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-bold shadow-lg ${previewSubtitleStyle.position === "custom" ? "" : "left-1/2 -translate-x-1/2"}`}
                             style={{
+                              ...getSubtitlePositionStyle(
+                                previewSubtitleStyle,
+                                hookRenderWidth,
+                                hookRenderHeight,
+                              ),
                               fontFamily: getFontStack(
                                 previewSubtitleStyle.fontFamily,
                               ),
@@ -3421,6 +3426,8 @@ export default function LocalEditorTab({
                         onChange={updateSubtitleStyle}
                         onRemove={removeSubtitles}
                         hasCues={subtitleCues.length > 0}
+                        renderWidth={hookRenderWidth}
+                        renderHeight={hookRenderHeight}
                       />
                     </div>
                   )}

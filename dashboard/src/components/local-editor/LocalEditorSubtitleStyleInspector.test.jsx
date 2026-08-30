@@ -94,4 +94,60 @@ describe("LocalEditorSubtitleStyleInspector", () => {
       displayMode: "phrase",
     });
   });
+
+  it("shows resolved preset pixels and switches to custom when edited", () => {
+    const onChange = vi.fn();
+    render(
+      <LocalEditorSubtitleStyleInspector
+        style={DEFAULT_SUBTITLE_STYLE}
+        onChange={onChange}
+        onRemove={vi.fn()}
+        hasCues
+        renderWidth={1080}
+        renderHeight={1920}
+      />,
+    );
+
+    expect(screen.getByLabelText("Subtitle X position")).toHaveValue(540);
+    expect(screen.getByLabelText("Subtitle Y position")).toHaveValue(1498);
+    expect(screen.getByText("Preset position")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Subtitle X position"), {
+      target: { value: "700" },
+    });
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        position: "custom",
+        positionX: 700,
+        positionY: 1498,
+      }),
+    );
+  });
+
+  it("clears custom coordinates when a preset is selected", () => {
+    const onChange = vi.fn();
+    render(
+      <LocalEditorSubtitleStyleInspector
+        style={{
+          ...DEFAULT_SUBTITLE_STYLE,
+          position: "custom",
+          positionX: 700,
+          positionY: 420,
+        }}
+        onChange={onChange}
+        onRemove={vi.fn()}
+        hasCues
+        renderWidth={1080}
+        renderHeight={1920}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Bottom" }));
+
+    const nextStyle = onChange.mock.lastCall[0];
+    expect(nextStyle).toMatchObject({ position: "bottom" });
+    expect(nextStyle).not.toHaveProperty("positionX");
+    expect(nextStyle).not.toHaveProperty("positionY");
+  });
 });

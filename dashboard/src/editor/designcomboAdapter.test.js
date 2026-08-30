@@ -331,6 +331,24 @@ describe("designcomboAdapter", () => {
     ]);
   });
 
+  it("passes custom subtitle positioning from the active track style", () => {
+    const props = manifestToRenderProps({
+      ...manifest,
+      subtitle_tracks: [
+        {
+          ...manifest.subtitle_tracks[0],
+          style: { position: "custom", positionX: 700, positionY: 420 },
+        },
+      ],
+    });
+
+    expect(props.subtitles).toMatchObject({
+      position: "custom",
+      positionX: 700,
+      positionY: 420,
+    });
+  });
+
   it("preserves nested word timings when building render props", () => {
     const props = manifestToRenderProps({
       timeline: { source_video_url: "/videos/source.mp4" },

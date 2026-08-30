@@ -142,6 +142,37 @@ describe("manifestToVersionRenderProps", () => {
     ]);
   });
 
+  it("passes custom subtitle coordinates from the active track", () => {
+    const props = manifestToVersionRenderProps(
+      {
+        timeline: { source_video_url: "/videos/job/source.mp4" },
+        render_spec: {
+          video_start_seconds: 0,
+          duration_in_frames: 240,
+          fps: 24,
+          width: 1080,
+          height: 1920,
+          video_fit: "contain",
+        },
+        active_subtitle_track_id: "original",
+        subtitle_tracks: [
+          {
+            id: "original",
+            style: { position: "custom", positionX: 700, positionY: 420 },
+            cues: [{ text: "Move me", startMs: 100, endMs: 900 }],
+          },
+        ],
+      },
+      { versionId: "v5", manifestRevision: "rev-5" },
+    );
+
+    expect(props.subtitles).toMatchObject({
+      position: "custom",
+      positionX: 700,
+      positionY: 420,
+    });
+  });
+
   it("rejects versions without a complete render specification", () => {
     expect(() =>
       manifestToVersionRenderProps(

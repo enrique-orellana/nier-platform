@@ -1,5 +1,8 @@
 const clone = (value) => JSON.parse(JSON.stringify(value ?? {}));
 
+const finiteCoordinate = (value) =>
+  Number.isFinite(Number(value)) ? Number(value) : null;
+
 const trackItems = (track) => {
   const cues = Array.isArray(track?.cues) ? track.cues : [];
   const captions = Array.isArray(track?.captions) ? track.captions : [];
@@ -41,12 +44,25 @@ export function manifestToRenderProps(
   const activeTrack =
     subtitleTracks.find((track) => track.id === activeSubtitleTrackId) || null;
   const activeCaptions = activeTrack ? trackCaptions(activeTrack) : [];
+  const subtitleStyle =
+    activeTrack?.style || manifest.layers?.subtitles?.style || null;
+  const subtitlePosition =
+    subtitleStyle?.position || manifest.layers?.subtitles?.position || "bottom";
+  const subtitlePositionX = finiteCoordinate(subtitleStyle?.positionX);
+  const subtitlePositionY = finiteCoordinate(subtitleStyle?.positionY);
   const subtitles =
     activeTrack && activeCaptions.length
       ? {
           ...(clone(manifest.layers?.subtitles) || {}),
           captions: activeCaptions,
-          style: activeTrack.style || manifest.layers?.subtitles?.style,
+          position: subtitlePosition,
+          ...(subtitlePositionX !== null
+            ? { positionX: subtitlePositionX }
+            : {}),
+          ...(subtitlePositionY !== null
+            ? { positionY: subtitlePositionY }
+            : {}),
+          style: subtitleStyle,
         }
       : null;
   const sourceLayout = manifest.layers?.layout || null;

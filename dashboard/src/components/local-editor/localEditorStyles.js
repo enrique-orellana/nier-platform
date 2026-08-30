@@ -201,6 +201,9 @@ export const DEFAULT_SUBTITLE_STYLE = {
 export const normalizeSubtitleStyle = (style = {}) => ({
   ...DEFAULT_SUBTITLE_STYLE,
   ...style,
+  position: ["top", "middle", "bottom", "custom"].includes(style.position)
+    ? style.position
+    : DEFAULT_SUBTITLE_STYLE.position,
   displayMode: style.displayMode === "single-word" ? "single-word" : "phrase",
 });
 

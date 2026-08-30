@@ -66,6 +66,20 @@ describe("local editor export helpers", () => {
     });
   });
 
+  it("preserves custom subtitle coordinates for canvas rendering", () => {
+    expect(
+      subtitleVisualStyle({
+        position: "custom",
+        positionX: 700,
+        positionY: 420,
+      }),
+    ).toMatchObject({
+      position: "custom",
+      positionX: 700,
+      positionY: 420,
+    });
+  });
+
   it("resets the source video to the beginning before export", () => {
     const video = { currentTime: 27.5, pause: vi.fn() };
 

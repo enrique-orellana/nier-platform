@@ -11,7 +11,7 @@ vi.mock("remotion", () => ({
   Sequence: ({ children }) => <>{children}</>,
   staticFile: (file) => `/${file}`,
   useCurrentFrame: () => 0,
-  useVideoConfig: () => ({ fps: 30 }),
+  useVideoConfig: () => ({ fps: 30, width: 360, height: 640 }),
 }));
 
 import {
@@ -73,5 +73,25 @@ describe("subtitle rendering defaults", () => {
 
     expect(isSubtitleBlockActiveAt(block, 750)).toBe(true);
     expect(isSubtitleBlockActiveAt(block, 1000)).toBe(false);
+  });
+
+  it("renders custom subtitles at their pixel coordinates", () => {
+    render(
+      <Subtitles
+        config={{
+          captions: [{ text: "Move me", startMs: 0, endMs: 1000 }],
+          position: "custom",
+          positionX: 90,
+          positionY: 128,
+        }}
+      />,
+    );
+
+    const container = screen.getByText("Move me").parentElement.parentElement;
+    expect(container).toHaveStyle({
+      left: "25%",
+      top: "20%",
+      transform: "translate(-50%, -50%)",
+    });
   });
 });

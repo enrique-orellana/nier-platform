@@ -16,7 +16,7 @@ export interface SubtitleBlock {
 
 // --- Subtitle config ---
 export type SubtitleAnimation = "none" | "word-highlight" | "pop" | "karaoke";
-export type SubtitlePosition = "top" | "middle" | "bottom";
+export type SubtitlePosition = "top" | "middle" | "bottom" | "custom";
 export type SubtitleDisplayMode = "phrase" | "single-word";
 
 export interface SubtitleStyle {
@@ -30,12 +30,17 @@ export interface SubtitleStyle {
   bgOpacity: number;
   animation: SubtitleAnimation;
   displayMode: SubtitleDisplayMode;
+  position?: SubtitlePosition;
+  positionX?: number;
+  positionY?: number;
 }
 
 export interface SubtitleConfig {
   captions: CaptionWord[];
   blocks?: SubtitleBlock[];
   position: SubtitlePosition;
+  positionX?: number;
+  positionY?: number;
   style: SubtitleStyle;
 }
 
@@ -196,6 +201,9 @@ export const subtitleStyleSchema = z.object({
   bgOpacity: z.number().min(0).max(1),
   animation: z.enum(["none", "word-highlight", "pop", "karaoke"]),
   displayMode: z.enum(["phrase", "single-word"]).default("phrase"),
+  position: z.enum(["top", "middle", "bottom", "custom"]).optional(),
+  positionX: z.number().optional(),
+  positionY: z.number().optional(),
 });
 
 export const subtitleConfigSchema = z.object({
@@ -206,7 +214,9 @@ export const subtitleConfigSchema = z.object({
     endMs: z.number(),
     text: z.string(),
   })).optional(),
-  position: z.enum(["top", "middle", "bottom"]),
+  position: z.enum(["top", "middle", "bottom", "custom"]),
+  positionX: z.number().optional(),
+  positionY: z.number().optional(),
   style: subtitleStyleSchema,
 });
 

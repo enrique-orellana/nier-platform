@@ -5,6 +5,7 @@ import {
   normalizeSubtitleStyle,
 } from "./localEditorStyles";
 import { getHookPositionCoordinates } from "../../remotion/lib/hookVisual";
+import { getSubtitlePositionCoordinates } from "../../remotion/lib/subtitleVisual";
 
 export const activeCueAt = (cues, playheadMs) =>
   (cues || []).find(
@@ -112,6 +113,14 @@ export const subtitleVisualStyle = (style = {}) => {
     backgroundOpacity: current.bgOpacity,
     animation: current.animation,
     position: current.position,
+    ...(current.position === "custom" &&
+    Number.isFinite(Number(current.positionX))
+      ? { positionX: Number(current.positionX) }
+      : {}),
+    ...(current.position === "custom" &&
+    Number.isFinite(Number(current.positionY))
+      ? { positionY: Number(current.positionY) }
+      : {}),
   };
 };
 
@@ -357,12 +366,19 @@ export async function renderLocalVideo({
           subtitleFontSize,
           subtitleStyleValues.fontFamily,
         );
+        const subtitlePosition = getSubtitlePositionCoordinates(
+          subtitleStyleValues,
+          canvas.width,
+          canvas.height,
+        );
         const subtitleDesiredY =
-          subtitleStyleValues.position === "top"
-            ? canvas.height * 0.12
-            : subtitleStyleValues.position === "middle"
-              ? canvas.height * 0.45
-              : canvas.height * 0.78;
+          subtitleStyleValues.position === "custom"
+            ? subtitlePosition.y
+            : subtitleStyleValues.position === "top"
+              ? canvas.height * 0.12
+              : subtitleStyleValues.position === "middle"
+                ? canvas.height * 0.45
+                : canvas.height * 0.78;
         const subtitleY = clampOverlayY(
           subtitleDesiredY,
           canvas.height,
@@ -370,7 +386,12 @@ export async function renderLocalVideo({
           subtitleMetrics.padding,
         );
         context.save();
-        context.translate(canvas.width / 2, subtitleY);
+        context.translate(
+          subtitleStyleValues.position === "custom"
+            ? subtitlePosition.x
+            : canvas.width / 2,
+          subtitleY,
+        );
         context.scale(subtitleScale, subtitleScale);
         drawOverlay(context, subtitle.text, {
           x: 0,

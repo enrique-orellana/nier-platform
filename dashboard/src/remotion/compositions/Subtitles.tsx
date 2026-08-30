@@ -14,6 +14,7 @@ import {
   groupCaptionsIntoBlocks,
 } from "../lib/captions";
 import { getFontStack, subtitleFontFace } from "../lib/fonts";
+import { getSubtitlePositionStyle } from "../lib/subtitleVisual";
 
 export { getSubtitleWordsForDisplay } from "../lib/captions";
 
@@ -21,12 +22,6 @@ interface SubtitlesProps {
   config: SubtitleConfig;
   mediaTimeMs?: number | null;
 }
-
-const POSITION_MAP: Record<string, React.CSSProperties> = {
-  top: { top: "12%", bottom: "auto" },
-  middle: { top: "45%", bottom: "auto" },
-  bottom: { bottom: "10%", top: "auto" },
-};
 
 const DEFAULT_SUBTITLE_STYLE: SubtitleConfig["style"] = {
   fontFamily: "Arial",
@@ -67,13 +62,29 @@ export const isSubtitleBlockActiveAt = (
 export function normalizeSubtitleConfig(
   config: Partial<SubtitleConfig> | null | undefined,
 ): SubtitleConfig {
+  const position = config?.style?.position || config?.position || "bottom";
+  const positionX = config?.positionX ?? config?.style?.positionX;
+  const positionY = config?.positionY ?? config?.style?.positionY;
   return {
     captions: Array.isArray(config?.captions) ? config.captions : [],
     blocks: Array.isArray(config?.blocks) ? config.blocks : undefined,
-    position: config?.position || "bottom",
+    position,
+    ...(Number.isFinite(Number(positionX))
+      ? { positionX: Number(positionX) }
+      : {}),
+    ...(Number.isFinite(Number(positionY))
+      ? { positionY: Number(positionY) }
+      : {}),
     style: {
       ...DEFAULT_SUBTITLE_STYLE,
       ...(config?.style || {}),
+      position,
+      ...(Number.isFinite(Number(positionX))
+        ? { positionX: Number(positionX) }
+        : {}),
+      ...(Number.isFinite(Number(positionY))
+        ? { positionY: Number(positionY) }
+        : {}),
       displayMode:
         config?.style?.displayMode === "single-word" ? "single-word" : "phrase",
     },
@@ -141,7 +152,7 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
   mediaTimeMs,
 }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const { style, position } = config;
 
   // Current time relative to composition start (sequence-relative frame)
@@ -163,7 +174,15 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
 
   if (style.displayMode === "single-word" && activeIndex < 0) return null;
 
-  const positionStyle = POSITION_MAP[position] ?? POSITION_MAP.bottom;
+  const positionStyle = getSubtitlePositionStyle(
+    {
+      position,
+      positionX: config.positionX ?? style.positionX,
+      positionY: config.positionY ?? style.positionY,
+    },
+    width,
+    height,
+  );
   const fontStack = getFontStack(style.fontFamily);
 
   // Background box style
@@ -184,6 +203,7 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
         position: "absolute",
         left: 0,
         right: 0,
+        ...(position === "custom" ? { width: "88%" } : {}),
         display: "flex",
         justifyContent: "center",
         ...positionStyle,

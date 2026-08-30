@@ -71,7 +71,9 @@ describe("local editor Remotion rendering", () => {
       height: 1080,
       subtitleCues: [{ text: "Hello", startMs: 500, endMs: 1500 }],
       subtitleStyle: {
-        position: "bottom",
+        position: "custom",
+        positionX: 600.6,
+        positionY: -20,
         fontFamily: "Verdana",
         fontSize: 24,
       },
@@ -107,6 +109,11 @@ describe("local editor Remotion rendering", () => {
       fontFamily: "Verdana",
       fontSize: 24,
       borderWidth: 2,
+    });
+    expect(props.subtitles).toMatchObject({
+      position: "custom",
+      positionX: 601,
+      positionY: 0,
     });
     expect(props.hook).toMatchObject({
       text: "Hook",
