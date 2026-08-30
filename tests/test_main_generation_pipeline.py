@@ -254,6 +254,21 @@ class MainGenerationPipelineTests(unittest.TestCase):
         assert persisted["transcript"] == {"segments": []}
         assert persisted["source_asset"]["asset_id"] == "source"
 
+    def test_prepare_manifest_source_normalizes_local_sources_to_canonical_master_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source_path = Path(directory) / "camera_take.MP4"
+            output_dir = Path(directory) / "job"
+            source_path.write_bytes(b"source")
+
+            with patch.object(main, "probe_media", return_value=source_media()):
+                prepared_path, asset, _ = main._prepare_manifest_source(
+                    str(source_path), str(output_dir)
+                )
+
+            assert prepared_path == str(output_dir / "source.mp4")
+            assert asset["relative_path"] == "source.mp4"
+            assert (output_dir / "source.mp4").read_bytes() == b"source"
+
     def test_clip_source_analysis_uses_clip_cache_and_range(self):
         with tempfile.TemporaryDirectory() as directory:
             source_path = Path(directory) / "source.mp4"

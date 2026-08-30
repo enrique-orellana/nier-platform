@@ -1769,17 +1769,10 @@ def _prepare_manifest_source(
         asset = register_remote_asset(Path(source_path), media, source_object)
         return source_path, asset, media
 
-    job_root = os.path.abspath(output_dir)
-    try:
-        inside_job = os.path.commonpath([source_path, job_root]) == job_root
-    except ValueError:
-        inside_job = False
-    if not inside_job:
-        source_name = os.path.basename(source_path)
-        destination = os.path.join(output_dir, f"source_{source_name}")
-        if os.path.abspath(destination) != source_path:
-            shutil.copy2(source_path, destination)
-        source_path = destination
+    destination = os.path.join(output_dir, "source.mp4")
+    if os.path.abspath(destination) != source_path:
+        shutil.copy2(source_path, destination)
+    source_path = destination
     media = probe_media(source_path)
     asset = register_asset(Path(source_path), Path(output_dir), media)
     return source_path, asset, media

@@ -621,11 +621,12 @@ def artifact_object_key(job_id, relative_name, clip_id=None):
     """Return the canonical object key for a job artifact."""
     relative_name = str(relative_name).replace("\\", "/").lstrip("/")
     job_id = str(job_id).strip()
+    normalized_name = relative_name.lower()
     if (
-        relative_name == "source.mp4"
-        or relative_name.startswith("source.")
-        or relative_name.startswith("master_")
-        or relative_name.endswith("_metadata.json")
+        normalized_name == "source.mp4"
+        or normalized_name.startswith("source.")
+        or normalized_name.startswith("master_")
+        or normalized_name.endswith("_metadata.json")
     ):
         return f"{job_id}/master/{relative_name}"
     clip_id = str(clip_id or job_id).strip()
@@ -660,17 +661,18 @@ def upload_job_artifacts(directory, job_id, excluded_paths=None, include_paths=N
             if include_paths and relative_name not in include_paths:
                 continue
             # Upload media, metadata, manifests, and sidecars while skipping scratch files.
+            normalized_filename = filename.lower()
             if (
-                not (filename.endswith((".mp4", ".json", ".srt")))
-                or filename.startswith("temp_")
-                or "_temp_video" in filename
-                or filename == "_source_analysis.json"
-                or filename == "clip_statuses.json"
+                not normalized_filename.endswith((".mp4", ".json", ".srt"))
+                or normalized_filename.startswith("temp_")
+                or "_temp_video" in normalized_filename
+                or normalized_filename == "_source_analysis.json"
+                or normalized_filename == "clip_statuses.json"
             ):
                 continue
             file_path = os.path.join(current_root, filename)
             policy = output_policies.get(filename)
-            if filename.endswith(".mp4") and policy:
+            if normalized_filename.endswith(".mp4") and policy:
                 try:
                     validate_clip_output(
                         file_path,
