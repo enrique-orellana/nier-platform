@@ -2,6 +2,10 @@ import React, { forwardRef, useImperativeHandle, useRef } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import RemotionPreview from "./RemotionPreview";
+import {
+  PlaybackClockProvider,
+  createPlaybackClockState,
+} from "../lib/playbackClock";
 
 const playMock = vi.hoisted(() => vi.fn());
 const pauseMock = vi.hoisted(() => vi.fn());
@@ -172,6 +176,46 @@ describe("RemotionPreview", () => {
     );
 
     expect(seekToMock).toHaveBeenCalledWith(12);
+  });
+
+  it("uses the shared clock for Player transport and composition time", () => {
+    playerPropsMock.mockClear();
+    const clock = {
+      ...createPlaybackClockState({
+        durationMs: 1000,
+        playheadMs: 500,
+        isPlaying: true,
+        isLooping: false,
+        playbackRate: 1.5,
+        seekRevision: 7,
+      }),
+      currentFrame: 15,
+    };
+
+    render(
+      <PlaybackClockProvider clock={clock}>
+        <RemotionPreview
+          videoUrl="/video.mp4"
+          currentFrame={0}
+          playing={false}
+          loop={true}
+          playbackRate={1}
+          seekRevision={0}
+        />
+      </PlaybackClockProvider>,
+    );
+
+    expect(playerPropsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        autoPlay: true,
+        loop: false,
+        playbackRate: 1.5,
+        inputProps: expect.objectContaining({
+          playbackTimeMs: 500,
+          seekRevision: 7,
+        }),
+      }),
+    );
   });
 
   it("does not seek to a stale frame when playback pauses during buffering", () => {

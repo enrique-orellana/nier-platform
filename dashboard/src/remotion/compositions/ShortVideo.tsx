@@ -577,6 +577,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     onGameplayCropReset,
     onGameplayCropDone,
     seekRevision = 0,
+    playbackTimeMs,
   } = rawProps as unknown as ShortVideoProps & {
     onAutoPlayError?: () => void;
     onSourceDimensionsChange?: (dimensions: {
@@ -588,11 +589,14 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     onGameplayCropReset?: () => void;
     onGameplayCropDone?: () => void;
     seekRevision?: number;
+    playbackTimeMs?: number | null;
   };
-  const [mediaTimeMs, setMediaTimeMs] = useState<number | null>(null);
-  const [previewMediaTimeMs, setPreviewMediaTimeMs] = useState<number | null>(
+  const [fallbackMediaTimeMs, setFallbackMediaTimeMs] = useState<number | null>(
     null,
   );
+  const [fallbackPreviewMediaTimeMs, setFallbackPreviewMediaTimeMs] = useState<
+    number | null
+  >(null);
   const previewMediaTimePublishedAtRef = useRef<number | null>(null);
   const previewMediaTimeValueRef = useRef<number | null>(null);
   const frame = useCurrentFrame();
@@ -600,6 +604,12 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
   frameRef.current = frame;
   const videoConfig = useVideoConfig();
   const compositionFps = Number(videoConfig.fps || fps);
+  const controlledPlaybackTimeMs =
+    playbackTimeMs !== null &&
+    playbackTimeMs !== undefined &&
+    Number.isFinite(Number(playbackTimeMs))
+      ? Math.max(0, Number(playbackTimeMs))
+      : null;
   const videoStartFrame = Math.max(
     0,
     Math.round(Number(videoStartSeconds) * Number(fps)),
@@ -628,10 +638,11 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
   const hasActiveSubtitles = Boolean(activeSubtitles);
   const handleMediaTimeChange = useCallback(
     (nextMediaTimeMs: number | null) => {
-      if (hasActiveSubtitles) setMediaTimeMs(nextMediaTimeMs);
+      if (controlledPlaybackTimeMs === null && hasActiveSubtitles)
+        setFallbackMediaTimeMs(nextMediaTimeMs);
       onMediaTimeChange?.(nextMediaTimeMs);
     },
-    [hasActiveSubtitles, onMediaTimeChange],
+    [controlledPlaybackTimeMs, hasActiveSubtitles, onMediaTimeChange],
   );
   const handleAudioMediaTimeChange = useCallback(
     (nextMediaTimeMs: number | null) => {
@@ -656,13 +667,17 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
       ) {
         previewMediaTimePublishedAtRef.current = now;
         previewMediaTimeValueRef.current = nextMediaTimeMs;
-        setPreviewMediaTimeMs(nextMediaTimeMs);
+        if (controlledPlaybackTimeMs === null)
+          setFallbackPreviewMediaTimeMs(nextMediaTimeMs);
       }
       handleMediaTimeChange(nextMediaTimeMs);
     },
-    [handleMediaTimeChange],
+    [controlledPlaybackTimeMs, handleMediaTimeChange],
   );
   const environment = useRemotionEnvironment();
+  const mediaTimeMs = controlledPlaybackTimeMs ?? fallbackMediaTimeMs;
+  const previewMediaTimeMs =
+    controlledPlaybackTimeMs ?? fallbackPreviewMediaTimeMs;
   const layoutFrame =
     !environment.isRendering && previewMediaTimeMs !== null
       ? (previewMediaTimeMs / 1000) * compositionFps
@@ -719,8 +734,8 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             muted
             isRendering={environment.isRendering}
             onAutoPlayError={onAutoPlayError}
-            onMediaTimeChange={handleMediaTimeChange}
-            reportMediaTime={hasActiveSubtitles || Boolean(onMediaTimeChange)}
+            onMediaTimeChange={undefined}
+            reportMediaTime={false}
             masterMediaTimeMs={previewMediaTimeMs}
             seekRevision={seekRevision}
             layout={layout}

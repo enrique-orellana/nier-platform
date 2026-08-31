@@ -213,6 +213,25 @@ describe("ShortVideo media source", () => {
     expect(video.currentTime).toBeCloseTo(7.25, 5);
   });
 
+  it("uses controlled playback time when the composition frame is stale", () => {
+    timelineContextMock.playing = false;
+    currentFrameMock.value = 0;
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        fps={30}
+        playbackTimeMs={7250}
+        layout={{ format: "standard" }}
+      />,
+    );
+
+    expect(screen.getByTestId("native-browser-video").currentTime).toBeCloseTo(
+      7.25,
+      5,
+    );
+  });
+
   it("switches preview layouts from the uninterrupted native media clock", () => {
     const animationFrames = [];
     vi.stubGlobal("requestAnimationFrame", (callback) => {
