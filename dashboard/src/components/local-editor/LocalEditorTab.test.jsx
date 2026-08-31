@@ -80,6 +80,9 @@ vi.mock("../RemotionPreview", () => ({
         <button type="button" onClick={() => onMediaTimeChange?.(2000)}>
           Emit native media time
         </button>
+        <button type="button" onClick={() => onMediaTimeChange?.(0)}>
+          Emit native media time zero
+        </button>
         {gameplayCropEditing && (
           <>
             <button
@@ -1157,7 +1160,7 @@ describe("LocalEditorTab", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: /emit native media time/i }),
+      screen.getByRole("button", { name: "Emit native media time" }),
     );
 
     await waitFor(() =>
@@ -1182,7 +1185,7 @@ describe("LocalEditorTab", () => {
     expect(initialLayout).toBeDefined();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /emit native media time/i }),
+      screen.getByRole("button", { name: "Emit native media time" }),
     );
 
     await waitFor(() =>
@@ -2180,6 +2183,45 @@ describe("LocalEditorTab", () => {
     expect(screen.getByTestId("local-editor-remotion-preview")).toHaveAttribute(
       "data-controls",
       "false",
+    );
+  });
+
+  it("keeps an explicit Remotion seek from being reset by native clock cleanup", async () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="https://example.test/master.mp4"
+        initialPlaybackDurationMs={10000}
+        remotionPreviewProps={{
+          videoUrl: "https://example.test/master.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+          width: 1080,
+          height: 1920,
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("local-editor-remotion-preview"),
+      ).toBeInTheDocument(),
+    );
+
+    fireEvent.keyDown(screen.getByTestId("local-editor-workspace"), {
+      key: "ArrowRight",
+    });
+    expect(screen.getByTestId("local-editor-remotion-preview")).toHaveAttribute(
+      "data-current-frame",
+      "1",
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Emit native media time zero" }),
+    );
+
+    expect(screen.getByTestId("local-editor-remotion-preview")).toHaveAttribute(
+      "data-current-frame",
+      "1",
     );
   });
 

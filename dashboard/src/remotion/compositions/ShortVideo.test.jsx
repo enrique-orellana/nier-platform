@@ -157,6 +157,62 @@ describe("ShortVideo media source", () => {
     expect(onMediaTimeChange).toHaveBeenCalledWith(750);
   });
 
+  it("does not publish a bootstrap zero for a delayed native audio seek", () => {
+    const animationFrames = [];
+    const onMediaTimeChange = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", (callback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    timelineContextMock.playing = true;
+    currentFrameMock.value = 30;
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        fps={30}
+        onMediaTimeChange={onMediaTimeChange}
+      />,
+    );
+
+    act(() => animationFrames[0]?.());
+
+    expect(onMediaTimeChange).not.toHaveBeenCalledWith(0);
+  });
+
+  it("keeps visual video time aligned with the persistent audio clock", () => {
+    const animationFrames = [];
+    vi.stubGlobal("requestAnimationFrame", (callback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    timelineContextMock.playing = true;
+    currentFrameMock.value = 150;
+
+    render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        fps={30}
+        onMediaTimeChange={vi.fn()}
+        layout={{ format: "standard" }}
+      />,
+    );
+
+    const audio = screen.getByTestId("native-browser-audio");
+    const video = screen.getByTestId("native-browser-video");
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      value: 7.25,
+      writable: true,
+    });
+
+    act(() => animationFrames[0]?.());
+
+    expect(video.currentTime).toBeCloseTo(7.25, 5);
+  });
+
   it("switches preview layouts from the uninterrupted native media clock", () => {
     const animationFrames = [];
     vi.stubGlobal("requestAnimationFrame", (callback) => {

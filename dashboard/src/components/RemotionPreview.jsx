@@ -14,6 +14,7 @@ import { useRenewableMediaUrl } from "../lib/videoUrls";
  * @param {object|null} props.hook - HookConfig or null
  * @param {object|null} props.effects - EffectsConfig or null
  * @param {number} [props.playbackRate] - Playback speed multiplier
+ * @param {number} [props.seekRevision] - Increments for explicit editor seeks
  * @param {(mediaTimeMs: number|null) => void} [props.onMediaTimeChange] - Native video clock callback
  * @param {(dimensions: {width: number, height: number}) => void} [props.onSourceDimensionsChange] - Native source video dimensions callback
  * @param {boolean} [props.gameplayCropEditing] - Enables the preview-only Streamer framing overlay
@@ -39,6 +40,7 @@ function RemotionPreview({
   playing = true,
   loop = true,
   playbackRate = 1,
+  seekRevision = 0,
   controls = true,
   onFrameChange,
   onMediaTimeChange,
@@ -162,6 +164,7 @@ function RemotionPreview({
       videoUrl: resolvedVideoUrl,
       videoStartSeconds,
       playbackRate,
+      seekRevision,
       durationInFrames,
       fps,
       width,
@@ -183,6 +186,7 @@ function RemotionPreview({
       resolvedVideoUrl,
       videoStartSeconds,
       playbackRate,
+      seekRevision,
       durationInFrames,
       fps,
       width,

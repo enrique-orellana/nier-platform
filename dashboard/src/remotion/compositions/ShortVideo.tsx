@@ -77,6 +77,8 @@ const BrowserVideo: React.FC<{
   style?: React.CSSProperties;
   muted: boolean;
   audioOnly?: boolean;
+  syncTimeMs?: number | null;
+  seekRevision?: number;
 }> = ({
   videoUrl,
   videoStartSeconds,
@@ -89,6 +91,8 @@ const BrowserVideo: React.FC<{
   style,
   muted,
   audioOnly = false,
+  syncTimeMs = null,
+  seekRevision = 0,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoId = useId();
@@ -97,6 +101,7 @@ const BrowserVideo: React.FC<{
   const [playerMuted] = Internals.usePlayerMutedState();
   const timeline = Internals.Timeline.useTimelineContext();
   const lastSourceKeyRef = useRef("");
+  const lastSeekRevisionRef = useRef(seekRevision);
   const sourceKey = `${videoUrl}:${videoStartSeconds}:${videoConfig.fps || fps}`;
   const effectiveMuted = muted || playerMuted;
 
@@ -164,10 +169,17 @@ const BrowserVideo: React.FC<{
     const video = videoRef.current;
     if (!video) return;
     const sourceChanged = sourceKey !== lastSourceKeyRef.current;
-    const shouldSync = sourceChanged || !timeline.playing;
+    const explicitSeek = seekRevision !== lastSeekRevisionRef.current;
+    const hasMasterTime =
+      !audioOnly && syncTimeMs !== null && Number.isFinite(Number(syncTimeMs));
+    const shouldSync =
+      sourceChanged || !timeline.playing || explicitSeek || hasMasterTime;
     if (shouldSync) {
       const targetTime =
-        Number(videoStartSeconds) + frame / Number(videoConfig.fps || fps);
+        Number(videoStartSeconds) +
+        (hasMasterTime
+          ? Number(syncTimeMs) / 1000
+          : frame / Number(videoConfig.fps || fps));
       if (
         Number.isFinite(targetTime) &&
         Math.abs(video.currentTime - targetTime) > 0.05
@@ -175,10 +187,13 @@ const BrowserVideo: React.FC<{
         video.currentTime = Math.max(0, targetTime);
     }
     lastSourceKeyRef.current = sourceKey;
+    lastSeekRevisionRef.current = seekRevision;
   }, [
     frame,
     fps,
+    seekRevision,
     sourceKey,
+    syncTimeMs,
     timeline.playing,
     videoConfig.fps,
     videoStartSeconds,
@@ -239,6 +254,8 @@ const StreamerPanel: React.FC<{
   onMediaTimeChange?: (mediaTimeMs: number | null) => void;
   reportMediaTime: boolean;
   cropOverride?: SourceRegion;
+  masterMediaTimeMs?: number | null;
+  seekRevision?: number;
 }> = ({
   videoUrl,
   videoStartFrame,
@@ -264,6 +281,8 @@ const StreamerPanel: React.FC<{
   onMediaTimeChange,
   reportMediaTime,
   cropOverride,
+  masterMediaTimeMs = null,
+  seekRevision = 0,
 }) => {
   const gameplayRegion = normalizeRegion(region) || {
     x: 0,
@@ -355,6 +374,8 @@ const StreamerPanel: React.FC<{
             objectFit={standardLayout && !cropOverride ? "contain" : "fill"}
             style={style}
             muted={muted}
+            syncTimeMs={masterMediaTimeMs}
+            seekRevision={seekRevision}
           />
         )}
         {!standardLayout && gameplayCropEditing && !isRendering && (
@@ -405,6 +426,8 @@ const LayoutVideoLayer: React.FC<{
   onGameplayCropChange?: (next: { focus: SourcePoint; zoom: number }) => void;
   onGameplayCropReset?: () => void;
   onGameplayCropDone?: () => void;
+  masterMediaTimeMs?: number | null;
+  seekRevision?: number;
 }> = ({
   segment,
   videoUrl,
@@ -426,6 +449,8 @@ const LayoutVideoLayer: React.FC<{
   onGameplayCropChange,
   onGameplayCropReset,
   onGameplayCropDone,
+  masterMediaTimeMs = null,
+  seekRevision = 0,
 }) => {
   const usesStandardLayout = segment.format === "standard";
   const facecamHeightRatio =
@@ -497,6 +522,8 @@ const LayoutVideoLayer: React.FC<{
         onMediaTimeChange={onMediaTimeChange}
         reportMediaTime={reportMediaTime && !muted}
         cropOverride={faceTrackingCrop}
+        masterMediaTimeMs={masterMediaTimeMs}
+        seekRevision={seekRevision}
       />
       {!usesStandardLayout && (
         <MemoizedStreamerPanel
@@ -515,6 +542,8 @@ const LayoutVideoLayer: React.FC<{
           isRendering={isRendering}
           onAutoPlayError={onAutoPlayError}
           reportMediaTime={false}
+          masterMediaTimeMs={masterMediaTimeMs}
+          seekRevision={seekRevision}
         />
       )}
     </div>
@@ -547,6 +576,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     onGameplayCropChange,
     onGameplayCropReset,
     onGameplayCropDone,
+    seekRevision = 0,
   } = rawProps as unknown as ShortVideoProps & {
     onAutoPlayError?: () => void;
     onSourceDimensionsChange?: (dimensions: {
@@ -557,6 +587,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     onGameplayCropChange?: (next: { focus: SourcePoint; zoom: number }) => void;
     onGameplayCropReset?: () => void;
     onGameplayCropDone?: () => void;
+    seekRevision?: number;
   };
   const [mediaTimeMs, setMediaTimeMs] = useState<number | null>(null);
   const [previewMediaTimeMs, setPreviewMediaTimeMs] = useState<number | null>(
@@ -608,7 +639,6 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
       // current seek. Do not let that bootstrap value overwrite a paused or
       // delayed Remotion frame.
       if (nextMediaTimeMs === 0 && frameRef.current > 0) {
-        handleMediaTimeChange(nextMediaTimeMs);
         return;
       }
       const now = performance.now();
@@ -673,6 +703,7 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             style={{ opacity: 0, pointerEvents: "none" }}
             muted={false}
             audioOnly
+            seekRevision={seekRevision}
           />
         )}
         {layoutLayers.map(({ segment, opacity }) => (
@@ -690,6 +721,8 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
             onAutoPlayError={onAutoPlayError}
             onMediaTimeChange={handleMediaTimeChange}
             reportMediaTime={hasActiveSubtitles || Boolean(onMediaTimeChange)}
+            masterMediaTimeMs={previewMediaTimeMs}
+            seekRevision={seekRevision}
             layout={layout}
             outputWidth={Number(videoConfig.width || 1080)}
             outputHeight={Number(videoConfig.height || 1920)}
