@@ -262,6 +262,41 @@ describe("ShortVideo media source", () => {
     expect(cancelAnimationFrameMock).not.toHaveBeenCalled();
   });
 
+  it("does not repeatedly seek visual video layers from the audio clock while playing", () => {
+    timelineContextMock.playing = true;
+    timelineContextMock.imperativePlaying.current = true;
+
+    const { rerender } = render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        playbackTimeMs={1000}
+        layout={{ format: "standard" }}
+      />,
+    );
+
+    const video = screen.getByTestId("native-browser-video");
+    let currentTime = 1;
+    const setCurrentTime = vi.fn((nextTime) => {
+      currentTime = nextTime;
+    });
+    Object.defineProperty(video, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: setCurrentTime,
+    });
+
+    rerender(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        playbackTimeMs={1100}
+        layout={{ format: "standard" }}
+      />,
+    );
+
+    expect(setCurrentTime).not.toHaveBeenCalled();
+    expect(video.currentTime).toBe(1);
+  });
+
   it("switches preview layouts from the uninterrupted native media clock", () => {
     const animationFrames = [];
     vi.stubGlobal("requestAnimationFrame", (callback) => {

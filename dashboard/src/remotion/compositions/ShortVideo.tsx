@@ -53,6 +53,7 @@ const FACECAM_HEIGHT_RATIOS = {
 } as const;
 
 const PREVIEW_LAYOUT_CLOCK_UPDATE_MS = 50;
+const PREVIEW_VISUAL_DRIFT_CORRECTION_MS = 250;
 
 const sourceAspectRatio = (layout: LayoutConfig | null | undefined) => {
   const width = Number(layout?.source_width);
@@ -172,14 +173,26 @@ const BrowserVideo: React.FC<{
     const explicitSeek = seekRevision !== lastSeekRevisionRef.current;
     const hasMasterTime =
       !audioOnly && syncTimeMs !== null && Number.isFinite(Number(syncTimeMs));
+    const targetTime =
+      Number(videoStartSeconds) +
+      (hasMasterTime
+        ? Number(syncTimeMs) / 1000
+        : frame / Number(videoConfig.fps || fps));
+    const visualDriftMs = hasMasterTime
+      ? Math.abs(video.currentTime - targetTime) * 1000
+      : 0;
+    // While playing, let the visual media decode continuously. Re-seeking it
+    // on every audio-clock tick can repeatedly restart decoding and leave the
+    // picture stuck while the audio keeps moving. A large drift still gets a
+    // corrective seek so a stalled or delayed visual layer can recover.
+    const shouldCorrectVisualDrift =
+      timeline.playing && visualDriftMs > PREVIEW_VISUAL_DRIFT_CORRECTION_MS;
     const shouldSync =
-      sourceChanged || !timeline.playing || explicitSeek || hasMasterTime;
+      sourceChanged ||
+      !timeline.playing ||
+      explicitSeek ||
+      shouldCorrectVisualDrift;
     if (shouldSync) {
-      const targetTime =
-        Number(videoStartSeconds) +
-        (hasMasterTime
-          ? Number(syncTimeMs) / 1000
-          : frame / Number(videoConfig.fps || fps));
       if (
         Number.isFinite(targetTime) &&
         Math.abs(video.currentTime - targetTime) > 0.05
