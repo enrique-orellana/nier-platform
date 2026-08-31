@@ -610,6 +610,10 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     Number.isFinite(Number(playbackTimeMs))
       ? Math.max(0, Number(playbackTimeMs))
       : null;
+  const controlledPlaybackTimeMsRef = useRef<number | null>(
+    controlledPlaybackTimeMs,
+  );
+  controlledPlaybackTimeMsRef.current = controlledPlaybackTimeMs;
   const videoStartFrame = Math.max(
     0,
     Math.round(Number(videoStartSeconds) * Number(fps)),
@@ -638,11 +642,11 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
   const hasActiveSubtitles = Boolean(activeSubtitles);
   const handleMediaTimeChange = useCallback(
     (nextMediaTimeMs: number | null) => {
-      if (controlledPlaybackTimeMs === null && hasActiveSubtitles)
+      if (controlledPlaybackTimeMsRef.current === null && hasActiveSubtitles)
         setFallbackMediaTimeMs(nextMediaTimeMs);
       onMediaTimeChange?.(nextMediaTimeMs);
     },
-    [controlledPlaybackTimeMs, hasActiveSubtitles, onMediaTimeChange],
+    [hasActiveSubtitles, onMediaTimeChange],
   );
   const handleAudioMediaTimeChange = useCallback(
     (nextMediaTimeMs: number | null) => {
@@ -667,12 +671,12 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
       ) {
         previewMediaTimePublishedAtRef.current = now;
         previewMediaTimeValueRef.current = nextMediaTimeMs;
-        if (controlledPlaybackTimeMs === null)
+        if (controlledPlaybackTimeMsRef.current === null)
           setFallbackPreviewMediaTimeMs(nextMediaTimeMs);
       }
       handleMediaTimeChange(nextMediaTimeMs);
     },
-    [controlledPlaybackTimeMs, handleMediaTimeChange],
+    [handleMediaTimeChange],
   );
   const environment = useRemotionEnvironment();
   const mediaTimeMs = controlledPlaybackTimeMs ?? fallbackMediaTimeMs;

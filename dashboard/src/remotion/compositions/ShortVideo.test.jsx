@@ -232,6 +232,36 @@ describe("ShortVideo media source", () => {
     );
   });
 
+  it("keeps the native media clock subscription stable while controlled time advances", () => {
+    const animationFrames = [];
+    const cancelAnimationFrameMock = vi.fn();
+    const onMediaTimeChange = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", (callback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", cancelAnimationFrameMock);
+    timelineContextMock.playing = true;
+
+    const { rerender } = render(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        playbackTimeMs={1000}
+        onMediaTimeChange={onMediaTimeChange}
+      />,
+    );
+
+    rerender(
+      <ShortVideo
+        videoUrl="/videos/master.mp4"
+        playbackTimeMs={1100}
+        onMediaTimeChange={onMediaTimeChange}
+      />,
+    );
+
+    expect(cancelAnimationFrameMock).not.toHaveBeenCalled();
+  });
+
   it("switches preview layouts from the uninterrupted native media clock", () => {
     const animationFrames = [];
     vi.stubGlobal("requestAnimationFrame", (callback) => {
