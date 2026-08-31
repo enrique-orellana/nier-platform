@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Player } from "@remotion/player";
 import { ShortVideo } from "../remotion/compositions/ShortVideo";
 import { useRenewableMediaUrl } from "../lib/videoUrls";
+import { usePlaybackClock } from "../lib/playbackClock";
 
 /**
  * Wraps Remotion's Player component for real-time preview in modals.
@@ -54,26 +55,57 @@ function RemotionPreview({
   className = "",
 }) {
   const { url: resolvedVideoUrl } = useRenewableMediaUrl(videoUrl);
-  const durationInFrames = Math.max(1, Math.round(durationInSeconds * fps));
+  const playbackClock = usePlaybackClock();
+  const effectiveDurationInSeconds = playbackClock
+    ? playbackClock.durationMs / 1000
+    : durationInSeconds;
+  const effectiveFps = playbackClock?.fps ?? fps;
+  const effectiveCurrentFrame = playbackClock?.currentFrame ?? currentFrame;
+  const effectivePlaying = playbackClock?.isPlaying ?? playing;
+  const effectiveLoop = playbackClock?.isLooping ?? loop;
+  const effectivePlaybackRate = playbackClock?.playbackRate ?? playbackRate;
+  const effectiveSeekRevision = playbackClock?.seekRevision ?? seekRevision;
+  const effectivePlaybackTimeMs = playbackClock
+    ? playbackClock.playheadMs
+    : null;
+  const setSharedPlaying = playbackClock?.setIsPlaying;
+  const durationInFrames = Math.max(
+    1,
+    Math.round(effectiveDurationInSeconds * effectiveFps),
+  );
   const playerRef = useRef(null);
   const playerFrameRef = useRef(null);
-  const wasPlayingRef = useRef(playing);
+  const wasPlayingRef = useRef(effectivePlaying);
+  const handlePlayingChange = useCallback(
+    (nextPlaying) => {
+      setSharedPlaying?.(nextPlaying);
+      onPlayingChange?.(nextPlaying);
+    },
+    [onPlayingChange, setSharedPlaying],
+  );
   const handleMediaTimeChange = useCallback(
     (mediaTimeMs) => {
       onMediaTimeChange?.(mediaTimeMs);
-      const durationMs = durationInSeconds * 1000;
-      const finalFrameToleranceMs = 1000 / Math.max(1, Number(fps) || 30);
+      const durationMs = effectiveDurationInSeconds * 1000;
+      const finalFrameToleranceMs =
+        1000 / Math.max(1, Number(effectiveFps) || 30);
       if (
         wasPlayingRef.current &&
-        !loop &&
+        !effectiveLoop &&
         Number.isFinite(mediaTimeMs) &&
         mediaTimeMs >= durationMs - finalFrameToleranceMs
       ) {
         playerRef.current?.pause?.();
-        onPlayingChange?.(false);
+        handlePlayingChange(false);
       }
     },
-    [durationInSeconds, fps, loop, onMediaTimeChange, onPlayingChange],
+    [
+      effectiveLoop,
+      effectiveDurationInSeconds,
+      effectiveFps,
+      handlePlayingChange,
+      onMediaTimeChange,
+    ],
   );
 
   useEffect(() => {
@@ -82,7 +114,7 @@ function RemotionPreview({
     // The editor receives frame updates from this player and publishes them
     // back on a throttled clock. Seeking from that delayed value while the
     // player is running makes every update jump the media backwards.
-    if (playing) {
+    if (effectivePlaying) {
       wasPlayingRef.current = true;
       return;
     }
@@ -94,19 +126,19 @@ function RemotionPreview({
     }
     const targetFrame = Math.max(
       0,
-      Math.min(durationInFrames - 1, Math.round(currentFrame)),
+      Math.min(durationInFrames - 1, Math.round(effectiveCurrentFrame)),
     );
     if (playerFrameRef.current === targetFrame) {
       playerFrameRef.current = null;
       return;
     }
     player.seekTo?.(targetFrame);
-  }, [currentFrame, durationInFrames, playing]);
+  }, [durationInFrames, effectiveCurrentFrame, effectivePlaying]);
 
   useEffect(() => {
-    if (playing) playerRef.current?.play?.();
+    if (effectivePlaying) playerRef.current?.play?.();
     else playerRef.current?.pause?.();
-  }, [playing]);
+  }, [effectivePlaying]);
 
   useEffect(() => {
     const onPlaybackRequest = (event) => {
@@ -132,15 +164,15 @@ function RemotionPreview({
       if (
         wasPlayingRef.current &&
         !onMediaTimeChange &&
-        !loop &&
+        !effectiveLoop &&
         frame >= durationInFrames - 1
       ) {
         player.pause?.();
-        onPlayingChange?.(false);
+        handlePlayingChange(false);
       }
     };
-    const onPlay = () => onPlayingChange?.(true);
-    const onPause = () => onPlayingChange?.(false);
+    const onPlay = () => handlePlayingChange(true);
+    const onPause = () => handlePlayingChange(false);
     player.addEventListener("frameupdate", onFrameUpdate);
     player.addEventListener("play", onPlay);
     player.addEventListener("pause", onPause);
@@ -152,10 +184,10 @@ function RemotionPreview({
     };
   }, [
     durationInFrames,
-    loop,
+    effectiveLoop,
     onFrameChange,
     onMediaTimeChange,
-    onPlayingChange,
+    handlePlayingChange,
     onPlayerReady,
   ]);
 
@@ -163,10 +195,11 @@ function RemotionPreview({
     () => ({
       videoUrl: resolvedVideoUrl,
       videoStartSeconds,
-      playbackRate,
-      seekRevision,
+      playbackRate: effectivePlaybackRate,
+      playbackTimeMs: effectivePlaybackTimeMs,
+      seekRevision: effectiveSeekRevision,
       durationInFrames,
-      fps,
+      fps: effectiveFps,
       width,
       height,
       subtitles,
@@ -183,12 +216,13 @@ function RemotionPreview({
       onSourceDimensionsChange,
     }),
     [
+      effectivePlaybackRate,
+      effectivePlaybackTimeMs,
+      effectiveSeekRevision,
       resolvedVideoUrl,
       videoStartSeconds,
-      playbackRate,
-      seekRevision,
       durationInFrames,
-      fps,
+      effectiveFps,
       width,
       height,
       subtitles,
@@ -214,7 +248,7 @@ function RemotionPreview({
         component={ShortVideo}
         inputProps={inputProps}
         durationInFrames={durationInFrames}
-        fps={fps}
+        fps={effectiveFps}
         compositionWidth={width}
         compositionHeight={height}
         style={{
@@ -222,9 +256,9 @@ function RemotionPreview({
           height: "100%",
         }}
         controls={controls}
-        autoPlay={playing}
-        loop={loop}
-        playbackRate={playbackRate}
+        autoPlay={effectivePlaying}
+        loop={effectiveLoop}
+        playbackRate={effectivePlaybackRate}
         acknowledgeRemotionLicense={true}
       />
     </div>

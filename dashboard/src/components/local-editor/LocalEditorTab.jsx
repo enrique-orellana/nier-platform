@@ -127,6 +127,10 @@ import {
   normalizeSubtitleStyle,
 } from "./localEditorStyles";
 import { getFontStack, subtitleFontFace } from "../../remotion/lib/fonts";
+import {
+  PlaybackClockProvider,
+  usePlaybackClockState,
+} from "../../lib/playbackClock";
 import { SUBTITLE_LANGUAGES } from "../subtitleLanguages";
 import {
   DEFAULT_DURATION_MS,
@@ -193,7 +197,6 @@ export default function LocalEditorTab({
   const layoutResizeRef = useRef(null);
   const inspectorResizeRef = useRef(null);
   const remotionPlayerRef = useRef(null);
-  const remotionPlayheadRef = useRef(0);
   const remotionPlayheadTimerRef = useRef(null);
   const remotionNativeClockActiveRef = useRef(false);
   const remotionMediaPlayheadTimerRef = useRef(null);
@@ -208,9 +211,6 @@ export default function LocalEditorTab({
   const [videoFile, setVideoFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState("");
   const [previewVideoUrl, setPreviewVideoUrl] = useState("");
-  const [durationMs, setDurationMs] = useState(DEFAULT_DURATION_MS);
-  const [playheadMs, setPlayheadMs] = useState(0);
-  const [remotionSeekRevision, setRemotionSeekRevision] = useState(0);
   const editorPreferencesRef = useRef(readEditorPreferences());
   const [editHistory, setEditHistory] = useState(() => {
     const history = createEmptyEditorHistory(editorPreferencesRef.current);
@@ -243,10 +243,7 @@ export default function LocalEditorTab({
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isLooping, setIsLooping] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState(1);
   const [playbackRateMenuOpen, setPlaybackRateMenuOpen] = useState(false);
   const [loopSegment, setLoopSegment] = useState(false);
   const [followAudio, setFollowAudio] = useState(true);
@@ -281,6 +278,33 @@ export default function LocalEditorTab({
       ? Number(initialPlaybackDurationMs)
       : null;
   const remotionFps = Number(remotionPreviewProps?.fps || 30);
+  const configuredPreviewDurationMs =
+    Number(remotionPreviewProps?.durationInSeconds) > 0
+      ? Number(remotionPreviewProps.durationInSeconds) * 1000
+      : null;
+  const initialClockDurationMs =
+    requestedPlaybackDurationMs ||
+    configuredPreviewDurationMs ||
+    DEFAULT_DURATION_MS;
+  const playbackClock = usePlaybackClockState({
+    initialDurationMs: initialClockDurationMs,
+    fps: remotionFps,
+  });
+  const {
+    durationMs,
+    playheadMs,
+    isPlaying,
+    isLooping,
+    playbackRate,
+    playheadRef: remotionPlayheadRef,
+    setDurationMs,
+    setPlayheadMs,
+    setIsPlaying,
+    setIsLooping,
+    setPlaybackRate,
+    resetPlayback,
+    seekTo,
+  } = playbackClock;
   const hookRenderWidth = Math.max(
     1,
     Number(remotionPreviewProps?.width || clipMetadata?.output_width || 1080),
@@ -304,7 +328,7 @@ export default function LocalEditorTab({
           setPlayheadMs(remotionPlayheadRef.current);
       }, 100);
     },
-    [durationMs, remotionFps],
+    [durationMs, remotionFps, remotionPlayheadRef, setPlayheadMs],
   );
   const handleRemotionMediaTimeChange = useCallback(
     (mediaTimeMs) => {
@@ -332,7 +356,7 @@ export default function LocalEditorTab({
           setPlayheadMs(remotionPlayheadRef.current);
       }, 50);
     },
-    [durationMs],
+    [durationMs, remotionPlayheadRef, setPlayheadMs],
   );
   const handleRemotionPlayerReady = useCallback((player) => {
     remotionPlayerRef.current = player;
@@ -655,7 +679,7 @@ export default function LocalEditorTab({
       setDurationMs(
         requestedPlaybackDurationMs ||
           restoredDurationMs ||
-          DEFAULT_DURATION_MS,
+          initialClockDurationMs,
       );
       remotionPlayheadRef.current = 0;
       remotionNativeClockActiveRef.current = false;
@@ -667,11 +691,7 @@ export default function LocalEditorTab({
         window.clearTimeout(remotionMediaPlayheadTimerRef.current);
         remotionMediaPlayheadTimerRef.current = null;
       }
-      setRemotionSeekRevision((revision) => revision + 1);
-      setPlayheadMs(0);
-      setIsPlaying(false);
-      setIsLooping(false);
-      setPlaybackRate(1);
+      resetPlayback();
       setLoopSegment(false);
       setFollowAudio(true);
       setIsMuted(false);
@@ -680,7 +700,13 @@ export default function LocalEditorTab({
       if (videoRef.current) videoRef.current.loop = false;
       if (videoRef.current) videoRef.current.muted = false;
     },
-    [requestedPlaybackDurationMs],
+    [
+      initialClockDurationMs,
+      remotionPlayheadRef,
+      requestedPlaybackDurationMs,
+      resetPlayback,
+      setDurationMs,
+    ],
   );
 
   useEffect(() => {
@@ -724,7 +750,7 @@ export default function LocalEditorTab({
     setVideoFile(null);
     setVideoUrl(streamUrl);
     setPreviewVideoUrl(streamUrl);
-    setDurationMs(requestedPlaybackDurationMs || DEFAULT_DURATION_MS);
+    setDurationMs(initialClockDurationMs);
     remotionPlayheadRef.current = 0;
     remotionNativeClockActiveRef.current = false;
     if (remotionPlayheadTimerRef.current) {
@@ -735,10 +761,7 @@ export default function LocalEditorTab({
       window.clearTimeout(remotionMediaPlayheadTimerRef.current);
       remotionMediaPlayheadTimerRef.current = null;
     }
-    setRemotionSeekRevision((revision) => revision + 1);
-    setPlayheadMs(0);
-    setIsPlaying(false);
-    setPlaybackRate(1);
+    resetPlayback();
     setLoopSegment(false);
     setFollowAudio(true);
     setError("");
@@ -746,7 +769,15 @@ export default function LocalEditorTab({
     return () => {
       if (videoElement) videoElement.pause();
     };
-  }, [initialExportVideoUrl, initialVideoUrl, requestedPlaybackDurationMs]);
+  }, [
+    initialExportVideoUrl,
+    initialVideoUrl,
+    initialClockDurationMs,
+    remotionPlayheadRef,
+    requestedPlaybackDurationMs,
+    resetPlayback,
+    setDurationMs,
+  ]);
 
   const handleVideoError = () => {
     if (!videoFile) setError("Could not stream the project video from MinIO.");
@@ -870,7 +901,7 @@ export default function LocalEditorTab({
       selectedLayoutSegment.transition === "crossfade"
         ? selectedLayoutSegment.transitionDurationMs || 0
         : frameStepMs;
-    setPlayheadMs(
+    seekTo(
       Math.min(
         Math.max(
           selectedLayoutSegment.startMs,
@@ -1582,9 +1613,8 @@ export default function LocalEditorTab({
       remotionMediaPlayheadTimerRef.current = null;
     }
     setSelectedMarkerId(markerAtPlayhead?.id || null);
-    setPlayheadMs(clampedMs);
+    seekTo(clampedMs);
     if (remotionPlayerRef.current) {
-      setRemotionSeekRevision((revision) => revision + 1);
       remotionPlayerRef.current.seekTo?.(
         Math.round((clampedMs / 1000) * remotionFps),
       );
@@ -1606,7 +1636,7 @@ export default function LocalEditorTab({
     if (sourceMs >= playbackStartMs + durationMs) {
       if (isLooping) {
         event.currentTarget.currentTime = playbackStartMs / 1000;
-        setPlayheadMs(0);
+        seekTo(0);
         return;
       }
       event.currentTarget.pause();
@@ -1625,7 +1655,7 @@ export default function LocalEditorTab({
       event.currentTarget.currentTime =
         clipTimeToSourceTime(loopCue.startMs, playbackStartMs, durationMs) /
         1000;
-      setPlayheadMs(loopCue.startMs);
+      seekTo(loopCue.startMs);
       return;
     }
     setPlayheadMs(nextMs);
@@ -1672,12 +1702,10 @@ export default function LocalEditorTab({
 
   const stopVideo = () => {
     if (remotionPlayerRef.current) {
-      remotionPlayheadRef.current = 0;
       remotionNativeClockActiveRef.current = false;
-      setRemotionSeekRevision((revision) => revision + 1);
       remotionPlayerRef.current.pause?.();
       remotionPlayerRef.current.seekTo?.(0);
-      setPlayheadMs(0);
+      seekTo(0);
       setIsPlaying(false);
       return;
     }
@@ -1685,7 +1713,7 @@ export default function LocalEditorTab({
     if (!video) return;
     video.pause();
     video.currentTime = playbackStartMs / 1000;
-    setPlayheadMs(0);
+    seekTo(0);
     setIsPlaying(false);
   };
 
@@ -1861,11 +1889,8 @@ export default function LocalEditorTab({
     setSelected(null);
     setSelectedLayoutSegmentId(null);
     setPendingSubtitle(null);
-    setPlayheadMs(0);
     setProgress(0);
-    setIsPlaying(false);
-    setIsLooping(false);
-    setPlaybackRate(1);
+    resetPlayback();
     setLoopSegment(false);
     setFollowAudio(true);
     setError("");
@@ -2297,36 +2322,30 @@ export default function LocalEditorTab({
               >
                 <div className="relative h-full max-h-full w-auto max-w-full aspect-[9/16]">
                   {remotionPreviewProps ? (
-                    <RemotionPreview
-                      {...remotionPreviewProps}
-                      layout={previewLayout}
-                      subtitles={previewSubtitles}
-                      subtitleTracks={[]}
-                      activeSubtitleTrackId={null}
-                      hook={hook}
-                      currentFrame={Math.round(
-                        (playheadMs / 1000) * remotionFps,
-                      )}
-                      playing={isPlaying}
-                      loop={isLooping}
-                      playbackRate={playbackRate}
-                      seekRevision={remotionSeekRevision}
-                      controls={false}
-                      className="h-full w-full"
-                      onFrameChange={handleRemotionFrameChange}
-                      onMediaTimeChange={handleRemotionMediaTimeChange}
-                      onPlayingChange={setIsPlaying}
-                      onPlayerReady={handleRemotionPlayerReady}
-                      gameplayCropEditing={Boolean(
-                        gameplayFramingSegmentId &&
-                        selectedLayoutSegment?.id ===
+                    <PlaybackClockProvider clock={playbackClock}>
+                      <RemotionPreview
+                        {...remotionPreviewProps}
+                        layout={previewLayout}
+                        subtitles={previewSubtitles}
+                        subtitleTracks={[]}
+                        activeSubtitleTrackId={null}
+                        hook={hook}
+                        controls={false}
+                        className="h-full w-full"
+                        onFrameChange={handleRemotionFrameChange}
+                        onMediaTimeChange={handleRemotionMediaTimeChange}
+                        onPlayerReady={handleRemotionPlayerReady}
+                        gameplayCropEditing={Boolean(
                           gameplayFramingSegmentId &&
-                        selectedLayoutSegment.format === "streamer_stack",
-                      )}
-                      onGameplayCropChange={handleGameplayCropChange}
-                      onGameplayCropReset={resetGameplayFraming}
-                      onGameplayCropDone={finishGameplayFraming}
-                    />
+                          selectedLayoutSegment?.id ===
+                            gameplayFramingSegmentId &&
+                          selectedLayoutSegment.format === "streamer_stack",
+                        )}
+                        onGameplayCropChange={handleGameplayCropChange}
+                        onGameplayCropReset={resetGameplayFraming}
+                        onGameplayCropDone={finishGameplayFraming}
+                      />
+                    </PlaybackClockProvider>
                   ) : (
                     <>
                       <video

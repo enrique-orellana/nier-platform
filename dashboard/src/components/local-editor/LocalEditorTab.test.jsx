@@ -12,6 +12,7 @@ import {
 import { StrictMode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import VersionHistory from "../editor/VersionHistory";
+import { usePlaybackClock } from "../../lib/playbackClock";
 import LocalEditorTab from "./LocalEditorTab";
 import { DEFAULT_SUBTITLE_STYLE } from "./localEditorStyles";
 import {
@@ -57,6 +58,8 @@ vi.mock("../RemotionPreview", () => ({
     onGameplayCropReset,
     onGameplayCropDone,
   }) {
+    const playbackClock = usePlaybackClock();
+    const effectiveCurrentFrame = playbackClock?.currentFrame ?? currentFrame;
     remotionPreviewLayoutMock(layout);
     useEffect(() => {
       onPlayerReady?.(remotionPlayerMock);
@@ -66,7 +69,7 @@ vi.mock("../RemotionPreview", () => ({
       <div
         data-testid="local-editor-remotion-preview"
         data-video-url={videoUrl}
-        data-current-frame={currentFrame ?? "uncontrolled"}
+        data-current-frame={effectiveCurrentFrame ?? "uncontrolled"}
         data-controls={String(controls)}
         data-hook-text={hook?.text || ""}
         data-subtitle-text={
