@@ -210,6 +210,7 @@ export default function LocalEditorTab({
   const [previewVideoUrl, setPreviewVideoUrl] = useState("");
   const [durationMs, setDurationMs] = useState(DEFAULT_DURATION_MS);
   const [playheadMs, setPlayheadMs] = useState(0);
+  const [remotionSeekRevision, setRemotionSeekRevision] = useState(0);
   const editorPreferencesRef = useRef(readEditorPreferences());
   const [editHistory, setEditHistory] = useState(() => {
     const history = createEmptyEditorHistory(editorPreferencesRef.current);
@@ -656,6 +657,17 @@ export default function LocalEditorTab({
           restoredDurationMs ||
           DEFAULT_DURATION_MS,
       );
+      remotionPlayheadRef.current = 0;
+      remotionNativeClockActiveRef.current = false;
+      if (remotionPlayheadTimerRef.current) {
+        window.clearTimeout(remotionPlayheadTimerRef.current);
+        remotionPlayheadTimerRef.current = null;
+      }
+      if (remotionMediaPlayheadTimerRef.current) {
+        window.clearTimeout(remotionMediaPlayheadTimerRef.current);
+        remotionMediaPlayheadTimerRef.current = null;
+      }
+      setRemotionSeekRevision((revision) => revision + 1);
       setPlayheadMs(0);
       setIsPlaying(false);
       setIsLooping(false);
@@ -713,6 +725,17 @@ export default function LocalEditorTab({
     setVideoUrl(streamUrl);
     setPreviewVideoUrl(streamUrl);
     setDurationMs(requestedPlaybackDurationMs || DEFAULT_DURATION_MS);
+    remotionPlayheadRef.current = 0;
+    remotionNativeClockActiveRef.current = false;
+    if (remotionPlayheadTimerRef.current) {
+      window.clearTimeout(remotionPlayheadTimerRef.current);
+      remotionPlayheadTimerRef.current = null;
+    }
+    if (remotionMediaPlayheadTimerRef.current) {
+      window.clearTimeout(remotionMediaPlayheadTimerRef.current);
+      remotionMediaPlayheadTimerRef.current = null;
+    }
+    setRemotionSeekRevision((revision) => revision + 1);
     setPlayheadMs(0);
     setIsPlaying(false);
     setPlaybackRate(1);
@@ -1552,9 +1575,16 @@ export default function LocalEditorTab({
     const markerAtPlayhead = markers.find(
       (marker) => Math.abs(Number(marker.timeMs) - clampedMs) <= 1,
     );
+    remotionPlayheadRef.current = clampedMs;
+    remotionNativeClockActiveRef.current = false;
+    if (remotionMediaPlayheadTimerRef.current) {
+      window.clearTimeout(remotionMediaPlayheadTimerRef.current);
+      remotionMediaPlayheadTimerRef.current = null;
+    }
     setSelectedMarkerId(markerAtPlayhead?.id || null);
     setPlayheadMs(clampedMs);
     if (remotionPlayerRef.current) {
+      setRemotionSeekRevision((revision) => revision + 1);
       remotionPlayerRef.current.seekTo?.(
         Math.round((clampedMs / 1000) * remotionFps),
       );
@@ -1642,6 +1672,9 @@ export default function LocalEditorTab({
 
   const stopVideo = () => {
     if (remotionPlayerRef.current) {
+      remotionPlayheadRef.current = 0;
+      remotionNativeClockActiveRef.current = false;
+      setRemotionSeekRevision((revision) => revision + 1);
       remotionPlayerRef.current.pause?.();
       remotionPlayerRef.current.seekTo?.(0);
       setPlayheadMs(0);
@@ -2277,6 +2310,7 @@ export default function LocalEditorTab({
                       playing={isPlaying}
                       loop={isLooping}
                       playbackRate={playbackRate}
+                      seekRevision={remotionSeekRevision}
                       controls={false}
                       className="h-full w-full"
                       onFrameChange={handleRemotionFrameChange}
