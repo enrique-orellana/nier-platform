@@ -11,6 +11,7 @@ import json
 import math
 import re
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 
@@ -162,6 +163,56 @@ def build_analysis_timeline(
         "timestamp_mode": "word" if words else "segment",
         "segments": segments,
         "words": words,
+    }
+
+
+def write_analysis_timeline_jsonl(
+    timeline: Mapping[str, Any],
+    destination: str | Path,
+) -> dict[str, Any]:
+    """Write complete canonical segments with nested absolute word timing."""
+
+    path = Path(destination)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    words_by_id = {
+        int(word[0]): {
+            "word_id": int(word[0]),
+            "start": word[1],
+            "end": word[2],
+            "text": word[3],
+        }
+        for word in timeline.get("words", [])
+    }
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
+        for segment in timeline.get("segments", []):
+            record = {
+                "schema_version": 1,
+                "unit_id": f"s{int(segment[0]):06d}",
+                "unit_type": "segment",
+                "segment_id": int(segment[0]),
+                "start": segment[1],
+                "end": segment[2],
+                "text": segment[3],
+                "words": [
+                    words_by_id[int(word_id)]
+                    for word_id in segment[4]
+                    if int(word_id) in words_by_id
+                ],
+            }
+            handle.write(
+                json.dumps(
+                    record,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+    return {
+        "path": str(path),
+        "record_count": len(timeline.get("segments", [])),
+        "bytes": path.stat().st_size,
+        "timestamp_mode": timeline.get("timestamp_mode", "segment"),
     }
 
 
@@ -417,3 +468,78 @@ def dedupe_clip_candidates(
         if not duplicate:
             kept.append(candidate)
     return kept
+
+
+def validate_full_timeline_response(
+    response: Mapping[str, Any],
+    indexed_units: Mapping[tuple[str, int], Mapping[str, Any]],
+    video_duration: float,
+    *,
+    timestamp_mode: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Validate complete-source coverage and resolve full-file clip evidence."""
+
+    if not isinstance(response, Mapping):
+        raise ValueError("full-timeline response must be an object")
+    coverage = response.get("coverage")
+    if not isinstance(coverage, Mapping):
+        raise ValueError("complete source coverage metadata is required")
+
+    source_duration = max(0.0, _number(video_duration) or 0.0)
+    coverage_start = _number(_field(coverage, "start", "source_start"))
+    coverage_end = _number(_field(coverage, "end", "source_end"))
+    units_reviewed = coverage.get("units_reviewed")
+    if units_reviewed is not None and (
+        isinstance(units_reviewed, bool)
+        or not isinstance(units_reviewed, int)
+        or units_reviewed < 0
+    ):
+        raise ValueError("units_reviewed must be a non-negative integer")
+    if (
+        coverage.get("complete") is not True
+        or coverage_start is None
+        or coverage_end is None
+        or coverage_start > 0.001
+        or coverage_end < source_duration - 0.001
+    ):
+        raise ValueError("response did not provide complete source coverage")
+
+    shorts = response.get("shorts")
+    if shorts is None:
+        for alternative in ("clips", "moments", "clip_plan", "viral_clips"):
+            value = response.get(alternative)
+            if isinstance(value, list):
+                shorts = value
+                break
+    if not isinstance(shorts, list):
+        raise ValueError("full-timeline response did not provide a shorts list")
+
+    resolved_candidates = []
+    rejected_count = 0
+    for raw_short in shorts:
+        if not isinstance(raw_short, Mapping):
+            rejected_count += 1
+            continue
+        resolved = resolve_candidate_bounds(
+            raw_short,
+            indexed_units,
+            source_duration,
+            timestamp_mode=timestamp_mode,
+            min_seconds=15.0,
+            max_seconds=60.0,
+        )
+        if resolved is None:
+            rejected_count += 1
+            continue
+        resolved_candidates.append(resolved)
+
+    candidates = dedupe_clip_candidates(resolved_candidates)
+    return candidates, {
+        "complete": True,
+        "start": round(coverage_start, 3),
+        "end": round(coverage_end, 3),
+        "units_reviewed": units_reviewed,
+        "candidates_received": len(shorts),
+        "candidates_accepted": len(resolved_candidates),
+        "candidates_rejected": rejected_count,
+    }

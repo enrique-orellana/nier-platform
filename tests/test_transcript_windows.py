@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from transcript_windows import (
     build_analysis_timeline,
     build_analysis_windows,
@@ -7,6 +9,8 @@ from transcript_windows import (
     dedupe_clip_candidates,
     resolve_candidate_bounds,
     timeline_units_by_id,
+    validate_full_timeline_response,
+    write_analysis_timeline_jsonl,
 )
 
 
@@ -89,6 +93,63 @@ def test_analysis_timeline_accepts_s_and_e_aliases_and_rounds_timestamps():
         "segments": [[0, 5.0, 7.0, "Alias words", [0, 1]]],
         "words": [[0, 5.1, 5.6, "Alias"], [1, 5.7, 6.4, "words"]],
     }
+
+
+def test_write_analysis_timeline_jsonl_preserves_every_absolute_timestamped_segment(tmp_path):
+    timeline = build_analysis_timeline(
+        {
+            "segments": [
+                {
+                    "start": 12.25,
+                    "end": 18.75,
+                    "text": "First complete segment.",
+                    "words": [
+                        {"word": "First", "start": 12.25, "end": 13.0},
+                        {"word": "complete", "start": 13.0, "end": 14.2},
+                    ],
+                },
+                {
+                    "start": 21.5,
+                    "end": 29.0,
+                    "text": "Segment without word timing.",
+                },
+            ]
+        },
+        40,
+    )
+
+    destination = tmp_path / "timeline.jsonl"
+    metadata = write_analysis_timeline_jsonl(timeline, destination)
+    records = [json.loads(line) for line in destination.read_text(encoding="utf-8").splitlines()]
+
+    assert len(records) == 2
+    assert records[0] == {
+        "schema_version": 1,
+        "unit_id": "s000000",
+        "unit_type": "segment",
+        "segment_id": 0,
+        "start": 12.25,
+        "end": 18.75,
+        "text": "First complete segment.",
+        "words": [
+            {"word_id": 0, "start": 12.25, "end": 13.0, "text": "First"},
+            {"word_id": 1, "start": 13.0, "end": 14.2, "text": "complete"},
+        ],
+    }
+    assert records[1] == {
+        "schema_version": 1,
+        "unit_id": "s000001",
+        "unit_type": "segment",
+        "segment_id": 1,
+        "start": 21.5,
+        "end": 29.0,
+        "text": "Segment without word timing.",
+        "words": [],
+    }
+    assert metadata["path"] == str(destination)
+    assert metadata["record_count"] == 2
+    assert metadata["bytes"] == destination.stat().st_size
+    assert metadata["timestamp_mode"] == "word"
 
 
 def test_compact_prompt_payload_keeps_complete_segments_and_words():
@@ -201,3 +262,92 @@ def test_dedupe_clip_candidates_keeps_best_overlap_and_distinct_moments():
         (0 + 11, 0.9),
         (100, 0.7),
     ]
+
+
+def test_validate_full_timeline_response_requires_complete_source_coverage():
+    timeline = build_analysis_timeline(
+        {
+            "segments": [{
+                "start": 10,
+                "end": 50,
+                "text": "A long candidate with exact word bounds.",
+                "words": [
+                    {"word": "A", "start": 10, "end": 20},
+                    {"word": "long", "start": 20, "end": 30},
+                    {"word": "candidate", "start": 30, "end": 40},
+                    {"word": "bounds", "start": 40, "end": 50},
+                ],
+            }]
+        },
+        60,
+    )
+
+    candidates, coverage = validate_full_timeline_response(
+        {
+            "coverage": {
+                "complete": True,
+                "start": 0,
+                "end": 60,
+                "units_reviewed": 4,
+            },
+            "shorts": [{
+                "start_word_id": 0,
+                "end_word_id": 3,
+                "start": 11.2,
+                "end": 48.8,
+                "score": 0.9,
+            }],
+        },
+        timeline_units_by_id(timeline),
+        60,
+        timestamp_mode="word",
+    )
+
+    assert candidates[0]["start"] == 10.0
+    assert candidates[0]["end"] == 50.0
+    assert candidates[0]["bounds_source"] == "canonical_unit"
+    assert coverage == {
+        "complete": True,
+        "start": 0.0,
+        "end": 60.0,
+        "units_reviewed": 4,
+        "candidates_received": 1,
+        "candidates_accepted": 1,
+        "candidates_rejected": 0,
+    }
+
+
+def test_validate_full_timeline_response_rejects_partial_coverage_and_invalid_ids():
+    timeline = build_analysis_timeline(
+        {"segments": [{"start": 0, "end": 80, "text": "A complete segment."}]},
+        80,
+    )
+
+    with pytest.raises(ValueError, match="complete source coverage"):
+        validate_full_timeline_response(
+            {
+                "coverage": {"complete": False, "start": 0, "end": 40},
+                "shorts": [],
+            },
+            timeline_units_by_id(timeline),
+            80,
+            timestamp_mode="segment",
+        )
+
+    candidates, coverage = validate_full_timeline_response(
+        {
+            "coverage": {"complete": True, "start": 0, "end": 80},
+            "shorts": [
+                {"start_segment_id": 99, "end_segment_id": 100, "score": 0.9},
+                {"start": 10, "end": 30, "score": 0.8},
+            ],
+        },
+        timeline_units_by_id(timeline),
+        80,
+        timestamp_mode="segment",
+    )
+
+    assert [(item["start"], item["end"]) for item in candidates] == [(10.0, 30.0)]
+    assert coverage["candidates_received"] == 2
+    assert coverage["candidates_accepted"] == 1
+    assert coverage["candidates_rejected"] == 1

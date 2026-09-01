@@ -8,6 +8,7 @@ import re
 import sys
 import os
 import shutil
+import tempfile
 import numpy as np
 import httpx
 from audit_capture import get_audit_emitter
@@ -49,7 +50,13 @@ from pathlib import Path
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='google.protobuf')
-from ai_client import load_ai_config, chat_json
+from ai_client import (
+    AIConfig,
+    chat_json,
+    codex_file_analysis_json,
+    load_ai_config,
+    openai_file_analysis_json,
+)
 from highlight_generation import transcribe_video_with_config
 from master_policy import master_video_encode_args, choose_master_spec, master_video_filter
 from media_probe import probe_media
@@ -80,6 +87,8 @@ from transcript_windows import (
     dedupe_clip_candidates,
     resolve_candidate_bounds,
     timeline_units_by_id,
+    validate_full_timeline_response,
+    write_analysis_timeline_jsonl,
 )
 
 # Load environment variables
@@ -97,6 +106,136 @@ DEFAULT_SCENE_STRATEGY_WORKERS = max(1, min(8, os.cpu_count() or 1))
 MAX_SCENE_STRATEGY_WORKERS = 32
 FACE_TRACKING_ALGORITHM_VERSION = "yolo-standard-v1"
 DEFAULT_FACE_TRACKING_INTERVAL_SECONDS = 0.5
+OPENAI_FILE_ANALYSIS_MODES = {"auto", "file", "legacy"}
+OPENAI_FILE_ANALYSIS_DEFAULT_MAX_TOKENS = 100_000
+
+
+def openai_clip_analysis_mode() -> str:
+    value = os.environ.get("OPENAI_CLIP_ANALYSIS_MODE", "auto").strip().lower()
+    if value not in OPENAI_FILE_ANALYSIS_MODES:
+        raise ValueError(
+            "OPENAI_CLIP_ANALYSIS_MODE must be one of: auto, file, legacy"
+        )
+    return value
+
+
+def should_use_openai_file_analysis(config: AIConfig) -> bool:
+    mode = openai_clip_analysis_mode()
+    if mode == "legacy":
+        return False
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    is_codex = config.normalized_provider() == "openai-codex"
+    if mode == "file" and not api_key and not is_codex:
+        raise ValueError(
+            "OPENAI_API_KEY is required when OPENAI_CLIP_ANALYSIS_MODE=file"
+        )
+    return is_codex
+
+
+def openai_file_analysis_settings(config: AIConfig) -> dict[str, str]:
+    model = (
+        os.environ.get("OPENAI_ANALYZE_MODEL", "").strip()
+        or config.analyze_model
+        or config.text_model
+        or os.environ.get("CODEX_MODEL", "").strip()
+        or "gpt-5.4"
+    )
+    return {
+        "api_key": os.environ.get("OPENAI_API_KEY", "").strip(),
+        "base_url": os.environ.get(
+            "OPENAI_BASE_URL",
+            "https://api.openai.com/v1",
+        ).strip().rstrip("/"),
+        "model": model,
+    }
+
+
+def openai_file_analysis_max_tokens() -> int:
+    raw_value = os.environ.get(
+        "OPENAI_FILE_ANALYSIS_MAX_TOKENS",
+        str(OPENAI_FILE_ANALYSIS_DEFAULT_MAX_TOKENS),
+    )
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return OPENAI_FILE_ANALYSIS_DEFAULT_MAX_TOKENS
+    return value if value > 0 else OPENAI_FILE_ANALYSIS_DEFAULT_MAX_TOKENS
+
+def build_full_timeline_clip_prompt(
+    *,
+    video_duration: float,
+    target_clips: int,
+    source_context: str,
+    timestamp_mode: str,
+) -> str:
+    """Build the prompt for one complete attached timestamped transcript."""
+
+    duration = max(float(video_duration or 0.0), 0.0)
+    return f"""
+You are a senior short-form video editor. Review the complete attached transcript
+file before choosing the strongest viral moments for TikTok, Instagram Reels,
+and YouTube Shorts. The attached JSONL file is the complete source timeline;
+review the complete attached transcript, from the first record through the last.
+Each clip must be between 15 and 60 seconds long.
+
+FULL_SOURCE_RANGE_SECONDS: 0.000-{duration:.3f}
+VIDEO_DURATION_SECONDS: {duration:.3f}
+TIMESTAMP_MODE: {timestamp_mode}
+TARGET_CLIP_COUNT: {int(target_clips or 1)}
+DISCOVERY_CANDIDATE_LIMIT: {CLIP_ANALYSIS_DISCOVERY_LIMIT}
+
+The file contains one JSON object per canonical segment. Segment start/end and
+nested word start/end values are absolute seconds from the beginning of the
+video. Canonical segment IDs and word IDs are the source of truth. Never reset
+timestamps, infer timing from text, or invent an ID. When word timing is
+available, return start_word_id and end_word_id. For segment-only input, return
+start_segment_id and end_segment_id instead. You may also include numeric start
+and end values as a readable cross-check, but the canonical IDs must determine
+precise final bounds.
+
+Search the entire source for hooks, reveals, surprising claims, emotional turns,
+useful explanations, conflict, humor, and strong payoffs. Avoid generic
+intros/outros and purely promotional segments unless they contain the hook.
+Prefer natural word boundaries and include enough setup and payoff for a complete
+clip. Keep every candidate within the full source range and the 15-60 second
+length limit. Return an empty shorts array if no valid clip exists.
+
+ORIGINAL SOURCE CONTEXT (grounded facts only; may be unavailable):
+{source_context}
+Use this context only for titles, descriptions, and hooks. Do not invent
+identities, locations, dates, events, or entities unsupported by the context or
+transcript.
+
+Return only valid JSON with this shape:
+{{
+  "coverage": {{
+    "complete": true,
+    "start": 0.000,
+    "end": {duration:.3f},
+    "units_reviewed": 0
+  }},
+  "shorts": [
+    {{
+      "start_word_id": 0,
+      "end_word_id": 0,
+      "start_segment_id": 0,
+      "end_segment_id": 0,
+      "start": 0.000,
+      "end": 15.000,
+      "score": 0.0,
+      "video_title_for_youtube_short": "",
+      "description": "",
+      "hook": ""
+    }}
+  ]
+}}
+
+Set coverage.complete to true only after reviewing the complete attached file.
+Set coverage.start to the earliest source timestamp reviewed and coverage.end to
+the latest source timestamp reviewed. For a complete review they must cover the
+full range above. Order shorts by predicted performance, best first, and keep
+all descriptions and hooks in the transcript's language.
+""".strip()
 
 
 def should_run_person_detection(
@@ -2452,6 +2591,162 @@ def _snap_clip_boundaries(short, transcript_result, video_duration):
     return snapped
 
 
+def _analyze_openai_file_timeline(
+    timeline,
+    indexed_units,
+    video_duration,
+    target_clips,
+    source_context,
+    ai_config,
+):
+    settings = openai_file_analysis_settings(ai_config)
+    with tempfile.TemporaryDirectory(prefix="openshorts-openai-file-") as temp_dir:
+        artifact_path = Path(temp_dir) / "timeline.jsonl"
+        artifact = write_analysis_timeline_jsonl(timeline, artifact_path)
+        estimated_tokens = max(1, int(artifact["bytes"]) // 4)
+        token_limit = openai_file_analysis_max_tokens()
+        if estimated_tokens > token_limit:
+            raise ValueError(
+                "complete transcript artifact estimate "
+                f"({estimated_tokens} tokens) exceeds "
+                f"OPENAI_FILE_ANALYSIS_MAX_TOKENS ({token_limit})"
+            )
+
+        prompt = build_full_timeline_clip_prompt(
+            video_duration=video_duration,
+            target_clips=target_clips,
+            source_context=source_context,
+            timestamp_mode=timeline["timestamp_mode"],
+        )
+        uses_codex_cli = (
+            ai_config.normalized_provider() == "openai-codex"
+            and not settings["api_key"]
+        )
+        if uses_codex_cli:
+            response = codex_file_analysis_json(
+                artifact_path,
+                prompt,
+                model=settings["model"],
+                reasoning_effort=ai_config.analyze_reasoning_effort,
+            )
+        else:
+            response = openai_file_analysis_json(
+                artifact_path,
+                prompt,
+                model=settings["model"],
+                api_key=settings["api_key"],
+                base_url=settings["base_url"],
+            )
+        candidates, coverage = validate_full_timeline_response(
+            response,
+            indexed_units,
+            video_duration,
+            timestamp_mode=timeline["timestamp_mode"],
+        )
+        normalized_response = dict(response)
+        normalized_response["shorts"] = candidates
+        artifact_metadata = {
+            key: artifact[key]
+            for key in ("record_count", "bytes", "timestamp_mode")
+        }
+        artifact_metadata["estimated_tokens"] = estimated_tokens
+        return normalized_response, candidates, {
+            "mode": "codex_file" if uses_codex_cli else "openai_file",
+            "model": settings["model"],
+            "planned_windows": 0,
+            "started_windows": 0,
+            "retried_windows": 0,
+            "succeeded_windows": 1,
+            "saturated_windows": 0,
+            "failed_windows": 0,
+            "incomplete": False,
+            "missing_core_ranges": [],
+            "artifact": artifact_metadata,
+            "coverage": coverage,
+        }
+
+
+def _finalize_clip_analysis_result(
+    result_json,
+    all_shorts,
+    *,
+    transcript_result,
+    video_duration,
+    target_clips,
+    analysis_metadata,
+    ai_config,
+    model_name,
+    local_min_duration,
+    local_target_duration,
+):
+    all_shorts = dedupe_clip_candidates(all_shorts)
+    if not all_shorts:
+        fallback = _build_fallback_clip_plan(
+            transcript_result,
+            video_duration,
+            target_clips,
+            min_duration=local_min_duration,
+            target_duration=local_target_duration,
+        )
+        fallback["analysis"] = analysis_metadata
+        return fallback
+
+    clip_limit = max(1, min(int(target_clips or 1), 15))
+    adjusted_shorts = []
+    is_lmstudio = ai_config.is_lmstudio()
+    for clip in all_shorts[:clip_limit]:
+        if is_lmstudio:
+            if not isinstance(clip, dict):
+                continue
+            try:
+                clip_start = float(clip.get("start", 0.0))
+                clip_end = float(clip.get("end", 0.0))
+            except (TypeError, ValueError):
+                continue
+            clip_start, clip_end = _stretch_clip_window(
+                clip_start,
+                clip_end,
+                video_duration,
+                min_duration=local_min_duration,
+                target_duration=local_target_duration,
+            )
+            updated_clip = dict(clip)
+            updated_clip["start"] = clip_start
+            updated_clip["end"] = clip_end
+            if updated_clip.get("bounds_source") == "canonical_unit":
+                updated_clip = _snap_clip_boundaries(
+                    updated_clip,
+                    transcript_result,
+                    video_duration,
+                )
+                for key in (
+                    "start_word_id",
+                    "end_word_id",
+                    "start_segment_id",
+                    "end_segment_id",
+                ):
+                    updated_clip.pop(key, None)
+                updated_clip["bounds_source"] = "canonical_unit_stretched"
+            clip = updated_clip
+        if clip.get("bounds_source") == "model_float":
+            clip = _snap_clip_boundaries(clip, transcript_result, video_duration)
+        adjusted_shorts.append(clip)
+
+    result = dict(result_json)
+    result["shorts"] = adjusted_shorts
+    result["analysis"] = analysis_metadata
+    if ai_config.is_gemini():
+        result["cost_analysis"] = {
+            "input_tokens": None,
+            "output_tokens": None,
+            "input_cost": None,
+            "output_cost": None,
+            "total_cost": None,
+            "model": model_name,
+        }
+    return result
+
+
 def get_viral_clips(transcript_result, video_duration, target_clips=6, source_context=None):
     ai_config = load_ai_config()
     print(f"🤖  Analyzing with {ai_config.normalized_provider()}...")
@@ -2484,6 +2779,38 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
             }]
         timeline = build_analysis_timeline(analysis_source, video_duration)
         indexed_units = timeline_units_by_id(timeline)
+        analysis_mode = openai_clip_analysis_mode()
+        file_fallback_reason = None
+        if should_use_openai_file_analysis(ai_config):
+            try:
+                result_json, all_shorts, analysis_metadata = _analyze_openai_file_timeline(
+                    timeline,
+                    indexed_units,
+                    video_duration,
+                    target_clips,
+                    source_context_json,
+                    ai_config,
+                )
+                return _finalize_clip_analysis_result(
+                    result_json,
+                    all_shorts,
+                    transcript_result=transcript_result,
+                    video_duration=video_duration,
+                    target_clips=target_clips,
+                    analysis_metadata=analysis_metadata,
+                    ai_config=ai_config,
+                    model_name=analysis_metadata["model"],
+                    local_min_duration=local_min_duration,
+                    local_target_duration=local_target_duration,
+                )
+            except Exception as exc:
+                if analysis_mode == "file":
+                    raise
+                file_fallback_reason = f"{type(exc).__name__}: {exc}"
+                print(
+                    "OpenAI file clip analysis unavailable; falling back to "
+                    f"lossless windows: {file_fallback_reason}"
+                )
         windows = build_analysis_windows(
             timeline,
             video_duration,
@@ -2620,77 +2947,25 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
         ]
         analysis_metadata = {
             **analysis_status,
+            "mode": "windowed_fallback" if file_fallback_reason else "windowed",
             "incomplete": bool(missing_windows),
             "missing_core_ranges": missing_windows,
         }
-        all_shorts = dedupe_clip_candidates(all_shorts)
+        if file_fallback_reason:
+            analysis_metadata["fallback_reason"] = file_fallback_reason
+        return _finalize_clip_analysis_result(
+            result_json,
+            all_shorts,
+            transcript_result=transcript_result,
+            video_duration=video_duration,
+            target_clips=target_clips,
+            analysis_metadata=analysis_metadata,
+            ai_config=ai_config,
+            model_name=model_name,
+            local_min_duration=local_min_duration,
+            local_target_duration=local_target_duration,
+        )
 
-        if not all_shorts:
-            print("⚠️ AI returned no usable shorts. Using transcript-based fallback clips.")
-            fallback = _build_fallback_clip_plan(
-                transcript_result,
-                video_duration,
-                target_clips,
-                min_duration=local_min_duration,
-                target_duration=local_target_duration,
-            )
-            fallback["analysis"] = analysis_metadata
-            return fallback
-
-        clip_limit = max(1, min(int(target_clips or 1), 15))
-        adjusted_shorts = []
-        for clip in all_shorts[:clip_limit]:
-            if is_lmstudio:
-                if not isinstance(clip, dict):
-                    continue
-                try:
-                    clip_start = float(clip.get("start", 0.0))
-                    clip_end = float(clip.get("end", 0.0))
-                except (TypeError, ValueError):
-                    continue
-                clip_start, clip_end = _stretch_clip_window(
-                    clip_start,
-                    clip_end,
-                    video_duration,
-                    min_duration=local_min_duration,
-                    target_duration=local_target_duration,
-                )
-                updated_clip = dict(clip)
-                updated_clip["start"] = clip_start
-                updated_clip["end"] = clip_end
-                if updated_clip.get("bounds_source") == "canonical_unit":
-                    updated_clip = _snap_clip_boundaries(
-                        updated_clip,
-                        transcript_result,
-                        video_duration,
-                    )
-                    for key in (
-                        "start_word_id",
-                        "end_word_id",
-                        "start_segment_id",
-                        "end_segment_id",
-                    ):
-                        updated_clip.pop(key, None)
-                    updated_clip["bounds_source"] = "canonical_unit_stretched"
-                clip = updated_clip
-            if clip.get("bounds_source") == "model_float":
-                clip = _snap_clip_boundaries(clip, transcript_result, video_duration)
-            adjusted_shorts.append(clip)
-
-        result_json["shorts"] = adjusted_shorts
-        result_json["analysis"] = analysis_metadata
-
-        if ai_config.is_gemini():
-            result_json['cost_analysis'] = {
-                "input_tokens": None,
-                "output_tokens": None,
-                "input_cost": None,
-                "output_cost": None,
-                "total_cost": None,
-                "model": model_name,
-            }
-
-        return result_json
     except Exception as e:
         print(f"❌ AI Error: {e}")
         fallback = _build_fallback_clip_plan(
@@ -2700,10 +2975,17 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
             min_duration=local_min_duration,
             target_duration=local_target_duration,
         )
-        fallback["analysis"] = {
+        failure_analysis = {
             "incomplete": True,
             "error": str(e),
         }
+        try:
+            failure_analysis["mode"] = (
+                "openai_file" if openai_clip_analysis_mode() == "file" else "windowed"
+            )
+        except ValueError:
+            pass
+        fallback["analysis"] = failure_analysis
         return fallback
 
 if __name__ == '__main__':

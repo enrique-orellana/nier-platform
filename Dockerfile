@@ -32,12 +32,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libxrender1 \
     nodejs \
+    npm \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install -r requirements.txt
+
+# Use the official Codex CLI so ChatGPT-subscription authentication can provide
+# complete local transcript artifacts to the model without an API key.
+ARG CODEX_CLI_VERSION=0.142.3
+RUN npm install --global "@openai/codex@${CODEX_CLI_VERSION}" --no-fund --no-audit
 
 # The official ROCm image contains HIP/PyTorch but not the WSL2 DXG bridge.
 # Install the pinned ROCDXG runtime in the image; only libdxcore.so remains a

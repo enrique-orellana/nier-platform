@@ -2,9 +2,13 @@ import base64
 import json
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from typing import Any, Mapping, Optional, Sequence
@@ -21,6 +25,7 @@ from codex_auth import (
 GEMINI_TEXT_MODEL = "gemini-2.5-flash"
 GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENAI_API_BASE_URL = "https://api.openai.com/v1"
 OPENROUTER_DEFAULT_MODEL = "openai/gpt-4o-mini"
 OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL = "openai/whisper-large-v3"
 OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS = 3
@@ -311,6 +316,350 @@ def _build_bearer_headers(api_key: str) -> dict[str, str]:
     if not api_key:
         return {}
     return {"Authorization": f"Bearer {api_key}"}
+
+
+def _openai_operation_error(
+    operation: str,
+    exc: BaseException,
+    response: Any = None,
+) -> str:
+    status_code = int(getattr(response, "status_code", 0) or 0)
+    if status_code >= 400:
+        return f"OpenAI {operation} failed with HTTP {status_code}."
+    if isinstance(exc, (json.JSONDecodeError, UnicodeDecodeError)):
+        return f"OpenAI {operation} returned invalid JSON."
+    if isinstance(exc, RuntimeError):
+        detail = str(exc)
+        if "invalid JSON" in detail:
+            return f"OpenAI {operation} returned invalid JSON."
+        if "no text output" in detail:
+            return f"OpenAI {operation} returned no text output."
+        if "not a JSON object" in detail:
+            return f"OpenAI {operation} returned an invalid JSON object."
+        if "not an object" in detail:
+            return f"OpenAI {operation} returned a non-object JSON value."
+    return f"OpenAI {operation} failed: {exc.__class__.__name__}."
+
+
+def _openai_output_text(payload: Mapping[str, Any]) -> str:
+    output_text = payload.get("output_text")
+    if isinstance(output_text, str) and output_text.strip():
+        return output_text.strip()
+    output = payload.get("output")
+    if not isinstance(output, Sequence) or isinstance(output, (str, bytes)):
+        return ""
+    for item in output:
+        if not isinstance(item, Mapping):
+            continue
+        content = item.get("content")
+        if not isinstance(content, Sequence) or isinstance(content, (str, bytes)):
+            continue
+        for part in content:
+            if not isinstance(part, Mapping):
+                continue
+            text = part.get("text")
+            if isinstance(text, str) and text.strip():
+                return text.strip()
+    return ""
+
+
+def openai_file_analysis_json(
+    file_path: str | Path,
+    prompt: str,
+    *,
+    model: str,
+    api_key: str,
+    base_url: str = OPENAI_API_BASE_URL,
+) -> dict[str, Any]:
+    """Analyze a complete transcript artifact through public OpenAI file input."""
+
+    if not api_key or not api_key.strip():
+        raise ValueError("OpenAI API key is required for file analysis.")
+    path = Path(file_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"Transcript artifact does not exist: {path}")
+
+    root_url = (base_url or OPENAI_API_BASE_URL).strip().rstrip("/")
+    files_url = f"{root_url}/files"
+    responses_url = f"{root_url}/responses"
+    headers = _build_bearer_headers(api_key.strip())
+    upload_payload = {
+        "purpose": "user_data",
+        "expires_after[anchor]": "created_at",
+        "expires_after[seconds]": "86400",
+    }
+    response_payload = {
+        "model": model,
+        "store": False,
+        "input": [{
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": prompt},
+                {"type": "input_file", "file_id": ""},
+            ],
+        }],
+    }
+    remote_file_id: str | None = None
+
+    with httpx.Client(timeout=None) as client:
+        try:
+            upload_event = None
+            upload_response = None
+            try:
+                upload_event_emitter, upload_event = _audit_request_start(
+                    name="ai.file.upload",
+                    url=files_url,
+                    method="POST",
+                    body=upload_payload,
+                    provider="openai",
+                    binary=True,
+                )
+                with path.open("rb") as handle:
+                    upload_response = client.post(
+                        files_url,
+                        headers=headers,
+                        data=upload_payload,
+                        files={"file": (path.name, handle, "application/jsonl")},
+                    )
+                try:
+                    uploaded = upload_response.json()
+                except Exception:
+                    uploaded = {}
+                if isinstance(uploaded, Mapping):
+                    candidate_file_id = uploaded.get("id")
+                    if isinstance(candidate_file_id, str) and candidate_file_id.strip():
+                        remote_file_id = candidate_file_id.strip()
+                upload_response.raise_for_status()
+                if not remote_file_id:
+                    raise RuntimeError("upload response did not include a file ID")
+            except Exception as exc:
+                error = _openai_operation_error("file upload", exc, upload_response)
+                if upload_event:
+                    _audit_request_finish(
+                        upload_event_emitter,
+                        upload_event,
+                        status_code=int(getattr(upload_response, "status_code", 0) or 0),
+                        error=error,
+                        binary=True,
+                    )
+                raise RuntimeError(error) from exc
+            else:
+                _audit_request_finish(
+                    upload_event_emitter,
+                    upload_event,
+                    status_code=int(getattr(upload_response, "status_code", 0) or 0),
+                    binary=True,
+                )
+
+            response_payload["input"][0]["content"][1]["file_id"] = remote_file_id
+            analysis_event = None
+            analysis_response = None
+            try:
+                analysis_event_emitter, analysis_event = _audit_request_start(
+                    name="ai.file.analysis",
+                    url=responses_url,
+                    method="POST",
+                    body=response_payload,
+                    provider="openai",
+                    binary=True,
+                )
+                analysis_response = client.post(
+                    responses_url,
+                    headers=headers,
+                    json=response_payload,
+                )
+                analysis_response.raise_for_status()
+                try:
+                    response_data = analysis_response.json()
+                except Exception as exc:
+                    raise RuntimeError("response body was not valid JSON") from exc
+                if not isinstance(response_data, Mapping):
+                    raise RuntimeError("response body was not a JSON object")
+                output_text = _openai_output_text(response_data)
+                if not output_text:
+                    raise RuntimeError("response contained no text output")
+                try:
+                    parsed = json.loads(extract_json_text(output_text))
+                except (TypeError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    raise RuntimeError("response contained invalid JSON output") from exc
+                if not isinstance(parsed, dict):
+                    raise RuntimeError("response JSON output was not an object")
+            except Exception as exc:
+                error = _openai_operation_error("analysis", exc, analysis_response)
+                if analysis_event:
+                    _audit_request_finish(
+                        analysis_event_emitter,
+                        analysis_event,
+                        status_code=int(getattr(analysis_response, "status_code", 0) or 0),
+                        error=error,
+                        binary=True,
+                    )
+                raise RuntimeError(error) from exc
+            else:
+                _audit_request_finish(
+                    analysis_event_emitter,
+                    analysis_event,
+                    status_code=int(getattr(analysis_response, "status_code", 0) or 0),
+                    binary=True,
+                )
+                return parsed
+        finally:
+            if remote_file_id:
+                delete_event = None
+                delete_response = None
+                try:
+                    delete_event_emitter, delete_event = _audit_request_start(
+                        name="ai.file.delete",
+                        url=f"{files_url}/{remote_file_id}",
+                        method="DELETE",
+                        body=None,
+                        provider="openai",
+                        binary=True,
+                    )
+                    delete_response = client.delete(
+                        f"{files_url}/{remote_file_id}",
+                        headers=headers,
+                    )
+                    delete_response.raise_for_status()
+                except Exception as exc:
+                    error = _openai_operation_error("file cleanup", exc, delete_response)
+                    if delete_event:
+                        _audit_request_finish(
+                            delete_event_emitter,
+                            delete_event,
+                            status_code=int(getattr(delete_response, "status_code", 0) or 0),
+                            error=error,
+                            binary=True,
+                        )
+                    print(f"OpenAI file cleanup warning: {error}")
+                else:
+                    _audit_request_finish(
+                        delete_event_emitter,
+                        delete_event,
+                        status_code=int(getattr(delete_response, "status_code", 0) or 0),
+                        binary=True,
+                    )
+
+
+def _codex_cli_auth_payload(credentials: Any) -> dict[str, Any]:
+    return {
+        "auth_mode": "chatgpt",
+        "OPENAI_API_KEY": None,
+        "tokens": {
+            "access_token": credentials.access_token,
+            "refresh_token": credentials.refresh_token,
+            "id_token": credentials.id_token,
+            "account_id": credentials.account_id,
+        },
+        "last_refresh": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def codex_file_analysis_json(
+    file_path: str | Path,
+    prompt: str,
+    *,
+    model: str,
+    reasoning_effort: Optional[str] = None,
+) -> dict[str, Any]:
+    """Analyze a complete local artifact through the connected Codex CLI."""
+    path = Path(file_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"Codex file analysis input does not exist: {path}")
+
+    configured_command = os.environ.get("CODEX_CLI_COMMAND", "codex").strip() or "codex"
+    executable = (
+        configured_command
+        if Path(configured_command).is_file()
+        else shutil.which(configured_command)
+    )
+    if not executable:
+        raise RuntimeError(
+            "Codex CLI is required for file-backed Codex analysis but was not found. "
+            "Install @openai/codex in the backend image."
+        )
+
+    store = default_codex_store()
+    get_access_token(store)
+    credentials = store.load()
+    if credentials is None:
+        raise CodexReauthRequired("Connect ChatGPT before using Codex file analysis.")
+
+    cli_prompt = (
+        f"{prompt}\n\n"
+        f"The complete source timeline is the local file `{path.name}` in your working directory. "
+        "Read every JSONL record in that file before selecting clips. Do not sample it, summarize "
+        "only part of it, or ask for the contents inline. Return only the JSON object requested by "
+        "the prompt after reviewing the full file."
+    )
+
+    with tempfile.TemporaryDirectory(prefix="openshorts-codex-cli-") as temp_dir:
+        temp_root = Path(temp_dir)
+        cli_home = temp_root / "codex-home"
+        cli_home.mkdir()
+        auth_path = cli_home / "auth.json"
+        auth_path.write_text(
+            json.dumps(_codex_cli_auth_payload(credentials)),
+            encoding="utf-8",
+        )
+        auth_path.chmod(0o600)
+        output_path = temp_root / "analysis.json"
+
+        command = [
+            executable,
+            "exec",
+            "--ephemeral",
+            "--skip-git-repo-check",
+            "--sandbox",
+            "read-only",
+            "--model",
+            model,
+            "--output-last-message",
+            str(output_path),
+            "--cd",
+            str(path.parent),
+        ]
+        if reasoning_effort and reasoning_effort.strip().lower() not in AUTO_REASONING_VALUES:
+            command.extend([
+                "--config",
+                f"model_reasoning_effort={json.dumps(reasoning_effort.strip().lower())}",
+            ])
+        command.append(cli_prompt)
+
+        environment = os.environ.copy()
+        environment["CODEX_HOME"] = str(cli_home)
+        environment.pop("OPENAI_API_KEY", None)
+        environment["NO_COLOR"] = "1"
+        completed = subprocess.run(
+            command,
+            cwd=str(path.parent),
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            stderr = (completed.stderr or "").strip()
+            for secret in (
+                credentials.access_token,
+                credentials.refresh_token,
+                credentials.id_token,
+            ):
+                if secret:
+                    stderr = stderr.replace(secret, "[redacted]")
+            detail = f": {stderr[-1000:]}" if stderr else ""
+            raise RuntimeError(
+                f"Codex CLI file analysis failed with exit code {completed.returncode}{detail}"
+            )
+        if not output_path.is_file():
+            raise RuntimeError("Codex CLI file analysis produced no output file")
+        try:
+            result = json.loads(extract_json_text(output_path.read_text(encoding="utf-8")))
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise RuntimeError("Codex CLI file analysis returned invalid JSON") from exc
+        if not isinstance(result, dict):
+            raise RuntimeError("Codex CLI file analysis returned a non-object JSON value")
+        return result
 
 
 def _audit_request_start(*, name: str, url: str, method: str, body: Any, provider: str, binary: bool = False):

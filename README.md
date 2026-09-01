@@ -260,7 +260,7 @@ deployment references.
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go control plane, Python JSON-lines ML/media worker, google-genai, ultralytics (YOLOv8), mediapipe, opencv-python, yt-dlp, FFmpeg, httpx |
+| Backend | Go control plane, Python JSON-lines ML/media worker, Codex CLI, google-genai, ultralytics (YOLOv8), mediapipe, opencv-python, yt-dlp, FFmpeg, httpx |
 | Frontend | React 18, Vite 4, Tailwind CSS 3.4 |
 | AI APIs | Google Gemini, fal.ai (Flux, Hailuo, VEED, Kling), ElevenLabs |
 | Infrastructure | Docker + Docker Compose, AWS S3 |
@@ -288,6 +288,10 @@ deployment references.
 | `MAX_CONCURRENT_JOBS` | Concurrent processing limit (default: 5) |
 | `OPENSHORTS_CODEX_AUTH_FILE` | Optional path for the installation-scoped Codex credential file |
 | `CODEX_MODEL` | Optional Codex model override (default: `gpt-5.4`) |
+| `OPENAI_CLIP_ANALYSIS_MODE` | `auto` uses complete-file analysis when available; `file` requires it; `legacy` forces lossless windows |
+| `OPENAI_API_KEY` | Optional server-only key for the public OpenAI Files API; not required for connected Codex |
+| `OPENAI_ANALYZE_MODEL` | Optional model override for complete-file analysis |
+| `OPENAI_FILE_ANALYSIS_MAX_TOKENS` | Maximum estimated complete-artifact size (default: `100000`) |
 
 **Client-side (encrypted in localStorage):**
 | Key | Description |
@@ -307,6 +311,7 @@ deployment references.
 - **Auto-Cleanup**: Automatic purging of old jobs (1h retention)
 - **Encrypted Keys**: API keys encrypted client-side, never stored server-side
 - **Codex credentials**: ChatGPT device authorization tokens stay in the backend's protected, git-ignored credential file and are never returned to the browser
+- **Complete timeline review**: Connected Codex runs the full timestamped JSONL artifact through the read-only Codex CLI; the worker does not split it into windows unless complete-file analysis is unavailable
 - **Upload Validation**: Image uploads validated for format and minimum size
 - **File Limits**: 2GB upload limit protection
 
