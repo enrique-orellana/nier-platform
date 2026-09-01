@@ -13,6 +13,13 @@ from typing import Any
 from ai_client import chat_json, load_ai_config, transcribe_audio_openrouter
 from highlight_selection import normalize_target, select_segments
 from media_probe import probe_media
+from transcript_windows import (
+    build_analysis_timeline,
+    build_analysis_windows,
+    dedupe_clip_candidates,
+    resolve_candidate_bounds,
+    timeline_units_by_id,
+)
 
 
 HIGHLIGHT_PROMPT = """
@@ -23,27 +30,35 @@ payoffs, stories, and moments that make sense without missing context. Exclude
 intros, outros, ads, dead air, repeated points, and weak filler.
 
 Return JSON only in this shape:
-{{"highlights":[{{"start":0.0,"end":30.0,"score":0.0,"reason":"...","text":"..."}}]}}
+{{"highlights":[{{"start":0.0,"end":30.0,"start_word_id":0,"end_word_id":4,"score":0.0,"reason":"...","text":"..."}}]}}
 
 Use absolute seconds. Every section must be between 15 and 300 seconds, must be
 inside the source duration, and must start/end near natural word boundaries. Rank
 the sections by score from 0 to 1. Return enough candidates to reach the target
 duration when strong material exists, but do not invent or pad weak sections. If
 the source is shorter than the requested target, analyze only the available source.
-Return at most 8 candidates. Keep each reason under 160 characters and each text
+Return at most 12 candidates. Keep each reason under 160 characters and each text
 under 300 characters.
 
 SOURCE_DURATION_SECONDS: {video_duration}
 MINIMUM_REEL_SECONDS: {min_seconds}
 IDEAL_REEL_SECONDS: {ideal_seconds}
 SOURCE_CONTEXT: {source_context}
-TRANSCRIPT (JSON array of segments with absolute start/end seconds and text):
-{transcript}
+WINDOW_CORE_AND_CONTEXT_SECONDS: {window_metadata}
+TIMESTAMPED_TRANSCRIPT (lossless segment records plus canonical word records):
+Segments are [SEGMENT_ID, ABSOLUTE_START_SECONDS, ABSOLUTE_END_SECONDS, COMPLETE_TEXT, WORD_IDS].
+Words are [WORD_ID, ABSOLUTE_START_SECONDS, ABSOLUTE_END_SECONDS, TEXT].
+Use canonical word IDs whenever available; use segment IDs only when no word IDs are present. Never invent IDs or timestamps outside this window.
+{timestamped_transcript}
 """.strip()
 
 MAX_PROMPT_CHARS = 48000
 MAX_TRANSCRIPT_CHARS_PER_CHUNK = 24000
 HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS = 120.0
+HIGHLIGHT_ANALYSIS_CORE_SECONDS = 90.0
+HIGHLIGHT_ANALYSIS_OVERLAP_SECONDS = 61.0
+HIGHLIGHT_ANALYSIS_DISCOVERY_LIMIT = 12
+HIGHLIGHT_ANALYSIS_RETRY_COUNT = 1
 OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS = 30.0
 OPENROUTER_TRANSCRIPTION_OVERLAP_SECONDS = 5.0
 
@@ -206,50 +221,33 @@ def transcribe_video_with_config(
     return {"text": " ".join(segment["text"] for segment in segments).strip(), "segments": segments, "language": language}
 
 
-def _analysis_chunks(transcript: Mapping[str, Any]) -> list[dict[str, Any]]:
-    compact_segments: list[dict[str, Any]] = []
-
-    def append_text_parts(start: float, end: float, text: str) -> None:
-        remaining = str(text or "").strip()
-        while remaining:
-            low, high = 1, len(remaining)
-            best = 1
-            while low <= high:
-                midpoint = (low + high) // 2
-                candidate = {"start": start, "end": end, "text": remaining[:midpoint]}
-                if len(json.dumps([candidate], ensure_ascii=False)) <= MAX_TRANSCRIPT_CHARS_PER_CHUNK:
-                    best = midpoint
-                    low = midpoint + 1
-                else:
-                    high = midpoint - 1
-            compact_segments.append({"start": start, "end": end, "text": remaining[:best]})
-            remaining = remaining[best:].lstrip()
-
-    for raw_segment in transcript.get("segments", []) or []:
-        text = " ".join(str(raw_segment.get("text") or "").split())
-        if not text:
-            continue
-        try:
-            start = round(float(raw_segment.get("start")), 3)
-            end = round(float(raw_segment.get("end")), 3)
-        except (TypeError, ValueError):
-            continue
-        if end > start:
-            append_text_parts(start, end, text)
-
-    if not compact_segments:
-        append_text_parts(0.0, 0.0, _transcript_text(transcript))
-
-    chunks: list[dict[str, Any]] = []
-    current: list[dict[str, Any]] = []
-    for segment in compact_segments:
-        if current and len(json.dumps(current + [segment], ensure_ascii=False)) > MAX_TRANSCRIPT_CHARS_PER_CHUNK:
-            chunks.append({"segments": current})
-            current = []
-        current.append(segment)
-    if current:
-        chunks.append({"segments": current})
-    return chunks or [{"segments": []}]
+def _analysis_chunks(
+    transcript: Mapping[str, Any],
+    video_duration: float = 0.0,
+) -> list[dict[str, Any]]:
+    """Compatibility wrapper around the shared lossless analysis planner."""
+    source = dict(transcript or {})
+    analysis_duration = max(float(video_duration or 0.0), 0.0)
+    if analysis_duration <= 0:
+        analysis_duration = max(
+            (float(segment.get("end", 0.0)) for segment in source.get("segments", []) or []),
+            default=0.0,
+        )
+    if not source.get("segments") and _transcript_text(source):
+        source["segments"] = [{
+            "start": 0.0,
+            "end": round(analysis_duration, 3),
+            "text": _transcript_text(source),
+        }]
+    timeline = build_analysis_timeline(source, analysis_duration)
+    return build_analysis_windows(
+        timeline,
+        analysis_duration,
+        core_seconds=HIGHLIGHT_ANALYSIS_CORE_SECONDS,
+        overlap_seconds=HIGHLIGHT_ANALYSIS_OVERLAP_SECONDS,
+        max_prompt_chars=MAX_PROMPT_CHARS,
+        prompt_overhead_chars=6000,
+    )
 
 
 def rank_highlights(
@@ -274,7 +272,25 @@ def rank_highlights(
 
     model = config.analyze_model or config.text_model or ("gemini-2.5-flash" if config.is_gemini() else "")
     candidates = []
-    chunks = _analysis_chunks(transcript)
+    analysis_source = dict(transcript or {})
+    if not analysis_source.get("segments") and _transcript_text(analysis_source):
+        analysis_source["segments"] = [{
+            "start": 0.0,
+            "end": round(max(float(video_duration or 0.0), 0.0), 3),
+            "text": _transcript_text(analysis_source),
+        }]
+    timeline = build_analysis_timeline(analysis_source, video_duration)
+    indexed_units = timeline_units_by_id(timeline)
+    chunks = _analysis_chunks(analysis_source, video_duration)
+    status = {
+        "planned_windows": len(chunks),
+        "started_windows": 0,
+        "retried_windows": 0,
+        "succeeded_windows": 0,
+        "saturated_windows": 0,
+        "failed_windows": 0,
+    }
+    successful_window_indexes = set()
     provider = config.normalized_provider()
     if emit_log:
         emit_log(
@@ -282,60 +298,124 @@ def rank_highlights(
             f"transcript_chunks={len(chunks)}"
         )
     for index, chunk in enumerate(chunks, start=1):
+        status["started_windows"] += 1
+        window_metadata = json.dumps({
+            "core_start": chunk["core_start"],
+            "core_end": chunk["core_end"],
+            "context_start": chunk["context_start"],
+            "context_end": chunk["context_end"],
+            "timestamp_mode": timeline["timestamp_mode"],
+        }, ensure_ascii=False)
         prompt = HIGHLIGHT_PROMPT.format(
             video_duration=round(float(video_duration), 3),
             min_seconds=target["min_seconds"],
             ideal_seconds=target["ideal_seconds"],
             source_context=json.dumps(prompt_context, ensure_ascii=False),
-            transcript=json.dumps(chunk, ensure_ascii=False),
+            window_metadata=window_metadata,
+            timestamped_transcript=json.dumps(
+                chunk["transcript"], ensure_ascii=False, separators=(",", ":")
+            ),
         )
         if len(prompt) > MAX_PROMPT_CHARS:
             raise ValueError("Transcript chunk exceeds the configured AI prompt limit")
         if emit_log:
             emit_log(
-                f"AI analysis chunk {index}/{len(chunks)} started; "
+                f"AI analysis window {index}/{len(chunks)} "
+                f"core={chunk['core_start']:.3f}-{chunk['core_end']:.3f} "
+                f"context={chunk['context_start']:.3f}-{chunk['context_end']:.3f} "
+                f"units={len(chunk['transcript'].get('segments', [])) + len(chunk['transcript'].get('words', []))} "
                 f"prompt_chars={len(prompt)}"
             )
         started_at = time.monotonic()
-        try:
-            response = chat_json(
-                config,
-                prompt,
-                model=model,
-                reasoning_effort=config.analyze_reasoning_effort,
-                timeout=HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS,
-            )
-        except Exception as exc:
-            if emit_log:
-                emit_log(
-                    f"AI analysis chunk {index}/{len(chunks)} failed after "
-                    f"{time.monotonic() - started_at:.1f}s: {type(exc).__name__}: {exc}"
+        raw_candidates = None
+        for attempt in range(HIGHLIGHT_ANALYSIS_RETRY_COUNT + 1):
+            if attempt:
+                status["retried_windows"] += 1
+            try:
+                response = chat_json(
+                    config,
+                    prompt,
+                    model=model,
+                    reasoning_effort=config.analyze_reasoning_effort,
+                    timeout=HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS,
                 )
-            raise
-        raw_candidates = response.get("highlights") if isinstance(response, dict) else None
+                raw_candidates = response.get("highlights") if isinstance(response, dict) else None
+                if not isinstance(raw_candidates, list):
+                    raise ValueError("AI returned no highlight candidates")
+                break
+            except Exception as exc:
+                if attempt >= HIGHLIGHT_ANALYSIS_RETRY_COUNT:
+                    status["failed_windows"] += 1
+                    if emit_log:
+                        emit_log(
+                            f"AI analysis window {index}/{len(chunks)} failed after retry: "
+                            f"{time.monotonic() - started_at:.1f}s: {type(exc).__name__}: {exc}"
+                        )
+                elif emit_log:
+                    emit_log(
+                        f"AI analysis window {index}/{len(chunks)} failed; retrying: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
         if not isinstance(raw_candidates, list):
-            raise ValueError("AI returned no highlight candidates")
+            continue
+        successful_window_indexes.add(index - 1)
+        status["succeeded_windows"] += 1
+        if len(raw_candidates) >= HIGHLIGHT_ANALYSIS_DISCOVERY_LIMIT:
+            status["saturated_windows"] += 1
+            continuation_prompt = (
+                prompt
+                + "\nCONTINUATION PASS: return additional distinct strong moments from this same window "
+                "that were not in the previous response. Do not repeat previous candidates. "
+                "Return at most 12 more highlights in the same JSON shape."
+            )
+            if len(continuation_prompt) <= MAX_PROMPT_CHARS:
+                try:
+                    continuation = chat_json(
+                        config,
+                        continuation_prompt,
+                        model=model,
+                        reasoning_effort=config.analyze_reasoning_effort,
+                        timeout=HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS,
+                    )
+                    if isinstance(continuation, dict) and isinstance(continuation.get("highlights"), list):
+                        raw_candidates = list(raw_candidates) + list(continuation["highlights"])
+                except Exception as exc:
+                    if emit_log:
+                        emit_log(
+                            f"AI analysis continuation for window {index} failed: "
+                            f"{type(exc).__name__}: {exc}"
+                        )
         if emit_log:
             emit_log(
-                f"AI analysis chunk {index}/{len(chunks)} completed in "
+                f"AI analysis window {index}/{len(chunks)} completed in "
                 f"{time.monotonic() - started_at:.1f}s; candidates={len(raw_candidates)}"
             )
         for raw in raw_candidates:
             if not isinstance(raw, Mapping):
                 continue
-            try:
-                start = float(raw.get("start"))
-                end = float(raw.get("end"))
-                score = float(raw.get("score", 0.0))
-            except (TypeError, ValueError):
-                continue
-            candidates.append({
-                "start": start,
-                "end": end,
-                "score": score,
-                "reason": str(raw.get("reason") or "").strip(),
-                "text": str(raw.get("text") or "").strip(),
-            })
+            resolved = resolve_candidate_bounds(
+                raw,
+                indexed_units,
+                video_duration,
+                timestamp_mode=timeline["timestamp_mode"],
+                core_start=chunk["core_start"],
+                core_end=chunk["core_end"],
+                min_seconds=15.0,
+                max_seconds=300.0,
+            )
+            if resolved is not None:
+                resolved["reason"] = str(raw.get("reason") or "").strip()
+                resolved["text"] = str(raw.get("text") or "").strip()
+                candidates.append(resolved)
+    missing_windows = [
+        {
+            "start": chunks[index]["core_start"],
+            "end": chunks[index]["core_end"],
+        }
+        for index in range(len(chunks))
+        if index not in successful_window_indexes
+    ]
+    candidates = dedupe_clip_candidates(candidates)
     return {
         "method": "ai",
         "provider": config.normalized_provider(),
@@ -343,6 +423,11 @@ def rank_highlights(
         "candidates": candidates,
         "target": target,
         "chunks_analyzed": len(chunks),
+        "analysis": {
+            **status,
+            "incomplete": bool(missing_windows),
+            "missing_core_ranges": missing_windows,
+        },
     }
 
 
@@ -410,6 +495,12 @@ def run_highlight_generation(request: Mapping[str, Any], emit_log: Callable[[str
         source_context={**(request.get("source_context") or {}), "headers": request.get("headers") or {}},
         emit_log=emit_log,
     )
+    analysis_metadata = ranked.get("analysis") or {}
+    if analysis_metadata.get("incomplete"):
+        emit_log(
+            "Warning: highlight AI analysis has incomplete core coverage; "
+            f"missing_windows={len(analysis_metadata.get('missing_core_ranges') or [])}"
+        )
     selected = select_segments(
         ranked.get("candidates", []),
         min_seconds=target["min_seconds"],
@@ -417,6 +508,8 @@ def run_highlight_generation(request: Mapping[str, Any], emit_log: Callable[[str
         source_duration_seconds=source_duration,
     )
     if not selected["segments"]:
+        if analysis_metadata.get("incomplete"):
+            raise ValueError("AI returned no usable highlight candidates because analysis coverage was incomplete")
         raise ValueError("AI returned no usable highlight candidates")
     if not selected["reached_minimum"]:
         emit_log("Warning: strong material did not reach the requested minimum duration")
@@ -429,7 +522,10 @@ def run_highlight_generation(request: Mapping[str, Any], emit_log: Callable[[str
         "source": {"path": str(source_path), "duration_seconds": source_duration},
         "target": target,
         "selection": selected,
-        "analysis": {key: ranked.get(key) for key in ("method", "provider", "model")},
+        "analysis": {
+            **{key: ranked.get(key) for key in ("method", "provider", "model")},
+            "window_coverage": analysis_metadata,
+        },
         "transcript_language": transcript.get("language", "und"),
         "video_url": f"/videos/{job_id}/highlights.mp4",
     }

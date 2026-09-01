@@ -194,15 +194,15 @@ def test_merge_transcript_segments_removes_duplicate_overlap_segments():
 
 def test_rank_highlights_uses_existing_ai_configuration(monkeypatch):
     transcript = {
-        "text": "A useful explanation.",
+        "text": "A useful explanation with a complete payoff.",
         "segments": [
-            {"text": "A useful explanation.", "start": 10.0, "end": 18.0, "words": []}
+            {"text": "A useful explanation with a complete payoff.", "start": 10.0, "end": 30.0, "words": []}
         ],
         "language": "en",
     }
     config = Mock(normalized_provider=lambda: "ollama", analyze_model="qwen", is_gemini=lambda: False)
     monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
-    chat = Mock(return_value={"highlights": [{"start": 10, "end": 18, "score": 0.91, "reason": "clear payoff"}]})
+    chat = Mock(return_value={"highlights": [{"start": 10, "end": 30, "score": 0.91, "reason": "clear payoff"}]})
     monkeypatch.setattr(highlight_generation, "chat_json", chat)
     logs = []
 
@@ -212,11 +212,11 @@ def test_rank_highlights_uses_existing_ai_configuration(monkeypatch):
     assert result["provider"] == "ollama"
     assert result["model"] == "qwen"
     assert result["candidates"][0]["score"] == 0.91
-    assert "TRANSCRIPT" in chat.call_args.args[1]
+    assert "TIMESTAMPED_TRANSCRIPT" in chat.call_args.args[1]
     assert chat.call_args.kwargs["timeout"] == highlight_generation.HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS
     assert logs[0] == "AI analysis provider=ollama model=qwen; transcript_chunks=1"
-    assert logs[1].startswith("AI analysis chunk 1/1 started; prompt_chars=")
-    assert logs[2].startswith("AI analysis chunk 1/1 completed in ")
+    assert logs[1].startswith("AI analysis window 1/1 core=0.000-60.000 context=0.000-60.000 units=")
+    assert logs[2].startswith("AI analysis window 1/1 completed in ")
     assert logs[2].endswith("; candidates=1")
 
 
@@ -271,37 +271,111 @@ def test_rank_highlights_chunks_oversized_transcripts(monkeypatch):
     transcript = {
         "text": "",
         "segments": [
-            {"text": "segment " + ("x" * 12000), "start": index * 30, "end": index * 30 + 20, "words": []}
+            {"text": "segment " + ("x" * 5000), "start": index * 30, "end": index * 30 + 20, "words": []}
             for index in range(8)
         ],
     }
 
     result = highlight_generation.rank_highlights(transcript, 240.0)
 
-    assert len(result["candidates"]) == chat.call_count
+    assert len(result["candidates"]) == 1
     assert chat.call_count > 1
     assert all(len(call.args[1]) <= highlight_generation.MAX_PROMPT_CHARS for call in chat.call_args_list)
+    assert result["analysis"]["incomplete"] is False
 
 
-def test_analysis_chunks_use_timestamped_segments_without_word_data():
+def test_analysis_windows_preserve_complete_segments_and_word_data():
     transcript = {
         "segments": [
             {
-                "text": "segment " + ("x" * 12000),
+                "text": "segment " + ("x" * 5000),
                 "start": index * 30,
                 "end": index * 30 + 20,
                 "words": [{"word": "segment", "start": index * 30, "end": index * 30 + 1}],
             }
-            for index in range(4)
+            for index in range(8)
         ],
     }
 
     chunks = highlight_generation._analysis_chunks(transcript)
 
     assert len(chunks) > 1
-    assert all("segments" in chunk for chunk in chunks)
-    assert all("words" not in chunk for chunk in chunks)
-    assert all(
-        all(set(segment) == {"start", "end", "text"} for segment in chunk["segments"])
-        for chunk in chunks
+    assert all("transcript" in chunk for chunk in chunks)
+    assert all(chunk["transcript"]["segments"] for chunk in chunks)
+    assert all(chunk["transcript"]["words"] for chunk in chunks)
+    assert chunks[0]["transcript"]["segments"][0][3].startswith("segment ")
+
+
+def test_rank_highlights_uses_overlapping_word_windows_and_resolves_bounds(monkeypatch):
+    config = Mock(normalized_provider=lambda: "ollama", analyze_model="qwen", is_gemini=lambda: False)
+    monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
+    prompts = []
+
+    def fake_chat_json(_config, prompt, **_kwargs):
+        prompts.append(prompt)
+        return {
+            "highlights": [{
+                "start_word_id": 2,
+                "end_word_id": 5,
+                "start": 0,
+                "end": 0,
+                "score": 0.91,
+                "reason": "boundary-safe candidate",
+                "text": "A complete moment",
+            }]
+        }
+
+    monkeypatch.setattr(highlight_generation, "chat_json", fake_chat_json)
+    segments = []
+    for index in range(12):
+        start = index * 20
+        segments.append({
+            "start": start,
+            "end": start + 20,
+            "text": "complete segment",
+            "words": [
+                {"word": f"w{index}-a", "start": start, "end": start + 10},
+                {"word": f"w{index}-b", "start": start + 10, "end": start + 20},
+            ],
+        })
+    segments[0]["words"] = [
+        {"word": "before", "start": 0, "end": 10},
+        {"word": "before2", "start": 10, "end": 20},
+    ]
+    segments[1]["words"] = [
+        {"word": "hook", "start": 20, "end": 30},
+        {"word": "middle", "start": 30, "end": 40},
+    ]
+    segments[2]["words"] = [
+        {"word": "payoff", "start": 40, "end": 50},
+        {"word": "end", "start": 50, "end": 59},
+    ]
+
+    result = highlight_generation.rank_highlights(
+        {"text": "", "segments": segments},
+        240.0,
     )
+
+    assert len(prompts) > 1
+    assert all("core_start" in prompt for prompt in prompts)
+    assert result["candidates"][0]["start"] == 20.0
+    assert result["candidates"][0]["end"] == 59.0
+    assert result["candidates"][0]["bounds_source"] == "canonical_unit"
+
+
+def test_rank_highlights_retries_a_failed_window_and_reports_coverage(monkeypatch):
+    config = Mock(normalized_provider=lambda: "ollama", analyze_model="qwen", is_gemini=lambda: False)
+    monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: config)
+    chat = Mock(side_effect=[RuntimeError("temporary"), {"highlights": [{"start": 0, "end": 20, "score": 0.8}]}])
+    monkeypatch.setattr(highlight_generation, "chat_json", chat)
+
+    result = highlight_generation.rank_highlights(
+        {"text": "A complete segment", "segments": [{"start": 0, "end": 60, "text": "A complete segment"}]},
+        60.0,
+    )
+
+    assert chat.call_count == 2
+    assert result["analysis"]["retried_windows"] == 1
+    assert result["analysis"]["failed_windows"] == 0
+    assert result["analysis"]["incomplete"] is False
+    assert result["candidates"][0]["start"] == 0.0
