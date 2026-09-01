@@ -3,6 +3,7 @@
 *.webm
 *.mov
 *.mkv
+.codex/
 
 # YOLO model
 *.pt
