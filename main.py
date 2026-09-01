@@ -74,6 +74,13 @@ from video_rendering import build_audio_extract_command
 from video_metrics import JobVideoMetrics
 from runtime_acceleration import preferred_device
 from subtitles import build_subtitle_segments, burn_subtitles, generate_srt
+from transcript_windows import (
+    build_analysis_timeline,
+    build_analysis_windows,
+    dedupe_clip_candidates,
+    resolve_candidate_bounds,
+    timeline_units_by_id,
+)
 
 # Load environment variables
 load_dotenv()
@@ -141,7 +148,7 @@ You are a senior short-form video editor. Read the supplied timestamped transcri
 
 TARGET_CLIP_COUNT: {target_clips}
 
-Return at most TARGET_CLIP_COUNT candidates from this transcript window. Do not stop early unless the window genuinely has fewer strong moments.
+Return at most DISCOVERY_CANDIDATE_LIMIT candidates from this transcript window. Do not stop early unless the window genuinely has fewer strong moments.
 
 ⚠️ FFMPEG TIME CONTRACT — STRICT REQUIREMENTS:
 - Return timestamps in ABSOLUTE SECONDS from the start of the video (usable in: ffmpeg -ss <start> -to <end> -i <input> ...).
@@ -153,13 +160,18 @@ Return at most TARGET_CLIP_COUNT candidates from this transcript window. Do not 
 - STRICTLY FORBIDDEN to use time formats other than absolute seconds.
 
 VIDEO_DURATION_SECONDS: {video_duration}
+DISCOVERY_CANDIDATE_LIMIT: {discovery_limit}
+WINDOW_CORE_AND_CONTEXT_SECONDS: {window_metadata}
 
 ORIGINAL SOURCE CONTEXT (grounded facts only; may be unavailable):
 {source_context}
 Use this context to improve titles, descriptions, and hooks. Do not invent identities, locations, dates, events, or entities that are not supported by the context or transcript.
 
-TIMESTAMPED_TRANSCRIPT_SEGMENTS (each segment has absolute start/end seconds):
-{transcript_segments}
+TIMESTAMPED_TRANSCRIPT (lossless segment records plus canonical word records):
+Segments are [SEGMENT_ID, ABSOLUTE_START_SECONDS, ABSOLUTE_END_SECONDS, COMPLETE_TEXT, WORD_IDS].
+Words are [WORD_ID, ABSOLUTE_START_SECONDS, ABSOLUTE_END_SECONDS, TEXT].
+Use start_word_id/end_word_id for precise boundaries when words are available. If the window is segment-only, use start_segment_id/end_segment_id. Never invent IDs or timestamps outside this window.
+{timestamped_transcript}
 
 STRICT EXCLUSIONS:
 - No generic intros/outros or purely sponsorship segments unless they contain the hook.
@@ -171,6 +183,10 @@ OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by pre
     {{
       "start": <number in seconds, e.g., 12.340>,
       "end": <number in seconds, e.g., 37.900>,
+      "start_word_id": <canonical integer when available, otherwise null>,
+      "end_word_id": <canonical integer when available, otherwise null>,
+      "start_segment_id": <canonical integer for segment-only windows, otherwise null>,
+      "end_segment_id": <canonical integer for segment-only windows, otherwise null>,
       "score": <number from 0 to 1>,
       "video_description_for_tiktok": "<description for TikTok oriented to get views with contextual CTA>",
       "video_description_for_instagram": "<description for Instagram oriented to get views with contextual CTA>",
@@ -183,6 +199,10 @@ OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by pre
 
 CLIP_ANALYSIS_MAX_CHUNK_CHARS = 24000
 CLIP_ANALYSIS_MAX_PROMPT_CHARS = 32000
+CLIP_ANALYSIS_CORE_SECONDS = 90.0
+CLIP_ANALYSIS_OVERLAP_SECONDS = 61.0
+CLIP_ANALYSIS_DISCOVERY_LIMIT = 12
+CLIP_ANALYSIS_RETRY_COUNT = 1
 
 # Load the YOLO model once for GPU-backed face/person analysis and fallback framing.
 model = None
@@ -2357,54 +2377,29 @@ def _stretch_clip_window(start, end, total_duration, *, min_duration=15.0, targe
 
 
 def _clip_analysis_chunks(transcript_result, video_duration=0.0):
-    """Build compact absolute-time transcript chunks for clip analysis prompts."""
-    compact_segments = []
-    raw_segments = transcript_result.get("segments", []) or []
-
-    def append_text_parts(start, end, text):
-        remaining = str(text or "").strip()
-        while remaining:
-            low, high = 1, len(remaining)
-            best = 1
-            while low <= high:
-                midpoint = (low + high) // 2
-                candidate = {"start": start, "end": end, "text": remaining[:midpoint]}
-                if len(json.dumps([candidate], ensure_ascii=False)) <= CLIP_ANALYSIS_MAX_CHUNK_CHARS:
-                    best = midpoint
-                    low = midpoint + 1
-                else:
-                    high = midpoint - 1
-            compact_segments.append({"start": start, "end": end, "text": remaining[:best]})
-            remaining = remaining[best:].lstrip()
-
-    for raw_segment in raw_segments:
-        text = re.sub(r"\s+", " ", str(raw_segment.get("text") or "").strip())
-        if not text:
-            continue
-        try:
-            start = round(float(raw_segment.get("start")), 3)
-            end = round(float(raw_segment.get("end")), 3)
-        except (TypeError, ValueError):
-            continue
-        if end <= start:
-            continue
-        append_text_parts(start, end, text)
-
-    if not compact_segments:
-        text = re.sub(r"\s+", " ", str(transcript_result.get("text") or "").strip())
-        if text:
-            append_text_parts(0.0, round(max(float(video_duration or 0.0), 0.0), 3), text)
-
-    chunks = []
-    current = []
-    for segment in compact_segments:
-        if current and len(json.dumps(current + [segment], ensure_ascii=False)) > CLIP_ANALYSIS_MAX_CHUNK_CHARS:
-            chunks.append(current)
-            current = []
-        current.append(segment)
-    if current:
-        chunks.append(current)
-    return chunks or [[]]
+    """Compatibility wrapper around the lossless clip-analysis window planner."""
+    source = dict(transcript_result or {})
+    analysis_duration = max(float(video_duration or 0.0), 0.0)
+    if analysis_duration <= 0:
+        analysis_duration = max(
+            (float(segment.get("end", 0.0)) for segment in source.get("segments", []) or []),
+            default=0.0,
+        )
+    if not source.get("segments") and source.get("text"):
+        source["segments"] = [{
+            "start": 0.0,
+            "end": round(analysis_duration, 3),
+            "text": source.get("text"),
+        }]
+    timeline = build_analysis_timeline(source, analysis_duration)
+    return build_analysis_windows(
+        timeline,
+        analysis_duration,
+        core_seconds=90.0,
+        overlap_seconds=61.0,
+        max_prompt_chars=CLIP_ANALYSIS_MAX_PROMPT_CHARS,
+        prompt_overhead_chars=0,
+    )
 
 
 def _snap_clip_boundaries(short, transcript_result, video_duration):
@@ -2471,8 +2466,6 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
 
     try:
         model_name = ai_config.analyze_model or ai_config.text_model or ("gemini-2.5-flash" if ai_config.is_gemini() else "")
-        chunks = _clip_analysis_chunks(transcript_result, video_duration)
-        per_chunk_target = max(1, min(15, (int(target_clips or 1) + len(chunks) - 1) // len(chunks)))
         result_json = {}
         all_shorts = []
         source_context_json = (
@@ -2481,56 +2474,167 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
             else "No original source context was provided."
         )
 
-        for chunk in chunks:
+        analysis_source = dict(transcript_result or {})
+        if not analysis_source.get("segments") and analysis_source.get("text"):
+            analysis_source["segments"] = [{
+                "start": 0.0,
+                "end": round(max(float(video_duration or 0.0), 0.0), 3),
+                "text": analysis_source.get("text"),
+            }]
+        timeline = build_analysis_timeline(analysis_source, video_duration)
+        indexed_units = timeline_units_by_id(timeline)
+        windows = build_analysis_windows(
+            timeline,
+            video_duration,
+            core_seconds=CLIP_ANALYSIS_CORE_SECONDS,
+            overlap_seconds=CLIP_ANALYSIS_OVERLAP_SECONDS,
+            max_prompt_chars=CLIP_ANALYSIS_MAX_PROMPT_CHARS,
+            prompt_overhead_chars=6000 + len(source_context_json),
+        )
+        analysis_status = {
+            "planned_windows": len(windows),
+            "started_windows": 0,
+            "retried_windows": 0,
+            "succeeded_windows": 0,
+            "saturated_windows": 0,
+            "failed_windows": 0,
+        }
+        successful_window_indexes = set()
+
+        for window_index, window in enumerate(windows):
+            analysis_status["started_windows"] += 1
+            window_metadata = json.dumps({
+                "core_start": window["core_start"],
+                "core_end": window["core_end"],
+                "context_start": window["context_start"],
+                "context_end": window["context_end"],
+                "timestamp_mode": timeline["timestamp_mode"],
+            }, ensure_ascii=False)
+            timestamped_transcript = json.dumps(
+                window["transcript"], ensure_ascii=False, separators=(",", ":")
+            )
             prompt = GEMINI_PROMPT_TEMPLATE.format(
                 video_duration=video_duration,
-                target_clips=per_chunk_target,
+                target_clips=CLIP_ANALYSIS_DISCOVERY_LIMIT,
+                discovery_limit=CLIP_ANALYSIS_DISCOVERY_LIMIT,
+                window_metadata=window_metadata,
                 source_context=source_context_json,
-                transcript_segments=json.dumps(chunk, ensure_ascii=False),
+                timestamped_transcript=timestamped_transcript,
             )
             if len(prompt) > CLIP_ANALYSIS_MAX_PROMPT_CHARS:
                 raise ValueError("Clip analysis prompt exceeds the configured size limit")
 
-            response = chat_json(
-                ai_config,
-                prompt,
-                model=model_name,
-                reasoning_effort=ai_config.analyze_reasoning_effort,
-            )
-            if not isinstance(response, dict):
+            response = None
+            shorts = None
+            for attempt in range(CLIP_ANALYSIS_RETRY_COUNT + 1):
+                if attempt:
+                    analysis_status["retried_windows"] += 1
+                try:
+                    response = chat_json(
+                        ai_config,
+                        prompt,
+                        model=model_name,
+                        reasoning_effort=ai_config.analyze_reasoning_effort,
+                    )
+                    if not isinstance(response, dict):
+                        raise ValueError("AI returned a non-object response")
+                    normalized_response = dict(response)
+                    if "shorts" not in normalized_response or not isinstance(normalized_response.get("shorts"), list):
+                        for alt_key in ("clips", "moments", "clip_plan", "viral_clips"):
+                            alt_value = normalized_response.get(alt_key)
+                            if isinstance(alt_value, list):
+                                normalized_response["shorts"] = alt_value
+                                break
+                    shorts = normalized_response.get("shorts")
+                    if not isinstance(shorts, list):
+                        raise ValueError("AI returned no shorts list")
+                    result_json = normalized_response
+                    break
+                except Exception as exc:
+                    if attempt >= CLIP_ANALYSIS_RETRY_COUNT:
+                        print(
+                            f"Clip analysis window {window_index + 1}/{len(windows)} failed after retry: "
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                        analysis_status["failed_windows"] += 1
+                    else:
+                        print(
+                            f"Clip analysis window {window_index + 1}/{len(windows)} failed; retrying: "
+                            f"{type(exc).__name__}: {exc}"
+                        )
+            if not isinstance(shorts, list):
                 continue
-            result_json = dict(response)
 
-            # Some models use alternate keys. Normalize those here before fallback.
-            if "shorts" not in result_json or not isinstance(result_json.get("shorts"), list):
-                for alt_key in ("clips", "moments", "clip_plan", "viral_clips"):
-                    alt_value = result_json.get(alt_key)
-                    if isinstance(alt_value, list) and alt_value:
-                        result_json["shorts"] = alt_value
-                        break
+            successful_window_indexes.add(window_index)
+            analysis_status["succeeded_windows"] += 1
+            if len(shorts) >= CLIP_ANALYSIS_DISCOVERY_LIMIT:
+                analysis_status["saturated_windows"] += 1
+                continuation_prompt = (
+                    prompt
+                    + "\nCONTINUATION PASS: return additional distinct strong moments from this same window "
+                    "that were not in the previous response. Do not repeat the previous candidates. "
+                    "Return at most 12 more candidates in the same JSON shape."
+                )
+                if len(continuation_prompt) <= CLIP_ANALYSIS_MAX_PROMPT_CHARS:
+                    try:
+                        continuation = chat_json(
+                            ai_config,
+                            continuation_prompt,
+                            model=model_name,
+                            reasoning_effort=ai_config.analyze_reasoning_effort,
+                        )
+                        if isinstance(continuation, dict) and isinstance(continuation.get("shorts"), list):
+                            shorts = list(shorts) + list(continuation["shorts"])
+                    except Exception as exc:
+                        print(
+                            f"Clip analysis continuation for window {window_index + 1} failed: "
+                            f"{type(exc).__name__}: {exc}"
+                        )
 
-            shorts = result_json.get("shorts")
-            if isinstance(shorts, list):
-                all_shorts.extend(short for short in shorts if isinstance(short, dict))
+            for raw_short in shorts:
+                if not isinstance(raw_short, dict):
+                    continue
+                resolved = resolve_candidate_bounds(
+                    raw_short,
+                    indexed_units,
+                    video_duration,
+                    timestamp_mode=timeline["timestamp_mode"],
+                    core_start=window["core_start"],
+                    core_end=window["core_end"],
+                    min_seconds=15.0,
+                    max_seconds=60.0,
+                )
+                if resolved is not None:
+                    all_shorts.append(resolved)
+
+        missing_windows = [
+            {
+                "start": windows[index]["core_start"],
+                "end": windows[index]["core_end"],
+            }
+            for index in range(len(windows))
+            if index not in successful_window_indexes
+        ]
+        analysis_metadata = {
+            **analysis_status,
+            "incomplete": bool(missing_windows),
+            "missing_core_ranges": missing_windows,
+        }
+        all_shorts = dedupe_clip_candidates(all_shorts)
 
         if not all_shorts:
             print("⚠️ AI returned no usable shorts. Using transcript-based fallback clips.")
-            return _build_fallback_clip_plan(
+            fallback = _build_fallback_clip_plan(
                 transcript_result,
                 video_duration,
                 target_clips,
                 min_duration=local_min_duration,
                 target_duration=local_target_duration,
             )
+            fallback["analysis"] = analysis_metadata
+            return fallback
 
         clip_limit = max(1, min(int(target_clips or 1), 15))
-        def score_value(clip):
-            try:
-                return float(clip.get("score", 0.0) or 0.0)
-            except (TypeError, ValueError):
-                return 0.0
-
-        all_shorts.sort(key=score_value, reverse=True)
         adjusted_shorts = []
         for clip in all_shorts[:clip_limit]:
             if is_lmstudio:
@@ -2551,10 +2655,27 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
                 updated_clip = dict(clip)
                 updated_clip["start"] = clip_start
                 updated_clip["end"] = clip_end
+                if updated_clip.get("bounds_source") == "canonical_unit":
+                    updated_clip = _snap_clip_boundaries(
+                        updated_clip,
+                        transcript_result,
+                        video_duration,
+                    )
+                    for key in (
+                        "start_word_id",
+                        "end_word_id",
+                        "start_segment_id",
+                        "end_segment_id",
+                    ):
+                        updated_clip.pop(key, None)
+                    updated_clip["bounds_source"] = "canonical_unit_stretched"
                 clip = updated_clip
-            adjusted_shorts.append(_snap_clip_boundaries(clip, transcript_result, video_duration))
+            if clip.get("bounds_source") == "model_float":
+                clip = _snap_clip_boundaries(clip, transcript_result, video_duration)
+            adjusted_shorts.append(clip)
 
         result_json["shorts"] = adjusted_shorts
+        result_json["analysis"] = analysis_metadata
 
         if ai_config.is_gemini():
             result_json['cost_analysis'] = {
@@ -2569,13 +2690,18 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
         return result_json
     except Exception as e:
         print(f"❌ AI Error: {e}")
-        return _build_fallback_clip_plan(
+        fallback = _build_fallback_clip_plan(
             transcript_result,
             video_duration,
             target_clips,
             min_duration=local_min_duration,
             target_duration=local_target_duration,
         )
+        fallback["analysis"] = {
+            "incomplete": True,
+            "error": str(e),
+        }
+        return fallback
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="AutoCrop-Vertical with Viral Clip Detection.")
