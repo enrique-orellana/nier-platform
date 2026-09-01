@@ -27,7 +27,6 @@ OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS = 3
 OPENROUTER_TRANSCRIPTION_RETRY_BACKOFF_SECONDS = 1.0
 CODEX_STREAM_MAX_ATTEMPTS = 3
 CODEX_STREAM_RETRY_BACKOFF_SECONDS = 0.5
-CODEX_MAX_TIMEOUT_SECONDS = 180.0
 CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.4")
 CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
 AUTO_MODEL_VALUES = {"", "auto", "default"}
@@ -866,11 +865,11 @@ def _build_codex_input(prompt: str, images: Optional[Sequence[Any]] = None) -> l
     return [{"role": "user", "content": content}]
 
 
-def _codex_timeout(timeout: float) -> float:
-    """Keep Codex requests bounded so a stalled generation cannot block a job for minutes."""
-    if timeout <= 0:
-        return timeout
-    return min(float(timeout), CODEX_MAX_TIMEOUT_SECONDS)
+def _codex_timeout(timeout: Optional[float]) -> Optional[float]:
+    """Use an unlimited stream unless the caller explicitly supplies a timeout."""
+    if timeout is None or timeout <= 0:
+        return None
+    return float(timeout)
 
 
 def _extract_codex_sse_text(lines: Sequence[Any], *, deadline: float | None = None) -> str:
@@ -930,11 +929,11 @@ def _codex_chat(
     if selected_effort:
         payload["reasoning"] = {"effort": selected_effort}
     text = ""
-    deadline = time.monotonic() + timeout if timeout > 0 else time.monotonic()
+    deadline = time.monotonic() + timeout if timeout is not None else None
     auth_refreshed = False
     for attempt in range(CODEX_STREAM_MAX_ATTEMPTS):
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
+        remaining = deadline - time.monotonic() if deadline is not None else None
+        if remaining is not None and remaining <= 0:
             raise RuntimeError(f"Codex streaming request timed out after {timeout:.0f}s")
         access_token = get_access_token()
         account_id = get_codex_account_id()
@@ -999,17 +998,30 @@ def _codex_chat(
             break
         except TimeoutError as exc:
             _audit_request_finish(audit_emitter, audit_event_id, error=str(exc), binary=bool(images))
-            raise RuntimeError(f"Codex streaming request timed out after {timeout:.0f}s") from exc
+            message = (
+                "Codex streaming request timed out"
+                if timeout is None
+                else f"Codex streaming request timed out after {timeout:.0f}s"
+            )
+            raise RuntimeError(message) from exc
         except httpx.TimeoutException as exc:
             _audit_request_finish(audit_emitter, audit_event_id, error=str(exc), binary=bool(images))
-            raise RuntimeError(f"Codex streaming request timed out after {timeout:.0f}s") from exc
+            message = (
+                "Codex streaming request timed out"
+                if timeout is None
+                else f"Codex streaming request timed out after {timeout:.0f}s"
+            )
+            raise RuntimeError(message) from exc
         except httpx.TransportError as exc:
             _audit_request_finish(audit_emitter, audit_event_id, error=str(exc), binary=bool(images))
             if attempt == CODEX_STREAM_MAX_ATTEMPTS - 1:
                 raise RuntimeError(
                     f"Codex streaming request failed after {CODEX_STREAM_MAX_ATTEMPTS} attempts: {exc}"
                 ) from exc
-            time.sleep(min(CODEX_STREAM_RETRY_BACKOFF_SECONDS * (2 ** attempt), max(0.0, deadline - time.monotonic())))
+            backoff = CODEX_STREAM_RETRY_BACKOFF_SECONDS * (2 ** attempt)
+            if deadline is not None:
+                backoff = min(backoff, max(0.0, deadline - time.monotonic()))
+            time.sleep(backoff)
         except httpx.HTTPStatusError as exc:
             response = exc.response
             _audit_request_finish(

@@ -72,10 +72,12 @@ def test_snap_clip_boundaries_to_local_word_timestamps():
 
 def test_get_viral_clips_sends_bounded_compact_prompts(monkeypatch):
     prompts = []
+    timeouts = []
     monkeypatch.setattr(main, "load_ai_config", lambda: _config())
 
-    def fake_chat_json(_config, prompt, **_kwargs):
+    def fake_chat_json(_config, prompt, **kwargs):
         prompts.append(prompt)
+        timeouts.append(kwargs.get("timeout"))
         return {
             "shorts": [
                 {
@@ -109,6 +111,7 @@ def test_get_viral_clips_sends_bounded_compact_prompts(monkeypatch):
     assert all(len(prompt) <= main.CLIP_ANALYSIS_MAX_PROMPT_CHARS for prompt in prompts)
     assert all("WORDS_JSON" not in prompt for prompt in prompts)
     assert all("TRANSCRIPT_TEXT" not in prompt for prompt in prompts)
+    assert all(timeout == 0.0 for timeout in timeouts)
     assert len(result["shorts"]) == 1
     assert result["shorts"][0]["bounds_source"] == "model_float"
     assert result["analysis"]["planned_windows"] == len(prompts)

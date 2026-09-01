@@ -2466,6 +2466,7 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
 
     try:
         model_name = ai_config.analyze_model or ai_config.text_model or ("gemini-2.5-flash" if ai_config.is_gemini() else "")
+        analysis_timeout = 0.0 if ai_config.normalized_provider() == "openai-codex" else 300.0
         result_json = {}
         all_shorts = []
         source_context_json = (
@@ -2535,6 +2536,7 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
                         prompt,
                         model=model_name,
                         reasoning_effort=ai_config.analyze_reasoning_effort,
+                        timeout=analysis_timeout,
                     )
                     if not isinstance(response, dict):
                         raise ValueError("AI returned a non-object response")
@@ -2582,6 +2584,7 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
                             continuation_prompt,
                             model=model_name,
                             reasoning_effort=ai_config.analyze_reasoning_effort,
+                            timeout=analysis_timeout,
                         )
                         if isinstance(continuation, dict) and isinstance(continuation.get("shorts"), list):
                             shorts = list(shorts) + list(continuation["shorts"])
