@@ -331,6 +331,7 @@ export const localEditorStateToManifest = (
     ? [...existingTracks.filter((track) => track.id !== nextTrackId), nextTrack]
     : existingTracks.filter((track) => track.id !== nextTrackId);
   source.subtitle_tracks_disabled = !cues.length;
+  source.subtitle_tracks_edited = true;
   source.active_subtitle_track_id = cues.length ? nextTrackId : null;
   const persistedHook = state.hook
     ? (() => {

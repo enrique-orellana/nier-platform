@@ -279,6 +279,62 @@ describe("designcomboAdapter", () => {
     expect(source.subtitle_tracks[0].cues).toHaveLength(1);
   });
 
+  it("preserves explicitly edited original cues when refreshing the source range", () => {
+    const source = {
+      timeline: { trim: { start_sec: 10, end_sec: 14 } },
+      subtitle_tracks_edited: true,
+      subtitle_tracks: [
+        {
+          id: "original",
+          language: "en",
+          origin: "original",
+          cues: [{ text: "Old", startMs: 500, endMs: 1500 }],
+        },
+      ],
+      layers: {},
+    };
+
+    const next = manifestWithRefreshedSourceRange(
+      source,
+      { startSec: 10, endSec: 16 },
+      {
+        language: "en",
+        captions: [
+          { text: "Old", startMs: 500, endMs: 1500 },
+          { text: "Deleted by user", startMs: 4500, endMs: 5500 },
+        ],
+      },
+    );
+
+    expect(next.timeline.trim).toEqual({ start_sec: 10, end_sec: 16 });
+    expect(next.subtitle_tracks[0].cues).toEqual(
+      source.subtitle_tracks[0].cues,
+    );
+    expect(next.layers.subtitles).toBeUndefined();
+  });
+
+  it("keeps explicitly disabled subtitles disabled when refreshing the source range", () => {
+    const source = {
+      timeline: { trim: { start_sec: 10, end_sec: 14 } },
+      subtitle_tracks: [],
+      subtitle_tracks_disabled: true,
+      layers: { subtitles: null },
+    };
+
+    const next = manifestWithRefreshedSourceRange(
+      source,
+      { startSec: 10, endSec: 16 },
+      {
+        language: "en",
+        captions: [{ text: "Deleted by user", startMs: 4500, endMs: 5500 }],
+      },
+    );
+
+    expect(next.subtitle_tracks).toEqual([]);
+    expect(next.subtitle_tracks_disabled).toBe(true);
+    expect(next.layers.subtitles).toBeNull();
+  });
+
   it("serializes a newly created cue into cues and captions", () => {
     const source = {
       timeline: { trim: { start_sec: 0, end_sec: 10 } },

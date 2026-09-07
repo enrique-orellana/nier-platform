@@ -153,7 +153,11 @@ const transcriptTrack = (manifest, transcript) => {
 };
 
 export function manifestWithTranscriptCaptions(manifest, transcript) {
-  if (manifest?.subtitle_tracks_disabled === true) return manifest;
+  if (
+    manifest?.subtitle_tracks_disabled === true ||
+    manifest?.subtitle_tracks_edited === true
+  )
+    return manifest;
   const track = transcriptTrack(manifest, transcript);
   if (!track) return manifest;
 
@@ -231,6 +235,11 @@ export function manifestWithRefreshedSourceRange(
       end_sec: Number(endSec),
     },
   };
+  if (
+    source.subtitle_tracks_disabled === true ||
+    source.subtitle_tracks_edited === true
+  )
+    return source;
   const refreshedTrack = transcriptTrack(source, transcript);
   if (!refreshedTrack) return source;
 

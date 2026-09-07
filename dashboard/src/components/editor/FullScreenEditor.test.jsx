@@ -228,6 +228,35 @@ describe("FullScreenEditor", () => {
     ).toEqual([{ text: "Oh,", startMs: 16678, endMs: 17078 }]);
   });
 
+  it("marks the saved subtitle track as authoritative after a cue is deleted", () => {
+    const source = {
+      ...manifest,
+      subtitle_tracks: [
+        {
+          id: "original",
+          language: "es",
+          label: "Original",
+          origin: "original",
+          cues: [
+            { text: "Hola", startMs: 1000, endMs: 2000 },
+            { text: "Adios", startMs: 3000, endMs: 4000 },
+          ],
+        },
+      ],
+    };
+    const state = manifestToLocalEditorState(source, "original");
+    const saved = localEditorStateToManifest(
+      source,
+      { ...state, subtitleCues: state.subtitleCues.slice(0, 1) },
+      "original",
+    );
+
+    expect(saved.subtitle_tracks_edited).toBe(true);
+    expect(saved.subtitle_tracks[0].cues).toEqual([
+      { text: "Hola", startMs: 1000, endMs: 2000 },
+    ]);
+  });
+
   it("creates a full-duration segment from a legacy layout format", () => {
     const source = {
       ...manifest,
