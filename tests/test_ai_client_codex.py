@@ -25,6 +25,12 @@ def test_load_ai_config_reads_codex_reasoning_efforts():
     assert config.vision_reasoning_effort == "medium"
 
 
+def test_codex_default_model_uses_chatgpt_supported_luna_model(monkeypatch):
+    monkeypatch.delenv("CODEX_MODEL", raising=False)
+
+    assert ai_client._codex_default_model() == "gpt-5.6-luna"
+
+
 def test_unsupported_provider_still_fails_fast():
     with pytest.raises(ValueError, match="Unsupported AI provider"):
         ai_client.chat_completion(ai_client.AIConfig(provider="unknown"), "hello")

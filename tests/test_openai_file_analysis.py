@@ -359,7 +359,6 @@ def test_codex_file_analysis_uses_chatgpt_oauth_and_complete_local_artifact(
         transcript_path,
         "analysis prompt",
         model="gpt-5.4",
-        reasoning_effort="high",
     )
 
     assert result == {"coverage": {"complete": True}, "shorts": []}
@@ -370,6 +369,7 @@ def test_codex_file_analysis_uses_chatgpt_oauth_and_complete_local_artifact(
     assert "--ask-for-approval" not in observed["command"]
     assert "--output-schema" not in observed["command"]
     assert observed["command"][observed["command"].index("--model") + 1] == "gpt-5.4"
+    assert observed["command"][observed["command"].index("--config") + 1] == 'model_reasoning_effort="high"'
     assert "timeline.jsonl" in observed["command"][-1]
     assert "OPENAI_API_KEY" not in observed["env"]
     assert observed["cli_auth"]["auth_mode"] == "chatgpt"

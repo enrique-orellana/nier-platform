@@ -61,3 +61,11 @@ def test_file_analysis_settings_resolve_public_model_and_base_url(monkeypatch):
         "base_url": "https://api.example.test/v1",
         "model": "public-model",
     }
+
+
+def test_file_analysis_settings_default_to_luna_for_connected_codex(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_ANALYZE_MODEL", raising=False)
+    monkeypatch.delenv("CODEX_MODEL", raising=False)
+
+    assert main.openai_file_analysis_settings(_config(analyze_model="auto", text_model="auto"))["model"] == "gpt-5.6-luna"

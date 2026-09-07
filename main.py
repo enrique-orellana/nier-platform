@@ -52,6 +52,8 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='google.protobuf')
 from ai_client import (
     AIConfig,
+    AUTO_MODEL_VALUES,
+    CODEX_DEFAULT_MODEL,
     chat_json,
     codex_file_analysis_json,
     load_ai_config,
@@ -133,12 +135,18 @@ def should_use_openai_file_analysis(config: AIConfig) -> bool:
 
 
 def openai_file_analysis_settings(config: AIConfig) -> dict[str, str]:
-    model = (
-        os.environ.get("OPENAI_ANALYZE_MODEL", "").strip()
-        or config.analyze_model
-        or config.text_model
-        or os.environ.get("CODEX_MODEL", "").strip()
-        or "gpt-5.4"
+    model = next(
+        (
+            value.strip()
+            for value in (
+                os.environ.get("OPENAI_ANALYZE_MODEL", ""),
+                config.analyze_model,
+                config.text_model,
+                os.environ.get("CODEX_MODEL", ""),
+            )
+            if value and value.strip().lower() not in AUTO_MODEL_VALUES
+        ),
+        CODEX_DEFAULT_MODEL,
     )
     return {
         "api_key": os.environ.get("OPENAI_API_KEY", "").strip(),

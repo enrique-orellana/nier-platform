@@ -287,7 +287,7 @@ deployment references.
 | `MINIO_DOWNLOAD_MULTIPART_CHUNKSIZE_MB` | Size of each multipart download chunk (default: 64 MB) |
 | `MAX_CONCURRENT_JOBS` | Concurrent processing limit (default: 5) |
 | `OPENSHORTS_CODEX_AUTH_FILE` | Optional path for the installation-scoped Codex credential file |
-| `CODEX_MODEL` | Optional Codex model override (default: `gpt-5.4`) |
+| `CODEX_MODEL` | Optional Codex model override (default: `gpt-5.6-luna`) |
 | `OPENAI_CLIP_ANALYSIS_MODE` | `auto` uses complete-file analysis when available; `file` requires it; `legacy` forces lossless windows |
 | `OPENAI_API_KEY` | Optional server-only key for the public OpenAI Files API; not required for connected Codex |
 | `OPENAI_ANALYZE_MODEL` | Optional model override for complete-file analysis |

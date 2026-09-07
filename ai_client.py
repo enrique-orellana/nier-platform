@@ -32,7 +32,8 @@ OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS = 3
 OPENROUTER_TRANSCRIPTION_RETRY_BACKOFF_SECONDS = 1.0
 CODEX_STREAM_MAX_ATTEMPTS = 3
 CODEX_STREAM_RETRY_BACKOFF_SECONDS = 0.5
-CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.4")
+CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.6-luna")
+CODEX_DEFAULT_REASONING_EFFORT = "high"
 CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
 AUTO_MODEL_VALUES = {"", "auto", "default"}
 CODEX_DEFAULT_CLIENT_VERSION = "0.144.1"
@@ -619,10 +620,13 @@ def codex_file_analysis_json(
             "--cd",
             str(path.parent),
         ]
-        if reasoning_effort and reasoning_effort.strip().lower() not in AUTO_REASONING_VALUES:
+        effective_reasoning_effort = (
+            reasoning_effort or CODEX_DEFAULT_REASONING_EFFORT
+        ).strip().lower()
+        if effective_reasoning_effort not in AUTO_REASONING_VALUES:
             command.extend([
                 "--config",
-                f"model_reasoning_effort={json.dumps(reasoning_effort.strip().lower())}",
+                f"model_reasoning_effort={json.dumps(effective_reasoning_effort)}",
             ])
         command.append(cli_prompt)
 

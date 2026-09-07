@@ -108,6 +108,56 @@ describe("App settings layout", () => {
     ).toHaveLength(3);
   });
 
+  it("defaults connected Codex text, clip, and vision settings to Luna High", async () => {
+    vi.mocked(fetch).mockImplementation((url) => {
+      if (String(url).includes("/api/ai/openai-codex/status")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ connected: true, pending: false }),
+        });
+      }
+      if (String(url).includes("/api/ai/openai-codex/models")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            models: [
+              {
+                id: "gpt-5.6-luna",
+                label: "GPT-5.6-Luna",
+                supportsVision: true,
+                efforts: [{ id: "high", label: "High" }],
+              },
+            ],
+            defaultModel: "gpt-5.6-luna",
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+
+    render(<App />);
+
+    await screen.findAllByRole("option", { name: "GPT-5.6-Luna" });
+    expect(screen.getByRole("combobox", { name: "Text Model" })).toHaveValue(
+      "gpt-5.6-luna",
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Clip Analysis Model" }),
+    ).toHaveValue("gpt-5.6-luna");
+    expect(screen.getByRole("combobox", { name: "Vision Model" })).toHaveValue(
+      "gpt-5.6-luna",
+    );
+    expect(screen.getByRole("combobox", { name: "Text Effort" })).toHaveValue(
+      "high",
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Clip Analysis Effort" }),
+    ).toHaveValue("high");
+    expect(screen.getByRole("combobox", { name: "Vision Effort" })).toHaveValue(
+      "high",
+    );
+  });
+
   it("preserves a persisted Codex model when the account catalog still provides it", async () => {
     localStorage.setItem("ai_text_model_v1", "gpt-5.4");
     render(<App />);

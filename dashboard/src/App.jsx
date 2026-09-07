@@ -229,6 +229,8 @@ const GEMINI_TEXT_MODEL = "gemini-2.5-flash";
 const GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview";
 const OPENROUTER_DEFAULT_MODEL = "openai/gpt-4o-mini";
 const OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL = "openai/whisper-large-v3";
+const CODEX_DEFAULT_MODEL = "gpt-5.6-luna";
+const CODEX_DEFAULT_EFFORT = "high";
 const normalizeQualityPreset = (value) => {
   const preset = (value || "").trim().toLowerCase();
   if (preset === "fast") return "lite";
@@ -300,20 +302,23 @@ function App() {
   const [aiTextModel, setAiTextModel] = useState(
     () =>
       localStorage.getItem("ai_text_model_v1") ||
-      import.meta.env.VITE_AI_MODEL ||
-      "auto",
+      (aiProvider === "openai-codex"
+        ? CODEX_DEFAULT_MODEL
+        : import.meta.env.VITE_AI_MODEL || "auto"),
   );
   const [aiAnalyzeModel, setAiAnalyzeModel] = useState(
     () =>
       localStorage.getItem("ai_analyze_model_v1") ||
-      import.meta.env.VITE_AI_ANALYZE_MODEL ||
-      "auto",
+      (aiProvider === "openai-codex"
+        ? CODEX_DEFAULT_MODEL
+        : import.meta.env.VITE_AI_ANALYZE_MODEL || "auto"),
   );
   const [aiVisionModel, setAiVisionModel] = useState(
     () =>
       localStorage.getItem("ai_vision_model_v1") ||
-      import.meta.env.VITE_AI_VISION_MODEL ||
-      "auto",
+      (aiProvider === "openai-codex"
+        ? CODEX_DEFAULT_MODEL
+        : import.meta.env.VITE_AI_VISION_MODEL || "auto"),
   );
   const [aiImageModel, setAiImageModel] = useState(
     () =>
@@ -322,13 +327,19 @@ function App() {
       "auto",
   );
   const [aiTextEffort, setAiTextEffort] = useState(
-    () => localStorage.getItem("ai_text_effort_v1") || "auto",
+    () =>
+      localStorage.getItem("ai_text_effort_v1") ||
+      (aiProvider === "openai-codex" ? CODEX_DEFAULT_EFFORT : "auto"),
   );
   const [aiAnalyzeEffort, setAiAnalyzeEffort] = useState(
-    () => localStorage.getItem("ai_analyze_effort_v1") || "auto",
+    () =>
+      localStorage.getItem("ai_analyze_effort_v1") ||
+      (aiProvider === "openai-codex" ? CODEX_DEFAULT_EFFORT : "auto"),
   );
   const [aiVisionEffort, setAiVisionEffort] = useState(
-    () => localStorage.getItem("ai_vision_effort_v1") || "auto",
+    () =>
+      localStorage.getItem("ai_vision_effort_v1") ||
+      (aiProvider === "openai-codex" ? CODEX_DEFAULT_EFFORT : "auto"),
   );
   const [transcriptionModel, setTranscriptionModel] = useState(
     () =>
@@ -905,12 +916,12 @@ function App() {
 
     if (aiProvider === "openai-codex") {
       if (previousProvider !== "openai-codex") {
-        setAiTextModel("auto");
-        setAiAnalyzeModel("auto");
-        setAiVisionModel("auto");
-        setAiTextEffort("auto");
-        setAiAnalyzeEffort("auto");
-        setAiVisionEffort("auto");
+        setAiTextModel(CODEX_DEFAULT_MODEL);
+        setAiAnalyzeModel(CODEX_DEFAULT_MODEL);
+        setAiVisionModel(CODEX_DEFAULT_MODEL);
+        setAiTextEffort(CODEX_DEFAULT_EFFORT);
+        setAiAnalyzeEffort(CODEX_DEFAULT_EFFORT);
+        setAiVisionEffort(CODEX_DEFAULT_EFFORT);
       }
       setAiImageModel("");
       return;

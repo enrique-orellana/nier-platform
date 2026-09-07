@@ -4,6 +4,7 @@
 *.mov
 *.mkv
 .codex/
+.npm/
 
 # YOLO model
 *.pt
