@@ -20,12 +20,23 @@ export const normalizeSubtitleReactionStyle = (value = {}) => {
   };
 };
 
-export const normalizeSubtitleReactions = (items = []) =>
+export const normalizeSubtitleReactions = (items = [], cues = null) =>
   (Array.isArray(items) ? items : []).flatMap((item, index) => {
     const reaction = item || {};
-    const cueIndex = Number(reaction.cueIndex);
-    const startMs = Number(reaction.startMs);
-    const endMs = Number(reaction.endMs);
+    const requestedCueIndex = Number(reaction.cueIndex);
+    const requestedCueId = reaction.cueId ? String(reaction.cueId) : "";
+    const cueList = Array.isArray(cues) ? cues : null;
+    const cue = cueList
+      ? requestedCueId
+        ? cueList.find(
+            (candidate) => String(candidate?.id || "") === requestedCueId,
+          )
+        : cueList[requestedCueIndex]
+      : null;
+    if (cueList && !cue) return [];
+    const cueIndex = cue ? cueList.indexOf(cue) : requestedCueIndex;
+    const startMs = cue ? Number(cue.startMs) : Number(reaction.startMs);
+    const endMs = cue ? Number(cue.endMs) : Number(reaction.endMs);
     const emojis = (Array.isArray(reaction.emojis) ? reaction.emojis : [])
       .map((emoji) => String(emoji).trim())
       .filter(Boolean)
@@ -45,6 +56,9 @@ export const normalizeSubtitleReactions = (items = []) =>
     return [
       {
         id: reaction.id || `reaction-${cueIndex}-${index}`,
+        ...(cue?.id || requestedCueId
+          ? { cueId: String(cue?.id || requestedCueId) }
+          : {}),
         cueIndex,
         startMs,
         endMs,
@@ -55,7 +69,7 @@ export const normalizeSubtitleReactions = (items = []) =>
   });
 
 export const makePendingReactionReview = (reactions = [], cues = []) =>
-  normalizeSubtitleReactions(reactions).flatMap((reaction) => {
+  normalizeSubtitleReactions(reactions, cues).flatMap((reaction) => {
     const cue = cues[reaction.cueIndex];
     return cue ? [{ ...reaction, text: cue.text || cue.label || "" }] : [];
   });

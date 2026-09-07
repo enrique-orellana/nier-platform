@@ -63,4 +63,52 @@ describe("subtitle reaction helpers", () => {
       }),
     ]);
   });
+
+  it("keeps reactions attached to cue identity and refreshes edited timing", () => {
+    expect(
+      normalizeSubtitleReactions(
+        [
+          {
+            id: "reaction-1",
+            cueId: "cue-b",
+            cueIndex: 1,
+            startMs: 100,
+            endMs: 900,
+            emojis: ["😱"],
+          },
+        ],
+        [
+          { id: "cue-a", text: "First", startMs: 0, endMs: 400 },
+          { id: "cue-b", text: "Second", startMs: 600, endMs: 1400 },
+        ],
+      ),
+    ).toEqual([
+      {
+        id: "reaction-1",
+        cueId: "cue-b",
+        cueIndex: 1,
+        startMs: 600,
+        endMs: 1400,
+        emojis: ["😱"],
+        enabled: true,
+      },
+    ]);
+  });
+
+  it("drops reactions whose source cue was removed", () => {
+    expect(
+      normalizeSubtitleReactions(
+        [
+          {
+            cueId: "deleted-cue",
+            cueIndex: 0,
+            startMs: 0,
+            endMs: 500,
+            emojis: ["💥"],
+          },
+        ],
+        [{ id: "remaining-cue", text: "Still here", startMs: 0, endMs: 500 }],
+      ),
+    ).toEqual([]);
+  });
 });

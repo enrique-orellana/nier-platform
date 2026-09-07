@@ -84,13 +84,16 @@ describe("local editor project persistence", () => {
   it("normalizes persisted subtitle reactions without dropping them", () => {
     const normalized = normalizeEditorHistory({
       present: {
-        subtitleCues: [],
+        subtitleCues: [
+          { id: "cue-0", text: "That was close", startMs: 100, endMs: 900 },
+        ],
         subtitleReactions: [
           {
             id: "r0",
+            cueId: "cue-0",
             cueIndex: 0,
             startMs: 0,
-            endMs: 900,
+            endMs: 500,
             emojis: ["😱"],
           },
         ],

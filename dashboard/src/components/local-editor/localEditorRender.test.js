@@ -69,12 +69,23 @@ describe("local editor Remotion rendering", () => {
       fps: 25,
       width: 608,
       height: 1080,
-      subtitleCues: [{ text: "Hello", startMs: 500, endMs: 1500 }],
+      subtitleCues: [{ id: "cue-1", text: "Hello", startMs: 500, endMs: 1500 }],
       subtitleStyle: {
         position: "bottom",
         fontFamily: "Verdana",
         fontSize: 24,
       },
+      subtitleReactions: [
+        {
+          id: "reaction-1",
+          cueId: "cue-1",
+          cueIndex: 0,
+          startMs: 0,
+          endMs: 900,
+          emojis: ["😱"],
+        },
+      ],
+      subtitleReactionStyle: { position: "left", animation: "shake", scale: 2 },
       hook: {
         text: "Hook",
         startMs: 0,
@@ -103,6 +114,21 @@ describe("local editor Remotion rendering", () => {
       { text: "Hello", startMs: 500, endMs: 1500 },
     ]);
     expect(props.subtitles.blocks).toBeUndefined();
+    expect(props.subtitles.reactions).toEqual([
+      expect.objectContaining({
+        id: "reaction-1",
+        cueId: "cue-1",
+        cueIndex: 0,
+        startMs: 500,
+        endMs: 1500,
+        emojis: ["😱"],
+      }),
+    ]);
+    expect(props.subtitles.reactionStyle).toEqual({
+      position: "left",
+      animation: "shake",
+      scale: 2,
+    });
     expect(props.subtitles.style).toMatchObject({
       fontFamily: "Verdana",
       fontSize: 24,

@@ -32,11 +32,31 @@ export interface SubtitleStyle {
   displayMode: SubtitleDisplayMode;
 }
 
+export type SubtitleReactionPosition = "above" | "left" | "right";
+export type SubtitleReactionAnimation = "pop" | "shake" | "fade";
+
+export interface SubtitleReaction {
+  id: string;
+  cueIndex: number;
+  startMs: number;
+  endMs: number;
+  emojis: string[];
+  enabled: boolean;
+}
+
+export interface SubtitleReactionStyle {
+  position: SubtitleReactionPosition;
+  animation: SubtitleReactionAnimation;
+  scale: number;
+}
+
 export interface SubtitleConfig {
   captions: CaptionWord[];
   blocks?: SubtitleBlock[];
   position: SubtitlePosition;
   style: SubtitleStyle;
+  reactions?: SubtitleReaction[];
+  reactionStyle?: SubtitleReactionStyle;
 }
 
 export interface SubtitleTrack {
@@ -47,6 +67,8 @@ export interface SubtitleTrack {
   origin: "original" | "translation" | "manual";
   captions: CaptionWord[];
   style?: SubtitleStyle;
+  reactions?: SubtitleReaction[];
+  reactionStyle?: SubtitleReactionStyle;
 }
 
 // --- Hook config ---
@@ -198,6 +220,21 @@ export const subtitleStyleSchema = z.object({
   displayMode: z.enum(["phrase", "single-word"]).default("phrase"),
 });
 
+export const subtitleReactionSchema = z.object({
+  id: z.string(),
+  cueIndex: z.number().int().min(0),
+  startMs: z.number().min(0),
+  endMs: z.number().positive(),
+  emojis: z.array(z.string()).min(1).max(2),
+  enabled: z.boolean().default(true),
+});
+
+export const subtitleReactionStyleSchema = z.object({
+  position: z.enum(["above", "left", "right"]),
+  animation: z.enum(["pop", "shake", "fade"]),
+  scale: z.number().min(1).max(2),
+});
+
 export const subtitleConfigSchema = z.object({
   captions: z.array(captionWordSchema),
   blocks: z.array(z.object({
@@ -208,6 +245,8 @@ export const subtitleConfigSchema = z.object({
   })).optional(),
   position: z.enum(["top", "middle", "bottom"]),
   style: subtitleStyleSchema,
+  reactions: z.array(subtitleReactionSchema).optional(),
+  reactionStyle: subtitleReactionStyleSchema.optional(),
 });
 
 export const subtitleTrackSchema = z.object({
@@ -218,6 +257,8 @@ export const subtitleTrackSchema = z.object({
   origin: z.enum(["original", "translation", "manual"]),
   captions: z.array(captionWordSchema),
   style: subtitleStyleSchema.optional(),
+  reactions: z.array(subtitleReactionSchema).optional(),
+  reactionStyle: subtitleReactionStyleSchema.optional(),
 });
 
 export const hookConfigSchema = z.object({

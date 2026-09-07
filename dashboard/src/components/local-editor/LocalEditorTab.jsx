@@ -552,8 +552,15 @@ export default function LocalEditorTab({
     { coalesce = false, transaction = null, recordAction = false } = {},
   ) =>
     setEditHistory((current) => {
-      const next =
+      const rawNext =
         typeof updater === "function" ? updater(current.present) : updater;
+      const next = {
+        ...rawNext,
+        subtitleReactions: normalizeSubtitleReactions(
+          rawNext?.subtitleReactions,
+          rawNext?.subtitleCues,
+        ),
+      };
       if (next === current.present) return current;
       if (coalesce && transaction) {
         if (recordAction) {
@@ -1252,6 +1259,7 @@ export default function LocalEditorTab({
         ...current,
         subtitleCues: importedCues,
         subtitleLanguage: "en",
+        subtitleReactions: [],
       }));
       setPendingSubtitle(null);
       if (subtitleInputRef.current) subtitleInputRef.current.value = "";
@@ -1309,6 +1317,7 @@ export default function LocalEditorTab({
         ...current,
         subtitleCues: generatedCues,
         subtitleLanguage: String(payload.language || "en").toLowerCase(),
+        subtitleReactions: [],
       }));
       setSelected(null);
     } catch (generationError) {
@@ -1501,6 +1510,8 @@ export default function LocalEditorTab({
       subtitleCues: [],
       subtitleStyle: DEFAULT_SUBTITLE_STYLE,
       subtitleLanguage: "en",
+      subtitleReactions: [],
+      subtitleReactionStyle: DEFAULT_SUBTITLE_REACTION_STYLE,
     }));
     setSelected((current) => (current?.type === "subtitle" ? null : current));
     setEditingSubtitle(null);
@@ -1908,6 +1919,8 @@ export default function LocalEditorTab({
         videoFit: cropForExport ? "cover" : "contain",
         subtitleCues,
         subtitleStyle,
+        subtitleReactions,
+        subtitleReactionStyle,
         hook,
         layout: previewLayout,
         onProgress: setProgress,
@@ -2176,6 +2189,10 @@ export default function LocalEditorTab({
     activeSubtitleWordIndex,
     previewSubtitleStyle.displayMode,
   );
+  const previewSubtitleReactions = normalizeSubtitleReactions(
+    subtitleReactions,
+    subtitleCues,
+  );
   const shouldShowPreviewSubtitle =
     Boolean(activeSubtitle) && previewSubtitleWords.length > 0;
   const previewSubtitles = subtitleCues.length
@@ -2183,7 +2200,7 @@ export default function LocalEditorTab({
         captions: previewSubtitleCaptions,
         position: previewSubtitleStyle.position || "bottom",
         style: previewSubtitleStyle,
-        reactions: subtitleReactions,
+        reactions: previewSubtitleReactions,
         reactionStyle: normalizeSubtitleReactionStyle(subtitleReactionStyle),
       }
     : null;

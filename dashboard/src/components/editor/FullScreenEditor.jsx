@@ -44,6 +44,10 @@ import {
 const defaultSubtitleTrackId = (nextManifest) =>
   nextManifest?.active_subtitle_track_id ||
   nextManifest?.subtitle_tracks?.[0]?.id ||
+  (Array.isArray(nextManifest?.layers?.subtitles?.cues) ||
+  Array.isArray(nextManifest?.layers?.subtitles?.captions)
+    ? "original"
+    : null) ||
   (nextManifest?.timeline?.transcript?.segments?.length ? "original" : null);
 
 const hasSubtitleTrackContent = (nextManifest) =>
@@ -361,11 +365,16 @@ export const manifestToLocalEditorState = (
     source.subtitle_tracks_disabled !== true &&
     source.subtitle_tracks_edited !== true &&
     !hasPersistedSubtitleLayer(source);
+  const subtitleCues = localCuesFromTrack(
+    activeTrack,
+    shouldUseTranscriptFallback ? transcriptCuesForEditor(source) : [],
+  );
   const subtitleReactions = normalizeSubtitleReactions(
     activeTrack?.reactions ||
       ((activeTrack?.id || trackId) === "original"
         ? legacySubtitles?.reactions
         : []),
+    subtitleCues,
   );
   const subtitleReactionStyle = normalizeSubtitleReactionStyle(
     activeTrack?.reactionStyle ||
@@ -374,10 +383,7 @@ export const manifestToLocalEditorState = (
         : null),
   );
   return {
-    subtitleCues: localCuesFromTrack(
-      activeTrack,
-      shouldUseTranscriptFallback ? transcriptCuesForEditor(source) : [],
-    ),
+    subtitleCues,
     subtitleStyle:
       activeTrack?.style ||
       source.layers?.subtitles?.style ||
@@ -436,6 +442,7 @@ export const localEditorStateToManifest = (
     state.subtitleReactions ??
       existingTrack.reactions ??
       (nextTrackId === "original" ? source.layers?.subtitles?.reactions : []),
+    state.subtitleCues,
   );
   const subtitleReactionStyle = normalizeSubtitleReactionStyle(
     state.subtitleReactionStyle ??

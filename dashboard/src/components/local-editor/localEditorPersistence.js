@@ -61,7 +61,10 @@ const normalizeSnapshot = (snapshot) => {
       : [],
     subtitleStyle: normalizeSubtitleStyle(snapshot?.subtitleStyle),
     subtitleLanguage: String(snapshot?.subtitleLanguage || "en").toLowerCase(),
-    subtitleReactions: normalizeSubtitleReactions(snapshot?.subtitleReactions),
+    subtitleReactions: normalizeSubtitleReactions(
+      snapshot?.subtitleReactions,
+      snapshot?.subtitleCues,
+    ),
     subtitleReactionStyle: normalizeSubtitleReactionStyle(
       snapshot?.subtitleReactionStyle,
     ),

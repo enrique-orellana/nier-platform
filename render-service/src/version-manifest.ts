@@ -74,24 +74,40 @@ export function manifestToVersionRenderProps(
     ? clone(manifest.subtitle_tracks)
     : [];
   const activeSubtitleTrackId = manifest.active_subtitle_track_id || null;
+  const legacySubtitles = manifest.layers?.subtitles || null;
   const activeTrack = subtitleTracks.find(
     (track: Record<string, any>) => track.id === activeSubtitleTrackId,
   );
-  const activeCaptions = trackCaptions(activeTrack);
+  const subtitleSource =
+    activeTrack ||
+    (activeSubtitleTrackId === "original" ? legacySubtitles : null);
+  const activeCaptions = trackCaptions(subtitleSource);
   const subtitleStyle =
-    activeTrack?.style ||
-    manifest.layers?.subtitles?.style ||
+    subtitleSource?.style ||
+    legacySubtitles?.style ||
     null;
   const subtitles =
-    activeTrack && activeCaptions.length
+    subtitleSource && activeCaptions.length
       ? {
-          ...(clone(manifest.layers?.subtitles) || {}),
+          ...(clone(legacySubtitles) || {}),
           captions: activeCaptions,
           position:
             subtitleStyle?.position ||
-            manifest.layers?.subtitles?.position ||
+            legacySubtitles?.position ||
             "bottom",
           style: subtitleStyle || undefined,
+          ...(Array.isArray(subtitleSource.reactions)
+            ? { reactions: clone(subtitleSource.reactions) }
+            : activeSubtitleTrackId === "original" &&
+                Array.isArray(legacySubtitles?.reactions)
+              ? { reactions: clone(legacySubtitles.reactions) }
+              : {}),
+          ...(subtitleSource.reactionStyle
+            ? { reactionStyle: clone(subtitleSource.reactionStyle) }
+            : activeSubtitleTrackId === "original" &&
+                legacySubtitles?.reactionStyle
+              ? { reactionStyle: clone(legacySubtitles.reactionStyle) }
+              : {}),
         }
       : null;
   const sourceLayout = clone(manifest.layers?.layout || null);

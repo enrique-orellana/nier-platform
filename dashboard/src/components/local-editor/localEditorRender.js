@@ -2,6 +2,10 @@ import { getApiUrl } from "../../config";
 import { renderInBrowser } from "../../lib/renderInBrowser";
 import { getHookPositionCoordinates } from "../../remotion/lib/hookVisual";
 import { normalizeSubtitleStyle } from "./localEditorStyles";
+import {
+  normalizeSubtitleReactionStyle,
+  normalizeSubtitleReactions,
+} from "./subtitleReactions";
 
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -257,6 +261,8 @@ export const buildRemotionRenderProps = ({
   videoFit = "cover",
   subtitleCues = [],
   subtitleStyle = null,
+  subtitleReactions = [],
+  subtitleReactionStyle = null,
   hook = null,
   layout = null,
 }) => {
@@ -310,6 +316,11 @@ export const buildRemotionRenderProps = ({
           captions: subtitleCues.flatMap((cue) => cueCaptionsForRender(cue)),
           position: subtitleStyle?.position || "bottom",
           style: normalizeSubtitleStyle(subtitleStyle || undefined),
+          reactions: normalizeSubtitleReactions(
+            subtitleReactions,
+            subtitleCues,
+          ),
+          reactionStyle: normalizeSubtitleReactionStyle(subtitleReactionStyle),
         }
       : null,
     hook: normalizedHook,
@@ -328,6 +339,8 @@ export async function renderLocalVideoOnBrowser({
   videoFit = "cover",
   subtitleCues = [],
   subtitleStyle = null,
+  subtitleReactions = [],
+  subtitleReactionStyle = null,
   hook = null,
   layout = null,
   onProgress = () => {},
@@ -342,6 +355,8 @@ export async function renderLocalVideoOnBrowser({
     videoFit,
     subtitleCues,
     subtitleStyle,
+    subtitleReactions,
+    subtitleReactionStyle,
     hook,
     layout,
   });
@@ -383,6 +398,8 @@ export async function renderLocalVideoOnBackend({
   videoFit = "cover",
   subtitleCues = [],
   subtitleStyle = null,
+  subtitleReactions = [],
+  subtitleReactionStyle = null,
   hook = null,
   layout = null,
   onProgress = () => {},
@@ -400,6 +417,8 @@ export async function renderLocalVideoOnBackend({
     videoFit,
     subtitleCues,
     subtitleStyle,
+    subtitleReactions,
+    subtitleReactionStyle,
     hook,
     layout,
   });
@@ -479,6 +498,8 @@ export async function burnLocalEditorSubtitles({
   videoFit = "cover",
   subtitleCues = [],
   subtitleStyle = null,
+  subtitleReactions = [],
+  subtitleReactionStyle = null,
   hook = null,
   layout = null,
   onProgress = () => {},
@@ -498,6 +519,8 @@ export async function burnLocalEditorSubtitles({
     videoFit,
     subtitleCues,
     subtitleStyle,
+    subtitleReactions,
+    subtitleReactionStyle,
     hook,
     layout,
     onProgress,

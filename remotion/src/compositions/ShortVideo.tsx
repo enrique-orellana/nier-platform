@@ -296,7 +296,14 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
     (track) => track.id === (activeSubtitleTrackId || subtitleTracks[0]?.id)
   );
   const activeSubtitles = activeTrack && subtitles
-    ? { ...subtitles, captions: activeTrack.captions, blocks: undefined, style: activeTrack.style || subtitles.style }
+    ? {
+        ...subtitles,
+        captions: activeTrack.captions,
+        blocks: undefined,
+        style: activeTrack.style || subtitles.style,
+        reactions: activeTrack.reactions || subtitles.reactions,
+        reactionStyle: activeTrack.reactionStyle || subtitles.reactionStyle,
+      }
     : subtitles;
   const resolvedLayout = resolveLayoutAtFrame(
     layout,

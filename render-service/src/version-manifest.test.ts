@@ -32,6 +32,17 @@ describe("manifestToVersionRenderProps", () => {
               animation: "pop",
             },
             cues: [{ text: "Hola", startMs: 100, endMs: 900 }],
+            reactions: [
+              {
+                id: "reaction-1",
+                cueIndex: 0,
+                startMs: 100,
+                endMs: 900,
+                emojis: ["😱"],
+                enabled: true,
+              },
+            ],
+            reactionStyle: { position: "left", animation: "shake", scale: 1.5 },
           },
         ],
         layers: {
@@ -100,6 +111,17 @@ describe("manifestToVersionRenderProps", () => {
         bgOpacity: 0.5,
         animation: "pop",
       },
+      reactions: [
+        {
+          id: "reaction-1",
+          cueIndex: 0,
+          startMs: 100,
+          endMs: 900,
+          emojis: ["😱"],
+          enabled: true,
+        },
+      ],
+      reactionStyle: { position: "left", animation: "shake", scale: 1.5 },
     });
   });
 
