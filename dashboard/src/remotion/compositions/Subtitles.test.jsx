@@ -10,6 +10,16 @@ vi.mock("remotion", () => ({
   ),
   Sequence: ({ children }) => <>{children}</>,
   staticFile: (file) => `/${file}`,
+  interpolate: (value, inputRange, outputRange) => {
+    const progress =
+      (value - inputRange[0]) /
+      (inputRange[inputRange.length - 1] - inputRange[0]);
+    return (
+      outputRange[0] +
+      progress * (outputRange[outputRange.length - 1] - outputRange[0])
+    );
+  },
+  spring: () => 1,
   useCurrentFrame: () => 0,
   useVideoConfig: () => ({ fps: 30 }),
 }));
@@ -73,5 +83,28 @@ describe("subtitle rendering defaults", () => {
 
     expect(isSubtitleBlockActiveAt(block, 750)).toBe(true);
     expect(isSubtitleBlockActiveAt(block, 1000)).toBe(false);
+  });
+
+  it("renders the optional reaction layer alongside a timed subtitle", () => {
+    render(
+      <Subtitles
+        config={{
+          captions: [{ text: "Close", startMs: 0, endMs: 1000 }],
+          reactions: [
+            {
+              id: "r0",
+              cueIndex: 0,
+              startMs: 0,
+              endMs: 1000,
+              emojis: ["💥"],
+              enabled: true,
+            },
+          ],
+          reactionStyle: { position: "above", animation: "pop", scale: 1 },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("💥")).toBeInTheDocument();
   });
 });

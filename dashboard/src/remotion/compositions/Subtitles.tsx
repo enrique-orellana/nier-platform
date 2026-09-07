@@ -14,6 +14,7 @@ import {
   groupCaptionsIntoBlocks,
 } from "../lib/captions";
 import { getFontStack, subtitleFontFace } from "../lib/fonts";
+import { SubtitleReactions } from "../components/SubtitleReactions";
 
 export { getSubtitleWordsForDisplay } from "../lib/captions";
 
@@ -39,6 +40,14 @@ const DEFAULT_SUBTITLE_STYLE: SubtitleConfig["style"] = {
   bgOpacity: 0,
   animation: "none",
   displayMode: "phrase",
+};
+
+const DEFAULT_SUBTITLE_REACTION_STYLE: NonNullable<
+  SubtitleConfig["reactionStyle"]
+> = {
+  position: "above",
+  animation: "pop",
+  scale: 1,
 };
 
 export const getSubtitleFrameRange = (
@@ -76,6 +85,15 @@ export function normalizeSubtitleConfig(
       ...(config?.style || {}),
       displayMode:
         config?.style?.displayMode === "single-word" ? "single-word" : "phrase",
+    },
+    reactions: Array.isArray(config?.reactions) ? config.reactions : [],
+    reactionStyle: {
+      ...DEFAULT_SUBTITLE_REACTION_STYLE,
+      ...(config?.reactionStyle || {}),
+      scale: Math.min(
+        2,
+        Math.max(1, Number(config?.reactionStyle?.scale) || 1),
+      ),
     },
   };
 }
@@ -196,9 +214,16 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
           justifyContent: "center",
           gap: "6px 8px",
           maxWidth: "85%",
+          position: "relative",
           ...bgStyle,
         }}
       >
+        <SubtitleReactions
+          reactions={config.reactions}
+          style={config.reactionStyle}
+          currentTimeMs={currentTimeMs}
+          fps={fps}
+        />
         {visibleWords.map((word, i) => (
           <WordSpan
             key={i}
