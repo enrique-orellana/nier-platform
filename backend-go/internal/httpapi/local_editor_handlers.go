@@ -189,6 +189,112 @@ func (s *Server) generateHashtags(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
+func subtitleCueMillisecondValue(value any) float64 {
+	parsed, err := strconv.ParseFloat(fmt.Sprint(value), 64)
+	if err != nil {
+		return -1
+	}
+	return parsed
+}
+
+func subtitleCueIndexValue(value any) (int, bool) {
+	parsed, err := strconv.ParseFloat(fmt.Sprint(value), 64)
+	if err != nil || parsed != float64(int(parsed)) {
+		return 0, false
+	}
+	return int(parsed), true
+}
+
+func (s *Server) generateSubtitleReactions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	if s.translationRunner == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"detail": "Python worker is not configured"})
+		return
+	}
+	var payload struct {
+		TrackID string           `json:"track_id"`
+		Cues    []map[string]any `json:"cues"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || strings.TrimSpace(payload.TrackID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "A subtitle track and valid cues are required."})
+		return
+	}
+	validCues := make([]map[string]any, 0, len(payload.Cues))
+	validIndexes := make(map[int]struct{}, len(payload.Cues))
+	for _, cue := range payload.Cues {
+		text := strings.TrimSpace(fmt.Sprint(cue["text"]))
+		startMs := subtitleCueMillisecondValue(cue["startMs"])
+		endMs := subtitleCueMillisecondValue(cue["endMs"])
+		cueIndex, hasCueIndex := subtitleCueIndexValue(cue["index"])
+		if text == "<nil>" || text == "" || startMs < 0 || endMs <= startMs || !hasCueIndex || cueIndex < 0 {
+			continue
+		}
+		validCues = append(validCues, cue)
+		validIndexes[cueIndex] = struct{}{}
+	}
+	if len(validCues) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "At least one timed subtitle cue is required."})
+		return
+	}
+	result, err := s.translationRunner.Run(r.Context(), "subtitle-reactions", "subtitle_reactions", map[string]any{
+		"track_id": payload.TrackID,
+		"cues":     validCues,
+	}, translationHeaders(r))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Subtitle reaction generation failed: %s", err)})
+		return
+	}
+	var response struct {
+		Reactions []map[string]any `json:"reactions"`
+	}
+	if err := json.Unmarshal(result, &response); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Invalid subtitle reaction worker result"})
+		return
+	}
+	reactions := make([]map[string]any, 0, len(response.Reactions))
+	seenIndexes := make(map[int]struct{}, len(response.Reactions))
+	for _, reaction := range response.Reactions {
+		cueIndex, ok := subtitleCueIndexValue(reaction["cueIndex"])
+		if !ok {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Subtitle reaction worker returned an invalid cue index"})
+			return
+		}
+		if _, ok := validIndexes[cueIndex]; !ok {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Subtitle reaction worker returned an unknown cue index"})
+			return
+		}
+		if _, duplicate := seenIndexes[cueIndex]; duplicate {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Subtitle reaction worker returned duplicate cue reactions"})
+			return
+		}
+		rawEmojis, ok := reaction["emojis"].([]any)
+		if !ok || len(rawEmojis) == 0 || len(rawEmojis) > 2 {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Subtitle reaction worker returned invalid emojis"})
+			return
+		}
+		emojis := make([]string, 0, len(rawEmojis))
+		for _, rawEmoji := range rawEmojis {
+			emoji, ok := rawEmoji.(string)
+			emoji = strings.TrimSpace(emoji)
+			if !ok || emoji == "" {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Subtitle reaction worker returned invalid emojis"})
+				return
+			}
+			emojis = append(emojis, emoji)
+		}
+		seenIndexes[cueIndex] = struct{}{}
+		reactions = append(reactions, map[string]any{"cueIndex": cueIndex, "emojis": emojis})
+	}
+	if len(reactions) == 0 {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Subtitle reaction worker returned no usable reactions"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"reactions": reactions})
+}
+
 func normalizeHashtag(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
 }

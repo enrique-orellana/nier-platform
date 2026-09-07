@@ -200,6 +200,45 @@ func (incompleteClipInfoOperation) Run(_ context.Context, _ string, operation st
 	return json.RawMessage(`{}`), nil
 }
 
+type subtitleReactionsOperation struct{}
+
+func (subtitleReactionsOperation) Run(_ context.Context, _ string, operation string, payload map[string]any, headers map[string]string) (json.RawMessage, error) {
+	if operation != "subtitle_reactions" || payload["track_id"] != "original" {
+		return nil, fmt.Errorf("unexpected subtitle reaction request: %s %#v", operation, payload)
+	}
+	if headers["X-AI-Provider"] != "lmstudio" {
+		return nil, fmt.Errorf("AI provider header was not forwarded: %#v", headers)
+	}
+	return json.RawMessage(`{"reactions":[{"cueIndex":0,"emojis":["😱"]}]}`), nil
+}
+
+type failingSubtitleReactionsOperation struct{}
+
+func (failingSubtitleReactionsOperation) Run(_ context.Context, _ string, operation string, _ map[string]any, _ map[string]string) (json.RawMessage, error) {
+	if operation != "subtitle_reactions" {
+		return nil, fmt.Errorf("unexpected operation %s", operation)
+	}
+	return nil, errors.New("provider unavailable")
+}
+
+type malformedSubtitleReactionsOperation struct{}
+
+func (malformedSubtitleReactionsOperation) Run(_ context.Context, _ string, operation string, _ map[string]any, _ map[string]string) (json.RawMessage, error) {
+	if operation != "subtitle_reactions" {
+		return nil, fmt.Errorf("unexpected operation %s", operation)
+	}
+	return json.RawMessage(`{"reactions":`), nil
+}
+
+type invalidSubtitleReactionsOperation struct{}
+
+func (invalidSubtitleReactionsOperation) Run(_ context.Context, _ string, operation string, _ map[string]any, _ map[string]string) (json.RawMessage, error) {
+	if operation != "subtitle_reactions" {
+		return nil, fmt.Errorf("unexpected operation %s", operation)
+	}
+	return json.RawMessage(`{"reactions":[{"cueIndex":4,"emojis":["😱"]},{"cueIndex":0,"emojis":["😱","💥","😂"]}]}`), nil
+}
+
 type burnOperation struct{}
 
 func (burnOperation) Run(_ context.Context, _ string, operation string, payload map[string]any, _ map[string]string) (json.RawMessage, error) {
@@ -2693,6 +2732,66 @@ func TestLocalEditorHashtagsUseGoWorkerBoundary(t *testing.T) {
 	server.Handler().ServeHTTP(res, req)
 	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"#one"`) || !strings.Contains(res.Body.String(), `"#rubius"`) {
 		t.Fatalf("unexpected hashtag response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestLocalEditorSubtitleReactionsValidatesAndForwards(t *testing.T) {
+	server := NewServerWithDependencies(config.Config{}, jobs.NewMemoryStore(), nil, subtitleReactionsOperation{})
+	req := httptest.NewRequest(http.MethodPost, "/api/local-editor/subtitle-reactions", strings.NewReader(
+		`{"track_id":"original","cues":[{"index":0,"text":"That was close","startMs":0,"endMs":900}]}`,
+	))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-AI-Provider", "lmstudio")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"cueIndex":0`) {
+		t.Fatalf("unexpected subtitle reaction response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestLocalEditorSubtitleReactionsRejectsInvalidRequests(t *testing.T) {
+	server := NewServerWithDependencies(config.Config{}, jobs.NewMemoryStore(), nil, subtitleReactionsOperation{})
+	for _, test := range []struct {
+		name string
+		body string
+	}{
+		{name: "malformed JSON", body: `{"track_id":"original"`},
+		{name: "missing track", body: `{"cues":[{"index":0,"text":"Hello","startMs":0,"endMs":500}]}`},
+		{name: "empty cues", body: `{"track_id":"original","cues":[{"index":0,"text":"","startMs":0,"endMs":500}]}`},
+		{name: "backwards cue", body: `{"track_id":"original","cues":[{"index":0,"text":"Hello","startMs":500,"endMs":400}]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/local-editor/subtitle-reactions", strings.NewReader(test.body))
+			res := httptest.NewRecorder()
+			server.Handler().ServeHTTP(res, req)
+			if res.Code != http.StatusBadRequest {
+				t.Fatalf("expected bad request, got %d %s", res.Code, res.Body.String())
+			}
+		})
+	}
+}
+
+func TestLocalEditorSubtitleReactionsRejectsWorkerFailures(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		runner OperationClient
+	}{
+		{name: "worker error", runner: failingSubtitleReactionsOperation{}},
+		{name: "malformed worker JSON", runner: malformedSubtitleReactionsOperation{}},
+		{name: "invalid worker reactions", runner: invalidSubtitleReactionsOperation{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := NewServerWithDependencies(config.Config{}, jobs.NewMemoryStore(), nil, test.runner)
+			req := httptest.NewRequest(http.MethodPost, "/api/local-editor/subtitle-reactions", strings.NewReader(
+				`{"track_id":"original","cues":[{"index":0,"text":"Hello","startMs":0,"endMs":500}]}`,
+			))
+			res := httptest.NewRecorder()
+			server.Handler().ServeHTTP(res, req)
+			if res.Code != http.StatusBadGateway {
+				t.Fatalf("expected bad gateway, got %d %s", res.Code, res.Body.String())
+			}
+		})
 	}
 }
 
