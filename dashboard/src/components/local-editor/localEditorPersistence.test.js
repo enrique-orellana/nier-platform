@@ -11,6 +11,7 @@ import {
   listStoredProjects,
   loadStoredProject,
   migrateLegacyProject,
+  normalizeEditorHistory,
   renameStoredProject,
   saveStoredVideo,
   setActiveProjectId,
@@ -72,6 +73,39 @@ describe("local editor project persistence", () => {
     expect(history.present.hook).toBeNull();
     expect(history.present.markers).toEqual([]);
     expect(history.present.layoutSegments).toEqual([]);
+    expect(history.present.subtitleReactions).toEqual([]);
+    expect(history.present.subtitleReactionStyle).toEqual({
+      position: "above",
+      animation: "pop",
+      scale: 1,
+    });
+  });
+
+  it("normalizes persisted subtitle reactions without dropping them", () => {
+    const normalized = normalizeEditorHistory({
+      present: {
+        subtitleCues: [],
+        subtitleReactions: [
+          {
+            id: "r0",
+            cueIndex: 0,
+            startMs: 0,
+            endMs: 900,
+            emojis: ["😱"],
+          },
+        ],
+        subtitleReactionStyle: { position: "left", scale: 4 },
+      },
+    });
+
+    expect(normalized.present.subtitleReactions).toEqual([
+      expect.objectContaining({ cueIndex: 0, emojis: ["😱"] }),
+    ]);
+    expect(normalized.present.subtitleReactionStyle).toEqual({
+      position: "left",
+      animation: "pop",
+      scale: 2,
+    });
   });
 
   it("creates, lists, loads, renames, and deletes a stored project", async () => {

@@ -145,6 +145,14 @@ import LocalEditorUploadState from "./LocalEditorUploadState";
 import LocalEditorSubtitleStyleInspector from "./LocalEditorSubtitleStyleInspector";
 import LocalEditorHookInspector from "./LocalEditorHookInspector";
 import LocalEditorSaveProjectDialog from "./LocalEditorSaveProjectDialog";
+import SubtitleReactionReviewPanel from "./SubtitleReactionReviewPanel";
+import {
+  DEFAULT_SUBTITLE_REACTION_STYLE,
+  makePendingReactionReview,
+  normalizeSubtitleReactionStyle,
+  normalizeSubtitleReactions,
+  reactionRequestCues,
+} from "./subtitleReactions";
 
 const MIN_TIMELINE_HEIGHT = 220;
 const MIN_PREVIEW_HEIGHT = 260;
@@ -167,6 +175,7 @@ export default function LocalEditorTab({
   remotionPreviewProps = null,
   initialEditorState = null,
   initialStateKey = null,
+  activeSubtitleTrackId = "original",
   onStateChange,
   onClose = null,
   headerActions = null,
@@ -238,6 +247,12 @@ export default function LocalEditorTab({
   const [pendingSubtitle, setPendingSubtitle] = useState(null);
   const [error, setError] = useState("");
   const [generatingSubtitles, setGeneratingSubtitles] = useState(false);
+  const [generatingReactions, setGeneratingReactions] = useState(false);
+  const [reactionReview, setReactionReview] = useState(null);
+  const [reactionReviewStyle, setReactionReviewStyle] = useState(
+    DEFAULT_SUBTITLE_REACTION_STYLE,
+  );
+  const [reactionError, setReactionError] = useState("");
   const [translatingSubtitles, setTranslatingSubtitles] = useState(false);
   const [translationTarget, setTranslationTarget] = useState("es");
   const [busy, setBusy] = useState(false);
@@ -385,6 +400,8 @@ export default function LocalEditorTab({
     subtitleCues,
     subtitleStyle,
     subtitleLanguage,
+    subtitleReactions = [],
+    subtitleReactionStyle = DEFAULT_SUBTITLE_REACTION_STYLE,
     hook,
     markers = [],
     layoutSegments = [],
@@ -1301,6 +1318,71 @@ export default function LocalEditorTab({
     }
   };
 
+  const suggestReactions = async () => {
+    const requestCues = reactionRequestCues(subtitleCues);
+    if (!requestCues.length || generatingReactions) return;
+    setGeneratingReactions(true);
+    setReactionError("");
+    try {
+      const response = await fetch(
+        getApiUrl("/api/local-editor/subtitle-reactions"),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...getLocalAiHeaders(),
+          },
+          body: JSON.stringify({
+            track_id: activeSubtitleTrackId,
+            cues: requestCues,
+          }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok)
+        throw new Error(
+          payload.detail || "Could not suggest subtitle reactions.",
+        );
+      const pending = (
+        Array.isArray(payload.reactions) ? payload.reactions : []
+      ).flatMap((reaction) => {
+        const cue = subtitleCues[Number(reaction?.cueIndex)];
+        return cue
+          ? [
+              {
+                ...reaction,
+                startMs: Number(cue.startMs),
+                endMs: Number(cue.endMs),
+              },
+            ]
+          : [];
+      });
+      const suggestions = makePendingReactionReview(pending, subtitleCues);
+      if (!suggestions.length)
+        throw new Error("No usable subtitle reactions were suggested.");
+      setReactionReview(suggestions);
+      setReactionReviewStyle(
+        normalizeSubtitleReactionStyle(subtitleReactionStyle),
+      );
+    } catch (suggestionError) {
+      setReactionError(
+        suggestionError.message || "Could not suggest subtitle reactions.",
+      );
+    } finally {
+      setGeneratingReactions(false);
+    }
+  };
+
+  const applyReactionReview = (approved, style) => {
+    commitEdit((current) => ({
+      ...current,
+      subtitleReactions: normalizeSubtitleReactions(approved),
+      subtitleReactionStyle: normalizeSubtitleReactionStyle(style),
+    }));
+    setReactionReview(null);
+    setReactionError("");
+  };
+
   const handleImport = () => {
     if (pendingSubtitle) {
       importSubtitleFile(pendingSubtitle);
@@ -2101,6 +2183,8 @@ export default function LocalEditorTab({
         captions: previewSubtitleCaptions,
         position: previewSubtitleStyle.position || "bottom",
         style: previewSubtitleStyle,
+        reactions: subtitleReactions,
+        reactionStyle: normalizeSubtitleReactionStyle(subtitleReactionStyle),
       }
     : null;
   const hookElapsedMs = activeHook
@@ -3326,6 +3410,31 @@ export default function LocalEditorTab({
                             : "Generate subtitles"}
                         </button>
                       </div>
+                      <button
+                        type="button"
+                        aria-label="Suggest reactions"
+                        onClick={suggestReactions}
+                        disabled={
+                          busy ||
+                          generatingReactions ||
+                          !reactionRequestCues(subtitleCues).length
+                        }
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-violet-300/20 bg-violet-400/10 px-3 py-2 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {generatingReactions ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Blend size={14} />
+                        )}
+                        {generatingReactions
+                          ? "Suggesting…"
+                          : "Suggest reactions"}
+                      </button>
+                      {reactionError && (
+                        <p className="mt-2 text-xs text-red-300" role="alert">
+                          {reactionError}
+                        </p>
+                      )}
                       <div className="mt-2">
                         <button
                           type="button"
@@ -3450,6 +3559,24 @@ export default function LocalEditorTab({
                     </div>
                   )}
                 </section>
+                {reactionReview && (
+                  <div className="border-b border-white/10 py-3">
+                    <SubtitleReactionReviewPanel
+                      suggestions={reactionReview}
+                      style={reactionReviewStyle}
+                      loading={generatingReactions}
+                      error={reactionError}
+                      onChange={setReactionReview}
+                      onStyleChange={setReactionReviewStyle}
+                      onRetry={suggestReactions}
+                      onClose={() => {
+                        setReactionReview(null);
+                        setReactionError("");
+                      }}
+                      onApply={applyReactionReview}
+                    />
+                  </div>
+                )}
                 <section className="pt-3">
                   <button
                     type="button"

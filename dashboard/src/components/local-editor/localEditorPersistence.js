@@ -3,6 +3,11 @@ import {
   normalizeSubtitleStyle,
 } from "./localEditorStyles";
 import { normalizeLayoutSegments } from "../../editor/layoutTimelineModel";
+import {
+  DEFAULT_SUBTITLE_REACTION_STYLE,
+  normalizeSubtitleReactionStyle,
+  normalizeSubtitleReactions,
+} from "./subtitleReactions";
 
 export const EDITOR_HISTORY_STORAGE_KEY = "openshorts_local_editor_state_v1";
 export const EDITOR_VIDEO_DB_NAME = "openshorts-local-editor-v1";
@@ -27,6 +32,8 @@ export const createEmptyEditorHistory = (preferences = {}) => ({
     subtitleLanguage: String(
       preferences?.subtitleLanguage || "en",
     ).toLowerCase(),
+    subtitleReactions: [],
+    subtitleReactionStyle: { ...DEFAULT_SUBTITLE_REACTION_STYLE },
     hook: null,
     markers: [],
     layoutSegments: [],
@@ -54,6 +61,10 @@ const normalizeSnapshot = (snapshot) => {
       : [],
     subtitleStyle: normalizeSubtitleStyle(snapshot?.subtitleStyle),
     subtitleLanguage: String(snapshot?.subtitleLanguage || "en").toLowerCase(),
+    subtitleReactions: normalizeSubtitleReactions(snapshot?.subtitleReactions),
+    subtitleReactionStyle: normalizeSubtitleReactionStyle(
+      snapshot?.subtitleReactionStyle,
+    ),
     hook: snapshot?.hook || null,
     markers: Array.isArray(snapshot?.markers)
       ? snapshot.markers

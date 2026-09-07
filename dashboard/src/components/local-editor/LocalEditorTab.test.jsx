@@ -1696,6 +1696,69 @@ describe("LocalEditorTab", () => {
     );
   });
 
+  it("reviews and applies full-clip subtitle reactions as one undoable edit", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        reactions: [{ cueIndex: 0, emojis: ["😱"] }],
+      }),
+    });
+    const onStateChange = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <LocalEditorTab
+        initialVideoUrl="https://media.example.test/project.mp4"
+        initialPlaybackDurationMs={2000}
+        initialEditorState={{
+          subtitleCues: [
+            { id: "cue-0", text: "That was close", startMs: 0, endMs: 900 },
+          ],
+          subtitleReactions: [],
+          subtitleReactionStyle: {
+            position: "above",
+            animation: "pop",
+            scale: 1,
+          },
+        }}
+        initialStateKey="reaction-review-test"
+        onStateChange={onStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Subtitles" }));
+    fireEvent.click(screen.getByRole("button", { name: /suggest reactions/i }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "Review reactions" }),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/local-editor/subtitle-reactions"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "X-AI-Provider": "gemini" }),
+      }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+      track_id: "original",
+      cues: [{ index: 0, text: "That was close", startMs: 0, endMs: 900 }],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply reactions" }));
+    await waitFor(() =>
+      expect(onStateChange.mock.calls.at(-1)?.[0]?.subtitleReactions).toEqual([
+        expect.objectContaining({ cueIndex: 0, emojis: ["😱"] }),
+      ]),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await waitFor(() =>
+      expect(onStateChange.mock.calls.at(-1)?.[0]?.subtitleReactions).toEqual(
+        [],
+      ),
+    );
+  });
+
   it("uses the live trim range and source metadata when regenerating clip information", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

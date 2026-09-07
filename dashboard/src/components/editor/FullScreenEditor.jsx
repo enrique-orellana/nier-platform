@@ -1579,6 +1579,7 @@ export default function FullScreenEditor({
         }}
         initialEditorState={localDraft}
         initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}:${localDraftRevision}`}
+        activeSubtitleTrackId={activeTrackId}
         masterDuration={masterDuration}
         clipMetadata={{ ...clip, hashtags: publishingMetadata.hashtags }}
         onHashtagsChange={saveGeneratedHashtags}
