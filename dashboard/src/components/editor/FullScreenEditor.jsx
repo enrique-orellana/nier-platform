@@ -292,6 +292,10 @@ const localCuesFromTrack = (track, fallbackCues = []) => {
   );
 };
 
+const hasPersistedSubtitleLayer = (manifest) =>
+  Array.isArray(manifest?.layers?.subtitles?.cues) ||
+  Array.isArray(manifest?.layers?.subtitles?.captions);
+
 // eslint-disable-next-line react-refresh/only-export-components
 export const manifestToLocalEditorState = (
   sourceManifest,
@@ -347,10 +351,14 @@ export const manifestToLocalEditorState = (
           source.export_policy?.layout_format ||
           fallbackLayoutFormat,
       );
+  const shouldUseTranscriptFallback =
+    source.subtitle_tracks_disabled !== true &&
+    source.subtitle_tracks_edited !== true &&
+    !hasPersistedSubtitleLayer(source);
   return {
     subtitleCues: localCuesFromTrack(
       activeTrack,
-      transcriptCuesForEditor(source),
+      shouldUseTranscriptFallback ? transcriptCuesForEditor(source) : [],
     ),
     subtitleStyle:
       activeTrack?.style ||
