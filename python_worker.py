@@ -880,6 +880,54 @@ def handle_request(request: Mapping[str, Any]) -> None:
                 raise ValueError("AI returned no usable hashtags")
             _emit({"id": request_id, "type": "result", "result": {"hashtags": hashtags[:12]}})
             return
+        if operation == "subtitle_reactions":
+            from ai_client import chat_json, load_ai_config
+
+            payload = request.get("payload") or {}
+            headers = request.get("headers") or {}
+            config = load_ai_config(headers)
+            if config.is_gemini() and not config.api_key:
+                raise ValueError("Missing X-Gemini-Key header")
+            cues = payload.get("cues") or []
+            prompt = (
+                "Suggest expressive, readable emoji reactions for these subtitle cues. "
+                "Return JSON only with {\"reactions\":[{\"cueIndex\":0,\"emojis\":[\"😱\"]}]}. "
+                "Use zero, one, or two emojis per cue and avoid repeating the same reaction everywhere.\n\n"
+                f"CUES: {json.dumps(cues, ensure_ascii=False, default=str)}"
+            )
+            response = chat_json(config, prompt, model=config.analyze_model or config.text_model)
+            valid_indexes = set()
+            for cue in cues:
+                try:
+                    valid_indexes.add(int(cue.get("index")))
+                except (AttributeError, TypeError, ValueError):
+                    continue
+
+            reactions = []
+            response_items = response.get("reactions", []) if isinstance(response, dict) else []
+            for item in response_items if isinstance(response_items, list) else []:
+                if not isinstance(item, Mapping):
+                    continue
+                try:
+                    cue_index = int(item.get("cueIndex"))
+                except (TypeError, ValueError):
+                    continue
+                emojis = []
+                seen = set()
+                raw_emojis = item.get("emojis", [])
+                for value in raw_emojis if isinstance(raw_emojis, list) else []:
+                    emoji = str(value).strip()
+                    if emoji and emoji not in seen:
+                        seen.add(emoji)
+                        emojis.append(emoji)
+                    if len(emojis) == 2:
+                        break
+                if cue_index in valid_indexes and emojis:
+                    reactions.append({"cueIndex": cue_index, "emojis": emojis})
+            if not reactions:
+                raise ValueError("AI returned no usable subtitle reactions")
+            _emit({"id": request_id, "type": "result", "result": {"reactions": reactions}})
+            return
         if operation == "burn_subtitles":
             import uuid
 

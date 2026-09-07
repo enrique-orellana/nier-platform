@@ -138,6 +138,60 @@ def test_handle_request_generates_hashtags_with_source_metadata(monkeypatch, cap
     assert "SOURCE CONTEXT" in seen["prompt"]
 
 
+def test_handle_request_generates_valid_subtitle_reactions(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    seen = {}
+    config = SimpleNamespace(
+        is_gemini=lambda: False,
+        api_key="",
+        analyze_model="analyze-model",
+        text_model="text-model",
+    )
+    monkeypatch.setattr("ai_client.load_ai_config", lambda headers: config)
+
+    def fake_chat_json(_config, prompt, **_kwargs):
+        seen["prompt"] = prompt
+        return {"reactions": [{"cueIndex": 0, "emojis": ["😱", "💥", "😱"]}]}
+
+    monkeypatch.setattr("ai_client.chat_json", fake_chat_json)
+    handle_request(
+        {
+            "id": "reactions-1",
+            "operation": "subtitle_reactions",
+            "payload": {
+                "cues": [
+                    {"index": 0, "text": "That was close", "startMs": 0, "endMs": 900}
+                ]
+            },
+            "headers": {"X-AI-Provider": "lmstudio"},
+        }
+    )
+
+    event = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert "That was close" in seen["prompt"]
+    assert "Return JSON only" in seen["prompt"]
+    assert event["result"] == {"reactions": [{"cueIndex": 0, "emojis": ["😱", "💥"]}]}
+
+
+def test_handle_request_reports_empty_subtitle_reactions(monkeypatch, capsys):
+    monkeypatch.setattr("ai_client.chat_json", lambda *_args, **_kwargs: {"reactions": []})
+    handle_request(
+        {
+            "id": "reactions-2",
+            "operation": "subtitle_reactions",
+            "payload": {
+                "cues": [{"index": 0, "text": "Hello", "startMs": 0, "endMs": 500}]
+            },
+            "headers": {"X-AI-Provider": "lmstudio"},
+        }
+    )
+
+    event = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert event["type"] == "error"
+    assert event["error"] == "AI returned no usable subtitle reactions"
+
+
 def test_parse_request_requires_id_and_operation():
     with pytest.raises(ValueError, match="request id is required"):
         parse_request(json.dumps({"operation": "clip_generation"}))
