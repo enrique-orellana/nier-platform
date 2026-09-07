@@ -41,12 +41,23 @@ export function manifestToRenderProps(
   const activeTrack =
     subtitleTracks.find((track) => track.id === activeSubtitleTrackId) || null;
   const activeCaptions = activeTrack ? trackCaptions(activeTrack) : [];
+  const reactionFields = activeTrack
+    ? {
+        ...(Array.isArray(activeTrack.reactions)
+          ? { reactions: clone(activeTrack.reactions) }
+          : {}),
+        ...(activeTrack.reactionStyle
+          ? { reactionStyle: clone(activeTrack.reactionStyle) }
+          : {}),
+      }
+    : {};
   const subtitles =
     activeTrack && activeCaptions.length
       ? {
           ...(clone(manifest.layers?.subtitles) || {}),
           captions: activeCaptions,
           style: activeTrack.style || manifest.layers?.subtitles?.style,
+          ...reactionFields,
         }
       : null;
   const sourceLayout = manifest.layers?.layout || null;
@@ -320,6 +331,8 @@ const subtitleTracksFromManifest = (manifest) => {
         label: legacy.label || "Original",
         origin: "original",
         cues: legacy.cues || legacy.captions || [],
+        reactions: legacy.reactions,
+        reactionStyle: legacy.reactionStyle,
       },
     ];
   const transcript = manifest?.timeline?.transcript;
@@ -415,6 +428,12 @@ export function manifestToEditorState(manifest, { fps = 30 } = {}) {
       muted: false,
       locked: false,
       visible: true,
+      ...(Array.isArray(track.reactions)
+        ? { reactions: clone(track.reactions) }
+        : {}),
+      ...(track.reactionStyle
+        ? { reactionStyle: clone(track.reactionStyle) }
+        : {}),
       items: subtitleItems(track),
     });
   }
@@ -493,6 +512,12 @@ export function editorStateToManifest(state, sourceManifest) {
         origin: existing.origin || track.origin || "manual",
         cues,
         captions: cues.flatMap((cue) => cue.captions),
+        ...(Array.isArray(track.reactions)
+          ? { reactions: clone(track.reactions) }
+          : {}),
+        ...(track.reactionStyle
+          ? { reactionStyle: clone(track.reactionStyle) }
+          : {}),
       };
     });
   if (subtitleTracks.length) {
@@ -520,6 +545,12 @@ export function editorStateToManifest(state, sourceManifest) {
           ...legacy,
           cues: legacyCues,
           captions: legacyCues.flatMap((cue) => cue.captions),
+          ...(Array.isArray(original.reactions)
+            ? { reactions: clone(original.reactions) }
+            : {}),
+          ...(original.reactionStyle
+            ? { reactionStyle: clone(original.reactionStyle) }
+            : {}),
         },
       };
       const transcript = manifest.timeline?.transcript;

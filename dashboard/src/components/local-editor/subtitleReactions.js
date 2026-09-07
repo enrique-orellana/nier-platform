@@ -57,9 +57,7 @@ export const normalizeSubtitleReactions = (items = []) =>
 export const makePendingReactionReview = (reactions = [], cues = []) =>
   normalizeSubtitleReactions(reactions).flatMap((reaction) => {
     const cue = cues[reaction.cueIndex];
-    return cue
-      ? [{ ...reaction, text: cue.text || cue.label || "" }]
-      : [];
+    return cue ? [{ ...reaction, text: cue.text || cue.label || "" }] : [];
   });
 
 export const reactionRequestCues = (cues = []) =>
@@ -69,7 +67,10 @@ export const reactionRequestCues = (cues = []) =>
     const startMs = Number(sourceCue.startMs);
     const endMs = Number(sourceCue.endMs);
 
-    return text && Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs
+    return text &&
+      Number.isFinite(startMs) &&
+      Number.isFinite(endMs) &&
+      endMs > startMs
       ? [{ index, text, startMs, endMs }]
       : [];
   });

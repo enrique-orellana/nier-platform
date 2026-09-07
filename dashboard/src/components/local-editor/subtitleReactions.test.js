@@ -28,7 +28,9 @@ describe("subtitle reaction helpers", () => {
   });
 
   it("normalizes reaction style to safe defaults", () => {
-    expect(normalizeSubtitleReactionStyle({ position: "left", scale: 9 })).toEqual({
+    expect(
+      normalizeSubtitleReactionStyle({ position: "left", scale: 9 }),
+    ).toEqual({
       ...DEFAULT_SUBTITLE_REACTION_STYLE,
       position: "left",
       scale: 2,

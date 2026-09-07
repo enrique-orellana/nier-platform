@@ -110,6 +110,48 @@ describe("designcomboAdapter", () => {
     expect(manifest.layers.hook.startMs).toBe(1000);
   });
 
+  it("round-trips subtitle reactions through editor state and render props", () => {
+    const reaction = {
+      id: "r0",
+      cueIndex: 0,
+      startMs: 1200,
+      endMs: 2400,
+      emojis: ["😱"],
+      enabled: true,
+    };
+    const reactionStyle = { position: "above", animation: "pop", scale: 1 };
+    const source = {
+      ...manifest,
+      subtitle_tracks: [
+        {
+          ...manifest.subtitle_tracks[0],
+          reactions: [reaction],
+          reactionStyle,
+        },
+        manifest.subtitle_tracks[1],
+      ],
+    };
+
+    const state = manifestToEditorState(source);
+    const originalTrack = state.tracks.find(
+      (track) => track.id === "subtitles-original",
+    );
+    expect(originalTrack.reactions).toEqual([reaction]);
+    expect(originalTrack.reactionStyle).toEqual(reactionStyle);
+
+    const next = editorStateToManifest(state, source);
+    expect(next.subtitle_tracks[0].reactions).toEqual([reaction]);
+    expect(next.subtitle_tracks[0].reactionStyle).toEqual(reactionStyle);
+    expect(next.layers.subtitles.reactions).toEqual([reaction]);
+    expect(next.layers.subtitles.reactionStyle).toEqual(reactionStyle);
+    expect(manifest.subtitle_tracks[0].reactions).toBeUndefined();
+
+    expect(manifestToRenderProps(source).subtitles).toMatchObject({
+      reactions: [reaction],
+      reactionStyle,
+    });
+  });
+
   it("preserves frame-accurate boundaries at the clip fps", () => {
     const state = manifestToEditorState(manifest, { fps: 29.97 });
     expect(state.durationFrames).toBe(Math.round(12.5 * 29.97));

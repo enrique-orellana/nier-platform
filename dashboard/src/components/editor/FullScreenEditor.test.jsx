@@ -138,6 +138,72 @@ describe("FullScreenEditor", () => {
     });
   });
 
+  it("round-trips subtitle reactions without mutating the source manifest", () => {
+    const source = {
+      layers: {
+        subtitles: {
+          cues: [{ text: "Close", startMs: 0, endMs: 900 }],
+          captions: [{ text: "Close", startMs: 0, endMs: 900 }],
+        },
+      },
+      subtitle_tracks: [
+        {
+          id: "original",
+          cues: [{ text: "Close", startMs: 0, endMs: 900 }],
+          captions: [{ text: "Close", startMs: 0, endMs: 900 }],
+          reactions: [
+            {
+              id: "r0",
+              cueIndex: 0,
+              startMs: 0,
+              endMs: 900,
+              emojis: ["😱"],
+            },
+          ],
+          reactionStyle: { position: "left", animation: "shake", scale: 1.5 },
+        },
+      ],
+      active_subtitle_track_id: "original",
+    };
+
+    const state = manifestToLocalEditorState(source, "original");
+    const next = localEditorStateToManifest(source, state, "original");
+
+    expect(state.subtitleReactions[0]).toMatchObject({
+      cueIndex: 0,
+      emojis: ["😱"],
+    });
+    expect(state.subtitleReactionStyle).toEqual({
+      position: "left",
+      animation: "shake",
+      scale: 1.5,
+    });
+    expect(next.subtitle_tracks[0].reactions[0]).toMatchObject({
+      cueIndex: 0,
+      emojis: ["😱"],
+    });
+    expect(next.subtitle_tracks[0].reactionStyle).toEqual(
+      source.subtitle_tracks[0].reactionStyle,
+    );
+    expect(next.layers.subtitles.reactions[0]).toMatchObject({
+      cueIndex: 0,
+      emojis: ["😱"],
+    });
+    expect(source.subtitle_tracks[0].reactions).toHaveLength(1);
+    expect(source.layers.subtitles.reactions).toBeUndefined();
+  });
+
+  it("defaults reaction state for manifests without a reaction layer", () => {
+    const state = manifestToLocalEditorState(manifest, "original");
+
+    expect(state.subtitleReactions).toEqual([]);
+    expect(state.subtitleReactionStyle).toEqual({
+      position: "above",
+      animation: "pop",
+      scale: 1,
+    });
+  });
+
   it("round-trips layout segments without dropping existing clip layers", () => {
     const source = {
       ...manifest,

@@ -20,6 +20,10 @@ import {
 import EditorActionToolbar from "./EditorActionToolbar";
 import LocalEditorTab from "../local-editor/LocalEditorTab";
 import { DEFAULT_SUBTITLE_STYLE } from "../local-editor/localEditorStyles";
+import {
+  normalizeSubtitleReactionStyle,
+  normalizeSubtitleReactions,
+} from "../local-editor/subtitleReactions";
 import { readEditorPreferences } from "../local-editor/localEditorPreferences";
 import { HOOK_FONT_FAMILY } from "../../remotion/lib/hookVisual";
 import {
@@ -320,6 +324,8 @@ export const manifestToLocalEditorState = (
                 ? legacySubtitles.cues
                 : legacySubtitles.captions || [],
               style: legacySubtitles.style,
+              reactions: legacySubtitles.reactions,
+              reactionStyle: legacySubtitles.reactionStyle,
             },
           ]
         : [];
@@ -355,6 +361,18 @@ export const manifestToLocalEditorState = (
     source.subtitle_tracks_disabled !== true &&
     source.subtitle_tracks_edited !== true &&
     !hasPersistedSubtitleLayer(source);
+  const subtitleReactions = normalizeSubtitleReactions(
+    activeTrack?.reactions ||
+      ((activeTrack?.id || trackId) === "original"
+        ? legacySubtitles?.reactions
+        : []),
+  );
+  const subtitleReactionStyle = normalizeSubtitleReactionStyle(
+    activeTrack?.reactionStyle ||
+      ((activeTrack?.id || trackId) === "original"
+        ? legacySubtitles?.reactionStyle
+        : null),
+  );
   return {
     subtitleCues: localCuesFromTrack(
       activeTrack,
@@ -370,6 +388,8 @@ export const manifestToLocalEditorState = (
       source.layers?.subtitles?.language ||
       editorPreferences?.subtitleLanguage ||
       "en",
+    subtitleReactions,
+    subtitleReactionStyle,
     hook: hook
       ? {
           id: "hook",
@@ -412,6 +432,18 @@ export const localEditorStateToManifest = (
     : [];
   const existingTrack =
     existingTracks.find((track) => track.id === nextTrackId) || {};
+  const subtitleReactions = normalizeSubtitleReactions(
+    state.subtitleReactions ??
+      existingTrack.reactions ??
+      (nextTrackId === "original" ? source.layers?.subtitles?.reactions : []),
+  );
+  const subtitleReactionStyle = normalizeSubtitleReactionStyle(
+    state.subtitleReactionStyle ??
+      existingTrack.reactionStyle ??
+      (nextTrackId === "original"
+        ? source.layers?.subtitles?.reactionStyle
+        : null),
+  );
   const cues = (state.subtitleCues || []).map((cue) => {
     const normalizedCue = normalizeCueCaptions(cue);
     return {
@@ -439,6 +471,8 @@ export const localEditorStateToManifest = (
         ],
     ),
     style: state.subtitleStyle || existingTrack.style || DEFAULT_SUBTITLE_STYLE,
+    reactions: subtitleReactions,
+    reactionStyle: subtitleReactionStyle,
   };
   source.subtitle_tracks = cues.length
     ? [...existingTracks.filter((track) => track.id !== nextTrackId), nextTrack]
@@ -509,6 +543,12 @@ export const localEditorStateToManifest = (
             state.subtitleLanguage ||
             source.layers?.subtitles?.language ||
             "en",
+          ...(nextTrackId === "original"
+            ? {
+                reactions: subtitleReactions,
+                reactionStyle: subtitleReactionStyle,
+              }
+            : {}),
         }
       : null,
     hook: persistedHook,
