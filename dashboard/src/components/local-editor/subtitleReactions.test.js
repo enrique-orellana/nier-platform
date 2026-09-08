@@ -111,4 +111,32 @@ describe("subtitle reaction helpers", () => {
       ),
     ).toEqual([]);
   });
+
+  it("restores cue-identified reactions when persisted cues have no ids", () => {
+    expect(
+      normalizeSubtitleReactions(
+        [
+          {
+            id: "reaction-1",
+            cueId: "cue-0",
+            cueIndex: 0,
+            startMs: 0,
+            endMs: 500,
+            emojis: ["🔥"],
+          },
+        ],
+        [{ text: "Still here", startMs: 100, endMs: 600 }],
+      ),
+    ).toEqual([
+      {
+        id: "reaction-1",
+        cueId: "cue-0",
+        cueIndex: 0,
+        startMs: 100,
+        endMs: 600,
+        emojis: ["🔥"],
+        enabled: true,
+      },
+    ]);
+  });
 });

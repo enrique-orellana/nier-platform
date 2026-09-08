@@ -26,12 +26,13 @@ export const normalizeSubtitleReactions = (items = [], cues = null) =>
     const requestedCueIndex = Number(reaction.cueIndex);
     const requestedCueId = reaction.cueId ? String(reaction.cueId) : "";
     const cueList = Array.isArray(cues) ? cues : null;
+    const indexedCue = cueList ? cueList[requestedCueIndex] : null;
     const cue = cueList
       ? requestedCueId
         ? cueList.find(
             (candidate) => String(candidate?.id || "") === requestedCueId,
-          )
-        : cueList[requestedCueIndex]
+          ) || (indexedCue && !indexedCue.id ? indexedCue : null)
+        : indexedCue
       : null;
     if (cueList && !cue) return [];
     const cueIndex = cue ? cueList.indexOf(cue) : requestedCueIndex;

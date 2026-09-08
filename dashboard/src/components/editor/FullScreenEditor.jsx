@@ -451,9 +451,17 @@ export const localEditorStateToManifest = (
         ? source.layers?.subtitles?.reactionStyle
         : null),
   );
+  const reactionCueIds = new Set(
+    subtitleReactions
+      .map((reaction) => (reaction?.cueId ? String(reaction.cueId) : ""))
+      .filter(Boolean),
+  );
   const cues = (state.subtitleCues || []).map((cue) => {
     const normalizedCue = normalizeCueCaptions(cue);
     return {
+      ...(reactionCueIds.has(String(normalizedCue.id))
+        ? { id: String(normalizedCue.id) }
+        : {}),
       text: normalizedCue.text || normalizedCue.label || "",
       startMs: Math.round(Number(normalizedCue.startMs || 0)),
       endMs: Math.round(

@@ -193,6 +193,46 @@ describe("FullScreenEditor", () => {
     expect(source.layers.subtitles.reactions).toBeUndefined();
   });
 
+  it("keeps generated reactions after saving and reloading a manifest", () => {
+    const source = {
+      layers: {
+        subtitles: {
+          cues: [{ id: "cue-0", text: "Close", startMs: 0, endMs: 900 }],
+        },
+      },
+      subtitle_tracks: [
+        {
+          id: "original",
+          cues: [{ id: "cue-0", text: "Close", startMs: 0, endMs: 900 }],
+          reactions: [
+            {
+              id: "reaction-1",
+              cueId: "cue-0",
+              cueIndex: 0,
+              startMs: 0,
+              endMs: 900,
+              emojis: ["🔥"],
+            },
+          ],
+        },
+      ],
+      active_subtitle_track_id: "original",
+    };
+
+    const state = manifestToLocalEditorState(source, "original");
+    const saved = localEditorStateToManifest(source, state, "original");
+    const reloaded = manifestToLocalEditorState(saved, "original");
+
+    expect(reloaded.subtitleReactions).toEqual([
+      expect.objectContaining({
+        id: "reaction-1",
+        cueId: "cue-0",
+        cueIndex: 0,
+        emojis: ["🔥"],
+      }),
+    ]);
+  });
+
   it("defaults reaction state for manifests without a reaction layer", () => {
     const state = manifestToLocalEditorState(manifest, "original");
 
