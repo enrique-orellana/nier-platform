@@ -1759,6 +1759,59 @@ describe("LocalEditorTab", () => {
     );
   });
 
+  it("lets applied subtitle reactions be edited without generating them again", async () => {
+    const onStateChange = vi.fn();
+
+    render(
+      <LocalEditorTab
+        initialVideoUrl="https://media.example.test/project.mp4"
+        initialPlaybackDurationMs={2000}
+        initialEditorState={{
+          subtitleCues: [
+            { id: "cue-0", text: "That was close", startMs: 0, endMs: 900 },
+          ],
+          subtitleReactions: [
+            {
+              id: "reaction-0",
+              cueId: "cue-0",
+              cueIndex: 0,
+              startMs: 0,
+              endMs: 900,
+              emojis: ["😱"],
+            },
+          ],
+          subtitleReactionStyle: {
+            position: "above",
+            animation: "pop",
+            scale: 1,
+          },
+        }}
+        initialStateKey="applied-reaction-edit-test"
+        onStateChange={onStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Subtitles" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit applied reactions" }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: "Edit applied reactions" }),
+    ).toBeInTheDocument();
+    fireEvent.change(
+      screen.getByLabelText("Emoji reaction for That was close"),
+      { target: { value: "🔥 😂" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Apply reactions" }));
+
+    await waitFor(() =>
+      expect(onStateChange.mock.calls.at(-1)?.[0]?.subtitleReactions).toEqual([
+        expect.objectContaining({ emojis: ["🔥", "😂"] }),
+      ]),
+    );
+  });
+
   it("uses the live trim range and source metadata when regenerating clip information", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

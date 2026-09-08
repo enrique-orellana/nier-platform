@@ -576,6 +576,67 @@ export const localEditorStateToManifest = (
   return source;
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
+export const mergeSavedSubtitleReactionFields = (
+  requestedManifest = {},
+  savedManifest = requestedManifest,
+) => {
+  const requestedTracks = Array.isArray(requestedManifest.subtitle_tracks)
+    ? requestedManifest.subtitle_tracks
+    : [];
+  const savedTracks = Array.isArray(savedManifest?.subtitle_tracks)
+    ? savedManifest.subtitle_tracks
+    : [];
+  const reactionFields = (savedTrack, requestedTrack) => ({
+    ...savedTrack,
+    ...(Object.prototype.hasOwnProperty.call(requestedTrack, "reactions")
+      ? { reactions: requestedTrack.reactions }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(requestedTrack, "reactionStyle")
+      ? { reactionStyle: requestedTrack.reactionStyle }
+      : {}),
+  });
+  const subtitleTracks = savedTracks.length
+    ? savedTracks.map((savedTrack) => {
+        const requestedTrack = requestedTracks.find(
+          (track) => track?.id === savedTrack?.id,
+        );
+        return requestedTrack
+          ? reactionFields(savedTrack, requestedTrack)
+          : savedTrack;
+      })
+    : requestedTracks;
+  const requestedSubtitles = requestedManifest.layers?.subtitles;
+  const savedSubtitles = savedManifest?.layers?.subtitles;
+  const savedLayers = savedManifest?.layers || {};
+  const subtitles = requestedSubtitles
+    ? {
+        ...(savedSubtitles || {}),
+        ...(Object.prototype.hasOwnProperty.call(
+          requestedSubtitles,
+          "reactions",
+        )
+          ? { reactions: requestedSubtitles.reactions }
+          : {}),
+        ...(Object.prototype.hasOwnProperty.call(
+          requestedSubtitles,
+          "reactionStyle",
+        )
+          ? { reactionStyle: requestedSubtitles.reactionStyle }
+          : {}),
+      }
+    : savedSubtitles;
+
+  return {
+    ...savedManifest,
+    ...(subtitleTracks.length ? { subtitle_tracks: subtitleTracks } : {}),
+    layers: {
+      ...savedLayers,
+      ...(subtitles ? { subtitles } : {}),
+    },
+  };
+};
+
 export default function FullScreenEditor({
   isOpen = true,
   jobId,
@@ -1351,7 +1412,12 @@ export default function FullScreenEditor({
         setRenderCompleteNotice(false);
         versionRef.current = nextVersion;
         setVersion(nextVersion);
-        setManifest(result.manifest || manifestToSave);
+        setManifest(
+          mergeSavedSubtitleReactionFields(
+            manifestToSave,
+            result.manifest || manifestToSave,
+          ),
+        );
         setRenderSpecDirty(false);
         onVersionChange?.(nextVersion.version_id);
       } catch (saveError) {

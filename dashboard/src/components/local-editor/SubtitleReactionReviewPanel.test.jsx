@@ -110,4 +110,26 @@ describe("SubtitleReactionReviewPanel", () => {
       expect.any(Object),
     );
   });
+
+  it("supports an edit-specific title and description", () => {
+    render(
+      <SubtitleReactionReviewPanel
+        title="Edit applied reactions"
+        description="Adjust the emoji layer already applied to this subtitle track."
+        suggestions={suggestions}
+        style={{ position: "above", animation: "pop", scale: 1 }}
+        onChange={vi.fn()}
+        onStyleChange={vi.fn()}
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+        onApply={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "Edit applied reactions" }),
+    ).toHaveTextContent(
+      "Adjust the emoji layer already applied to this subtitle track.",
+    );
+  });
 });

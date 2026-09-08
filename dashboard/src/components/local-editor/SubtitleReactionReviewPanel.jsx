@@ -114,6 +114,8 @@ const ReactionStyleControls = ({ value, onChange }) => {
 export default function SubtitleReactionReviewPanel({
   suggestions = [],
   style = DEFAULT_SUBTITLE_REACTION_STYLE,
+  title = "Review reactions",
+  description = "Tune the emoji layer before applying it to the full subtitle track.",
   loading = false,
   error = "",
   onChange,
@@ -131,15 +133,13 @@ export default function SubtitleReactionReviewPanel({
   return (
     <div
       role="dialog"
-      aria-label="Review reactions"
+      aria-label={title}
       className="space-y-3 rounded-xl border border-violet-400/30 bg-[#15121c] p-4 shadow-2xl"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-white">Review reactions</h3>
-          <p className="mt-1 text-xs text-zinc-400">
-            Tune the emoji layer before applying it to the full subtitle track.
-          </p>
+          <h3 className="text-sm font-semibold text-white">{title}</h3>
+          <p className="mt-1 text-xs text-zinc-400">{description}</p>
         </div>
         <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] text-zinc-400">
           {enabled.length} enabled

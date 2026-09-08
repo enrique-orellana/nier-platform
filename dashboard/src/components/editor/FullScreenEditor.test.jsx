@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FullScreenEditor, {
   localEditorStateToManifest,
+  mergeSavedSubtitleReactionFields,
   manifestToLocalEditorState,
   manifestWithClipLayout,
 } from "./FullScreenEditor";
@@ -231,6 +232,55 @@ describe("FullScreenEditor", () => {
         emojis: ["🔥"],
       }),
     ]);
+  });
+
+  it("restores reaction fields when a save response omits them", () => {
+    const requested = {
+      subtitle_tracks: [
+        {
+          id: "original",
+          cues: [{ id: "cue-0", text: "Close", startMs: 0, endMs: 900 }],
+          reactions: [
+            {
+              id: "reaction-1",
+              cueId: "cue-0",
+              cueIndex: 0,
+              startMs: 0,
+              endMs: 900,
+              emojis: ["🔥"],
+            },
+          ],
+          reactionStyle: { position: "left", animation: "shake", scale: 1.5 },
+        },
+      ],
+      layers: {
+        subtitles: {
+          reactions: [{ cueIndex: 0, emojis: ["🔥"] }],
+          reactionStyle: { position: "left", animation: "shake", scale: 1.5 },
+        },
+      },
+    };
+    const sparseResponse = {
+      subtitle_tracks: [
+        {
+          id: "original",
+          cues: [{ id: "cue-0", text: "Close", startMs: 0, endMs: 900 }],
+        },
+      ],
+      layers: { subtitles: { cues: requested.subtitle_tracks[0].cues } },
+    };
+
+    const merged = mergeSavedSubtitleReactionFields(requested, sparseResponse);
+
+    expect(merged.subtitle_tracks[0].reactions).toEqual(
+      requested.subtitle_tracks[0].reactions,
+    );
+    expect(merged.subtitle_tracks[0].reactionStyle).toEqual(
+      requested.subtitle_tracks[0].reactionStyle,
+    );
+    expect(merged.layers.subtitles.reactions).toEqual(
+      requested.layers.subtitles.reactions,
+    );
   });
 
   it("defaults reaction state for manifests without a reaction layer", () => {
@@ -3066,6 +3116,74 @@ describe("FullScreenEditor", () => {
         expect.objectContaining({
           manifest: expect.objectContaining({
             publishing_metadata: { hashtags: ["#shorts", "#viral"] },
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("includes applied subtitle reactions when saving a new version", async () => {
+    const reactionManifest = {
+      ...manifest,
+      subtitle_tracks: [
+        {
+          ...manifest.subtitle_tracks[0],
+          cues: [{ id: "cue-0", text: "Hola", startMs: 1000, endMs: 2000 }],
+          reactions: [
+            {
+              id: "reaction-0",
+              cueId: "cue-0",
+              cueIndex: 0,
+              startMs: 1000,
+              endMs: 2000,
+              emojis: ["🔥"],
+            },
+          ],
+          reactionStyle: { position: "right", animation: "shake", scale: 1.5 },
+        },
+      ],
+      active_subtitle_track_id: "original",
+    };
+    renderVersionMocks.saveDraftVersion.mockResolvedValue({
+      status: "saved",
+      versionId: "v2",
+      version: { version_id: "v2", status: "pending" },
+      manifest: reactionManifest,
+    });
+
+    render(
+      <FullScreenEditor
+        useLocalEditor
+        jobId="job"
+        clipIndex={0}
+        clip={{
+          output_fps: 30,
+          video_url: reactionManifest.timeline.source_video_url,
+        }}
+        initialManifest={reactionManifest}
+        initialVersion={{ version_id: "v1", status: "done" }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save as new version" }),
+    );
+
+    await waitFor(() =>
+      expect(renderVersionMocks.saveDraftVersion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          manifest: expect.objectContaining({
+            subtitle_tracks: [
+              expect.objectContaining({
+                reactions: [expect.objectContaining({ emojis: ["🔥"] })],
+                reactionStyle: {
+                  position: "right",
+                  animation: "shake",
+                  scale: 1.5,
+                },
+              }),
+            ],
           }),
         }),
       ),

@@ -252,6 +252,7 @@ export default function LocalEditorTab({
   const [reactionReviewStyle, setReactionReviewStyle] = useState(
     DEFAULT_SUBTITLE_REACTION_STYLE,
   );
+  const [editingAppliedReactions, setEditingAppliedReactions] = useState(false);
   const [reactionError, setReactionError] = useState("");
   const [translatingSubtitles, setTranslatingSubtitles] = useState(false);
   const [translationTarget, setTranslationTarget] = useState("es");
@@ -1369,6 +1370,7 @@ export default function LocalEditorTab({
       const suggestions = makePendingReactionReview(pending, subtitleCues);
       if (!suggestions.length)
         throw new Error("No usable subtitle reactions were suggested.");
+      setEditingAppliedReactions(false);
       setReactionReview(suggestions);
       setReactionReviewStyle(
         normalizeSubtitleReactionStyle(subtitleReactionStyle),
@@ -1382,6 +1384,17 @@ export default function LocalEditorTab({
     }
   };
 
+  const editAppliedReactions = () => {
+    const applied = makePendingReactionReview(subtitleReactions, subtitleCues);
+    if (!applied.length) return;
+    setEditingAppliedReactions(true);
+    setReactionReview(applied);
+    setReactionReviewStyle(
+      normalizeSubtitleReactionStyle(subtitleReactionStyle),
+    );
+    setReactionError("");
+  };
+
   const applyReactionReview = (approved, style) => {
     commitEdit((current) => ({
       ...current,
@@ -1389,6 +1402,7 @@ export default function LocalEditorTab({
       subtitleReactionStyle: normalizeSubtitleReactionStyle(style),
     }));
     setReactionReview(null);
+    setEditingAppliedReactions(false);
     setReactionError("");
   };
 
@@ -3447,6 +3461,17 @@ export default function LocalEditorTab({
                           ? "Suggesting…"
                           : "Suggest reactions"}
                       </button>
+                      {!!subtitleReactions.length && (
+                        <button
+                          type="button"
+                          aria-label="Edit applied reactions"
+                          onClick={editAppliedReactions}
+                          disabled={busy || generatingReactions}
+                          className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-transparent px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-violet-300/30 hover:bg-white/[.04] hover:text-violet-200 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Edit applied reactions
+                        </button>
+                      )}
                       {reactionError && (
                         <p className="mt-2 text-xs text-red-300" role="alert">
                           {reactionError}
@@ -3588,8 +3613,19 @@ export default function LocalEditorTab({
                       onRetry={suggestReactions}
                       onClose={() => {
                         setReactionReview(null);
+                        setEditingAppliedReactions(false);
                         setReactionError("");
                       }}
+                      title={
+                        editingAppliedReactions
+                          ? "Edit applied reactions"
+                          : "Review reactions"
+                      }
+                      description={
+                        editingAppliedReactions
+                          ? "Adjust the emoji layer already applied to this subtitle track."
+                          : undefined
+                      }
                       onApply={applyReactionReview}
                     />
                   </div>
