@@ -883,15 +883,25 @@ func TestRenderStatusPublishesLocalEditorOutputOnceAndCleansStaging(t *testing.T
 	}
 }
 
-func TestLocalRenderVideoURLUsesMasterCacheForMinioURL(t *testing.T) {
+func TestLocalRenderVideoURLKeepsMasterURLForMinioURL(t *testing.T) {
 	server := NewServer(config.Config{})
 	server.s3Store = &integrations.S3Store{Bucket: "openshorts-media"}
 	got := server.localRenderVideoURL(
 		"job-1",
 		"http://minio.example/openshorts-media/job-1/master/source.mp4?X-Amz-Signature=test",
 	)
-	if got != "/videos/job-1/source.mp4" {
-		t.Fatalf("expected local master cache URL, got %q", got)
+	if got != "http://minio.example/openshorts-media/job-1/master/source.mp4?X-Amz-Signature=test" {
+		t.Fatalf("expected remote master URL, got %q", got)
+	}
+}
+
+func TestLocalRenderVideoURLKeepsMasterURLWhenLocalCacheIsMissing(t *testing.T) {
+	server := NewServer(config.Config{OutputDir: t.TempDir()})
+	server.s3Store = &integrations.S3Store{Bucket: "openshorts-media"}
+	videoURL := "http://minio.example/openshorts-media/job-1/master/source.mp4?X-Amz-Signature=test"
+
+	if got := server.localRenderVideoURL("job-1", videoURL); got != videoURL {
+		t.Fatalf("expected remote master URL when local cache is unavailable, got %q", got)
 	}
 }
 

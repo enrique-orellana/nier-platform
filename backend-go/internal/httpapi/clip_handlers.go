@@ -257,11 +257,10 @@ func (s *Server) localRenderVideoURL(jobID, videoURL string) string {
 		}
 		switch parts[index+2] {
 		case "master":
-			filename := parts[len(parts)-1]
-			if filename == "" || filename == "." || filename == ".." || strings.Contains(filename, "\\") {
-				return videoURL
-			}
-			return "/videos/" + jobID + "/" + filename
+			// The local master cache is optional and may have been cleaned up
+			// after the project was created. Keep the signed object URL so the
+			// renderer can fetch the source from durable storage in that case.
+			return videoURL
 		case "clips":
 			if index+4 >= len(parts) || parts[index+3] == "" || parts[len(parts)-1] == "" {
 				return videoURL
