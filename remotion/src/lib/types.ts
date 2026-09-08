@@ -48,6 +48,7 @@ export interface SubtitleReactionStyle {
   position: SubtitleReactionPosition;
   animation: SubtitleReactionAnimation;
   scale: number;
+  spacing?: number;
 }
 
 export interface SubtitleConfig {
@@ -232,7 +233,8 @@ export const subtitleReactionSchema = z.object({
 export const subtitleReactionStyleSchema = z.object({
   position: z.enum(["above", "left", "right"]),
   animation: z.enum(["pop", "shake", "fade"]),
-  scale: z.number().min(1).max(2),
+  scale: z.number().min(1).max(4),
+  spacing: z.number().min(0).max(96).default(16),
 });
 
 export const subtitleConfigSchema = z.object({

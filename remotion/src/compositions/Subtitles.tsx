@@ -41,6 +41,7 @@ const DEFAULT_SUBTITLE_REACTION_STYLE: NonNullable<
   position: "above",
   animation: "pop",
   scale: 1,
+  spacing: 16,
 };
 
 export const getSubtitleWordsForDisplay = (
@@ -70,6 +71,8 @@ export const getSubtitleTimeMs = (
 ) => ((blockStartFrame + relativeFrame) / fps) * 1000;
 
 export function normalizeSubtitleConfig(config: Partial<SubtitleConfig> | null | undefined): SubtitleConfig {
+  const reactionScale = Number(config?.reactionStyle?.scale);
+  const reactionSpacing = Number(config?.reactionStyle?.spacing);
   return {
     captions: Array.isArray(config?.captions) ? config.captions : [],
     blocks: Array.isArray(config?.blocks) ? config.blocks : undefined,
@@ -84,10 +87,12 @@ export function normalizeSubtitleConfig(config: Partial<SubtitleConfig> | null |
     reactionStyle: {
       ...DEFAULT_SUBTITLE_REACTION_STYLE,
       ...(config?.reactionStyle || {}),
-      scale: Math.min(
-        2,
-        Math.max(1, Number(config?.reactionStyle?.scale) || 1),
-      ),
+      scale: Number.isFinite(reactionScale)
+        ? Math.min(4, Math.max(1, reactionScale))
+        : 1,
+      spacing: Number.isFinite(reactionSpacing)
+        ? Math.min(96, Math.max(0, reactionSpacing))
+        : 16,
     },
   };
 }
@@ -188,6 +193,7 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
         <SubtitleReactions
           reactions={config.reactions}
           style={config.reactionStyle}
+          subtitleFontSize={style.fontSize}
           currentTimeMs={currentTimeMs}
           fps={fps}
         />
