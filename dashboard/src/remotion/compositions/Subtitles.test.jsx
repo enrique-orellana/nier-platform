@@ -100,7 +100,12 @@ describe("subtitle rendering defaults", () => {
               enabled: true,
             },
           ],
-          reactionStyle: { position: "above", animation: "pop", scale: 1 },
+          reactionStyle: {
+            position: "above",
+            animation: "pop",
+            scale: 2,
+            spacing: 20,
+          },
         }}
       />,
     );

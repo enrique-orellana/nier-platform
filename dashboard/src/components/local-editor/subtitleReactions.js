@@ -1,7 +1,13 @@
+export const SUBTITLE_REACTION_SCALE_MIN = 1;
+export const SUBTITLE_REACTION_SCALE_MAX = 4;
+export const SUBTITLE_REACTION_SPACING_MIN = 0;
+export const SUBTITLE_REACTION_SPACING_MAX = 96;
+
 export const DEFAULT_SUBTITLE_REACTION_STYLE = {
   position: "above",
   animation: "pop",
   scale: 1,
+  spacing: 16,
 };
 
 const REACTION_POSITIONS = ["above", "left", "right"];
@@ -9,6 +15,8 @@ const REACTION_ANIMATIONS = ["pop", "shake", "fade"];
 
 export const normalizeSubtitleReactionStyle = (value = {}) => {
   const style = value || {};
+  const scale = Number(style.scale);
+  const spacing = Number(style.spacing);
   return {
     position: REACTION_POSITIONS.includes(style.position)
       ? style.position
@@ -16,7 +24,18 @@ export const normalizeSubtitleReactionStyle = (value = {}) => {
     animation: REACTION_ANIMATIONS.includes(style.animation)
       ? style.animation
       : DEFAULT_SUBTITLE_REACTION_STYLE.animation,
-    scale: Math.min(2, Math.max(1, Number(style.scale) || 1)),
+    scale: Number.isFinite(scale)
+      ? Math.min(
+          SUBTITLE_REACTION_SCALE_MAX,
+          Math.max(SUBTITLE_REACTION_SCALE_MIN, scale),
+        )
+      : DEFAULT_SUBTITLE_REACTION_STYLE.scale,
+    spacing: Number.isFinite(spacing)
+      ? Math.min(
+          SUBTITLE_REACTION_SPACING_MAX,
+          Math.max(SUBTITLE_REACTION_SPACING_MIN, spacing),
+        )
+      : DEFAULT_SUBTITLE_REACTION_STYLE.spacing,
   };
 };
 

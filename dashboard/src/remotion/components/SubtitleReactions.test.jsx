@@ -73,4 +73,20 @@ describe("SubtitleReactions", () => {
 
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
+
+  it("sizes reactions from the subtitle font size and keeps the configured gap", () => {
+    render(
+      <SubtitleReactions
+        reactions={[reaction]}
+        style={{ position: "above", animation: "pop", scale: 2, spacing: 24 }}
+        subtitleFontSize={42}
+        currentTimeMs={500}
+        fps={30}
+      />,
+    );
+
+    const emoji = document.querySelector("span");
+    expect(emoji).toHaveStyle({ fontSize: "84px" });
+    expect(emoji.parentElement).toHaveStyle({ bottom: "calc(100% + 24px)" });
+  });
 });

@@ -29,11 +29,16 @@ describe("subtitle reaction helpers", () => {
 
   it("normalizes reaction style to safe defaults", () => {
     expect(
-      normalizeSubtitleReactionStyle({ position: "left", scale: 9 }),
+      normalizeSubtitleReactionStyle({
+        position: "left",
+        scale: 9,
+        spacing: 24,
+      }),
     ).toEqual({
       ...DEFAULT_SUBTITLE_REACTION_STYLE,
       position: "left",
-      scale: 2,
+      scale: 4,
+      spacing: 24,
     });
   });
 

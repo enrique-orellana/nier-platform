@@ -78,6 +78,7 @@ describe("local editor project persistence", () => {
       position: "above",
       animation: "pop",
       scale: 1,
+      spacing: 16,
     });
   });
 
@@ -107,7 +108,8 @@ describe("local editor project persistence", () => {
     expect(normalized.present.subtitleReactionStyle).toEqual({
       position: "left",
       animation: "pop",
-      scale: 2,
+      scale: 4,
+      spacing: 16,
     });
   });
 

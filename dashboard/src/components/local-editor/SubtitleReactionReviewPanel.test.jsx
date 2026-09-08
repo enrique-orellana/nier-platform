@@ -31,7 +31,7 @@ describe("SubtitleReactionReviewPanel", () => {
     render(
       <SubtitleReactionReviewPanel
         suggestions={suggestions}
-        style={{ position: "above", animation: "pop", scale: 1 }}
+        style={{ position: "above", animation: "pop", scale: 1, spacing: 16 }}
         onChange={onChange}
         onStyleChange={vi.fn()}
         onRetry={vi.fn()}
@@ -74,7 +74,7 @@ describe("SubtitleReactionReviewPanel", () => {
           { ...suggestions[0], enabled: true },
           { ...suggestions[1], enabled: false },
         ]}
-        style={{ position: "above", animation: "pop", scale: 1 }}
+        style={{ position: "above", animation: "pop", scale: 1, spacing: 16 }}
         onChange={vi.fn()}
         onStyleChange={onStyleChange}
         onRetry={onRetry}
@@ -90,7 +90,10 @@ describe("SubtitleReactionReviewPanel", () => {
       target: { value: "shake" },
     });
     fireEvent.change(screen.getByLabelText("Reaction size"), {
-      target: { value: "1.5" },
+      target: { value: "3.5" },
+    });
+    fireEvent.change(screen.getByLabelText("Reaction spacing"), {
+      target: { value: "32" },
     });
     expect(onStyleChange).toHaveBeenCalledWith(
       expect.objectContaining({ position: "left" }),
@@ -99,7 +102,10 @@ describe("SubtitleReactionReviewPanel", () => {
       expect.objectContaining({ animation: "shake" }),
     );
     expect(onStyleChange).toHaveBeenCalledWith(
-      expect.objectContaining({ scale: 1.5 }),
+      expect.objectContaining({ scale: 3.5 }),
+    );
+    expect(onStyleChange).toHaveBeenCalledWith(
+      expect.objectContaining({ spacing: 32 }),
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -117,7 +123,7 @@ describe("SubtitleReactionReviewPanel", () => {
         title="Edit applied reactions"
         description="Adjust the emoji layer already applied to this subtitle track."
         suggestions={suggestions}
-        style={{ position: "above", animation: "pop", scale: 1 }}
+        style={{ position: "above", animation: "pop", scale: 1, spacing: 16 }}
         onChange={vi.fn()}
         onStyleChange={vi.fn()}
         onRetry={vi.fn()}

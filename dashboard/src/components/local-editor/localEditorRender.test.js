@@ -85,7 +85,12 @@ describe("local editor Remotion rendering", () => {
           emojis: ["😱"],
         },
       ],
-      subtitleReactionStyle: { position: "left", animation: "shake", scale: 2 },
+      subtitleReactionStyle: {
+        position: "left",
+        animation: "shake",
+        scale: 2,
+        spacing: 16,
+      },
       hook: {
         text: "Hook",
         startMs: 0,
@@ -128,6 +133,7 @@ describe("local editor Remotion rendering", () => {
       position: "left",
       animation: "shake",
       scale: 2,
+      spacing: 16,
     });
     expect(props.subtitles.style).toMatchObject({
       fontFamily: "Verdana",

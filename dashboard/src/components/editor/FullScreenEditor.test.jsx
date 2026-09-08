@@ -161,7 +161,12 @@ describe("FullScreenEditor", () => {
               emojis: ["😱"],
             },
           ],
-          reactionStyle: { position: "left", animation: "shake", scale: 1.5 },
+          reactionStyle: {
+            position: "left",
+            animation: "shake",
+            scale: 1.5,
+            spacing: 16,
+          },
         },
       ],
       active_subtitle_track_id: "original",
@@ -178,6 +183,7 @@ describe("FullScreenEditor", () => {
       position: "left",
       animation: "shake",
       scale: 1.5,
+      spacing: 16,
     });
     expect(next.subtitle_tracks[0].reactions[0]).toMatchObject({
       cueIndex: 0,
@@ -250,13 +256,23 @@ describe("FullScreenEditor", () => {
               emojis: ["🔥"],
             },
           ],
-          reactionStyle: { position: "left", animation: "shake", scale: 1.5 },
+          reactionStyle: {
+            position: "left",
+            animation: "shake",
+            scale: 1.5,
+            spacing: 16,
+          },
         },
       ],
       layers: {
         subtitles: {
           reactions: [{ cueIndex: 0, emojis: ["🔥"] }],
-          reactionStyle: { position: "left", animation: "shake", scale: 1.5 },
+          reactionStyle: {
+            position: "left",
+            animation: "shake",
+            scale: 1.5,
+            spacing: 16,
+          },
         },
       },
     };
@@ -291,6 +307,7 @@ describe("FullScreenEditor", () => {
       position: "above",
       animation: "pop",
       scale: 1,
+      spacing: 16,
     });
   });
 
@@ -3139,7 +3156,12 @@ describe("FullScreenEditor", () => {
               emojis: ["🔥"],
             },
           ],
-          reactionStyle: { position: "right", animation: "shake", scale: 1.5 },
+          reactionStyle: {
+            position: "right",
+            animation: "shake",
+            scale: 1.5,
+            spacing: 16,
+          },
         },
       ],
       active_subtitle_track_id: "original",
@@ -3181,6 +3203,7 @@ describe("FullScreenEditor", () => {
                   position: "right",
                   animation: "shake",
                   scale: 1.5,
+                  spacing: 16,
                 },
               }),
             ],

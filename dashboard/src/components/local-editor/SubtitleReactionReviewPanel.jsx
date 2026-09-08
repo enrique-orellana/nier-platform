@@ -1,6 +1,10 @@
 import React from "react";
 import {
   DEFAULT_SUBTITLE_REACTION_STYLE,
+  SUBTITLE_REACTION_SCALE_MAX,
+  SUBTITLE_REACTION_SCALE_MIN,
+  SUBTITLE_REACTION_SPACING_MAX,
+  SUBTITLE_REACTION_SPACING_MIN,
   normalizeSubtitleReactionStyle,
 } from "./subtitleReactions";
 
@@ -67,46 +71,75 @@ const ReactionStyleControls = ({ value, onChange }) => {
   const update = (key, nextValue) => onChange({ ...current, [key]: nextValue });
 
   return (
-    <div className="grid grid-cols-3 gap-2">
-      <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-        Position
-        <select
-          aria-label="Reaction position"
-          value={current.position}
-          onChange={(event) => update("position", event.target.value)}
-          className="input-field mt-1.5 text-xs"
-        >
-          <option value="above">Above</option>
-          <option value="left">Left</option>
-          <option value="right">Right</option>
-        </select>
-      </label>
-      <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-        Animation
-        <select
-          aria-label="Reaction animation"
-          value={current.animation}
-          onChange={(event) => update("animation", event.target.value)}
-          className="input-field mt-1.5 text-xs"
-        >
-          <option value="pop">Pop</option>
-          <option value="shake">Shake</option>
-          <option value="fade">Fade</option>
-        </select>
-      </label>
-      <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-        Size
-        <select
-          aria-label="Reaction size"
-          value={current.scale}
-          onChange={(event) => update("scale", Number(event.target.value))}
-          className="input-field mt-1.5 text-xs"
-        >
-          <option value="1">1×</option>
-          <option value="1.5">1.5×</option>
-          <option value="2">2×</option>
-        </select>
-      </label>
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+          Position
+          <select
+            aria-label="Reaction position"
+            value={current.position}
+            onChange={(event) => update("position", event.target.value)}
+            className="input-field mt-1.5 text-xs"
+          >
+            <option value="above">Above</option>
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+          </select>
+        </label>
+        <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+          Animation
+          <select
+            aria-label="Reaction animation"
+            value={current.animation}
+            onChange={(event) => update("animation", event.target.value)}
+            className="input-field mt-1.5 text-xs"
+          >
+            <option value="pop">Pop</option>
+            <option value="shake">Shake</option>
+            <option value="fade">Fade</option>
+          </select>
+        </label>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+          Size relative to text
+          <div className="mt-1.5 flex items-center gap-2">
+            <input
+              aria-label="Reaction size"
+              type="range"
+              min={SUBTITLE_REACTION_SCALE_MIN}
+              max={SUBTITLE_REACTION_SCALE_MAX}
+              step="0.25"
+              value={current.scale}
+              onChange={(event) => update("scale", Number(event.target.value))}
+              className="w-full accent-violet-400"
+            />
+            <output className="w-10 shrink-0 text-right text-[10px] text-zinc-300">
+              {current.scale}×
+            </output>
+          </div>
+        </label>
+        <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+          Spacing
+          <div className="mt-1.5 flex items-center gap-2">
+            <input
+              aria-label="Reaction spacing"
+              type="range"
+              min={SUBTITLE_REACTION_SPACING_MIN}
+              max={SUBTITLE_REACTION_SPACING_MAX}
+              step="2"
+              value={current.spacing}
+              onChange={(event) =>
+                update("spacing", Number(event.target.value))
+              }
+              className="w-full accent-violet-400"
+            />
+            <output className="w-10 shrink-0 text-right text-[10px] text-zinc-300">
+              {current.spacing}px
+            </output>
+          </div>
+        </label>
+      </div>
     </div>
   );
 };
