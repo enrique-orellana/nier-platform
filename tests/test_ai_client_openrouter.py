@@ -284,6 +284,24 @@ class OpenRouterTests(unittest.TestCase):
         self.assertEqual(DetailedTranscriptionClient.last_json["language"], "it")
 
     @patch("ai_client.httpx.Client", DetailedTranscriptionClient)
+    def test_transcription_requests_deterministic_original_language_output(self):
+        config = ai_client.AIConfig(
+            provider="openrouter",
+            api_key="secret",
+        )
+        with TemporaryDirectory() as directory:
+            audio_path = Path(directory) / "audio.wav"
+            audio_path.write_bytes(b"audio")
+
+            ai_client.transcribe_audio_openrouter(str(audio_path), config)
+
+        prompt = DetailedTranscriptionClient.last_json["prompt"]
+        self.assertEqual(DetailedTranscriptionClient.last_json["temperature"], 0)
+        self.assertIn("original spoken language", prompt)
+        self.assertIn("Do not translate", prompt)
+        self.assertNotIn("language", DetailedTranscriptionClient.last_json)
+
+    @patch("ai_client.httpx.Client", DetailedTranscriptionClient)
     def test_transcription_restricts_openrouter_to_configured_provider(self):
         config = ai_client.AIConfig(
             provider="openrouter",

@@ -781,6 +781,12 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
     payload = {
         "model": config.transcription_model or OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL,
         "input_audio": {"data": encoded_audio, "format": suffix},
+        "prompt": (
+            "Transcribe the spoken audio exactly in its original spoken language. "
+            "Do not translate, summarize, or invent words. Return only speech that "
+            "is audible in the recording."
+        ),
+        "temperature": 0,
         "response_format": "verbose_json",
         "timestamp_granularities": ["segment", "word"],
     }
