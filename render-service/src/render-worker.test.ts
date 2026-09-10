@@ -30,7 +30,7 @@ vi.mock("./source-proxy.js", () => ({
   prepareRangeProxy: vi.fn(async () => ({
     videoUrl: "http://renderer/output/source.mp4",
     videoStartSeconds: 0,
-    standardBackgroundVideoUrl: "http://renderer/output/render-cache/background.mp4",
+    standardBackgroundVideoUrl: "http://renderer/output/job-3/render-cache/background.mp4",
   })),
 }));
 vi.mock("./progress.js", () => ({ shouldLogRenderProgress: vi.fn(() => false) }));
@@ -172,7 +172,7 @@ describe("executeRender browser lifecycle", () => {
     expect(mocks.selectComposition).toHaveBeenCalledWith(
       expect.objectContaining({
         inputProps: expect.objectContaining({
-          standardBackgroundVideoUrl: "http://renderer/output/render-cache/background.mp4",
+          standardBackgroundVideoUrl: "http://renderer/output/job-3/render-cache/background.mp4",
         }),
       }),
     );

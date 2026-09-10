@@ -88,8 +88,8 @@ describe("range source proxy", () => {
     );
   });
 
-  it("shares a cached source range across render jobs", async () => {
-    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "source-proxy-shared-"));
+  it("scopes cached source ranges to the owning render job", async () => {
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "source-proxy-scoped-"));
     const sourcePath = path.join(outputDir, "uploads", "source.mp4");
     fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
     fs.writeFileSync(sourcePath, "source");
@@ -113,9 +113,14 @@ describe("range source proxy", () => {
       const first = await prepareRangeProxy({ ...baseOptions, jobId: "job-1" });
       const second = await prepareRangeProxy({ ...baseOptions, jobId: "job-2" });
 
-      expect(second).toEqual(first);
-      expect(first.proxyPath).toContain(`${path.sep}render-cache${path.sep}`);
-      expect(spawnMock).toHaveBeenCalledTimes(1);
+      expect(first.proxyPath).toContain(
+        `${path.sep}job-1${path.sep}render-cache${path.sep}`,
+      );
+      expect(second.proxyPath).toContain(
+        `${path.sep}job-2${path.sep}render-cache${path.sep}`,
+      );
+      expect(second).not.toEqual(first);
+      expect(spawnMock).toHaveBeenCalledTimes(2);
     } finally {
       spawnMock.mockReset();
       fs.rmSync(outputDir, { recursive: true, force: true });
@@ -146,12 +151,14 @@ describe("range source proxy", () => {
         includeStandardBackground: true,
       });
 
-      expect(result.proxyPath).toMatch(/render-cache[\\/]clip-[a-f0-9]{16}\.mp4$/);
+      expect(result.proxyPath).toMatch(
+        /job-1[\\/]render-cache[\\/]clip-[a-f0-9]{16}\.mp4$/,
+      );
       expect(result.standardBackgroundProxyPath).toMatch(
-        /render-cache[\\/]clip-[a-f0-9]{16}-bg\.mp4$/,
+        /job-1[\\/]render-cache[\\/]clip-[a-f0-9]{16}-bg\.mp4$/,
       );
       expect(result.standardBackgroundVideoUrl).toMatch(
-        /\/output\/render-cache\/clip-[a-f0-9]{16}-bg\.mp4$/,
+        /\/output\/job-1\/render-cache\/clip-[a-f0-9]{16}-bg\.mp4$/,
       );
       expect(spawnMock).toHaveBeenCalledTimes(2);
       expect(spawnMock.mock.calls[1][1]).toContain("-an");
