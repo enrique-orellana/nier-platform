@@ -8,6 +8,7 @@ export default function MediaInput({
   isProcessing,
   targetClipCount,
   onTargetClipCountChange,
+  defaultTranscriptionLanguage = "auto",
 }) {
   const [mode, setMode] = useState("minio"); // 'minio' | 'file'
   const [selectedObject, setSelectedObject] = useState(null);
@@ -16,7 +17,9 @@ export default function MediaInput({
   const [acknowledged, setAcknowledged] = useState(false);
   const [layoutFormat, setLayoutFormat] = useState("standard");
   const [facecamSize, setFacecamSize] = useState("medium");
-  const [transcriptionLanguage, setTranscriptionLanguage] = useState("auto");
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState(
+    defaultTranscriptionLanguage || "auto",
+  );
 
   const handleSubmit = (e) => {
     e.preventDefault();

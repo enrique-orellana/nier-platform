@@ -29,6 +29,32 @@ describe("MediaInput", () => {
     ).toBeInTheDocument();
   });
 
+  it("uses the saved source language as the generation default", () => {
+    const onProcess = vi.fn();
+    const { container } = render(
+      <MediaInput
+        onProcess={onProcess}
+        isProcessing={false}
+        targetClipCount={6}
+        onTargetClipCountChange={vi.fn()}
+        defaultTranscriptionLanguage="it"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /upload file/i }));
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: {
+        files: [new File(["video"], "source.mp4", { type: "video/mp4" })],
+      },
+    });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /generate clips/i }));
+
+    expect(onProcess).toHaveBeenCalledWith(
+      expect.objectContaining({ transcriptionLanguage: "it" }),
+    );
+  });
+
   it("submits a selected MinIO object without YouTube-specific UI", async () => {
     fetch.mockResolvedValueOnce({
       ok: true,

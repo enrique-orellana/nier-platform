@@ -2159,6 +2159,7 @@ function App() {
                     isProcessing={status === "processing"}
                     targetClipCount={clipCount}
                     onTargetClipCountChange={setClipCount}
+                    defaultTranscriptionLanguage={transcriptionLanguage}
                   />
 
                   <div className="flex items-center justify-center gap-8 text-zinc-500 text-sm">
