@@ -486,6 +486,19 @@ def validate_full_timeline_response(
         raise ValueError("complete source coverage metadata is required")
 
     source_duration = max(0.0, _number(video_duration) or 0.0)
+    segment_units = [
+        unit
+        for (unit_type, _unit_id), unit in indexed_units.items()
+        if unit_type == "segment"
+    ]
+    transcript_start = min(
+        (_number(unit.get("start")) for unit in segment_units),
+        default=0.0,
+    )
+    transcript_end = max(
+        (_number(unit.get("end")) for unit in segment_units),
+        default=source_duration,
+    )
     coverage_start = _number(_field(coverage, "start", "source_start"))
     coverage_end = _number(_field(coverage, "end", "source_end"))
     units_reviewed = coverage.get("units_reviewed")
@@ -499,8 +512,8 @@ def validate_full_timeline_response(
         coverage.get("complete") is not True
         or coverage_start is None
         or coverage_end is None
-        or coverage_start > 0.001
-        or coverage_end < source_duration - 0.001
+        or coverage_start > transcript_start + 0.001
+        or coverage_end < transcript_end - 0.001
     ):
         raise ValueError("response did not provide complete source coverage")
 

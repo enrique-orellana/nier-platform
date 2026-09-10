@@ -317,6 +317,33 @@ def test_validate_full_timeline_response_requires_complete_source_coverage():
     }
 
 
+def test_validate_full_timeline_response_accepts_complete_transcript_inside_video_bounds():
+    timeline = build_analysis_timeline(
+        {
+            "segments": [{
+                "start": 5,
+                "end": 50,
+                "text": "Transcript does not include leading or trailing silence.",
+            }]
+        },
+        60,
+    )
+
+    candidates, coverage = validate_full_timeline_response(
+        {
+            "coverage": {"complete": True, "start": 5, "end": 50},
+            "shorts": [],
+        },
+        timeline_units_by_id(timeline),
+        60,
+        timestamp_mode="segment",
+    )
+
+    assert candidates == []
+    assert coverage["start"] == 5.0
+    assert coverage["end"] == 50.0
+
+
 def test_validate_full_timeline_response_rejects_partial_coverage_and_invalid_ids():
     timeline = build_analysis_timeline(
         {"segments": [{"start": 0, "end": 80, "text": "A complete segment."}]},
