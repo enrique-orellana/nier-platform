@@ -35,6 +35,61 @@ CODEX_STREAM_RETRY_BACKOFF_SECONDS = 0.5
 CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.6-luna")
 CODEX_DEFAULT_REASONING_EFFORT = "high"
 CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
+CODEX_FILE_ANALYSIS_OUTPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["coverage", "shorts"],
+    "properties": {
+        "coverage": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["complete", "start", "end", "units_reviewed"],
+            "properties": {
+                "complete": {"enum": [True]},
+                "start": {"type": "number"},
+                "end": {"type": "number"},
+                "units_reviewed": {"type": "integer", "minimum": 0},
+            },
+        },
+        "shorts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "start",
+                    "end",
+                    "start_word_id",
+                    "end_word_id",
+                    "start_segment_id",
+                    "end_segment_id",
+                    "score",
+                    "video_description_for_tiktok",
+                    "video_description_for_instagram",
+                    "video_title_for_youtube_short",
+                    "viral_hook_text",
+                    "description",
+                    "hook",
+                ],
+                "properties": {
+                    "start": {"type": ["number", "null"]},
+                    "end": {"type": ["number", "null"]},
+                    "start_word_id": {"type": ["integer", "null"]},
+                    "end_word_id": {"type": ["integer", "null"]},
+                    "start_segment_id": {"type": ["integer", "null"]},
+                    "end_segment_id": {"type": ["integer", "null"]},
+                    "score": {"type": ["number", "null"]},
+                    "video_description_for_tiktok": {"type": ["string", "null"]},
+                    "video_description_for_instagram": {"type": ["string", "null"]},
+                    "video_title_for_youtube_short": {"type": ["string", "null"]},
+                    "viral_hook_text": {"type": ["string", "null"]},
+                    "description": {"type": ["string", "null"]},
+                    "hook": {"type": ["string", "null"]},
+                },
+            },
+        },
+    },
+}
 AUTO_MODEL_VALUES = {"", "auto", "default"}
 CODEX_DEFAULT_CLIENT_VERSION = "0.144.1"
 AUTO_TRANSCRIPTION_LANGUAGE_VALUES = {"", "auto", "detect", "default"}
@@ -604,6 +659,11 @@ def codex_file_analysis_json(
             encoding="utf-8",
         )
         auth_path.chmod(0o600)
+        schema_path = temp_root / "analysis.schema.json"
+        schema_path.write_text(
+            json.dumps(CODEX_FILE_ANALYSIS_OUTPUT_SCHEMA),
+            encoding="utf-8",
+        )
         output_path = temp_root / "analysis.json"
 
         command = [
@@ -615,6 +675,8 @@ def codex_file_analysis_json(
             "read-only",
             "--model",
             model,
+            "--output-schema",
+            str(schema_path),
             "--output-last-message",
             str(output_path),
             "--cd",

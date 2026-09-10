@@ -346,9 +346,11 @@ def test_codex_file_analysis_uses_chatgpt_oauth_and_complete_local_artifact(
             (Path(observed["env"]["CODEX_HOME"]) / "auth.json").read_text(encoding="utf-8")
         )
         observed["cli_auth"] = cli_auth
+        schema_path = Path(command[command.index("--output-schema") + 1])
+        observed["output_schema"] = json.loads(schema_path.read_text(encoding="utf-8"))
         output_path = Path(command[command.index("--output-last-message") + 1])
         output_path.write_text(
-            '{"coverage":{"complete":true},"shorts":[]}',
+            '{"coverage":{"complete":true,"start":0,"end":12,"units_reviewed":1},"shorts":[]}',
             encoding="utf-8",
         )
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
@@ -361,13 +363,28 @@ def test_codex_file_analysis_uses_chatgpt_oauth_and_complete_local_artifact(
         model="gpt-5.4",
     )
 
-    assert result == {"coverage": {"complete": True}, "shorts": []}
+    assert result == {
+        "coverage": {"complete": True, "start": 0, "end": 12, "units_reviewed": 1},
+        "shorts": [],
+    }
     assert observed["which"] == "codex"
     assert observed["command"][1:3] == ["exec", "--ephemeral"]
     assert "--sandbox" in observed["command"]
     assert observed["command"][observed["command"].index("--sandbox") + 1] == "read-only"
     assert "--ask-for-approval" not in observed["command"]
-    assert "--output-schema" not in observed["command"]
+    assert "--output-schema" in observed["command"]
+    assert observed["output_schema"]["required"] == ["coverage", "shorts"]
+    assert observed["output_schema"]["additionalProperties"] is False
+    assert observed["output_schema"]["properties"]["coverage"]["required"] == [
+        "complete",
+        "start",
+        "end",
+        "units_reviewed",
+    ]
+    assert observed["output_schema"]["properties"]["coverage"]["additionalProperties"] is False
+    assert observed["output_schema"]["properties"]["coverage"]["properties"]["complete"] == {
+        "enum": [True],
+    }
     assert observed["command"][observed["command"].index("--model") + 1] == "gpt-5.4"
     assert observed["command"][observed["command"].index("--config") + 1] == 'model_reasoning_effort="high"'
     assert "timeline.jsonl" in observed["command"][-1]
