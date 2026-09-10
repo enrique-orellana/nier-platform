@@ -42,7 +42,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 # Use the official Codex CLI so ChatGPT-subscription authentication can provide
 # complete local transcript artifacts to the model without an API key.
-ARG CODEX_CLI_VERSION=0.142.3
+ARG CODEX_CLI_VERSION=0.144.1
 RUN npm install --global "@openai/codex@${CODEX_CLI_VERSION}" --no-fund --no-audit
 
 # The official ROCm image contains HIP/PyTorch but not the WSL2 DXG bridge.
