@@ -118,6 +118,7 @@ export const getHookBoxStyle = (
     fontSize: `${getHookFontSize(hook.fontSize, hook.size, renderWidth)}px`,
     fontWeight: 700,
     lineHeight: 1.5,
+    whiteSpace: "pre-wrap",
     padding: `${8 * scale}px ${12 * scale}px`,
     borderRadius: isStreamer ? "0px" : `${8 * scale}px`,
     boxShadow: isStreamer

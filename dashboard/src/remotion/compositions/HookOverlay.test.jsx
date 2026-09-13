@@ -68,6 +68,27 @@ describe("HookOverlay visual contract", () => {
     });
   });
 
+  it("preserves explicit line breaks in the hook preview", () => {
+    render(
+      <HookOverlay
+        config={{
+          text: "First line\nSecond line",
+          position: "top",
+          size: "M",
+          entranceAnimation: "none",
+          displayDurationSec: 2,
+        }}
+      />,
+    );
+
+    const text = screen.getByText(
+      (_, element) =>
+        element?.tagName === "SPAN" &&
+        element.textContent === "First line\nSecond line",
+    );
+    expect(text.parentElement).toHaveStyle({ whiteSpace: "pre-wrap" });
+  });
+
   it("renders Streamer Stack hooks across the selected facecam boundary", () => {
     render(
       <HookOverlay

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getHookPositionCoordinates, getHookPositionStyle } from "./hookVisual";
+import {
+  getHookBoxStyle,
+  getHookPositionCoordinates,
+  getHookPositionStyle,
+} from "./hookVisual";
 
 describe("hook pixel positioning", () => {
   it("resolves preset and custom hook center points in output pixels", () => {
@@ -63,5 +67,9 @@ describe("hook pixel positioning", () => {
       bottom: "auto",
       transform: "translate(-50%, -50%)",
     });
+  });
+
+  it("preserves explicit line breaks in hook text", () => {
+    expect(getHookBoxStyle({ fontSize: 48 }).whiteSpace).toBe("pre-wrap");
   });
 });

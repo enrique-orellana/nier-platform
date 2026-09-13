@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getHookPositionCoordinates } from "../../remotion/src/lib/hookVisual";
+import {
+  getHookBoxStyle,
+  getHookPositionCoordinates,
+} from "../../remotion/src/lib/hookVisual";
 
 describe("renderer hook pixel positioning", () => {
   it("resolves preset and custom coordinates consistently with the dashboard", () => {
@@ -26,5 +29,9 @@ describe("renderer hook pixel positioning", () => {
         1920,
       ),
     ).toEqual({ x: 1080, y: 0 });
+  });
+
+  it("preserves explicit line breaks in rendered hook text", () => {
+    expect(getHookBoxStyle({ fontSize: 48 }).whiteSpace).toBe("pre-wrap");
   });
 });
