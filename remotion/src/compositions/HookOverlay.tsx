@@ -12,6 +12,7 @@ import {
   getHookAnimationStyle,
   getHookBoxStyle,
   getHookCardBorderRadius,
+  getHookCardOverlap,
   getHookCardStackStyle,
   getHookPositionStyle,
   getHookTextLines,
@@ -115,6 +116,10 @@ const HookBox: React.FC<HookBoxProps> = ({
                   textLines.length,
                   width,
                 ),
+                marginTop:
+                  index === 0
+                    ? "0px"
+                    : `-${getHookCardOverlap(config.boxStyle, width)}px`,
               }}
             >
               <span style={{ overflowWrap: "break-word" }}>{line}</span>

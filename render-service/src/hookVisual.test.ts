@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getHookCardBorderRadius,
+  getHookCardOverlap,
   getHookBoxStyle,
   getHookPositionCoordinates,
   getHookTextLines,
@@ -60,5 +61,7 @@ describe("renderer hook pixel positioning", () => {
     expect(getHookCardBorderRadius("headline_cards", 1, 2)).toBe(
       "0px 0px 4px 4px",
     );
+    expect(getHookCardOverlap("headline_cards")).toBe(2);
+    expect(getHookCardOverlap("headline_cards", 1080)).toBe(6);
   });
 });

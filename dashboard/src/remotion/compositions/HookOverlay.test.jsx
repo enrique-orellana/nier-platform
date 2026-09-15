@@ -169,8 +169,14 @@ describe("HookOverlay visual contract", () => {
       fontFamily: "Impact",
     });
     expect(parseFloat(first.parentElement.style.borderRadius)).toBe(4);
-    expect(first.parentElement.style.borderRadius).toBe("4px 4px 0px 0px");
-    expect(second.parentElement.style.borderRadius).toBe("0px 0px 4px 4px");
+    expect(first.parentElement).toHaveStyle({
+      borderRadius: "4px 4px 0px 0px",
+      marginTop: "0px",
+    });
+    expect(second.parentElement).toHaveStyle({
+      borderRadius: "0px 0px 4px 4px",
+      marginTop: "-2px",
+    });
     expect(first.parentElement.parentElement).toHaveStyle({
       display: "flex",
       flexDirection: "column",

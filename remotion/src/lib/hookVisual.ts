@@ -211,3 +211,11 @@ export const getHookCardBorderRadius = (
   if (index >= lineCount - 1) return `0px 0px ${radius} ${radius}`;
   return "0px";
 };
+
+export const getHookCardOverlap = (
+  boxStyle: string = "rounded",
+  renderWidth = HOOK_PREVIEW_WIDTH,
+) =>
+  normalizeHookBoxStyle(boxStyle) === "headline_cards"
+    ? 2 * widthScale(renderWidth)
+    : 0;

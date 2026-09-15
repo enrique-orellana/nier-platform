@@ -40,3 +40,4 @@ export declare const getHookBoxStyle: (hook?: {
 }, renderWidth?: number) => CSSProperties;
 export declare const getHookCardStackStyle: (boxStyle?: string, renderWidth?: number) => CSSProperties;
 export declare const getHookCardBorderRadius: (boxStyle?: string, index?: number, lineCount?: number, renderWidth?: number) => string | undefined;
+export declare const getHookCardOverlap: (boxStyle?: string, renderWidth?: number) => number;

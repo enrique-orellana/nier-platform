@@ -94,6 +94,7 @@ import {
   getHookAnimationStyle,
   getHookBoxStyle,
   getHookCardBorderRadius,
+  getHookCardOverlap,
   getHookCardStackStyle,
   getHookPositionStyle,
   getHookTextLines,
@@ -2529,6 +2530,10 @@ export default function LocalEditorTab({
                                             activeHook.boxStyle,
                                           ).length,
                                         ),
+                                        marginTop:
+                                          index === 0
+                                            ? "0px"
+                                            : `-${getHookCardOverlap(activeHook.boxStyle)}px`,
                                       }}
                                     >
                                       {line}

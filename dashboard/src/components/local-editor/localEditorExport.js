@@ -4,7 +4,10 @@ import {
   hexToRgba,
   normalizeSubtitleStyle,
 } from "./localEditorStyles";
-import { getHookPositionCoordinates } from "../../remotion/lib/hookVisual";
+import {
+  getHookCardOverlap,
+  getHookPositionCoordinates,
+} from "../../remotion/lib/hookVisual";
 import {
   getHookTextLines,
   normalizeHookBoxStyle,
@@ -224,7 +227,7 @@ const getHookCardCornerRadii = (index, cardCount, radius) => {
 };
 
 export const drawHookOverlay = (context, text, options = {}) => {
-  const { boxStyle, ...overlayOptions } = options;
+  const { boxStyle, renderWidth, ...overlayOptions } = options;
   if (normalizeHookBoxStyle(boxStyle) !== "headline_cards") {
     drawOverlay(context, text, overlayOptions);
     return;
@@ -263,10 +266,10 @@ export const drawHookOverlay = (context, text, options = {}) => {
       height: metrics.height,
     };
   });
-  const gap = 0;
+  const overlap = getHookCardOverlap("headline_cards", renderWidth);
   const totalHeight =
-    cards.reduce((total, card) => total + card.height, 0) +
-    gap * Math.max(0, cards.length - 1);
+    cards.reduce((total, card) => total + card.height, 0) -
+    overlap * Math.max(0, cards.length - 1);
   let cardY = y - totalHeight / 2;
 
   cards.forEach(({ metrics, width: cardWidth, height: cardHeight }, index) => {
@@ -291,7 +294,7 @@ export const drawHookOverlay = (context, text, options = {}) => {
       context.fillStyle = color;
       context.fillText(line, x, lineY);
     });
-    cardY += cardHeight + gap;
+    cardY += cardHeight - overlap;
   });
   context.restore();
 };
@@ -509,6 +512,7 @@ export async function renderLocalVideo({
           background: currentHook.background || "rgba(17, 17, 17, 0.8)",
           fontFamily: currentHook.fontFamily || "Arial, sans-serif",
           boxStyle: currentHook.boxStyle,
+          renderWidth: canvas.width,
           opacity: hookState.opacity,
         });
         context.restore();

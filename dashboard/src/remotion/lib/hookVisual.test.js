@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getHookBoxStyle,
   getHookCardBorderRadius,
+  getHookCardOverlap,
   getHookCardStackStyle,
   getHookPositionCoordinates,
   getHookPositionStyle,
@@ -109,6 +110,9 @@ describe("hook pixel positioning", () => {
     expect(getHookCardBorderRadius("headline_cards", 1, 2)).toBe(
       "0px 0px 4px 4px",
     );
+    expect(getHookCardOverlap("rounded")).toBe(0);
+    expect(getHookCardOverlap("headline_cards")).toBe(2);
+    expect(getHookCardOverlap("headline_cards", 1080)).toBe(6);
   });
 
   it("uses non-empty explicit lines for headline cards", () => {
