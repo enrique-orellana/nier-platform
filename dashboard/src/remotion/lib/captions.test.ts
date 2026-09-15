@@ -27,4 +27,15 @@ describe("groupCaptionsIntoBlocks", () => {
       },
     ]);
   });
+
+  it("treats a 200ms silent gap as a new display block", () => {
+    const blocks = groupCaptionsIntoBlocks([
+      { text: "before", startMs: 0, endMs: 300 },
+      { text: "after", startMs: 500, endMs: 800 },
+    ]);
+
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].text).toBe("before");
+    expect(blocks[1].text).toBe("after");
+  });
 });

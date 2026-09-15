@@ -60,6 +60,24 @@ def test_build_subtitle_segments_starts_a_new_cue_after_a_long_silence():
     ]
 
 
+def test_build_subtitle_segments_treats_a_200ms_silence_as_a_new_cue():
+    transcript = {
+        "segments": [{
+            "words": [
+                {"word": "prima", "start": 0.0, "end": 0.3},
+                {"word": "dopo", "start": 0.5, "end": 0.8},
+            ],
+        }],
+    }
+
+    cues = build_subtitle_segments(transcript, 0, 2, max_chars=80, max_duration=5.0)
+
+    assert cues == [
+        {"start": 0.0, "end": 0.3, "text": "prima"},
+        {"start": 0.5, "end": 0.8, "text": "dopo"},
+    ]
+
+
 def test_build_subtitle_segments_uses_provider_segments_without_word_timestamps():
     transcript = {
         "language": "es",

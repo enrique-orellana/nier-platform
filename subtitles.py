@@ -54,7 +54,7 @@ def build_subtitle_segments(
     clip_end,
     max_chars=20,
     max_duration=2.0,
-    max_gap=0.5,
+    max_gap=0.2,
 ):
     """Build compact timed subtitle cues using the clip generator's rules."""
     words = []
@@ -128,7 +128,7 @@ def build_subtitle_segments(
             if (
                 current_text_len + len(word['word']) > max_chars
                 or duration > max_duration
-                or gap > max_gap
+                or gap >= max_gap
             ):
                 append_current_block()
                 current_block = [normalized_word]
@@ -147,7 +147,7 @@ def generate_srt(
     output_path,
     max_chars=20,
     max_duration=2.0,
-    max_gap=0.5,
+    max_gap=0.2,
 ):
     """Generate an SRT using compact timed cues for a specific time range."""
     cues = build_subtitle_segments(
