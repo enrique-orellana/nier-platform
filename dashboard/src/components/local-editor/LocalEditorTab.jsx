@@ -93,6 +93,7 @@ import { normalizeFaceTrackingCache } from "../../editor/faceTracking";
 import {
   getHookAnimationStyle,
   getHookBoxStyle,
+  getHookCardBorderRadius,
   getHookCardStackStyle,
   getHookPositionStyle,
   getHookTextLines,
@@ -2520,6 +2521,14 @@ export default function LocalEditorTab({
                                       style={{
                                         maxWidth: "100%",
                                         ...getHookBoxStyle(activeHook),
+                                        borderRadius: getHookCardBorderRadius(
+                                          activeHook.boxStyle,
+                                          index,
+                                          getHookTextLines(
+                                            activeHook.text,
+                                            activeHook.boxStyle,
+                                          ).length,
+                                        ),
                                       }}
                                     >
                                       {line}

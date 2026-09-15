@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  getHookCardBorderRadius,
   getHookBoxStyle,
   getHookPositionCoordinates,
   getHookTextLines,
@@ -53,5 +54,11 @@ describe("renderer hook pixel positioning", () => {
       "First",
       "Second",
     ]);
+    expect(getHookCardBorderRadius("headline_cards", 0, 2)).toBe(
+      "4px 4px 0px 0px",
+    );
+    expect(getHookCardBorderRadius("headline_cards", 1, 2)).toBe(
+      "0px 0px 4px 4px",
+    );
   });
 });

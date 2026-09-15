@@ -216,6 +216,13 @@ const drawRoundedRect = (context, x, y, width, height, radius) => {
   context.fillRect(x, y, width, height);
 };
 
+const getHookCardCornerRadii = (index, cardCount, radius) => {
+  if (cardCount <= 1) return radius;
+  if (index <= 0) return [radius, radius, 0, 0];
+  if (index >= cardCount - 1) return [0, 0, radius, radius];
+  return [0, 0, 0, 0];
+};
+
 export const drawHookOverlay = (context, text, options = {}) => {
   const { boxStyle, ...overlayOptions } = options;
   if (normalizeHookBoxStyle(boxStyle) !== "headline_cards") {
@@ -262,7 +269,7 @@ export const drawHookOverlay = (context, text, options = {}) => {
     gap * Math.max(0, cards.length - 1);
   let cardY = y - totalHeight / 2;
 
-  cards.forEach(({ metrics, width: cardWidth, height: cardHeight }) => {
+  cards.forEach(({ metrics, width: cardWidth, height: cardHeight }, index) => {
     if (background && background !== "transparent") {
       context.fillStyle = background;
       drawRoundedRect(
@@ -271,7 +278,7 @@ export const drawHookOverlay = (context, text, options = {}) => {
         cardY,
         cardWidth,
         cardHeight,
-        fontSize * 0.1,
+        getHookCardCornerRadii(index, cards.length, fontSize * 0.1),
       );
     }
     metrics.lines.forEach((line, index) => {

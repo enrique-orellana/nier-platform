@@ -155,3 +155,17 @@ export const getHookCardStackStyle = (boxStyle = "rounded") => {
     gap: "0px",
   };
 };
+
+export const getHookCardBorderRadius = (
+  boxStyle = "rounded",
+  index = 0,
+  lineCount = 1,
+  renderWidth = HOOK_PREVIEW_WIDTH,
+) => {
+  if (normalizeHookBoxStyle(boxStyle) !== "headline_cards") return undefined;
+  const radius = `${4 * widthScale(renderWidth)}px`;
+  if (lineCount <= 1) return radius;
+  if (index <= 0) return `${radius} ${radius} 0px 0px`;
+  if (index >= lineCount - 1) return `0px 0px ${radius} ${radius}`;
+  return "0px";
+};

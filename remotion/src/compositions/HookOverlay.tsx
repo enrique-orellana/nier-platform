@@ -11,6 +11,7 @@ import {
   HOOK_FONT_FAMILY,
   getHookAnimationStyle,
   getHookBoxStyle,
+  getHookCardBorderRadius,
   getHookCardStackStyle,
   getHookPositionStyle,
   getHookTextLines,
@@ -105,7 +106,16 @@ const HookBox: React.FC<HookBoxProps> = ({
           {textLines.map((line, index) => (
             <div
               key={`${index}-${line}`}
-              style={{ maxWidth: "100%", ...boxStyle }}
+              style={{
+                maxWidth: "100%",
+                ...boxStyle,
+                borderRadius: getHookCardBorderRadius(
+                  config.boxStyle,
+                  index,
+                  textLines.length,
+                  width,
+                ),
+              }}
             >
               <span style={{ overflowWrap: "break-word" }}>{line}</span>
             </div>
