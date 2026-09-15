@@ -93,7 +93,10 @@ import { normalizeFaceTrackingCache } from "../../editor/faceTracking";
 import {
   getHookAnimationStyle,
   getHookBoxStyle,
+  getHookCardStackStyle,
   getHookPositionStyle,
+  getHookTextLines,
+  normalizeHookBoxStyle,
 } from "../../remotion/lib/hookVisual";
 import LocalEditorProjects from "./LocalEditorProjects";
 import { getLocalAiHeaders } from "./localEditorAi";
@@ -2498,11 +2501,31 @@ export default function LocalEditorTab({
                             <div
                               className="text-center"
                               style={{
-                                ...getHookBoxStyle(activeHook),
+                                ...(normalizeHookBoxStyle(
+                                  activeHook.boxStyle,
+                                ) === "headline_cards"
+                                  ? getHookCardStackStyle(activeHook.boxStyle)
+                                  : getHookBoxStyle(activeHook)),
                                 ...hookEntranceStyle,
                               }}
                             >
-                              {activeHook.text}
+                              {normalizeHookBoxStyle(activeHook.boxStyle) ===
+                              "headline_cards"
+                                ? getHookTextLines(
+                                    activeHook.text,
+                                    activeHook.boxStyle,
+                                  ).map((line, index) => (
+                                    <div
+                                      key={`${index}-${line}`}
+                                      style={{
+                                        maxWidth: "100%",
+                                        ...getHookBoxStyle(activeHook),
+                                      }}
+                                    >
+                                      {line}
+                                    </div>
+                                  ))
+                                : activeHook.text}
                             </div>
                           </div>
                         )}

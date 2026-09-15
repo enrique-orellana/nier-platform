@@ -76,6 +76,7 @@ export interface SubtitleTrack {
 export type HookPosition = "top" | "center" | "bottom" | "custom";
 export type HookSize = "S" | "M" | "L";
 export type HookEntrance = "spring" | "fade" | "slide-up" | "none";
+export type HookBoxStyle = "rounded" | "headline_cards";
 
 export interface HookConfig {
   text: string;
@@ -93,6 +94,7 @@ export interface HookConfig {
   positionY?: number;
   layoutFormat?: "standard" | "streamer_stack";
   facecamSize?: "small" | "medium" | "large";
+  boxStyle?: HookBoxStyle;
 }
 
 // --- Effects config ---
@@ -273,6 +275,7 @@ export const hookConfigSchema = z.object({
   endMs: z.number().positive().optional(),
   positionX: z.number().optional(),
   positionY: z.number().optional(),
+  boxStyle: z.enum(["rounded", "headline_cards"]).catch("rounded").optional(),
 });
 
 export const effectSegmentSchema = z.object({

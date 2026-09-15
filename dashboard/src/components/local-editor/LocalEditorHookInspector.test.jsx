@@ -117,4 +117,40 @@ describe("LocalEditorHookInspector", () => {
     expect(nextHook).not.toHaveProperty("positionX");
     expect(nextHook).not.toHaveProperty("positionY");
   });
+
+  it("changes only box style when selecting headline cards", () => {
+    const onChange = vi.fn();
+    render(
+      <LocalEditorHookInspector
+        hook={{
+          ...hook,
+          boxStyle: "rounded",
+          color: "#123456",
+          background: "#fedcba",
+          fontFamily: "Impact",
+          fontSize: 52,
+          position: "custom",
+          positionX: 700,
+          positionY: 420,
+        }}
+        onChange={onChange}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Headline cards" }));
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        boxStyle: "headline_cards",
+        color: "#123456",
+        background: "#fedcba",
+        fontFamily: "Impact",
+        fontSize: 52,
+        position: "custom",
+        positionX: 700,
+        positionY: 420,
+      }),
+    );
+  });
 });

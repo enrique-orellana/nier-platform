@@ -1,6 +1,9 @@
 import { getApiUrl } from "../../config";
 import { renderInBrowser } from "../../lib/renderInBrowser";
-import { getHookPositionCoordinates } from "../../remotion/lib/hookVisual";
+import {
+  getHookPositionCoordinates,
+  normalizeHookBoxStyle,
+} from "../../remotion/lib/hookVisual";
 import { normalizeSubtitleStyle } from "./localEditorStyles";
 import {
   normalizeSubtitleReactionStyle,
@@ -280,6 +283,7 @@ export const buildRemotionRenderProps = ({
           position,
           size: hook.size || "M",
           entranceAnimation: hook.entranceAnimation || "none",
+          boxStyle: normalizeHookBoxStyle(hook.boxStyle),
           displayDurationSec: Math.max(
             0.001,
             (Number(hook.endMs) - Number(hook.startMs)) / 1000,

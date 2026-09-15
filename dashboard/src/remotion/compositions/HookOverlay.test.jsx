@@ -142,4 +142,37 @@ describe("HookOverlay visual contract", () => {
       transform: "translate(-50%, -50%)",
     });
   });
+
+  it("renders each non-empty headline line as its own card", () => {
+    render(
+      <HookOverlay
+        config={{
+          text: "First line\n\nSecond line",
+          position: "top",
+          size: "M",
+          entranceAnimation: "none",
+          displayDurationSec: 2,
+          boxStyle: "headline_cards",
+          color: "#123456",
+          background: "#fedcba",
+          fontFamily: "Impact",
+          fontSize: 52,
+        }}
+      />,
+    );
+
+    const first = screen.getByText("First line");
+    const second = screen.getByText("Second line");
+    expect(first.parentElement).toHaveStyle({
+      color: "#123456",
+      backgroundColor: "#fedcba",
+      fontFamily: "Impact",
+      borderRadius: "0px",
+    });
+    expect(second.parentElement).toHaveStyle({ borderRadius: "0px" });
+    expect(first.parentElement.parentElement).toHaveStyle({
+      display: "flex",
+      flexDirection: "column",
+    });
+  });
 });

@@ -5,6 +5,10 @@ import {
   normalizeSubtitleStyle,
 } from "./localEditorStyles";
 import { getHookPositionCoordinates } from "../../remotion/lib/hookVisual";
+import {
+  getHookTextLines,
+  normalizeHookBoxStyle,
+} from "../../remotion/lib/hookVisual";
 
 export const activeCueAt = (cues, playheadMs) =>
   (cues || []).find(
@@ -198,6 +202,72 @@ const drawOverlay = (
     }
     context.fillStyle = color;
     context.fillText(line, x, lineY);
+  });
+  context.restore();
+};
+
+export const drawHookOverlay = (context, text, options = {}) => {
+  const { boxStyle, ...overlayOptions } = options;
+  if (normalizeHookBoxStyle(boxStyle) !== "headline_cards") {
+    drawOverlay(context, text, overlayOptions);
+    return;
+  }
+
+  const lines = getHookTextLines(text, boxStyle);
+  if (!lines.length) return;
+  const {
+    x,
+    y,
+    width,
+    fontSize,
+    color,
+    background,
+    fontFamily = "Arial, sans-serif",
+    borderColor = "#000000",
+    borderWidth = 0,
+    opacity = 1,
+  } = overlayOptions;
+
+  context.save();
+  context.globalAlpha = opacity;
+  context.font = `700 ${fontSize}px ${fontFamily}, sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "top";
+  const cards = lines.map((line) => {
+    const metrics = measureOverlay(context, line, width, fontSize, fontFamily);
+    const measured = metrics.lines.reduce(
+      (max, currentLine) =>
+        Math.max(max, context.measureText(currentLine).width),
+      0,
+    );
+    return {
+      metrics,
+      width: Math.min(width, measured + metrics.padding * 2),
+      height: metrics.height,
+    };
+  });
+  const gap = fontSize * 0.2;
+  const totalHeight =
+    cards.reduce((total, card) => total + card.height, 0) +
+    gap * Math.max(0, cards.length - 1);
+  let cardY = y - totalHeight / 2;
+
+  cards.forEach(({ metrics, width: cardWidth, height: cardHeight }) => {
+    if (background && background !== "transparent") {
+      context.fillStyle = background;
+      context.fillRect(x - cardWidth / 2, cardY, cardWidth, cardHeight);
+    }
+    metrics.lines.forEach((line, index) => {
+      const lineY = cardY + metrics.padding + index * metrics.lineHeight;
+      if (borderWidth > 0) {
+        context.strokeStyle = borderColor;
+        context.lineWidth = borderWidth * 2;
+        context.strokeText(line, x, lineY);
+      }
+      context.fillStyle = color;
+      context.fillText(line, x, lineY);
+    });
+    cardY += cardHeight + gap;
   });
   context.restore();
 };
@@ -404,7 +474,7 @@ export async function renderLocalVideo({
         context.save();
         context.translate(x, y + hookState.translateY);
         context.scale(hookState.scale, hookState.scale);
-        drawOverlay(context, currentHook.text, {
+        drawHookOverlay(context, currentHook.text, {
           x: 0,
           y: 0,
           width: canvas.width * 0.9,
@@ -413,6 +483,8 @@ export async function renderLocalVideo({
             Math.max(24, Math.round(canvas.width * 0.05)),
           color: currentHook.color || "#ffffff",
           background: currentHook.background || "rgba(17, 17, 17, 0.8)",
+          fontFamily: currentHook.fontFamily || "Arial, sans-serif",
+          boxStyle: currentHook.boxStyle,
           opacity: hookState.opacity,
         });
         context.restore();

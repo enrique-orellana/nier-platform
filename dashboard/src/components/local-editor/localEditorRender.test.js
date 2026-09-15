@@ -184,6 +184,25 @@ describe("local editor Remotion rendering", () => {
     ).toEqual({ format: "standard", segments });
   });
 
+  it("preserves the hook box style in local render props", () => {
+    const props = buildRemotionRenderProps({
+      durationSeconds: 2,
+      fps: 30,
+      width: 1080,
+      height: 1920,
+      hook: {
+        text: "First\nSecond",
+        position: "top",
+        size: "M",
+        entranceAnimation: "none",
+        displayDurationSec: 2,
+        boxStyle: "headline_cards",
+      },
+    });
+
+    expect(props.hook).toMatchObject({ boxStyle: "headline_cards" });
+  });
+
   it("leaves subtitle block grouping to the renderer for word-level cues", () => {
     const props = buildRemotionRenderProps({
       durationSeconds: 2,

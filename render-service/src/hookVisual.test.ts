@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getHookBoxStyle,
   getHookPositionCoordinates,
+  getHookTextLines,
 } from "../../remotion/src/lib/hookVisual";
 
 describe("renderer hook pixel positioning", () => {
@@ -33,5 +34,24 @@ describe("renderer hook pixel positioning", () => {
 
   it("preserves explicit line breaks in rendered hook text", () => {
     expect(getHookBoxStyle({ fontSize: 48 }).whiteSpace).toBe("pre-wrap");
+  });
+
+  it("renders headline cards with the configured box colors and separate lines", () => {
+    expect(
+      getHookBoxStyle({
+        boxStyle: "headline_cards",
+        color: "#123456",
+        background: "#fedcba",
+      }),
+    ).toMatchObject({
+      color: "#123456",
+      backgroundColor: "#fedcba",
+      borderRadius: "0px",
+      boxShadow: "none",
+    });
+    expect(getHookTextLines("First\n\nSecond", "headline_cards")).toEqual([
+      "First",
+      "Second",
+    ]);
   });
 });

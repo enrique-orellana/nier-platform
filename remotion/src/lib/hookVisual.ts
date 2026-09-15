@@ -11,6 +11,20 @@ export const FACECAM_HEIGHT_RATIOS: Record<string, number> = {
   large: 0.46,
 };
 
+export const normalizeHookBoxStyle = (
+  boxStyle?: string,
+): "rounded" | "headline_cards" =>
+  boxStyle === "headline_cards" ? "headline_cards" : "rounded";
+
+export const getHookTextLines = (
+  text: string | null | undefined,
+  boxStyle: string = "rounded",
+) => {
+  const value = String(text ?? "");
+  if (normalizeHookBoxStyle(boxStyle) !== "headline_cards") return [value];
+  return value.split(/\r?\n/).filter((line) => line.trim().length > 0);
+};
+
 const widthScale = (renderWidth = HOOK_PREVIEW_WIDTH) => {
   const width = Number(renderWidth);
   return Number.isFinite(width) && width > 0 ? width / HOOK_PREVIEW_WIDTH : 1;
@@ -138,11 +152,14 @@ export const getHookBoxStyle = (
     fontSize?: number;
     size?: string;
     layoutFormat?: string;
+    boxStyle?: string;
   } = {},
   renderWidth = HOOK_PREVIEW_WIDTH,
 ): CSSProperties => {
   const scale = widthScale(renderWidth);
   const isStreamer = hook.layoutFormat === "streamer_stack";
+  const isHeadlineCards =
+    normalizeHookBoxStyle(hook.boxStyle) === "headline_cards";
   return {
     color: isStreamer ? "#FFE840" : hook.color || "#FFFFFF",
     backgroundColor: isStreamer ? "transparent" : hook.background || "#111111",
@@ -151,9 +168,10 @@ export const getHookBoxStyle = (
     fontWeight: 700,
     lineHeight: 1.5,
     whiteSpace: "pre-wrap",
-    padding: `${8 * scale}px ${12 * scale}px`,
-    borderRadius: isStreamer ? "0px" : `${8 * scale}px`,
-    boxShadow: isStreamer
+    padding: `${(isHeadlineCards ? 6 : 8) * scale}px ${12 * scale}px`,
+    borderRadius:
+      isStreamer || isHeadlineCards ? "0px" : `${8 * scale}px`,
+    boxShadow: isStreamer || isHeadlineCards
       ? "none"
       : "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)",
     WebkitTextStroke: isStreamer
@@ -163,5 +181,18 @@ export const getHookBoxStyle = (
       ? "1px 1px 0 #000000, -1px -1px 0 #000000, 1px -1px 0 #000000, -1px 1px 0 #000000"
       : undefined,
     textAlign: "center",
+  };
+};
+
+export const getHookCardStackStyle = (
+  boxStyle: string = "rounded",
+  renderWidth = HOOK_PREVIEW_WIDTH,
+): CSSProperties => {
+  if (normalizeHookBoxStyle(boxStyle) !== "headline_cards") return {};
+  return {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: `${4 * widthScale(renderWidth)}px`,
   };
 };

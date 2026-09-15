@@ -8,6 +8,7 @@ import { cleanChoiceClass, cleanLabelClass } from "./localEditorUtils";
 import {
   clampHookCoordinate,
   getHookPositionCoordinates,
+  normalizeHookBoxStyle,
 } from "../../remotion/lib/hookVisual";
 
 const sectionClass = "space-y-3 border-t border-white/10 pt-4";
@@ -254,6 +255,33 @@ export default function LocalEditorHookInspector({
         <h4 id="hook-appearance-heading" className={sectionHeadingClass}>
           Appearance
         </h4>
+        <div>
+          <span className={cleanLabelClass}>Box style</span>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { value: "rounded", label: "Rounded" },
+              { value: "headline_cards", label: "Headline cards" },
+            ].map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                aria-label={option.label}
+                aria-pressed={
+                  normalizeHookBoxStyle(hook.boxStyle) === option.value
+                }
+                onClick={() => onChange({ ...hook, boxStyle: option.value })}
+                className={cleanChoiceClass(
+                  normalizeHookBoxStyle(hook.boxStyle) === option.value,
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[10px] text-zinc-500">
+            In Headline cards, use line breaks to create separate cards.
+          </p>
+        </div>
         <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(100px,0.8fr)] items-start gap-3">
           <div>
             <span className={cleanLabelClass}>Text color</span>

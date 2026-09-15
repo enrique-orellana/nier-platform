@@ -3,6 +3,8 @@ import {
   getHookBoxStyle,
   getHookPositionCoordinates,
   getHookPositionStyle,
+  getHookTextLines,
+  normalizeHookBoxStyle,
 } from "./hookVisual";
 
 describe("hook pixel positioning", () => {
@@ -71,5 +73,39 @@ describe("hook pixel positioning", () => {
 
   it("preserves explicit line breaks in hook text", () => {
     expect(getHookBoxStyle({ fontSize: 48 }).whiteSpace).toBe("pre-wrap");
+  });
+
+  it("defaults missing and unknown box styles to rounded", () => {
+    expect(normalizeHookBoxStyle()).toBe("rounded");
+    expect(normalizeHookBoxStyle("not-a-style")).toBe("rounded");
+    expect(normalizeHookBoxStyle("headline_cards")).toBe("headline_cards");
+  });
+
+  it("keeps configured visual properties while using headline card geometry", () => {
+    expect(
+      getHookBoxStyle({
+        boxStyle: "headline_cards",
+        color: "#123456",
+        background: "#fedcba",
+        fontFamily: "Impact",
+        fontSize: 52,
+      }),
+    ).toMatchObject({
+      color: "#123456",
+      backgroundColor: "#fedcba",
+      fontFamily: "Impact",
+      borderRadius: "0px",
+      boxShadow: "none",
+      padding: "6px 12px",
+    });
+  });
+
+  it("uses non-empty explicit lines for headline cards", () => {
+    expect(
+      getHookTextLines(" First line \n\nSecond line ", "headline_cards"),
+    ).toEqual([" First line ", "Second line "]);
+    expect(getHookTextLines("First line\nSecond line", "rounded")).toEqual([
+      "First line\nSecond line",
+    ]);
   });
 });

@@ -18,6 +18,7 @@ export const DEFAULT_HOOK_DEFAULTS = {
   fontSize: 48,
   background: "#111111",
   fontFamily: HOOK_FONT_FAMILY,
+  boxStyle: "rounded",
 };
 
 export const DEFAULT_EDITOR_PREFERENCES = {

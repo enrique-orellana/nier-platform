@@ -11,7 +11,10 @@ import {
   HOOK_FONT_FAMILY,
   getHookAnimationStyle,
   getHookBoxStyle,
+  getHookCardStackStyle,
   getHookPositionStyle,
+  getHookTextLines,
+  normalizeHookBoxStyle,
 } from "../lib/hookVisual";
 
 interface HookOverlayProps {
@@ -92,6 +95,9 @@ const HookBox: React.FC<HookBoxProps> = ({
     elapsedMs,
     width,
   );
+  const isHeadlineCards =
+    normalizeHookBoxStyle(config.boxStyle) === "headline_cards";
+  const textLines = getHookTextLines(config.text, config.boxStyle);
 
   return (
     <div
@@ -104,15 +110,34 @@ const HookBox: React.FC<HookBoxProps> = ({
         ...positionStyle,
       }}
     >
-      <div
-        style={{
-          maxWidth: "88%",
-          ...boxStyle,
-          ...animationStyle,
-        }}
-      >
-        <span style={{ overflowWrap: "break-word" }}>{config.text}</span>
-      </div>
+      {isHeadlineCards ? (
+        <div
+          style={{
+            maxWidth: "88%",
+            ...getHookCardStackStyle(config.boxStyle, width),
+            ...animationStyle,
+          }}
+        >
+          {textLines.map((line, index) => (
+            <div
+              key={`${index}-${line}`}
+              style={{ maxWidth: "100%", ...boxStyle }}
+            >
+              <span style={{ overflowWrap: "break-word" }}>{line}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div
+          style={{
+            maxWidth: "88%",
+            ...boxStyle,
+            ...animationStyle,
+          }}
+        >
+          <span style={{ overflowWrap: "break-word" }}>{config.text}</span>
+        </div>
+      )}
     </div>
   );
 };

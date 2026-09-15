@@ -3,6 +3,7 @@ import {
   activeCueAt,
   chooseRecordingMimeType,
   clampOverlayY,
+  drawHookOverlay,
   formatClock,
   getHookCanvasPosition,
   getExportSourceUrl,
@@ -99,5 +100,31 @@ describe("local editor export helpers", () => {
       videoBitsPerSecond: 16588800,
       audioBitsPerSecond: 192000,
     });
+  });
+
+  it("draws one canvas card for each non-empty headline line", () => {
+    const context = {
+      fillRect: vi.fn(),
+      fillText: vi.fn(),
+      measureText: vi.fn((text) => ({ width: text.length * 10 })),
+      restore: vi.fn(),
+      save: vi.fn(),
+    };
+
+    drawHookOverlay(context, "First\n\nSecond", {
+      x: 100,
+      y: 200,
+      width: 400,
+      fontSize: 20,
+      color: "#123456",
+      background: "#fedcba",
+      boxStyle: "headline_cards",
+    });
+
+    expect(context.fillRect).toHaveBeenCalledTimes(2);
+    expect(context.fillText.mock.calls.map(([text]) => text)).toEqual([
+      "First",
+      "Second",
+    ]);
   });
 });

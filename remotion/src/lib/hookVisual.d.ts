@@ -5,6 +5,8 @@ export declare const HOOK_OUTPUT_HEIGHT = 1920;
 export declare const HOOK_FONT_FAMILY = "Arial, Helvetica, sans-serif";
 export declare const HOOK_SIZE_SCALE: Record<string, number>;
 export declare const FACECAM_HEIGHT_RATIOS: Record<string, number>;
+export declare const normalizeHookBoxStyle: (boxStyle?: string) => "rounded" | "headline_cards";
+export declare const getHookTextLines: (text: string | null | undefined, boxStyle?: string) => string[];
 export declare const getHookFontSize: (fontSize?: number, size?: string, renderWidth?: number) => number;
 export declare const getStreamerBoundaryRatio: (facecamSize?: string) => number;
 export declare const clampHookCoordinate: (value: number, maximum: number, fallback: number) => number;
@@ -24,6 +26,7 @@ export declare const getHookPositionStyle: (positionOrHook?: string | {
     positionY?: number;
     layoutFormat?: string;
     facecamSize?: string;
+    boxStyle?: string;
 }, layoutFormat?: string, facecamSize?: string, renderWidth?: number, renderHeight?: number) => CSSProperties;
 export declare const getHookAnimationStyle: (entranceAnimation?: string, elapsedMs?: number, renderWidth?: number) => CSSProperties;
 export declare const getHookBoxStyle: (hook?: {
@@ -33,4 +36,6 @@ export declare const getHookBoxStyle: (hook?: {
     fontSize?: number;
     size?: string;
     layoutFormat?: string;
+    boxStyle?: string;
 }, renderWidth?: number) => CSSProperties;
+export declare const getHookCardStackStyle: (boxStyle?: string, renderWidth?: number) => CSSProperties;
