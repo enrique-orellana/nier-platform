@@ -142,10 +142,17 @@ const wrapTextLines = (context, text, maxWidth) => {
   return output;
 };
 
-const measureOverlay = (context, text, width, fontSize, fontFamily) => {
+const measureOverlay = (
+  context,
+  text,
+  width,
+  fontSize,
+  fontFamily,
+  paddingRatio = 0.35,
+) => {
   context.save();
   context.font = `700 ${fontSize}px ${fontFamily}, sans-serif`;
-  const padding = fontSize * 0.35;
+  const padding = fontSize * paddingRatio;
   const maxWidth = width - padding * 2;
   const lines = wrapTextLines(context, text, maxWidth);
   const lineHeight = fontSize * 1.2;
@@ -254,7 +261,14 @@ export const drawHookOverlay = (context, text, options = {}) => {
   context.textAlign = "center";
   context.textBaseline = "top";
   const cards = lines.map((line) => {
-    const metrics = measureOverlay(context, line, width, fontSize, fontFamily);
+    const metrics = measureOverlay(
+      context,
+      line,
+      width,
+      fontSize,
+      fontFamily,
+      0.25,
+    );
     const measured = metrics.lines.reduce(
       (max, currentLine) =>
         Math.max(max, context.measureText(currentLine).width),

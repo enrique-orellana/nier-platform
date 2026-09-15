@@ -168,7 +168,9 @@ export const getHookBoxStyle = (
     fontWeight: 700,
     lineHeight: 1.5,
     whiteSpace: "pre-wrap",
-    padding: `${(isHeadlineCards ? 6 : 8) * scale}px ${12 * scale}px`,
+    padding: `${(isHeadlineCards ? 4 : 8) * scale}px ${
+      (isHeadlineCards ? 8 : 12) * scale
+    }px`,
     borderRadius: isStreamer
       ? "0px"
       : `${(isHeadlineCards ? 4 : 8) * scale}px`,

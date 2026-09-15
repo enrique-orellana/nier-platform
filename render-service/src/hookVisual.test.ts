@@ -50,6 +50,7 @@ describe("renderer hook pixel positioning", () => {
       backgroundColor: "#fedcba",
       borderRadius: "4px",
       boxShadow: "none",
+      padding: "4px 8px",
     });
     expect(getHookTextLines("First\n\nSecond", "headline_cards")).toEqual([
       "First",
@@ -63,5 +64,6 @@ describe("renderer hook pixel positioning", () => {
     );
     expect(getHookCardOverlap("headline_cards")).toBe(4);
     expect(getHookCardOverlap("headline_cards", 1080)).toBe(12);
+    expect(getHookBoxStyle().padding).toBe("8px 12px");
   });
 });

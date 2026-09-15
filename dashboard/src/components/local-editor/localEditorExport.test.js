@@ -131,7 +131,7 @@ describe("local editor export helpers", () => {
     expect(context.roundRect.mock.calls[0][4]).toEqual([2, 2, 0, 0]);
     expect(context.roundRect.mock.calls[1][4]).toEqual([0, 0, 2, 2]);
     expect(context.roundRect.mock.calls[1][1]).toBe(
-      context.roundRect.mock.calls[0][1] + 34,
+      context.roundRect.mock.calls[0][1] + 30,
     );
     expect(context.fillText.mock.calls.map(([text]) => text)).toEqual([
       "First",

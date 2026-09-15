@@ -99,7 +99,7 @@ describe("hook pixel positioning", () => {
       fontFamily: "Impact",
       borderRadius: "4px",
       boxShadow: "none",
-      padding: "6px 12px",
+      padding: "4px 8px",
     });
     expect(getHookCardStackStyle("headline_cards")).toMatchObject({
       gap: "0px",
@@ -113,6 +113,7 @@ describe("hook pixel positioning", () => {
     expect(getHookCardOverlap("rounded")).toBe(0);
     expect(getHookCardOverlap("headline_cards")).toBe(4);
     expect(getHookCardOverlap("headline_cards", 1080)).toBe(12);
+    expect(getHookBoxStyle().padding).toBe("8px 12px");
   });
 
   it("uses non-empty explicit lines for headline cards", () => {
