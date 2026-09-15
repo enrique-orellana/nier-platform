@@ -85,6 +85,23 @@ describe("subtitle rendering defaults", () => {
     expect(isSubtitleBlockActiveAt(block, 1000)).toBe(false);
   });
 
+  it("keeps the subtitle overlay empty during a long silent gap", () => {
+    render(
+      <Subtitles
+        config={{
+          captions: [
+            { text: "before", startMs: 0, endMs: 300 },
+            { text: "after", startMs: 1500, endMs: 1800 },
+          ],
+        }}
+        mediaTimeMs={1000}
+      />,
+    );
+
+    expect(screen.queryByText("before")).not.toBeInTheDocument();
+    expect(screen.queryByText("after")).not.toBeInTheDocument();
+  });
+
   it("renders the optional reaction layer alongside a timed subtitle", () => {
     render(
       <Subtitles

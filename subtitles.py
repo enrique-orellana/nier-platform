@@ -48,7 +48,14 @@ def generate_srt_from_video(video_path, output_path, max_chars=20, max_duration=
     return generate_srt(transcript, 0, duration, output_path, max_chars, max_duration)
 
 
-def build_subtitle_segments(transcript, clip_start, clip_end, max_chars=20, max_duration=2.0):
+def build_subtitle_segments(
+    transcript,
+    clip_start,
+    clip_end,
+    max_chars=20,
+    max_duration=2.0,
+    max_gap=0.5,
+):
     """Build compact timed subtitle cues using the clip generator's rules."""
     words = []
     for segment in transcript.get('segments', []):
@@ -117,7 +124,12 @@ def build_subtitle_segments(transcript, clip_start, clip_end, max_chars=20, max_
                 continue
             current_text_len = sum(len(w['word']) + 1 for w in current_block)
             duration = end - block_start
-            if current_text_len + len(word['word']) > max_chars or duration > max_duration:
+            gap = start - current_block[-1]['end']
+            if (
+                current_text_len + len(word['word']) > max_chars
+                or duration > max_duration
+                or gap > max_gap
+            ):
                 append_current_block()
                 current_block = [normalized_word]
                 block_start = start
@@ -128,9 +140,19 @@ def build_subtitle_segments(transcript, clip_start, clip_end, max_chars=20, max_
     return cues
 
 
-def generate_srt(transcript, clip_start, clip_end, output_path, max_chars=20, max_duration=2.0):
+def generate_srt(
+    transcript,
+    clip_start,
+    clip_end,
+    output_path,
+    max_chars=20,
+    max_duration=2.0,
+    max_gap=0.5,
+):
     """Generate an SRT using compact timed cues for a specific time range."""
-    cues = build_subtitle_segments(transcript, clip_start, clip_end, max_chars, max_duration)
+    cues = build_subtitle_segments(
+        transcript, clip_start, clip_end, max_chars, max_duration, max_gap
+    )
     if not cues:
         return False
 

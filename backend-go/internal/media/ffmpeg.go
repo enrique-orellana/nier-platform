@@ -195,6 +195,7 @@ func BuildSubtitleCues(transcript map[string]any, start, end float64) []Subtitle
 }
 
 func BuildWordSRT(transcript map[string]any, start, end float64) (string, error) {
+	const maxSubtitleWordGapSeconds = 0.5
 	words := collectSubtitleCueTimings(transcript, start, end)
 	var output strings.Builder
 	sequence := 1
@@ -221,7 +222,7 @@ func BuildWordSRT(transcript map[string]any, start, end float64) (string, error)
 		for _, item := range current {
 			currentLength += len(item.text) + 1
 		}
-		if sentenceEnd(last.text) || currentLength+len(word.text) > 20 || word.end-current[0].start > 2 {
+		if sentenceEnd(last.text) || currentLength+len(word.text) > 20 || word.end-current[0].start > 2 || word.start-last.end > maxSubtitleWordGapSeconds {
 			writeCue()
 		}
 		current = append(current, word)

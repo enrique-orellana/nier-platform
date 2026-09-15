@@ -80,6 +80,21 @@ func TestBuildWordSRTFallsBackToTranscriptSegments(t *testing.T) {
 	}
 }
 
+func TestBuildWordSRTStartsANewCueAfterALongSilence(t *testing.T) {
+	transcript := map[string]any{"segments": []any{map[string]any{"words": []any{
+		map[string]any{"word": "before", "start": 0.0, "end": 0.3},
+		map[string]any{"word": "after", "start": 1.5, "end": 1.8},
+	}}}}
+
+	srt, err := BuildWordSRT(transcript, 0, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(srt, " --> ") != 2 || !strings.Contains(srt, "before") || !strings.Contains(srt, "after") {
+		t.Fatalf("expected separate cues around silence, got %q", srt)
+	}
+}
+
 func TestSafeMediaPathRejectsTraversal(t *testing.T) {
 	if SafeMediaPath("output/job", "output/job/clip.mp4") == false {
 		t.Fatal("expected path inside root to be accepted")

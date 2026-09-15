@@ -42,6 +42,24 @@ def test_build_subtitle_segments_starts_a_new_cue_after_sentence_punctuation():
     ]
 
 
+def test_build_subtitle_segments_starts_a_new_cue_after_a_long_silence():
+    transcript = {
+        "segments": [{
+            "words": [
+                {"word": "prima", "start": 0.0, "end": 0.3},
+                {"word": "dopo", "start": 1.5, "end": 1.8},
+            ],
+        }],
+    }
+
+    cues = build_subtitle_segments(transcript, 0, 2, max_chars=80, max_duration=5.0)
+
+    assert cues == [
+        {"start": 0.0, "end": 0.3, "text": "prima"},
+        {"start": 1.5, "end": 1.8, "text": "dopo"},
+    ]
+
+
 def test_build_subtitle_segments_uses_provider_segments_without_word_timestamps():
     transcript = {
         "language": "es",
