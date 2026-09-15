@@ -137,5 +137,5 @@ export const getHookCardBorderRadius = (boxStyle = "rounded", index = 0, lineCou
 };
 
 export const getHookCardOverlap = (boxStyle = "rounded", renderWidth = HOOK_PREVIEW_WIDTH) => normalizeHookBoxStyle(boxStyle) === "headline_cards"
-    ? 2 * widthScale(renderWidth)
+    ? 4 * widthScale(renderWidth)
     : 0;

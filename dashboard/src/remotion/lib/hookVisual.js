@@ -175,5 +175,5 @@ export const getHookCardOverlap = (
   renderWidth = HOOK_PREVIEW_WIDTH,
 ) =>
   normalizeHookBoxStyle(boxStyle) === "headline_cards"
-    ? 2 * widthScale(renderWidth)
+    ? 4 * widthScale(renderWidth)
     : 0;

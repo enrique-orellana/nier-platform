@@ -111,8 +111,8 @@ describe("hook pixel positioning", () => {
       "0px 0px 4px 4px",
     );
     expect(getHookCardOverlap("rounded")).toBe(0);
-    expect(getHookCardOverlap("headline_cards")).toBe(2);
-    expect(getHookCardOverlap("headline_cards", 1080)).toBe(6);
+    expect(getHookCardOverlap("headline_cards")).toBe(4);
+    expect(getHookCardOverlap("headline_cards", 1080)).toBe(12);
   });
 
   it("uses non-empty explicit lines for headline cards", () => {

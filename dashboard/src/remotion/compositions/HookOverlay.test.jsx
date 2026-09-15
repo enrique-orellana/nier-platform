@@ -175,7 +175,7 @@ describe("HookOverlay visual contract", () => {
     });
     expect(second.parentElement).toHaveStyle({
       borderRadius: "0px 0px 4px 4px",
-      marginTop: "-2px",
+      marginTop: "-4px",
     });
     expect(first.parentElement.parentElement).toHaveStyle({
       display: "flex",
