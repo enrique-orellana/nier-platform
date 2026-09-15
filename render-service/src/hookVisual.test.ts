@@ -46,7 +46,7 @@ describe("renderer hook pixel positioning", () => {
     ).toMatchObject({
       color: "#123456",
       backgroundColor: "#fedcba",
-      borderRadius: "0px",
+      borderRadius: "4px",
       boxShadow: "none",
     });
     expect(getHookTextLines("First\n\nSecond", "headline_cards")).toEqual([

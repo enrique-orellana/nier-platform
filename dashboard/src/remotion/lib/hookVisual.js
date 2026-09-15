@@ -131,7 +131,7 @@ export const getHookBoxStyle = (
     lineHeight: 1.5,
     whiteSpace: "pre-wrap",
     padding: `${(isHeadlineCards ? 6 : 8) * scale}px ${12 * scale}px`,
-    borderRadius: isStreamer || isHeadlineCards ? "0px" : `${8 * scale}px`,
+    borderRadius: isStreamer ? "0px" : `${(isHeadlineCards ? 4 : 8) * scale}px`,
     boxShadow:
       isStreamer || isHeadlineCards
         ? "none"
@@ -146,15 +146,12 @@ export const getHookBoxStyle = (
   };
 };
 
-export const getHookCardStackStyle = (
-  boxStyle = "rounded",
-  renderWidth = HOOK_PREVIEW_WIDTH,
-) => {
+export const getHookCardStackStyle = (boxStyle = "rounded") => {
   if (normalizeHookBoxStyle(boxStyle) !== "headline_cards") return {};
   return {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    gap: `${4 * widthScale(renderWidth)}px`,
+    gap: "0px",
   };
 };

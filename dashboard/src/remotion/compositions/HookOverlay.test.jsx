@@ -167,12 +167,15 @@ describe("HookOverlay visual contract", () => {
       color: "#123456",
       backgroundColor: "#fedcba",
       fontFamily: "Impact",
-      borderRadius: "0px",
     });
-    expect(second.parentElement).toHaveStyle({ borderRadius: "0px" });
+    expect(parseFloat(first.parentElement.style.borderRadius)).toBe(4);
+    expect(second.parentElement.style.borderRadius).toBe(
+      first.parentElement.style.borderRadius,
+    );
     expect(first.parentElement.parentElement).toHaveStyle({
       display: "flex",
       flexDirection: "column",
+      gap: "0px",
     });
   });
 });

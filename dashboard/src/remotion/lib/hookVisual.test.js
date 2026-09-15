@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getHookBoxStyle,
+  getHookCardStackStyle,
   getHookPositionCoordinates,
   getHookPositionStyle,
   getHookTextLines,
@@ -94,9 +95,12 @@ describe("hook pixel positioning", () => {
       color: "#123456",
       backgroundColor: "#fedcba",
       fontFamily: "Impact",
-      borderRadius: "0px",
+      borderRadius: "4px",
       boxShadow: "none",
       padding: "6px 12px",
+    });
+    expect(getHookCardStackStyle("headline_cards")).toMatchObject({
+      gap: "0px",
     });
   });
 

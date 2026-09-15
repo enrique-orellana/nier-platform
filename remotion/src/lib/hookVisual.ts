@@ -169,8 +169,9 @@ export const getHookBoxStyle = (
     lineHeight: 1.5,
     whiteSpace: "pre-wrap",
     padding: `${(isHeadlineCards ? 6 : 8) * scale}px ${12 * scale}px`,
-    borderRadius:
-      isStreamer || isHeadlineCards ? "0px" : `${8 * scale}px`,
+    borderRadius: isStreamer
+      ? "0px"
+      : `${(isHeadlineCards ? 4 : 8) * scale}px`,
     boxShadow: isStreamer || isHeadlineCards
       ? "none"
       : "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)",
@@ -193,6 +194,6 @@ export const getHookCardStackStyle = (
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    gap: `${4 * widthScale(renderWidth)}px`,
+    gap: "0px",
   };
 };

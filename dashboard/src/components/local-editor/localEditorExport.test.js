@@ -105,6 +105,9 @@ describe("local editor export helpers", () => {
   it("draws one canvas card for each non-empty headline line", () => {
     const context = {
       fillRect: vi.fn(),
+      roundRect: vi.fn(),
+      beginPath: vi.fn(),
+      fill: vi.fn(),
       fillText: vi.fn(),
       measureText: vi.fn((text) => ({ width: text.length * 10 })),
       restore: vi.fn(),
@@ -121,7 +124,12 @@ describe("local editor export helpers", () => {
       boxStyle: "headline_cards",
     });
 
-    expect(context.fillRect).toHaveBeenCalledTimes(2);
+    expect(context.fillRect).not.toHaveBeenCalled();
+    expect(context.roundRect).toHaveBeenCalledTimes(2);
+    expect(context.fill).toHaveBeenCalledTimes(2);
+    expect(context.roundRect.mock.calls[1][1]).toBe(
+      context.roundRect.mock.calls[0][1] + 38,
+    );
     expect(context.fillText.mock.calls.map(([text]) => text)).toEqual([
       "First",
       "Second",

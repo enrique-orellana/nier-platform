@@ -206,6 +206,16 @@ const drawOverlay = (
   context.restore();
 };
 
+const drawRoundedRect = (context, x, y, width, height, radius) => {
+  if (typeof context.roundRect === "function") {
+    context.beginPath();
+    context.roundRect(x, y, width, height, radius);
+    context.fill();
+    return;
+  }
+  context.fillRect(x, y, width, height);
+};
+
 export const drawHookOverlay = (context, text, options = {}) => {
   const { boxStyle, ...overlayOptions } = options;
   if (normalizeHookBoxStyle(boxStyle) !== "headline_cards") {
@@ -246,7 +256,7 @@ export const drawHookOverlay = (context, text, options = {}) => {
       height: metrics.height,
     };
   });
-  const gap = fontSize * 0.2;
+  const gap = 0;
   const totalHeight =
     cards.reduce((total, card) => total + card.height, 0) +
     gap * Math.max(0, cards.length - 1);
@@ -255,7 +265,14 @@ export const drawHookOverlay = (context, text, options = {}) => {
   cards.forEach(({ metrics, width: cardWidth, height: cardHeight }) => {
     if (background && background !== "transparent") {
       context.fillStyle = background;
-      context.fillRect(x - cardWidth / 2, cardY, cardWidth, cardHeight);
+      drawRoundedRect(
+        context,
+        x - cardWidth / 2,
+        cardY,
+        cardWidth,
+        cardHeight,
+        fontSize * 0.1,
+      );
     }
     metrics.lines.forEach((line, index) => {
       const lineY = cardY + metrics.padding + index * metrics.lineHeight;
