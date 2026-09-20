@@ -8,6 +8,9 @@ from typing import Any, Mapping
 from ai_client import chat_json, load_ai_config
 from subtitle_translation import translate_cue_texts
 
+TRANSLATION_BATCH_SIZE = 20
+TRANSLATION_BATCH_ATTEMPTS = 2
+
 
 def _ai_headers(request_headers: Mapping[str, str]) -> dict[str, str]:
     allowed = {
@@ -28,6 +31,41 @@ def _ai_headers(request_headers: Mapping[str, str]) -> dict[str, str]:
         for key, value in request_headers.items()
         if key.lower() in allowed and value
     }
+
+
+def _translate_batch(
+    ai_config: Any,
+    source_texts: list[str],
+    source_language: str,
+    target_language: str,
+    batch_start: int,
+    total_cues: int,
+) -> list[str]:
+    prompt = (
+        "Translate every subtitle cue in this batch into the target language. "
+        "Preserve the order exactly, do not merge or split cues, and return only JSON "
+        "with a translations array containing exactly one string per input cue. "
+        f"Batch cues {batch_start + 1}-{batch_start + len(source_texts)} of {total_cues}. "
+        f"Source language: {source_language}. Target language: {target_language}. "
+        f"Cues: {json.dumps(source_texts, ensure_ascii=False)}"
+    )
+    last_count = None
+    for _ in range(TRANSLATION_BATCH_ATTEMPTS):
+        payload = chat_json(ai_config, prompt, model=ai_config.text_model)
+        translated_texts = payload.get("translations") if isinstance(payload, dict) else None
+        if isinstance(translated_texts, list):
+            last_count = len(translated_texts)
+            if len(translated_texts) == len(source_texts) and all(
+                isinstance(text, str) for text in translated_texts
+            ):
+                return translated_texts
+
+    if last_count is None:
+        raise ValueError("translation response did not contain a translations array")
+    raise ValueError(
+        "translation cue count does not match source cue count "
+        f"(expected {len(source_texts)}, received {last_count})"
+    )
 
 
 def perform_translation(
@@ -56,16 +94,19 @@ def perform_translation(
     if ai_config.is_gemini() and not ai_config.api_key:
         raise ValueError("Missing AI API key for subtitle translation")
 
-    prompt = (
-        "Translate each subtitle cue into the target language. Preserve array order and return only JSON "
-        "with a translations array containing exactly one string per cue. "
-        f"Source language: {source_language}. Target language: {target_language}. "
-        f"Cues: {json.dumps([cue.get('text', '') for cue in source_cues], ensure_ascii=False)}"
-    )
-    payload = chat_json(ai_config, prompt, model=ai_config.text_model)
-    translated_texts = payload.get("translations") if isinstance(payload, dict) else None
-    if not isinstance(translated_texts, list):
-        raise ValueError("translation response did not contain a translations array")
+    translated_texts = []
+    for batch_start in range(0, len(source_cues), TRANSLATION_BATCH_SIZE):
+        batch = source_cues[batch_start : batch_start + TRANSLATION_BATCH_SIZE]
+        translated_texts.extend(
+            _translate_batch(
+                ai_config,
+                [str(cue.get("text") or "") for cue in batch],
+                source_language,
+                target_language,
+                batch_start,
+                len(source_cues),
+            )
+        )
 
     translated_track = translate_cue_texts(
         source_cues,
