@@ -198,9 +198,14 @@ export const DEFAULT_SUBTITLE_STYLE = {
   displayMode: "phrase",
 };
 
+const SUBTITLE_POSITIONS = new Set(["top", "middle", "bottom", "custom"]);
+
 export const normalizeSubtitleStyle = (style = {}) => ({
   ...DEFAULT_SUBTITLE_STYLE,
   ...style,
+  position: SUBTITLE_POSITIONS.has(style.position)
+    ? style.position
+    : DEFAULT_SUBTITLE_STYLE.position,
   displayMode: style.displayMode === "single-word" ? "single-word" : "phrase",
 });
 

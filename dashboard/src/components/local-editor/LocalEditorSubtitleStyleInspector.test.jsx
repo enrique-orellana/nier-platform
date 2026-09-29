@@ -94,4 +94,75 @@ describe("LocalEditorSubtitleStyleInspector", () => {
       displayMode: "phrase",
     });
   });
+
+  it("shows effective preset coordinates and switches to custom on edit", () => {
+    const onChange = vi.fn();
+    render(
+      <LocalEditorSubtitleStyleInspector
+        style={DEFAULT_SUBTITLE_STYLE}
+        onChange={onChange}
+        onRemove={vi.fn()}
+        hasCues
+      />,
+    );
+
+    expect(screen.getByLabelText("Subtitle X position")).toHaveValue(540);
+    expect(screen.getByLabelText("Subtitle Y position")).toHaveValue(1728);
+    fireEvent.change(screen.getByLabelText("Subtitle X position"), {
+      target: { value: "700" },
+    });
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...DEFAULT_SUBTITLE_STYLE,
+      position: "custom",
+      positionX: 700,
+      positionY: 1728,
+    });
+  });
+
+  it("clears custom coordinates when a preset is selected", () => {
+    const onChange = vi.fn();
+    render(
+      <LocalEditorSubtitleStyleInspector
+        style={{
+          ...DEFAULT_SUBTITLE_STYLE,
+          position: "custom",
+          positionX: 700,
+          positionY: 420,
+        }}
+        onChange={onChange}
+        onRemove={vi.fn()}
+        hasCues
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Bottom" }));
+    expect(onChange).toHaveBeenLastCalledWith(DEFAULT_SUBTITLE_STYLE);
+  });
+
+  it("clears custom coordinates when a quick pick selects a preset", () => {
+    const onChange = vi.fn();
+    render(
+      <LocalEditorSubtitleStyleInspector
+        style={{
+          ...DEFAULT_SUBTITLE_STYLE,
+          position: "custom",
+          positionX: 700,
+          positionY: 420,
+        }}
+        onChange={onChange}
+        onRemove={vi.fn()}
+        hasCues
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: SUBTITLE_STYLE_TEMPLATES[0].ariaLabel,
+      }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...DEFAULT_SUBTITLE_STYLE,
+      ...SUBTITLE_STYLE_TEMPLATES[0].style,
+    });
+  });
 });

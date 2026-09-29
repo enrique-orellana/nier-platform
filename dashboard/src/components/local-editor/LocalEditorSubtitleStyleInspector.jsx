@@ -7,6 +7,7 @@ import {
   SUBTITLE_STYLE_TEMPLATES,
   normalizeSubtitleStyle,
 } from "./localEditorStyles";
+import { getSubtitlePositionCoordinates } from "../../remotion/lib/subtitlePosition";
 import { cleanChoiceClass, cleanLabelClass } from "./localEditorUtils";
 
 export default function LocalEditorSubtitleStyleInspector({
@@ -16,9 +17,39 @@ export default function LocalEditorSubtitleStyleInspector({
   hasCues,
 }) {
   const current = normalizeSubtitleStyle(style);
+  const coordinates = getSubtitlePositionCoordinates(current);
   const update = (key, value) => onChange({ ...current, [key]: value });
-  const applyTemplate = (template) =>
-    onChange({ ...current, ...template.style });
+  const updateCoordinate = (key, rawValue) => {
+    const value = rawValue === "" ? "" : Number(rawValue);
+    onChange({
+      ...current,
+      position: "custom",
+      positionX: key === "positionX" ? value : coordinates.x,
+      positionY: key === "positionY" ? value : coordinates.y,
+    });
+  };
+  const commitCoordinate = (key) => {
+    const next = { ...current, position: "custom" };
+    const resolved = getSubtitlePositionCoordinates(next);
+    onChange({
+      ...current,
+      position: "custom",
+      positionX: key === "positionX" ? resolved.x : coordinates.x,
+      positionY: key === "positionY" ? resolved.y : coordinates.y,
+    });
+  };
+  const selectPreset = (position) => {
+    const { positionX, positionY, ...withoutCoordinates } = current;
+    onChange({ ...withoutCoordinates, position });
+  };
+  const applyTemplate = (template) => {
+    const next = { ...current, ...template.style };
+    if (template.style.position && template.style.position !== "custom") {
+      delete next.positionX;
+      delete next.positionY;
+    }
+    onChange(next);
+  };
   return (
     <div className="space-y-5">
       <div className="border-b border-white/10 pb-4">
@@ -72,13 +103,58 @@ export default function LocalEditorSubtitleStyleInspector({
             <button
               key={position}
               type="button"
-              onClick={() => update("position", position)}
+              onClick={() => selectPreset(position)}
               className={cleanChoiceClass(current.position === position)}
             >
               {position.charAt(0).toUpperCase() + position.slice(1)}
             </button>
           ))}
         </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <label className="text-xs text-zinc-400">
+            X (px)
+            <input
+              aria-label="Subtitle X position"
+              type="number"
+              min="0"
+              max="1080"
+              step="1"
+              value={
+                current.position === "custom"
+                  ? (current.positionX ?? coordinates.x)
+                  : coordinates.x
+              }
+              onChange={(event) =>
+                updateCoordinate("positionX", event.target.value)
+              }
+              onBlur={() => commitCoordinate("positionX")}
+              className="input-field mt-2"
+            />
+          </label>
+          <label className="text-xs text-zinc-400">
+            Y (px)
+            <input
+              aria-label="Subtitle Y position"
+              type="number"
+              min="0"
+              max="1920"
+              step="1"
+              value={
+                current.position === "custom"
+                  ? (current.positionY ?? coordinates.y)
+                  : coordinates.y
+              }
+              onChange={(event) =>
+                updateCoordinate("positionY", event.target.value)
+              }
+              onBlur={() => commitCoordinate("positionY")}
+              className="input-field mt-2"
+            />
+          </label>
+        </div>
+        <p className="mt-1 text-[10px] text-zinc-500">
+          Center point in a 1080 × 1920 video.
+        </p>
       </div>
       <div>
         <span className={cleanLabelClass}>Animation</span>

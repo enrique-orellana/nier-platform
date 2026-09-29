@@ -46,6 +46,23 @@ describe("local editor overlay styles", () => {
     );
   });
 
+  it("accepts custom subtitle coordinates and normalizes invalid positions", () => {
+    expect(
+      normalizeSubtitleStyle({
+        position: "custom",
+        positionX: 700,
+        positionY: 420,
+      }),
+    ).toMatchObject({
+      position: "custom",
+      positionX: 700,
+      positionY: 420,
+    });
+    expect(normalizeSubtitleStyle({ position: "invalid" }).position).toBe(
+      "bottom",
+    );
+  });
+
   it("converts editor subtitle controls to the Clip Generator render scale", () => {
     expect(
       toClipGeneratorSubtitleStyle({

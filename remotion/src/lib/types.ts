@@ -30,6 +30,9 @@ export interface SubtitleStyle {
   bgOpacity: number;
   animation: SubtitleAnimation;
   displayMode: SubtitleDisplayMode;
+  position?: SubtitlePosition;
+  positionX?: number;
+  positionY?: number;
 }
 
 export type SubtitleReactionPosition = "above" | "left" | "right";
@@ -221,6 +224,9 @@ export const subtitleStyleSchema = z.object({
   bgOpacity: z.number().min(0).max(1),
   animation: z.enum(["none", "word-highlight", "pop", "karaoke"]),
   displayMode: z.enum(["phrase", "single-word"]).default("phrase"),
+  position: z.enum(["top", "middle", "bottom", "custom"]).optional(),
+  positionX: z.number().min(0).max(1080).optional(),
+  positionY: z.number().min(0).max(1920).optional(),
 });
 
 export const subtitleReactionSchema = z.object({
