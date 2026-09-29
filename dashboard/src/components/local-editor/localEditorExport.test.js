@@ -11,6 +11,7 @@ import {
   getVideoFrameDimensions,
   hookVisualState,
   prepareVideoForExport,
+  getSubtitleCanvasPosition,
   subtitleVisualStyle,
 } from "./localEditorExport";
 
@@ -49,6 +50,17 @@ describe("local editor export helpers", () => {
         1920,
       ),
     ).toEqual({ x: 700, y: 420 });
+  });
+
+  it("uses custom subtitle coordinates on the export canvas", () => {
+    expect(
+      getSubtitleCanvasPosition(
+        { position: "custom", positionX: 700, positionY: 420 },
+        1080,
+        1920,
+        { height: 144, padding: 12 },
+      ),
+    ).toEqual({ x: 700, y: 360 });
   });
 
   it("converts subtitle style to canvas values", () => {

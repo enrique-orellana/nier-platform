@@ -8,6 +8,7 @@ import {
   getHookCardOverlap,
   getHookPositionCoordinates,
 } from "../../remotion/lib/hookVisual";
+import { getSubtitlePositionCoordinates } from "../../remotion/lib/subtitlePosition";
 import {
   getHookTextLines,
   normalizeHookBoxStyle,
@@ -85,6 +86,27 @@ export const clampOverlayY = (
   return Math.max(safePadding, Math.min(Number(desiredY) || 0, maxY));
 };
 
+export const getSubtitleCanvasPosition = (
+  style,
+  canvasWidth,
+  canvasHeight,
+  metrics,
+) => {
+  const { x, y } = getSubtitlePositionCoordinates(
+    style,
+    canvasWidth,
+    canvasHeight,
+  );
+  const padding = Math.max(0, Number(metrics?.padding) || 0);
+  const lineHeight =
+    Math.max(0, Number(metrics?.height) || 0) - padding * 2;
+  const desiredTextY = y - lineHeight / 2;
+  return {
+    x,
+    y: clampOverlayY(desiredTextY, canvasHeight, metrics?.height, padding),
+  };
+};
+
 export const hookVisualState = (hook = {}, elapsedMs = 0) => {
   const progress = Math.max(0, Math.min(1, Number(elapsedMs) / 500));
   const scale = HOOK_SIZE_SCALE[hook.size] || HOOK_SIZE_SCALE.M;
@@ -119,6 +141,8 @@ export const subtitleVisualStyle = (style = {}) => {
     backgroundOpacity: current.bgOpacity,
     animation: current.animation,
     position: current.position,
+    positionX: current.positionX,
+    positionY: current.positionY,
   };
 };
 
@@ -468,20 +492,14 @@ export async function renderLocalVideo({
           subtitleFontSize,
           subtitleStyleValues.fontFamily,
         );
-        const subtitleDesiredY =
-          subtitleStyleValues.position === "top"
-            ? canvas.height * 0.12
-            : subtitleStyleValues.position === "middle"
-              ? canvas.height * 0.45
-              : canvas.height * 0.78;
-        const subtitleY = clampOverlayY(
-          subtitleDesiredY,
+        const { x: subtitleX, y: subtitleY } = getSubtitleCanvasPosition(
+          subtitleStyleValues,
+          canvas.width,
           canvas.height,
-          subtitleMetrics.height,
-          subtitleMetrics.padding,
+          subtitleMetrics,
         );
         context.save();
-        context.translate(canvas.width / 2, subtitleY);
+        context.translate(subtitleX, subtitleY);
         context.scale(subtitleScale, subtitleScale);
         drawOverlay(context, subtitle.text, {
           x: 0,

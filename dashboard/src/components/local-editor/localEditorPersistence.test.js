@@ -113,6 +113,24 @@ describe("local editor project persistence", () => {
     });
   });
 
+  it("preserves custom subtitle coordinates in persisted history", () => {
+    const normalized = normalizeEditorHistory({
+      present: {
+        subtitleStyle: {
+          position: "custom",
+          positionX: 700,
+          positionY: 420,
+        },
+      },
+    });
+
+    expect(normalized.present.subtitleStyle).toMatchObject({
+      position: "custom",
+      positionX: 700,
+      positionY: 420,
+    });
+  });
+
   it("creates, lists, loads, renames, and deletes a stored project", async () => {
     const file = makeVideoFile();
     const project = await createStoredProject({
