@@ -21,7 +21,7 @@ vi.mock("remotion", () => ({
   },
   spring: () => 1,
   useCurrentFrame: () => 0,
-  useVideoConfig: () => ({ fps: 30 }),
+  useVideoConfig: () => ({ fps: 30, width: 1080, height: 1920 }),
 }));
 
 import {
@@ -39,6 +39,29 @@ describe("subtitle rendering defaults", () => {
 
     expect(screen.getByTestId("subtitle-overlay-root")).toHaveStyle({
       pointerEvents: "none",
+    });
+  });
+
+  it("renders custom subtitle coordinates against the video canvas", () => {
+    render(
+      <Subtitles
+        config={{
+          position: "custom",
+          style: {
+            position: "custom",
+            positionX: 270,
+            positionY: 480,
+          },
+          captions: [{ text: "Custom", startMs: 0, endMs: 1000 }],
+        }}
+        mediaTimeMs={500}
+      />,
+    );
+
+    expect(screen.getByTestId("subtitle-position-layer")).toHaveStyle({
+      left: "25%",
+      top: "25%",
+      transform: "translate(-50%, -50%)",
     });
   });
 

@@ -10,17 +10,12 @@ import {
 import type { SubtitleBlock, SubtitleConfig } from "../lib/types";
 import { groupCaptionsIntoBlocks, getActiveWordIndex } from "../lib/captions";
 import { getFontStack, subtitleFontFace } from "../lib/fonts";
+import { getSubtitlePositionStyle } from "../lib/subtitlePosition";
 import { SubtitleReactions } from "../components/SubtitleReactions";
 
 interface SubtitlesProps {
   config: SubtitleConfig;
 }
-
-const POSITION_MAP: Record<string, React.CSSProperties> = {
-  top: { top: "12%", bottom: "auto" },
-  middle: { top: "45%", bottom: "auto" },
-  bottom: { bottom: "10%", top: "auto" },
-};
 
 const DEFAULT_SUBTITLE_STYLE: SubtitleConfig["style"] = {
   fontFamily: "Arial",
@@ -139,7 +134,7 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
   blockStartFrame,
 }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const { style, position } = config;
 
   // Current time relative to composition start (sequence-relative frame)
@@ -153,7 +148,11 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
 
   if (style.displayMode === "single-word" && activeIndex < 0) return null;
 
-  const positionStyle = POSITION_MAP[position] ?? POSITION_MAP.bottom;
+  const positionStyle = getSubtitlePositionStyle(
+    { ...style, position },
+    width,
+    height,
+  );
   const fontStack = getFontStack(style.fontFamily);
 
   // Background box style
@@ -170,10 +169,10 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = ({
 
   return (
     <div
+      data-testid="subtitle-position-layer"
       style={{
         position: "absolute",
-        left: 0,
-        right: 0,
+        width: "88%",
         display: "flex",
         justifyContent: "center",
         ...positionStyle,

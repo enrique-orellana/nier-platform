@@ -129,9 +129,9 @@ import {
   DEFAULT_SUBTITLE_STYLE,
   hexToRgba,
   normalizeSubtitleStyle,
-  subtitlePositionClass,
 } from "./localEditorStyles";
 import { getFontStack, subtitleFontFace } from "../../remotion/lib/fonts";
+import { getSubtitlePositionStyle } from "../../remotion/lib/subtitlePosition";
 import {
   PlaybackClockProvider,
   usePlaybackClockState,
@@ -2203,6 +2203,11 @@ export default function LocalEditorTab({
   const activeHook =
     hook && playheadMs >= hook.startMs && playheadMs < hook.endMs ? hook : null;
   const previewSubtitleStyle = normalizeSubtitleStyle(subtitleStyle);
+  const previewSubtitlePosition = getSubtitlePositionStyle(
+    previewSubtitleStyle,
+    1080,
+    1920,
+  );
   const previewSubtitleWords = getSubtitleWordsForDisplay(
     activeSubtitleWords,
     activeSubtitleWordIndex,
@@ -2545,8 +2550,9 @@ export default function LocalEditorTab({
                         )}
                         {shouldShowPreviewSubtitle && (
                           <div
-                            className={`absolute left-1/2 flex w-[88%] -translate-x-1/2 flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-bold shadow-lg ${subtitlePositionClass(previewSubtitleStyle.position)}`}
+                            className="absolute flex w-[88%] flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-bold shadow-lg"
                             style={{
+                              ...previewSubtitlePosition,
                               fontFamily: getFontStack(
                                 previewSubtitleStyle.fontFamily,
                               ),
