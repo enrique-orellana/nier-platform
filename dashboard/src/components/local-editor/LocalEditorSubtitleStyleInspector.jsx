@@ -39,8 +39,10 @@ export default function LocalEditorSubtitleStyleInspector({
     });
   };
   const selectPreset = (position) => {
-    const { positionX, positionY, ...withoutCoordinates } = current;
-    onChange({ ...withoutCoordinates, position });
+    const next = { ...current, position };
+    delete next.positionX;
+    delete next.positionY;
+    onChange(next);
   };
   const applyTemplate = (template) => {
     const next = { ...current, ...template.style };

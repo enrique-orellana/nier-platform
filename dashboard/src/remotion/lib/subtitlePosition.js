@@ -23,11 +23,18 @@ export const getSubtitlePositionCoordinates = (
   if (style.position === "custom") {
     return {
       x: clampSubtitleCoordinate(style.positionX, outputWidth, outputWidth / 2),
-      y: clampSubtitleCoordinate(style.positionY, outputHeight, outputHeight / 2),
+      y: clampSubtitleCoordinate(
+        style.positionY,
+        outputHeight,
+        outputHeight / 2,
+      ),
     };
   }
   const ratio = PRESET_Y_RATIOS[style.position] ?? PRESET_Y_RATIOS.bottom;
-  return { x: Math.round(outputWidth / 2), y: Math.round(outputHeight * ratio) };
+  return {
+    x: Math.round(outputWidth / 2),
+    y: Math.round(outputHeight * ratio),
+  };
 };
 
 export const getSubtitlePositionStyle = (

@@ -98,8 +98,7 @@ export const getSubtitleCanvasPosition = (
     canvasHeight,
   );
   const padding = Math.max(0, Number(metrics?.padding) || 0);
-  const lineHeight =
-    Math.max(0, Number(metrics?.height) || 0) - padding * 2;
+  const lineHeight = Math.max(0, Number(metrics?.height) || 0) - padding * 2;
   const desiredTextY = y - lineHeight / 2;
   return {
     x,
