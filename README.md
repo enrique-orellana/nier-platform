@@ -222,8 +222,8 @@ Navigate to **`http://localhost:18575`**
 4. **YouTube Studio**: Generate thumbnails, titles, and descriptions for YouTube
 5. **UGC Gallery**: Browse all generated videos and avatars
 
-### MinIO storage
-The Docker Compose deployment uses the migrated standalone MinIO endpoint
+### SeaweedFS S3 storage
+The Docker Compose deployment uses the migrated SeaweedFS S3-compatible endpoint
 `http://seaweedfs-s3.192.168.1.189.nip.io:32380` and the `openshorts-media` bucket for
 generated media and source-object browsing. The old Kubernetes OpenShorts
 runtime has been removed; the files under `k8s/` remain only as legacy
@@ -273,15 +273,15 @@ deployment references.
 **Server-side (.env):**
 | Variable | Description |
 |----------|------------|
-| `AWS_ACCESS_KEY_ID` | S3 access key, including MinIO |
-| `AWS_SECRET_ACCESS_KEY` | S3 secret key, including MinIO |
+| `AWS_ACCESS_KEY_ID` | S3 access key, including SeaweedFS |
+| `AWS_SECRET_ACCESS_KEY` | S3 secret key, including SeaweedFS |
 | `AWS_REGION` | Region label used for S3 signing and fallback URLs |
 | `AWS_S3_BUCKET` | Private bucket for clip backup |
 | `AWS_S3_PUBLIC_BUCKET` | Public bucket for gallery/avatars |
-| `AWS_S3_ENDPOINT_URL` | Custom S3 endpoint, such as MinIO |
+| `AWS_S3_ENDPOINT_URL` | Custom S3 endpoint, such as SeaweedFS |
 | `AWS_S3_PUBLIC_URL_BASE` | Browser-facing base URL for public media links |
 | `AWS_S3_PUBLIC_ENDPOINT_URL` | Endpoint used to generate presigned URLs for public access |
-| `AWS_S3_FORCE_PATH_STYLE` | Force path-style URLs, recommended for MinIO |
+| `AWS_S3_FORCE_PATH_STYLE` | Force path-style URLs, recommended for SeaweedFS |
 | `MINIO_DOWNLOAD_MAX_CONCURRENCY` | Parallel multipart download workers (default: 16) |
 | `MINIO_DOWNLOAD_MULTIPART_THRESHOLD_MB` | File size at which multipart downloading starts (default: 32 MB) |
 | `MINIO_DOWNLOAD_MULTIPART_CHUNKSIZE_MB` | Size of each multipart download chunk (default: 64 MB) |
