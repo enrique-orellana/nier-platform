@@ -224,7 +224,7 @@ Navigate to **`http://localhost:18575`**
 
 ### SeaweedFS S3 storage
 The Docker Compose deployment uses the migrated SeaweedFS S3-compatible endpoint
-`http://seaweedfs-s3.192.168.1.189.nip.io:32380` and the `openshorts-media` bucket for
+`http://seaweedfs-s3.192.168.50.2.nip.io:32380` and the `openshorts-media` bucket for
 generated media and source-object browsing. The old Kubernetes OpenShorts
 runtime has been removed; the files under `k8s/` remain only as legacy
 deployment references.
