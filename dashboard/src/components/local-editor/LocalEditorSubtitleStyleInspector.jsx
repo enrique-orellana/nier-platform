@@ -12,12 +12,18 @@ import { cleanChoiceClass, cleanLabelClass } from "./localEditorUtils";
 
 export default function LocalEditorSubtitleStyleInspector({
   style,
+  renderWidth = 1080,
+  renderHeight = 1920,
   onChange,
   onRemove,
   hasCues,
 }) {
   const current = normalizeSubtitleStyle(style);
-  const coordinates = getSubtitlePositionCoordinates(current);
+  const coordinates = getSubtitlePositionCoordinates(
+    current,
+    renderWidth,
+    renderHeight,
+  );
   const update = (key, value) => onChange({ ...current, [key]: value });
   const updateCoordinate = (key, rawValue) => {
     const value = rawValue === "" ? "" : Number(rawValue);
@@ -30,7 +36,11 @@ export default function LocalEditorSubtitleStyleInspector({
   };
   const commitCoordinate = (key) => {
     const next = { ...current, position: "custom" };
-    const resolved = getSubtitlePositionCoordinates(next);
+    const resolved = getSubtitlePositionCoordinates(
+      next,
+      renderWidth,
+      renderHeight,
+    );
     onChange({
       ...current,
       position: "custom",
@@ -119,7 +129,7 @@ export default function LocalEditorSubtitleStyleInspector({
               aria-label="Subtitle X position"
               type="number"
               min="0"
-              max="1080"
+              max={renderWidth}
               step="1"
               value={
                 current.position === "custom"
@@ -139,7 +149,7 @@ export default function LocalEditorSubtitleStyleInspector({
               aria-label="Subtitle Y position"
               type="number"
               min="0"
-              max="1920"
+              max={renderHeight}
               step="1"
               value={
                 current.position === "custom"
@@ -155,7 +165,7 @@ export default function LocalEditorSubtitleStyleInspector({
           </label>
         </div>
         <p className="mt-1 text-[10px] text-zinc-500">
-          Center point in a 1080 × 1920 video.
+          Center point in a {renderWidth} × {renderHeight} video.
         </p>
       </div>
       <div>

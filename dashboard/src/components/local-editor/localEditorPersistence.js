@@ -8,6 +8,7 @@ import {
   normalizeSubtitleReactionStyle,
   normalizeSubtitleReactions,
 } from "./subtitleReactions";
+import { normalizeAspectRatio } from "./localEditorAspectRatio";
 
 export const EDITOR_HISTORY_STORAGE_KEY = "openshorts_local_editor_state_v1";
 export const EDITOR_VIDEO_DB_NAME = "openshorts-local-editor-v1";
@@ -25,6 +26,7 @@ export const EDITOR_PROJECT_MIGRATION_KEY =
 export const createEmptyEditorHistory = (preferences = {}) => ({
   past: [],
   present: {
+    aspectRatio: "9:16",
     subtitleCues: [],
     subtitleStyle: normalizeSubtitleStyle(
       preferences?.subtitleStyle || DEFAULT_SUBTITLE_STYLE,
@@ -56,6 +58,7 @@ const normalizeSnapshot = (snapshot) => {
       )
     : [];
   return {
+    aspectRatio: normalizeAspectRatio(snapshot?.aspectRatio),
     subtitleCues: Array.isArray(snapshot?.subtitleCues)
       ? snapshot.subtitleCues
       : [],

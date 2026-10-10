@@ -67,10 +67,14 @@ import {
   resolveProjectExportStartSeconds,
   syncSubtitleCue,
 } from "./localEditorRender";
+import { detectEmbeddedSideBars } from "./localEditorVideo";
 import {
-  detectEmbeddedSideBars,
-  getFilledFrameDimensions,
-} from "./localEditorVideo";
+  formatAspectRatio,
+  LOCAL_EDITOR_ASPECT_RATIOS,
+  normalizeAspectRatio,
+  resolveAspectRatioDimensions,
+  scaleCanvasCoordinate,
+} from "./localEditorAspectRatio";
 import {
   clipTimeToSourceTime,
   sourceTimeToClipTime,
@@ -96,6 +100,7 @@ import {
   getHookCardBorderRadius,
   getHookCardOverlap,
   getHookCardStackStyle,
+  getHookPositionCoordinates,
   getHookPositionStyle,
   getHookTextLines,
   normalizeHookBoxStyle,
@@ -131,7 +136,10 @@ import {
   normalizeSubtitleStyle,
 } from "./localEditorStyles";
 import { getFontStack, subtitleFontFace } from "../../remotion/lib/fonts";
-import { getSubtitlePositionStyle } from "../../remotion/lib/subtitlePosition";
+import {
+  getSubtitlePositionCoordinates,
+  getSubtitlePositionStyle,
+} from "../../remotion/lib/subtitlePosition";
 import {
   PlaybackClockProvider,
   usePlaybackClockState,
@@ -225,6 +233,16 @@ export default function LocalEditorTab({
   const [videoFile, setVideoFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState("");
   const [previewVideoUrl, setPreviewVideoUrl] = useState("");
+  const [sourceDimensions, setSourceDimensions] = useState(null);
+  useEffect(() => {
+    setSourceDimensions(null);
+  }, [
+    initialClipIndex,
+    initialProjectId,
+    previewVideoUrl,
+    remotionPreviewProps?.videoUrl,
+    videoUrl,
+  ]);
   const editorPreferencesRef = useRef(readEditorPreferences());
   const [editHistory, setEditHistory] = useState(() => {
     const history = createEmptyEditorHistory(editorPreferencesRef.current);
@@ -326,15 +344,6 @@ export default function LocalEditorTab({
     resetPlayback,
     seekTo,
   } = playbackClock;
-  const hookRenderWidth = Math.max(
-    1,
-    Number(remotionPreviewProps?.width || clipMetadata?.output_width || 1080),
-  );
-  const hookRenderHeight = Math.max(
-    1,
-    Number(remotionPreviewProps?.height || clipMetadata?.output_height || 1920),
-  );
-
   const handleRemotionFrameChange = useCallback(
     (frame) => {
       if (remotionNativeClockActiveRef.current) return;
@@ -412,6 +421,26 @@ export default function LocalEditorTab({
     markers = [],
     layoutSegments = [],
   } = editHistory.present;
+  const aspectRatio = normalizeAspectRatio(editHistory.present.aspectRatio);
+  const sourceWidth =
+    Number(sourceDimensions?.width) ||
+    Number(remotionPreviewProps?.width) ||
+    Number(clipMetadata?.source_width) ||
+    Number(clipMetadata?.output_width) ||
+    0;
+  const sourceHeight =
+    Number(sourceDimensions?.height) ||
+    Number(remotionPreviewProps?.height) ||
+    Number(clipMetadata?.source_height) ||
+    Number(clipMetadata?.output_height) ||
+    0;
+  const outputDimensions = useMemo(
+    () => resolveAspectRatioDimensions(aspectRatio, sourceWidth, sourceHeight),
+    [aspectRatio, sourceHeight, sourceWidth],
+  );
+  const hookRenderWidth = outputDimensions.width;
+  const hookRenderHeight = outputDimensions.height;
+  const sourceAspectRatio = formatAspectRatio(sourceWidth, sourceHeight);
   const effectiveLayoutSegments = useMemo(
     () =>
       normalizeLayoutSegments(
@@ -813,10 +842,29 @@ export default function LocalEditorTab({
     if (!videoFile) setError("Could not stream the project video from MinIO.");
   };
 
+  const onRemotionSourceDimensionsChange =
+    remotionPreviewProps?.onSourceDimensionsChange;
+  const handleRemotionSourceDimensionsChange = useCallback(
+    (dimensions) => {
+      const width = Number(dimensions?.width);
+      const height = Number(dimensions?.height);
+      if (width > 0 && height > 0) setSourceDimensions({ width, height });
+      onRemotionSourceDimensionsChange?.(dimensions);
+    },
+    [onRemotionSourceDimensionsChange],
+  );
+
   const handleMetadata = () => {
+    const sourceVideo = videoRef.current;
+    if (sourceVideo?.videoWidth > 0 && sourceVideo?.videoHeight > 0) {
+      setSourceDimensions({
+        width: sourceVideo.videoWidth,
+        height: sourceVideo.videoHeight,
+      });
+    }
     const sourceDurationMs = Math.max(
       1,
-      Math.round((videoRef.current?.duration || 30) * 1000),
+      Math.round((sourceVideo?.duration || 30) * 1000),
     );
     const availableClipDurationMs = Math.max(
       1,
@@ -1889,6 +1937,56 @@ export default function LocalEditorTab({
     }
   };
 
+  const changeAspectRatio = (value) => {
+    const nextAspectRatio = normalizeAspectRatio(value);
+    commitEdit((current) => {
+      const currentAspectRatio = normalizeAspectRatio(current.aspectRatio);
+      if (nextAspectRatio === currentAspectRatio) return current;
+
+      const fromDimensions = resolveAspectRatioDimensions(
+        currentAspectRatio,
+        sourceWidth,
+        sourceHeight,
+      );
+      const toDimensions = resolveAspectRatioDimensions(
+        nextAspectRatio,
+        sourceWidth,
+        sourceHeight,
+      );
+      const remapPosition = (item, getCoordinates) => {
+        if (!item || item.position !== "custom") return item;
+        const coordinates = getCoordinates(
+          item,
+          fromDimensions.width,
+          fromDimensions.height,
+        );
+        return {
+          ...item,
+          positionX: scaleCanvasCoordinate(
+            coordinates.x,
+            fromDimensions.width,
+            toDimensions.width,
+          ),
+          positionY: scaleCanvasCoordinate(
+            coordinates.y,
+            fromDimensions.height,
+            toDimensions.height,
+          ),
+        };
+      };
+
+      return {
+        ...current,
+        aspectRatio: nextAspectRatio,
+        subtitleStyle: remapPosition(
+          current.subtitleStyle,
+          getSubtitlePositionCoordinates,
+        ),
+        hook: remapPosition(current.hook, getHookPositionCoordinates),
+      };
+    });
+  };
+
   const exportSubtitles = () =>
     downloadBlob(
       new Blob([serializeSrt(subtitleCues)], { type: "application/x-subrip" }),
@@ -1901,21 +1999,24 @@ export default function LocalEditorTab({
     setError("");
     try {
       const video = videoRef.current;
-      const sourceWidth =
+      const exportSourceWidth =
         Number(video?.videoWidth) ||
+        sourceWidth ||
         Number(remotionPreviewProps?.width) ||
         Number(clipMetadata?.output_width);
-      const sourceHeight =
+      const exportSourceHeight =
         Number(video?.videoHeight) ||
+        sourceHeight ||
         Number(remotionPreviewProps?.height) ||
         Number(clipMetadata?.output_height);
-      if (!sourceWidth || !sourceHeight)
+      if (!exportSourceWidth || !exportSourceHeight)
         throw new Error("Video metadata is not ready for export.");
       const cropForExport =
         videoViewMode === "fill" || (videoViewMode === "auto" && autoCrop);
-      const outputDimensions = getFilledFrameDimensions(
-        sourceWidth,
-        sourceHeight,
+      const exportDimensions = resolveAspectRatioDimensions(
+        aspectRatio,
+        exportSourceWidth,
+        exportSourceHeight,
       );
       const projectSourceUrl =
         !videoFile && initialProjectId && initialClipIndex !== null
@@ -1934,7 +2035,7 @@ export default function LocalEditorTab({
               remotionPreviewProps?.videoStartSeconds,
             )
           : 0,
-        ...outputDimensions,
+        ...exportDimensions,
         videoFit: cropForExport ? "cover" : "contain",
         subtitleCues,
         subtitleStyle,
@@ -2205,8 +2306,8 @@ export default function LocalEditorTab({
   const previewSubtitleStyle = normalizeSubtitleStyle(subtitleStyle);
   const previewSubtitlePosition = getSubtitlePositionStyle(
     previewSubtitleStyle,
-    1080,
-    1920,
+    outputDimensions.width,
+    outputDimensions.height,
   );
   const previewSubtitleWords = getSubtitleWordsForDisplay(
     activeSubtitleWords,
@@ -2445,11 +2546,18 @@ export default function LocalEditorTab({
                 data-testid="local-editor-player-stage"
                 className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#242424]"
               >
-                <div className="relative h-full max-h-full w-auto max-w-full aspect-[9/16]">
+                <div
+                  className="relative h-full max-h-full w-auto max-w-full"
+                  style={{
+                    aspectRatio: `${outputDimensions.width} / ${outputDimensions.height}`,
+                  }}
+                >
                   {remotionPreviewProps ? (
                     <PlaybackClockProvider clock={playbackClock}>
                       <RemotionPreview
                         {...remotionPreviewProps}
+                        width={outputDimensions.width}
+                        height={outputDimensions.height}
                         layout={previewLayout}
                         subtitles={previewSubtitles}
                         subtitleTracks={[]}
@@ -2457,6 +2565,9 @@ export default function LocalEditorTab({
                         hook={hook}
                         controls={false}
                         className="h-full w-full"
+                        onSourceDimensionsChange={
+                          handleRemotionSourceDimensionsChange
+                        }
                         onFrameChange={handleRemotionFrameChange}
                         onMediaTimeChange={handleRemotionMediaTimeChange}
                         onPlayerReady={handleRemotionPlayerReady}
@@ -2772,14 +2883,26 @@ export default function LocalEditorTab({
                   >
                     Full
                   </button>
-                  <button
-                    type="button"
-                    aria-label="Aspect ratio 9:16"
-                    title="Aspect ratio 9:16"
-                    className="rounded-sm border border-zinc-500/70 bg-[#2b2b2b] px-1 py-0.5 text-[10px] font-medium leading-none text-zinc-300 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] hover:border-zinc-300 hover:bg-[#343434] hover:text-white"
-                  >
-                    9:16
-                  </button>
+                  {!onExport && (
+                    <select
+                      aria-label="Export aspect ratio"
+                      title={`Output ratio ${formatAspectRatio(outputDimensions.width, outputDimensions.height)}`}
+                      value={aspectRatio}
+                      onChange={(event) =>
+                        changeAspectRatio(event.target.value)
+                      }
+                      className="max-w-[118px] rounded-sm border border-zinc-500/70 bg-[#2b2b2b] px-1 py-0.5 text-[10px] font-medium leading-none text-zinc-300 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] hover:border-zinc-300 hover:bg-[#343434] hover:text-white"
+                    >
+                      {LOCAL_EDITOR_ASPECT_RATIOS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.value === "original" &&
+                          sourceAspectRatio !== "—"
+                            ? `Original (${sourceAspectRatio})`
+                            : option.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <button
                     type="button"
                     onClick={toggleFullscreen}
@@ -3366,8 +3489,10 @@ export default function LocalEditorTab({
                 subtitleCues={subtitleCues}
                 videoName={videoFile?.name || initialVideoName}
                 fps={remotionFps}
-                width={remotionPreviewProps?.width}
-                height={remotionPreviewProps?.height}
+                width={outputDimensions.width}
+                height={outputDimensions.height}
+                sourceWidth={sourceWidth}
+                sourceHeight={sourceHeight}
                 hashtags={clipMetadata?.hashtags}
                 onHashtagsChange={onHashtagsChange}
                 sourceMetadata={clipMetadata?.source_metadata}
@@ -3694,6 +3819,8 @@ export default function LocalEditorTab({
                     <div id="subtitle-cue-editing-panel" className="pt-2">
                       <LocalEditorSubtitleStyleInspector
                         style={subtitleStyle}
+                        renderWidth={outputDimensions.width}
+                        renderHeight={outputDimensions.height}
                         onChange={updateSubtitleStyle}
                         onRemove={removeSubtitles}
                         hasCues={subtitleCues.length > 0}

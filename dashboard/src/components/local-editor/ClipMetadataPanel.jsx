@@ -3,6 +3,7 @@ import { Instagram, Loader2, Video, Wand2, Youtube } from "lucide-react";
 import { getApiUrl } from "../../config";
 import { getLocalAiHeaders, subtitleTextFromCues } from "./localEditorAi";
 import { formatClock } from "./localEditorExport";
+import { formatAspectRatio } from "./localEditorAspectRatio";
 
 const finiteNumber = (value) => {
   const parsed = Number(value);
@@ -43,6 +44,8 @@ export default function ClipMetadataPanel({
   fps = null,
   width = null,
   height = null,
+  sourceWidth = null,
+  sourceHeight = null,
   hashtags,
   onHashtagsChange,
   sourceMetadata = null,
@@ -93,6 +96,10 @@ export default function ClipMetadataPanel({
   }, [clipInfoSourceKey]);
   const outputWidth = finiteNumber(width || metadata.output_width);
   const outputHeight = finiteNumber(height || metadata.output_height);
+  const actualSourceWidth = finiteNumber(sourceWidth || metadata.source_width);
+  const actualSourceHeight = finiteNumber(
+    sourceHeight || metadata.source_height,
+  );
   const frameRate = finiteNumber(fps || metadata.output_fps || metadata.fps);
   const sourceTiming = [
     hasTimestamp(metadata.start)
@@ -119,17 +126,14 @@ export default function ClipMetadataPanel({
     outputWidth > 0 && outputHeight > 0
       ? `${outputWidth} × ${outputHeight}`
       : metadata.resolution || "Adapted";
-  let aspectRatio = metadata.aspect_ratio || "9:16";
-  if (outputWidth > 0 && outputHeight > 0) {
-    let ratioWidth = outputWidth;
-    let ratioHeight = outputHeight;
-    while (ratioHeight) {
-      const remainder = ratioWidth % ratioHeight;
-      ratioWidth = ratioHeight;
-      ratioHeight = remainder;
-    }
-    aspectRatio = `${outputWidth / ratioWidth}:${outputHeight / ratioWidth}`;
-  }
+  const outputAspectRatio =
+    outputWidth > 0 && outputHeight > 0
+      ? formatAspectRatio(outputWidth, outputHeight)
+      : metadata.aspect_ratio || "9:16";
+  const sourceAspectRatio = formatAspectRatio(
+    actualSourceWidth,
+    actualSourceHeight,
+  );
 
   useEffect(() => {
     if (Array.isArray(hashtags) && hashtags.length)
@@ -332,7 +336,8 @@ export default function ClipMetadataPanel({
           ["Name", projectName],
           ["Timeline", timelineName],
           ["Source", sourceName],
-          ["Aspect ratio", aspectRatio],
+          ["Source ratio", sourceAspectRatio],
+          ["Output ratio", outputAspectRatio],
           ["Resolution", resolution],
           ["Frame rate", `${frameRate || 30} fps`],
           ["Subtitles", `${subtitleCues.length} cues`],
