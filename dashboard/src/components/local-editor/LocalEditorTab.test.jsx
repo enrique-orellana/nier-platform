@@ -2257,12 +2257,16 @@ describe("LocalEditorTab", () => {
     expect(
       screen.getByRole("button", { name: /change preview fit|fill video/i }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Aspect ratio 9:16" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Aspect ratio 9:16" }),
-    ).toHaveClass("border", "bg-[#2b2b2b]", "rounded-sm");
+    const aspectRatioSelect = screen.getByRole("combobox", {
+      name: "Export aspect ratio",
+    });
+    expect(aspectRatioSelect).toHaveValue("9:16");
+    expect(aspectRatioSelect).toHaveAttribute("title", "Output ratio 9:16");
+    expect(aspectRatioSelect).toHaveClass(
+      "border",
+      "bg-[#2b2b2b]",
+      "rounded-sm",
+    );
     expect(
       screen.queryByRole("button", { name: "Preview zoom" }),
     ).not.toBeInTheDocument();
