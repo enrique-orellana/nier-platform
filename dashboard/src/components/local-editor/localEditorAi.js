@@ -1,5 +1,23 @@
 import { resolveAiBaseUrl } from "../../lib/aiProvider";
 
+export const TRANSCRIPTION_LANGUAGE_CHANGE_EVENT =
+  "local-editor-transcription-language-change";
+const TRANSCRIPTION_LANGUAGE_STORAGE_KEY = "ai_transcription_language_v1";
+
+export const getLocalTranscriptionLanguage = () =>
+  localStorage.getItem(TRANSCRIPTION_LANGUAGE_STORAGE_KEY) || "auto";
+
+export const setLocalTranscriptionLanguage = (language) => {
+  const nextLanguage = language || "auto";
+  localStorage.setItem(TRANSCRIPTION_LANGUAGE_STORAGE_KEY, nextLanguage);
+  window.dispatchEvent(
+    new CustomEvent(TRANSCRIPTION_LANGUAGE_CHANGE_EVENT, {
+      detail: nextLanguage,
+    }),
+  );
+  return nextLanguage;
+};
+
 export const getLocalAiHeaders = () => {
   const provider = localStorage.getItem("ai_provider_v1") || "gemini";
   const apiKey =
@@ -21,8 +39,7 @@ export const getLocalAiHeaders = () => {
     "X-AI-Transcription-Model":
       localStorage.getItem("ai_transcription_model_v1") ||
       "openai/whisper-large-v3",
-    "X-AI-Transcription-Language":
-      localStorage.getItem("ai_transcription_language_v1") || "auto",
+    "X-AI-Transcription-Language": getLocalTranscriptionLanguage(),
   };
   const transcriptionOpenRouterProvider = (
     localStorage.getItem("ai_transcription_openrouter_provider_v1") || ""

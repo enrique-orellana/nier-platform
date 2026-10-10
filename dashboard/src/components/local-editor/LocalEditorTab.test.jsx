@@ -2741,6 +2741,39 @@ describe("LocalEditorTab", () => {
     );
   });
 
+  it("defaults the audio language selector to auto-detect", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/job-1/source.mp4"
+        initialProjectId="job-1"
+        initialClipIndex={2}
+        allowLocalUpload={false}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /toggle subtitles settings/i }),
+    );
+
+    expect(screen.getByLabelText("Audio language")).toHaveValue("auto");
+  });
+
+  it("loads the saved audio language preference", () => {
+    localStorage.setItem("ai_transcription_language_v1", "de");
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/job-1/source.mp4"
+        initialProjectId="job-1"
+        initialClipIndex={2}
+        allowLocalUpload={false}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /toggle subtitles settings/i }),
+    );
+
+    expect(screen.getByLabelText("Audio language")).toHaveValue("de");
+  });
+
   it("generates subtitles from the local video and records one undoable action", async () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:demo");
     localStorage.setItem("ai_provider_v1", "openrouter");
@@ -2765,6 +2798,10 @@ describe("LocalEditorTab", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /toggle subtitles settings/i }),
     );
+    fireEvent.change(screen.getByLabelText("Audio language"), {
+      target: { value: "it" },
+    });
+    expect(localStorage.getItem("ai_transcription_language_v1")).toBe("it");
     fireEvent.click(
       screen.getByRole("button", { name: /generate subtitles/i }),
     );
@@ -2780,6 +2817,7 @@ describe("LocalEditorTab", () => {
         headers: expect.objectContaining({
           "X-AI-Provider": "openrouter",
           "X-AI-Api-Key": "test-openrouter-key",
+          "X-AI-Transcription-Language": "it",
         }),
       }),
     );
@@ -2793,6 +2831,7 @@ describe("LocalEditorTab", () => {
   });
 
   it("generates subtitles for a streamed project clip from the cached master", async () => {
+    localStorage.setItem("ai_transcription_language_v1", "auto");
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -2822,6 +2861,9 @@ describe("LocalEditorTab", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /toggle subtitles settings/i }),
     );
+    fireEvent.change(screen.getByLabelText("Audio language"), {
+      target: { value: "es" },
+    });
     const generateButton = screen.getByRole("button", {
       name: /generate subtitles/i,
     });
@@ -2840,8 +2882,51 @@ describe("LocalEditorTab", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({}),
+        headers: expect.objectContaining({
+          "X-AI-Transcription-Language": "es",
+        }),
       }),
     );
+  });
+
+  it("disables the audio language selector while transcription is running", async () => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue(
+      "blob:pending-transcription",
+    );
+    let resolveTranscription;
+    const transcriptionResponse = new Promise((resolve) => {
+      resolveTranscription = resolve;
+    });
+    const fetchMock = vi.fn(() => transcriptionResponse);
+    vi.stubGlobal("fetch", fetchMock);
+    render(<LocalEditorTab />);
+    fireEvent.change(screen.getByLabelText(/upload video/i), {
+      target: { files: [makeVideoFile()] },
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /toggle subtitles settings/i }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /toggle subtitles settings/i }),
+    );
+    const languageSelect = screen.getByLabelText("Audio language");
+    fireEvent.click(
+      screen.getByRole("button", { name: /generate subtitles/i }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(languageSelect).toBeDisabled();
+
+    resolveTranscription({
+      ok: true,
+      json: async () => ({
+        language: "en",
+        segments: [{ start: 0.25, end: 1.4, text: "Generated caption" }],
+      }),
+    });
+    await waitFor(() => expect(languageSelect).toBeEnabled());
   });
 
   it("cleans subtitle dots in the current editor state", async () => {

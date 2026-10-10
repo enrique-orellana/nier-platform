@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import { setLocalTranscriptionLanguage } from "./components/local-editor/localEditorAi";
 
 describe("App settings layout", () => {
   beforeEach(() => {
@@ -106,6 +107,22 @@ describe("App settings layout", () => {
     expect(
       await screen.findAllByRole("option", { name: "GPT-5.4" }),
     ).toHaveLength(3);
+  });
+
+  it("updates transcription language when changed from the Local Editor", async () => {
+    render(<App />);
+
+    const languageSelect = await screen.findByRole("combobox", {
+      name: "Transcription source language",
+    });
+    expect(languageSelect).toHaveValue("auto");
+
+    act(() => {
+      setLocalTranscriptionLanguage("it");
+    });
+
+    expect(languageSelect).toHaveValue("it");
+    expect(localStorage.getItem("ai_transcription_language_v1")).toBe("it");
   });
 
   it("defaults connected Codex text, clip, and vision settings to Luna High", async () => {

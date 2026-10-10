@@ -106,7 +106,11 @@ import {
   normalizeHookBoxStyle,
 } from "../../remotion/lib/hookVisual";
 import LocalEditorProjects from "./LocalEditorProjects";
-import { getLocalAiHeaders } from "./localEditorAi";
+import {
+  getLocalAiHeaders,
+  getLocalTranscriptionLanguage,
+  setLocalTranscriptionLanguage,
+} from "./localEditorAi";
 import {
   createEmptyEditorHistory,
   createStoredProject,
@@ -270,6 +274,9 @@ export default function LocalEditorTab({
   const [pendingSubtitle, setPendingSubtitle] = useState(null);
   const [error, setError] = useState("");
   const [generatingSubtitles, setGeneratingSubtitles] = useState(false);
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState(
+    getLocalTranscriptionLanguage,
+  );
   const [generatingReactions, setGeneratingReactions] = useState(false);
   const [reactionReview, setReactionReview] = useState(null);
   const [reactionReviewStyle, setReactionReviewStyle] = useState(
@@ -1322,6 +1329,10 @@ export default function LocalEditorTab({
     } catch (importError) {
       setError(importError.message || "Could not import subtitles.");
     }
+  };
+
+  const handleTranscriptionLanguageChange = (event) => {
+    setTranscriptionLanguage(setLocalTranscriptionLanguage(event.target.value));
   };
 
   const generateSubtitles = async () => {
@@ -3582,6 +3593,47 @@ export default function LocalEditorTab({
                           importSubtitleFile(file);
                         }}
                       />
+                      <label className="mb-3 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                        Audio language
+                        <div className="relative mt-1.5">
+                          <select
+                            aria-label="Audio language"
+                            value={transcriptionLanguage}
+                            onChange={handleTranscriptionLanguageChange}
+                            disabled={generatingSubtitles}
+                            style={{ colorScheme: "dark" }}
+                            className="w-full appearance-none rounded-md border border-white/10 bg-transparent px-2.5 py-2 pr-8 text-xs text-zinc-200 outline-none transition-colors hover:border-white/20 focus:border-violet-300/50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <option
+                              value="auto"
+                              style={{
+                                backgroundColor: "#171e21",
+                                color: "#f4f4f5",
+                              }}
+                            >
+                              Auto-detect
+                            </option>
+                            {Object.entries(SUBTITLE_LANGUAGES).map(
+                              ([code, name]) => (
+                                <option
+                                  key={code}
+                                  value={code}
+                                  style={{
+                                    backgroundColor: "#171e21",
+                                    color: "#f4f4f5",
+                                  }}
+                                >
+                                  {name}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                          <ChevronDown
+                            size={14}
+                            className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
+                          />
+                        </div>
+                      </label>
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"

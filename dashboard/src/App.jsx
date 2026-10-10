@@ -50,6 +50,11 @@ import UGCGallery from "./components/UGCGallery";
 import ScheduleWeekModal from "./components/ScheduleWeekModal";
 import AISettingsPanel from "./components/AISettingsPanel";
 import LocalEditorTab from "./components/local-editor/LocalEditorTab";
+import {
+  getLocalTranscriptionLanguage,
+  setLocalTranscriptionLanguage,
+  TRANSCRIPTION_LANGUAGE_CHANGE_EVENT,
+} from "./components/local-editor/localEditorAi";
 import HighlightsTab from "./components/HighlightsTab";
 import PerformanceDashboard from "./components/PerformanceDashboard";
 
@@ -347,13 +352,25 @@ function App() {
       OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL,
   );
   const [transcriptionLanguage, setTranscriptionLanguage] = useState(
-    () => localStorage.getItem("ai_transcription_language_v1") || "auto",
+    getLocalTranscriptionLanguage,
   );
   const handleTranscriptionLanguageChange = (nextLanguage) => {
-    const normalizedLanguage = nextLanguage || "auto";
-    setTranscriptionLanguage(normalizedLanguage);
-    localStorage.setItem("ai_transcription_language_v1", normalizedLanguage);
+    setTranscriptionLanguage(setLocalTranscriptionLanguage(nextLanguage));
   };
+  useEffect(() => {
+    const handleLocalTranscriptionLanguageChange = (event) => {
+      setTranscriptionLanguage(event.detail || "auto");
+    };
+    window.addEventListener(
+      TRANSCRIPTION_LANGUAGE_CHANGE_EVENT,
+      handleLocalTranscriptionLanguageChange,
+    );
+    return () =>
+      window.removeEventListener(
+        TRANSCRIPTION_LANGUAGE_CHANGE_EVENT,
+        handleLocalTranscriptionLanguageChange,
+      );
+  }, []);
   const [transcriptionOpenRouterProvider, setTranscriptionOpenRouterProvider] =
     useState(
       () =>
