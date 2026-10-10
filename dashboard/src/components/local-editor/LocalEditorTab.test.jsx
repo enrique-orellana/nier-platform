@@ -2743,6 +2743,8 @@ describe("LocalEditorTab", () => {
 
   it("generates subtitles from the local video and records one undoable action", async () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:demo");
+    localStorage.setItem("ai_provider_v1", "openrouter");
+    localStorage.setItem("ai_api_key_v1", "test-openrouter-key");
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -2772,7 +2774,14 @@ describe("LocalEditorTab", () => {
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/local-editor/transcribe",
-      expect.objectContaining({ method: "POST", body: expect.any(FormData) }),
+      expect.objectContaining({
+        method: "POST",
+        body: expect.any(FormData),
+        headers: expect.objectContaining({
+          "X-AI-Provider": "openrouter",
+          "X-AI-Api-Key": "test-openrouter-key",
+        }),
+      }),
     );
     expect(
       screen.getByRole("button", { name: "Undo", exact: true }),

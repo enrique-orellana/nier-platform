@@ -1339,6 +1339,7 @@ export default function LocalEditorTab({
         formData.append("file", videoFile, videoFile.name);
         response = await fetch(getApiUrl("/api/local-editor/transcribe"), {
           method: "POST",
+          headers: getLocalAiHeaders(),
           body: formData,
         });
       } else if (hasProjectClipSource) {
