@@ -234,7 +234,7 @@ const GEMINI_TEXT_MODEL = "gemini-2.5-flash";
 const GEMINI_VISION_MODEL = "gemini-3.1-flash-image-preview";
 const OPENROUTER_DEFAULT_MODEL = "openai/gpt-4o-mini";
 const OPENROUTER_DEFAULT_TRANSCRIPTION_MODEL = "openai/whisper-large-v3";
-const CODEX_DEFAULT_MODEL = "gpt-5.6-luna";
+const CODEX_DEFAULT_MODEL = "gpt-6-luna";
 const CODEX_DEFAULT_EFFORT = "high";
 const normalizeQualityPreset = (value) => {
   const preset = (value || "").trim().toLowerCase();

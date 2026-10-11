@@ -28,7 +28,7 @@ def test_load_ai_config_reads_codex_reasoning_efforts():
 def test_codex_default_model_uses_chatgpt_supported_luna_model(monkeypatch):
     monkeypatch.delenv("CODEX_MODEL", raising=False)
 
-    assert ai_client._codex_default_model() == "gpt-5.6-luna"
+    assert ai_client._codex_default_model() == "gpt-6-luna"
 
 
 def test_unsupported_provider_still_fails_fast():
@@ -199,7 +199,7 @@ def test_codex_transport_aggregates_response_output_text_deltas(monkeypatch):
     assert FakeCodexStreamClient.last_url == "https://chatgpt.com/backend-api/codex/responses"
     assert FakeCodexStreamClient.last_headers["Authorization"] == "Bearer access"
     assert FakeCodexStreamClient.last_headers["ChatGPT-Account-ID"] == "account"
-    assert FakeCodexStreamClient.last_payload["model"] == ai_client.CODEX_DEFAULT_MODEL
+    assert FakeCodexStreamClient.last_payload["model"] == "gpt-6-luna"
     assert FakeCodexStreamClient.last_payload["stream"] is True
     assert FakeCodexStreamClient.last_payload["store"] is False
 
@@ -218,7 +218,7 @@ def test_codex_transport_allows_unbounded_stream_when_timeout_is_zero(monkeypatc
 def test_codex_transport_sends_selected_reasoning_effort(monkeypatch):
     config = ai_client.AIConfig(
         provider="openai-codex",
-        text_model="gpt-5.6-luna",
+        text_model="auto",
         reasoning_effort="high",
     )
     monkeypatch.setattr(ai_client, "get_access_token", lambda: "access")
@@ -227,7 +227,7 @@ def test_codex_transport_sends_selected_reasoning_effort(monkeypatch):
 
     ai_client.chat_completion(config, "Return JSON", json_mode=True)
 
-    assert FakeCodexStreamClient.last_payload["model"] == "gpt-5.6-luna"
+    assert FakeCodexStreamClient.last_payload["model"] == "gpt-6-luna"
     assert FakeCodexStreamClient.last_payload["reasoning"] == {"effort": "high"}
 
 
