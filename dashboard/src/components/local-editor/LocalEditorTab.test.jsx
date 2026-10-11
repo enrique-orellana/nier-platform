@@ -148,6 +148,13 @@ if (!URL.createObjectURL) {
     value: () => "blob:demo",
   });
 }
+if (!URL.revokeObjectURL) {
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    writable: true,
+    value: () => {},
+  });
+}
 
 describe("LocalEditorTab", () => {
   beforeEach(async () => {
@@ -158,6 +165,7 @@ describe("LocalEditorTab", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -2159,6 +2167,46 @@ describe("LocalEditorTab", () => {
     expect(
       screen.getByTestId("local-editor-timeline-canvas"),
     ).toBeInTheDocument();
+  });
+
+  it("exports subtitle times offset to the original video in-point", async () => {
+    let exportedBlob;
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      exportedBlob = blob;
+      return "blob:subtitles";
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    render(
+      <LocalEditorTab
+        initialVideoUrl="https://media.example.test/project.mp4"
+        initialPlaybackStartMs={120000}
+        initialEditorState={{
+          subtitleCues: [
+            { id: "cue-1", text: "Ciao", startMs: 4500, endMs: 6200 },
+          ],
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /add cue to timeline/i }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open subtitle table" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Export Subtitles" }));
+
+    await waitFor(() => expect(exportedBlob).toBeDefined());
+    const exportedText = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(exportedBlob);
+    });
+    expect(exportedText).toBe("1\n00:02:04,500 --> 00:02:06,200\nCiao\n");
   });
 
   it("shows word timings for a cue after its text is entered", async () => {

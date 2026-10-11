@@ -2001,7 +2001,18 @@ export default function LocalEditorTab({
 
   const exportSubtitles = () =>
     downloadBlob(
-      new Blob([serializeSrt(subtitleCues)], { type: "application/x-subrip" }),
+      new Blob(
+        [
+          serializeSrt(
+            subtitleCues.map((cue) => ({
+              ...cue,
+              startMs: Number(cue.startMs) + playbackStartMs,
+              endMs: Number(cue.endMs) + playbackStartMs,
+            })),
+          ),
+        ],
+        { type: "application/x-subrip" },
+      ),
       "openshorts-subtitles.srt",
     );
 
