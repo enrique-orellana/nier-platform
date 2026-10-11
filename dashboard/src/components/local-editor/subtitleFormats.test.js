@@ -50,4 +50,15 @@ describe("subtitle formats", () => {
       "1\n00:00:01,200 --> 00:00:03,400\nHello\n",
     );
   });
+
+  it("serializes cues in chronological order", () => {
+    expect(
+      serializeSrt([
+        { text: "Later", startMs: 949129, endMs: 950040 },
+        { text: "Earlier", startMs: 35105, endMs: 36621 },
+      ]),
+    ).toBe(
+      "1\n00:00:35,105 --> 00:00:36,621\nEarlier\n\n2\n00:15:49,129 --> 00:15:50,040\nLater\n",
+    );
+  });
 });

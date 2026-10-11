@@ -90,7 +90,8 @@ export function parseSubtitleFile(fileName, source) {
 }
 
 export function serializeSrt(cues) {
-  return (cues || [])
+  return [...(cues || [])]
+    .sort((a, b) => Number(a.startMs) - Number(b.startMs))
     .map(
       (cue, index) =>
         `${index + 1}\n${formatTimestamp(cue.startMs)} --> ${formatTimestamp(cue.endMs)}\n${cue.text || ""}\n`,
