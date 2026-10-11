@@ -61,4 +61,33 @@ describe("subtitle formats", () => {
       "1\n00:00:35,105 --> 00:00:36,621\nEarlier\n\n2\n00:15:49,129 --> 00:15:50,040\nLater\n",
     );
   });
+
+  it("adds an invisible zero-time anchor for timeline-based SRT imports", () => {
+    expect(
+      serializeSrt(
+        [
+          { text: "Later", startMs: 949129, endMs: 950040 },
+          { text: "Earlier", startMs: 35105, endMs: 36621 },
+        ],
+        { includeTimelineAnchor: true },
+      ),
+    ).toBe(
+      "1\n00:00:00,000 --> 00:00:35,105\n\u200B\n\n2\n00:00:35,105 --> 00:00:36,621\nEarlier\n\n3\n00:15:49,129 --> 00:15:50,040\nLater\n",
+    );
+  });
+
+  it("ignores the invisible timeline anchor when importing an exported SRT", () => {
+    expect(
+      parseSrt(
+        "1\n00:00:00,000 --> 00:00:35,105\n\u200B\n\n2\n00:00:35,105 --> 00:00:36,621\nEarlier\n",
+      ),
+    ).toEqual([
+      {
+        id: "subtitle-2",
+        text: "Earlier",
+        startMs: 35105,
+        endMs: 36621,
+      },
+    ]);
+  });
 });

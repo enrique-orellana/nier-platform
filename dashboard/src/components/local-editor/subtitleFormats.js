@@ -1,4 +1,5 @@
 const TIMESTAMP_RE = /^(?:(\d+):)?(\d{2}):(\d{2})[,.](\d{3})$/;
+const SRT_TIMELINE_ANCHOR = "\u200B";
 
 const parseTimestamp = (value) => {
   const match = String(value).trim().match(TIMESTAMP_RE);
@@ -47,7 +48,7 @@ const parseCueBlock = (block, index, preserveId = false) => {
     .join("\n")
     .trim();
   if (!start || !end) throw new Error("Invalid subtitle cue");
-  if (!text) return null;
+  if (!text || text === SRT_TIMELINE_ANCHOR) return null;
   return {
     id: preserveId
       ? lines[timingIndex - 1]?.trim() || `subtitle-${index + 1}`
@@ -89,9 +90,24 @@ export function parseSubtitleFile(fileName, source) {
   throw new Error("Only .srt and .vtt subtitle files are supported");
 }
 
-export function serializeSrt(cues) {
-  return [...(cues || [])]
-    .sort((a, b) => Number(a.startMs) - Number(b.startMs))
+export function serializeSrt(cues, { includeTimelineAnchor = false } = {}) {
+  const sortedCues = [...(cues || [])].sort(
+    (a, b) => Number(a.startMs) - Number(b.startMs),
+  );
+  const firstCueStartMs = Number(sortedCues[0]?.startMs);
+  const exportCues =
+    includeTimelineAnchor && firstCueStartMs > 0
+      ? [
+          {
+            text: SRT_TIMELINE_ANCHOR,
+            startMs: 0,
+            endMs: firstCueStartMs,
+          },
+          ...sortedCues,
+        ]
+      : sortedCues;
+
+  return exportCues
     .map(
       (cue, index) =>
         `${index + 1}\n${formatTimestamp(cue.startMs)} --> ${formatTimestamp(cue.endMs)}\n${cue.text || ""}\n`,

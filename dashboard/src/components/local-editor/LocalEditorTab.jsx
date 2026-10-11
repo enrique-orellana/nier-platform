@@ -2009,6 +2009,7 @@ export default function LocalEditorTab({
               startMs: Number(cue.startMs) + playbackStartMs,
               endMs: Number(cue.endMs) + playbackStartMs,
             })),
+            { includeTimelineAnchor: true },
           ),
         ],
         { type: "application/x-subrip" },

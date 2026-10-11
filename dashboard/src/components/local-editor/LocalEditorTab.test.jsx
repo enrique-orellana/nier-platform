@@ -2206,7 +2206,9 @@ describe("LocalEditorTab", () => {
       reader.onerror = () => reject(reader.error);
       reader.readAsText(exportedBlob);
     });
-    expect(exportedText).toBe("1\n00:02:04,500 --> 00:02:06,200\nCiao\n");
+    expect(exportedText).toBe(
+      "1\n00:00:00,000 --> 00:02:04,500\n\u200B\n\n2\n00:02:04,500 --> 00:02:06,200\nCiao\n",
+    );
   });
 
   it("shows word timings for a cue after its text is entered", async () => {
