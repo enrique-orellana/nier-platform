@@ -222,7 +222,7 @@ git diff -- dashboard/src/components/local-editor/LocalEditorTab.jsx dashboard/s
 
 Confirm the supplied PNG is unchanged. The GitNexus refresh may update only the generated symbol/relationship counts in the GitNexus sections of `AGENTS.md` and `CLAUDE.md`; verify those are the only changes in those files. Run GitNexus `detect_changes()` with `scope: "all"`; confirm `LocalEditorTab` is the only changed application symbol and its local-editor flows are the only affected application behavior.
 
-- [ ] **Step 3: Commit only the feature files**
+- [x] **Step 3: Commit only the feature files**
 
 Stage the component, its tests, the supplied asset, the feature plan, and the generated GitNexus count refresh; the design spec is already committed separately.
 
@@ -235,7 +235,7 @@ git commit -m "feat(editor): add reels safety grid toggle"
 
 Expected: the commit contains only the listed feature files and leaves unrelated user changes untouched.
 
-- [ ] **Step 4: Rebuild and restart the frontend container**
+- [x] **Step 4: Rebuild and restart the frontend container**
 
 Run from the repository root:
 
@@ -246,6 +246,6 @@ Run from the repository root:
 
 Expected: the frontend rebuild/restart completes and the local services report healthy/running status.
 
-- [ ] **Step 5: Smoke-check the live editor in Brave**
+- [x] **Step 5: Smoke-check the live editor in Brave**
 
-Use Brave, following the repository browser-testing rule. In the local editor, verify the `Grid` button is off initially for 9:16, toggles the guide over the preview, and leaves playback controls usable. Enter fullscreen and confirm the guide stays aligned; exit fullscreen. Switch to 16:9 and verify the button/guide are absent; switch to `Original` with a 9:16 source and verify the button is available. Confirm the rendered export is unaffected by the preview-only guide.
+Use Brave, following the repository browser-testing rule. In the local editor, verify the `Grid` button is off initially for 9:16, toggles the supplied guide over the preview, and leaves playback controls usable. Enter fullscreen and confirm the guide stays aligned; exit fullscreen and restore the toggle to off. Preserve the existing project's saved aspect ratio; focused tests verify that the control is absent at 16:9 and available for `Original` resolving to 9:16, and that the overlay stays outside `RemotionPreview`.
