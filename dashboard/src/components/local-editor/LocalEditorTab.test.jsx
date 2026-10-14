@@ -2325,6 +2325,80 @@ describe("LocalEditorTab", () => {
     ).toBeInTheDocument();
   });
 
+  it("toggles the Reels safety grid as a preview-only overlay", () => {
+    render(
+      <LocalEditorTab
+        initialVideoUrl="/videos/project.mp4"
+        initialPlaybackDurationMs={10000}
+        remotionPreviewProps={{
+          videoUrl: "/videos/project.mp4",
+          durationInSeconds: 10,
+          fps: 30,
+          width: 1080,
+          height: 1920,
+        }}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Grid" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.queryByRole("img", { name: "Instagram Reels safe zones" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    const overlay = screen.getByRole("img", {
+      name: "Instagram Reels safe zones",
+    });
+    expect(screen.getByRole("button", { name: "Grid" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(overlay).toHaveAttribute("src", "/ig-safety-grid.png");
+    expect(overlay).toHaveClass("pointer-events-none");
+    expect(screen.getByTestId("local-editor-player-stage")).toContainElement(
+      overlay,
+    );
+    expect(
+      screen.getByTestId("local-editor-remotion-preview"),
+    ).not.toContainElement(overlay);
+  });
+
+  it("offers the safety grid only for resolved 9:16 output frames", () => {
+    const editorProps = {
+      initialVideoUrl: "/videos/project.mp4",
+      initialPlaybackDurationMs: 10000,
+      remotionPreviewProps: {
+        videoUrl: "/videos/project.mp4",
+        durationInSeconds: 10,
+        fps: 30,
+        width: 1080,
+        height: 1920,
+      },
+    };
+    const { unmount } = render(
+      <LocalEditorTab
+        {...editorProps}
+        initialEditorState={{ aspectRatio: "16:9" }}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Grid" }),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    render(
+      <LocalEditorTab
+        {...editorProps}
+        initialEditorState={{ aspectRatio: "original" }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Grid" })).toBeInTheDocument();
+  });
+
   it("uses the standard Remotion preview for project clips", async () => {
     render(
       <LocalEditorTab

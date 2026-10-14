@@ -289,6 +289,7 @@ export default function LocalEditorTab({
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [safetyGridVisible, setSafetyGridVisible] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRateMenuOpen, setPlaybackRateMenuOpen] = useState(false);
   const [loopSegment, setLoopSegment] = useState(false);
@@ -445,6 +446,9 @@ export default function LocalEditorTab({
     () => resolveAspectRatioDimensions(aspectRatio, sourceWidth, sourceHeight),
     [aspectRatio, sourceHeight, sourceWidth],
   );
+  const isReelsAspectRatio =
+    formatAspectRatio(outputDimensions.width, outputDimensions.height) ===
+    "9:16";
   const hookRenderWidth = outputDimensions.width;
   const hookRenderHeight = outputDimensions.height;
   const sourceAspectRatio = formatAspectRatio(sourceWidth, sourceHeight);
@@ -2750,6 +2754,14 @@ export default function LocalEditorTab({
                       </div>
                     </>
                   )}
+                  {isReelsAspectRatio && safetyGridVisible && (
+                    <img
+                      src="/ig-safety-grid.png"
+                      alt="Instagram Reels safe zones"
+                      draggable={false}
+                      className="pointer-events-none absolute inset-0 z-20 h-full w-full object-fill"
+                    />
+                  )}
                 </div>
               </div>
               <div
@@ -2907,6 +2919,27 @@ export default function LocalEditorTab({
                   >
                     Full
                   </button>
+                  {isReelsAspectRatio && (
+                    <button
+                      type="button"
+                      aria-pressed={safetyGridVisible}
+                      title={
+                        safetyGridVisible
+                          ? "Hide Instagram Reels safe zones"
+                          : "Show Instagram Reels safe zones"
+                      }
+                      onClick={() =>
+                        setSafetyGridVisible((visible) => !visible)
+                      }
+                      className={`flex h-7 min-h-7 shrink-0 items-center rounded-md border px-2 text-[10px] font-medium transition-colors ${
+                        safetyGridVisible
+                          ? "border-violet-300/30 bg-violet-400/10 text-violet-100"
+                          : "border-white/10 bg-white/[.02] text-zinc-400 hover:border-white/20 hover:text-zinc-100"
+                      }`}
+                    >
+                      Grid
+                    </button>
+                  )}
                   {!onExport && (
                     <select
                       aria-label="Export aspect ratio"
