@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -153,7 +154,30 @@ def test_transcribe_video_uses_provider_selected_by_environment(monkeypatch, tmp
     assert result["events"] == []
 
 
+def test_local_chat_requires_explicit_transcription_service_even_with_remote_env_default(
+    monkeypatch,
+):
+    local_chat_config = SimpleNamespace(
+        normalized_provider=lambda: "lmstudio",
+        transcription_language="auto",
+    )
+    monkeypatch.setattr(
+        highlight_generation,
+        "load_ai_config",
+        lambda _headers=None: local_chat_config,
+    )
+    monkeypatch.setenv("AI_PROVIDER", "openrouter")
+    monkeypatch.setenv("AI_TRANSCRIPTION_PROVIDER", "")
+
+    with pytest.raises(
+        ValueError, match="AI_TRANSCRIPTION_PROVIDER must be set explicitly"
+    ):
+        highlight_generation.transcribe_video_with_config("unused.mp4", 30)
+
+
 def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch, tmp_path):
+    monkeypatch.setenv("AI_PROVIDER", "openrouter")
+    monkeypatch.setenv("AI_TRANSCRIPTION_PROVIDER", "openrouter-json")
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
     config = Mock()
@@ -183,6 +207,8 @@ def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch
 
 
 def test_openrouter_transcription_uses_single_chunk_for_short_source(monkeypatch, tmp_path):
+    monkeypatch.setenv("AI_PROVIDER", "openrouter")
+    monkeypatch.setenv("AI_TRANSCRIPTION_PROVIDER", "openrouter-json")
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
     config = Mock()
@@ -211,6 +237,8 @@ def test_openrouter_transcription_uses_single_chunk_for_short_source(monkeypatch
 
 
 def test_openrouter_transcription_uses_selected_clip_range(monkeypatch, tmp_path):
+    monkeypatch.setenv("AI_PROVIDER", "openrouter")
+    monkeypatch.setenv("AI_TRANSCRIPTION_PROVIDER", "openrouter-json")
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
     config = Mock()
@@ -255,6 +283,8 @@ def test_openrouter_transcription_uses_selected_clip_range(monkeypatch, tmp_path
 
 
 def test_openrouter_transcription_reports_failed_chunk(monkeypatch, tmp_path):
+    monkeypatch.setenv("AI_PROVIDER", "openrouter")
+    monkeypatch.setenv("AI_TRANSCRIPTION_PROVIDER", "openrouter-json")
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
     config = Mock()
@@ -275,6 +305,8 @@ def test_openrouter_transcription_reports_failed_chunk(monkeypatch, tmp_path):
 
 
 def test_openrouter_transcription_uses_five_minute_overlapping_chunks(monkeypatch, tmp_path):
+    monkeypatch.setenv("AI_PROVIDER", "openrouter")
+    monkeypatch.setenv("AI_TRANSCRIPTION_PROVIDER", "openrouter-json")
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
     config = Mock()

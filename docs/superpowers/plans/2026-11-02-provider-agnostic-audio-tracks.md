@@ -62,7 +62,7 @@ Before each implementation commit, run GitNexus detect_changes() and confirm the
 
 - [ ] **Step 1: Add failing tests for explicit transcription settings**
 
-In tests/test_analysis_providers.py, test that the loader reads AI_TRANSCRIPTION_PROVIDER, AI_TRANSCRIPTION_BASE_URL, AI_TRANSCRIPTION_MODEL, and AI_TRANSCRIPTION_API_KEY from the environment, accepts a third-party provider ID for registry lookup, rejects an empty provider ID, and rejects missing required configuration for built-in adapters. Use a concrete local test endpoint: http://127.0.0.1:8000/v1.
+In tests/test_analysis_providers.py, test that the loader reads AI_TRANSCRIPTION_PROVIDER, AI_TRANSCRIPTION_BASE_URL, AI_TRANSCRIPTION_MODEL, and AI_TRANSCRIPTION_API_KEY from the environment, accepts a third-party provider ID for registry lookup, rejects missing required configuration for built-in adapters, and requires explicit ASR selection when the active chat provider is not OpenRouter. Use a concrete local test endpoint: http://127.0.0.1:8000/v1.
 
     def test_transcription_config_uses_explicit_service_settings(monkeypatch):
     monkeypatch.setenv("AI_TRANSCRIPTION_PROVIDER", "openai-compatible")
@@ -75,10 +75,13 @@ In tests/test_analysis_providers.py, test that the loader reads AI_TRANSCRIPTION
         assert config.model == "whisper-small"
         assert config.api_key == ""
 
-    def test_transcription_config_rejects_empty_provider_id(monkeypatch):
-        monkeypatch.setenv("AI_TRANSCRIPTION_PROVIDER", " ")
-        with pytest.raises(ValueError, match="AI_TRANSCRIPTION_PROVIDER cannot be empty"):
-            load_transcription_config()
+    def test_local_chat_requires_explicit_transcription_provider():
+        with pytest.raises(ValueError, match="AI_TRANSCRIPTION_PROVIDER must be set explicitly"):
+            load_transcription_config({"AI_PROVIDER": "lmstudio"})
+
+    def test_openrouter_chat_preserves_legacy_transcription_default():
+        config = load_transcription_config({"AI_PROVIDER": "openrouter"})
+        assert config.provider == "openrouter-json"
 
 Run: python -m pytest tests/test_analysis_providers.py -q
 Expected: FAIL because the loader does not exist.
@@ -96,7 +99,7 @@ Expected: PASS with the new generic adapter and existing provider tests.
 
 - [ ] **Step 4: Add transcription settings to Compose and the example env**
 
-Pass AI_TRANSCRIPTION_PROVIDER, AI_TRANSCRIPTION_BASE_URL, AI_TRANSCRIPTION_API_KEY, AI_TRANSCRIPTION_MODEL, and AI_TRANSCRIPTION_LANGUAGE to the backend in docker-compose.yml. Also pass the existing AI_API_KEY, which is currently absent from the backend service environment but is needed by configured remote chat/transcription endpoints. The provider value selects the ASR adapter: openrouter-json or openai-compatible. Document safe example values and endpoint selection in .env.example. Keep credentials in environment configuration and never log their values.
+Pass AI_TRANSCRIPTION_PROVIDER, AI_TRANSCRIPTION_BASE_URL, AI_TRANSCRIPTION_API_KEY, AI_TRANSCRIPTION_MODEL, and AI_TRANSCRIPTION_LANGUAGE to the backend in docker-compose.yml. Also pass the existing AI_API_KEY for remote chat. Leave the ASR provider and endpoint unset by default in Compose; infer the legacy OpenRouter ASR only when the active chat provider is OpenRouter. With another active chat provider, require an explicit ASR provider so audio is never sent to OpenRouter by accident. Built-in and installed plugin IDs select the adapter. Document endpoint selection in .env.example, and never log credentials.
 
 Run: docker compose config --quiet
 Expected: exit code 0 with no resolved configuration printed.
@@ -123,7 +126,7 @@ Mock HTTP calls and verify:
   - openrouter-json preserves the existing OpenRouter JSON request and optional route hint;
   - openai-compatible sends multipart file, model, language, verbose_json, and word/segment timestamp granularity;
   - equivalent local and remote responses normalize to the same text, segments, words, and language;
-  - openrouter-json may use existing AI_API_KEY when AI_TRANSCRIPTION_API_KEY is unset for backward compatibility, while openai-compatible never reuses AI_API_KEY;
+  - openrouter-json may use existing AI_API_KEY when AI_TRANSCRIPTION_API_KEY is unset only if chat analysis also uses OpenRouter, while openai-compatible never reuses AI_API_KEY;
   - unknown protocols and malformed responses raise clear errors without invoking a second adapter.
 
 Run: python -m pytest tests/test_analysis_providers.py -q
@@ -137,7 +140,7 @@ In analysis_providers.py define immutable TranscriptionProviderConfig and transc
 
 Normalize both responses into the transcript shape already consumed by the app. Require non-empty text and positive, finite segment/word ranges. Keep errors readable and redact keys and audio data. Retain transcribe_audio_openrouter() as a compatibility wrapper for saasshorts.py.
 
-Use AI_TRANSCRIPTION_API_KEY for the ASR call. For openrouter-json only, accept AI_API_KEY as a legacy key alias when the dedicated key is unset. Never send AI_API_KEY to an openai-compatible endpoint unless it was also explicitly configured as AI_TRANSCRIPTION_API_KEY.
+Use AI_TRANSCRIPTION_API_KEY for the ASR call. For openrouter-json only, accept AI_API_KEY as a legacy key alias when the dedicated key is unset and chat analysis is also configured for OpenRouter. Never send a local chat key to an OpenRouter endpoint; never send AI_API_KEY to an openai-compatible endpoint unless it was also explicitly configured as AI_TRANSCRIPTION_API_KEY.
 
 - [ ] **Step 3: Verify both adapters**
 

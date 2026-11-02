@@ -79,9 +79,18 @@ def test_transcription_config_accepts_installed_plugin_settings():
     assert config.language == "es"
 
 
-def test_transcription_config_rejects_empty_provider_id():
-    with pytest.raises(ValueError, match="AI_TRANSCRIPTION_PROVIDER cannot be empty"):
-        providers.load_transcription_config({"AI_TRANSCRIPTION_PROVIDER": " "})
+def test_transcription_provider_defaults_to_openrouter_only_for_openrouter_chat():
+    config = providers.load_transcription_config({"AI_PROVIDER": "openrouter"})
+
+    assert config.provider == "openrouter-json"
+    assert config.base_url == providers.OPENROUTER_TRANSCRIPTION_URL
+
+
+def test_transcription_config_requires_explicit_provider_for_local_chat():
+    with pytest.raises(
+        ValueError, match="AI_TRANSCRIPTION_PROVIDER must be set explicitly"
+    ):
+        providers.load_transcription_config({"AI_PROVIDER": "lmstudio"})
 
 
 def test_openrouter_transcription_can_use_legacy_ai_key_but_generic_does_not(

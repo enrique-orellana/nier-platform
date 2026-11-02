@@ -329,7 +329,11 @@ def transcribe_video_with_config(
 ) -> dict[str, Any]:
     """Transcribe audio with the environment-selected provider and bounded chunks."""
     ai_config = load_ai_config(headers)
-    transcription_config = load_transcription_config()
+    normalized_provider = getattr(ai_config, "normalized_provider", None)
+    chat_provider = normalized_provider() if callable(normalized_provider) else None
+    if not isinstance(chat_provider, str):
+        chat_provider = None
+    transcription_config = load_transcription_config(ai_provider=chat_provider)
     language_hint = getattr(ai_config, "transcription_language", "auto")
     if isinstance(language_hint, str) and language_hint != "auto":
         transcription_config = replace(transcription_config, language=language_hint)

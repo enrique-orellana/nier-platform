@@ -199,14 +199,30 @@ class AudioEventConfig:
 
 def load_transcription_config(
     environ: Mapping[str, str] | None = None,
+    *,
+    ai_provider: str | None = None,
 ) -> TranscriptionConfig:
     env = os.environ if environ is None else environ
-    provider = (
-        str(env.get("AI_TRANSCRIPTION_PROVIDER", "openrouter-json")).strip().lower()
+    chat_provider = (
+        str(
+            ai_provider
+            if ai_provider is not None
+            else env.get("AI_PROVIDER", "openrouter")
+        )
+        .strip()
+        .lower()
     )
-    built_in_providers = {"openrouter-json", "openai-compatible"}
+    provider = str(env.get("AI_TRANSCRIPTION_PROVIDER", "") or "").strip().lower()
     if not provider:
-        raise ProviderConfigurationError("AI_TRANSCRIPTION_PROVIDER cannot be empty")
+        if chat_provider == "openrouter":
+            provider = "openrouter-json"
+        else:
+            raise ProviderConfigurationError(
+                "AI_TRANSCRIPTION_PROVIDER must be set explicitly when chat analysis "
+                f"uses '{chat_provider}'. Configure a transcription service; no provider "
+                "will be selected automatically."
+            )
+    built_in_providers = {"openrouter-json", "openai-compatible"}
     default_url = OPENROUTER_TRANSCRIPTION_URL if provider == "openrouter-json" else ""
     base_url = (
         str(env.get("AI_TRANSCRIPTION_BASE_URL", default_url)).strip().rstrip("/")
@@ -226,12 +242,11 @@ def load_transcription_config(
     default_model = (
         DEFAULT_TRANSCRIPTION_MODEL if provider in built_in_providers else ""
     )
-    model = str(env.get("AI_TRANSCRIPTION_MODEL", default_model)).strip()
+    model = str(env.get("AI_TRANSCRIPTION_MODEL", "") or default_model).strip()
     if provider in built_in_providers and not model:
         raise ProviderConfigurationError("AI_TRANSCRIPTION_MODEL cannot be empty")
     api_key = str(env.get("AI_TRANSCRIPTION_API_KEY", "") or "").strip()
     if provider == "openrouter-json" and not api_key:
-        chat_provider = str(env.get("AI_PROVIDER", "openrouter")).strip().lower()
         if chat_provider == "openrouter":
             api_key = str(env.get("AI_API_KEY") or "").strip()
         if not api_key:

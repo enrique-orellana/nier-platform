@@ -93,9 +93,9 @@ Providers, endpoints, models, credentials, and resource controls are configured 
 
 | Variable | Initial value | Meaning |
 | --- | --- | --- |
-| `AI_TRANSCRIPTION_PROVIDER` | `openrouter-json` | Adapter: `openrouter-json`, `openai-compatible`, or an installed plugin ID. |
-| `AI_TRANSCRIPTION_BASE_URL` | Explicitly configured | Local or external transcription service endpoint. |
-| `AI_TRANSCRIPTION_MODEL` | Explicitly configured | Model identifier understood by that endpoint. |
+| `AI_TRANSCRIPTION_PROVIDER` | Inferred only for OpenRouter chat | Adapter: `openrouter-json`, `openai-compatible`, or an installed plugin ID. With any other chat provider, this must be explicit. |
+| `AI_TRANSCRIPTION_BASE_URL` | Empty | Local or external transcription service endpoint; OpenRouter's URL is used only when its adapter is selected. |
+| `AI_TRANSCRIPTION_MODEL` | Empty | Model identifier understood by that endpoint; built-in OpenRouter uses its established default. |
 | `AI_TRANSCRIPTION_API_KEY` | Optional | Credential required by the selected endpoint; never log its value. |
 | `AI_TRANSCRIPTION_LANGUAGE` | `auto` | Optional language hint passed to the selected transcription service. |
 | `AUDIO_EVENT_PROVIDER` | `none` | Provider/adapter name for the sound-event track. |
@@ -115,7 +115,7 @@ Providers, endpoints, models, credentials, and resource controls are configured 
 | `AUDIO_EVENT_MIN_CONFIDENCE` | `0.35` | Starting event threshold, calibrated against validation clips. |
 | `LOCAL_MODEL_CACHE_DIR` | Persistent service volume | Cache for locally hosted model files. |
 
-The stage selectors are independent: `AI_PROVIDER` selects chat transport only and does not change transcription or event detection. For fully local processing, point every enabled stage at its local endpoint. A transcription key is stage-specific; `AI_API_KEY` is reused for OpenRouter transcription only when chat is also configured for OpenRouter.
+The stage selectors are independent: `AI_PROVIDER` selects chat transport only and does not change transcription or event detection. OpenRouter transcription is selected implicitly only when chat is also OpenRouter. When chat uses a local or other provider, an unset transcription provider fails clearly instead of sending audio to OpenRouter. For fully local processing, point every enabled stage at its local endpoint. A transcription key is stage-specific; `AI_API_KEY` is reused for OpenRouter transcription only when chat is also configured for OpenRouter.
 
 Provider names select adapters, while URLs, models, and credentials are data-driven configuration. A provider that implements the configured common protocol can be selected without changing orchestration code. A provider with a different protocol needs one adapter that maps it to the shared input/output contract; after that adapter exists, switching to it remains configuration-only. Remote services are allowed when explicitly selected. A failed configured provider fails the job; it never triggers another provider or heuristic clip selection.
 
