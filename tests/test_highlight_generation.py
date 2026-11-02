@@ -12,6 +12,147 @@ def test_plan_transcription_chunks_bounds_long_sources():
     assert chunks == [(0.0, 600.0), (590.0, 1190.0), (1180.0, 1200.0)]
 
 
+def test_chunked_transcription_service_composes_injected_speech_and_event_providers(tmp_path):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    chunks = []
+
+    class SpeechProvider:
+        config = type("Config", (), {"provider": "test-asr"})()
+
+        def transcribe_chunk(self, path):
+            chunks.append(Path(path).name)
+            return {
+                "text": "ciao",
+                "language": "it",
+                "segments": [{"start": 1, "end": 2, "text": "ciao", "words": []}],
+            }
+
+    class EventProvider:
+        config = type("Config", (), {"provider": "test-events"})()
+
+        def detect_events(self, path, *, transcript=None):
+            assert transcript["text"] == "ciao"
+            return [{"start": 3, "end": 4, "label": "Laughter", "confidence": 0.9}]
+
+    def extract(_source, start, end, destination):
+        destination.write_bytes(f"{start}-{end}".encode())
+
+    service = highlight_generation.ChunkedTranscriptionService(
+        SpeechProvider(),
+        EventProvider(),
+        chunk_seconds=10,
+        overlap_seconds=0,
+        extract_chunk=extract,
+    )
+
+    result = service.transcribe(source, 25)
+
+    assert len(chunks) == 3
+    assert [segment["start"] for segment in result["segments"]] == [1, 11, 21]
+    assert [event["start"] for event in result["events"]] == [3, 13, 23]
+    assert [event["source"] for event in result["events"]] == ["test-events"] * 3
+
+
+def test_chunked_transcription_service_merges_duplicate_events_from_chunk_overlap(tmp_path):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    event_chunks = iter([
+        [{"start": 8.7, "end": 9.6, "label": "Laughter", "confidence": 0.8}],
+        [{"start": 0.8, "end": 1.7, "label": "Laughter", "confidence": 0.95}],
+    ])
+
+    class SpeechProvider:
+        config = type("Config", (), {"provider": "test-asr"})()
+
+        def transcribe_chunk(self, _path):
+            return {"text": "", "segments": [], "language": "it"}
+
+    class EventProvider:
+        config = type("Config", (), {"provider": "test-events"})()
+
+        def detect_events(self, _path, *, transcript=None):
+            return next(event_chunks)
+
+    service = highlight_generation.ChunkedTranscriptionService(
+        SpeechProvider(),
+        EventProvider(),
+        chunk_seconds=10,
+        overlap_seconds=2,
+        extract_chunk=lambda _source, start, end, destination: destination.write_bytes(b"audio"),
+    )
+
+    result = service.transcribe(source, 18)
+
+    assert len(result["events"]) == 1
+    assert result["events"][0]["start"] == 8.7
+    assert result["events"][0]["end"] == 9.7
+    assert result["events"][0]["confidence"] == 0.95
+
+
+def test_chunked_transcription_service_fails_the_selected_provider_without_fallback(tmp_path):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    calls = []
+
+    class BrokenProvider:
+        config = type("Config", (), {"provider": "remote-asr"})()
+
+        def transcribe_chunk(self, _path):
+            calls.append("remote-asr")
+            raise RuntimeError("service unavailable")
+
+    service = highlight_generation.ChunkedTranscriptionService(
+        BrokenProvider(),
+        chunk_seconds=10,
+        overlap_seconds=0,
+        extract_chunk=lambda _source, _start, _end, destination: destination.write_bytes(b"audio"),
+    )
+
+    with pytest.raises(RuntimeError, match="remote-asr transcription failed for chunk 1/1"):
+        service.transcribe(source, 5)
+    assert calls == ["remote-asr"]
+
+
+def test_transcribe_video_uses_provider_selected_by_environment(monkeypatch, tmp_path):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    selected = []
+
+    class FakeSpeechProvider:
+        config = type("Config", (), {"provider": "openai-compatible"})()
+
+        def transcribe_chunk(self, _path):
+            return {"text": "local text", "language": "it", "segments": [{"start": 0, "end": 2, "text": "local text"}]}
+
+    class FakeEvents:
+        config = type("Config", (), {"provider": "none"})()
+
+        def detect_events(self, _path, *, transcript=None):
+            return []
+
+    def create_transcriber(config, **_dependencies):
+        selected.append(config.provider)
+        return FakeSpeechProvider()
+
+    monkeypatch.setenv("AI_TRANSCRIPTION_PROVIDER", "openai-compatible")
+    monkeypatch.setenv("AI_TRANSCRIPTION_BASE_URL", "http://127.0.0.1:8000/v1")
+    monkeypatch.setattr(highlight_generation, "load_ai_config", lambda _headers=None: type("AI", (), {"transcription_language": "auto"})())
+    monkeypatch.setattr(highlight_generation, "create_transcription_provider", create_transcriber)
+    monkeypatch.setattr(highlight_generation, "create_audio_event_provider", lambda _config: FakeEvents())
+    monkeypatch.setattr(
+        highlight_generation,
+        "_extract_openrouter_audio_chunk",
+        lambda _source, _start, _end, destination: destination.write_bytes(b"audio"),
+    )
+
+    result = highlight_generation.transcribe_video_with_config(source, 30)
+
+    assert selected == ["openai-compatible"]
+    assert result["text"] == "local text"
+    assert result["events"] == []
+
+
 def test_transcribe_video_with_config_uses_openrouter_audio_provider(monkeypatch, tmp_path):
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
@@ -129,7 +270,7 @@ def test_openrouter_transcription_reports_failed_chunk(monkeypatch, tmp_path):
         Mock(side_effect=RuntimeError("could not connect to OpenRouter")),
     )
 
-    with pytest.raises(RuntimeError, match=r"OpenRouter transcription failed for chunk 1/1.*could not connect"):
+    with pytest.raises(RuntimeError, match=r"openrouter-json transcription failed for chunk 1/1.*could not connect"):
         highlight_generation.transcribe_video_with_config(source, 60.0, headers={"X-AI-Provider": "openrouter"})
 
 

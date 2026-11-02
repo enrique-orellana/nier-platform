@@ -159,10 +159,77 @@ def build_analysis_timeline(
             ]
         )
 
+    raw_events: Any = []
+    if isinstance(transcript, Mapping):
+        raw_events = transcript.get("events") or []
+        if not raw_events:
+            for track in transcript.get("tracks", []) or []:
+                if isinstance(track, Mapping) and track.get("type") in {"sound_events", "audio_events"}:
+                    raw_events = track.get("items") or []
+                    break
+    event_by_key: dict[tuple[str, float, float, str], dict[str, Any]] = {}
+    if isinstance(raw_events, Sequence) and not isinstance(raw_events, (str, bytes)):
+        for raw_event in raw_events:
+            if not isinstance(raw_event, Mapping):
+                continue
+            bounds = _range(raw_event, origin, duration)
+            label = _text(_field(raw_event, "label", "tag", "text"))
+            confidence = _number(raw_event.get("confidence", 1.0))
+            if bounds is None or not label or confidence is None or not 0.0 <= confidence <= 1.0:
+                continue
+            source = _text(raw_event.get("source") or "embedded")
+            key = (label.casefold(), bounds[0], bounds[1], source)
+            event_by_key[key] = {
+                "start": bounds[0],
+                "end": bounds[1],
+                "label": label,
+                "confidence": confidence,
+                "source": source,
+            }
+    events = sorted(
+        event_by_key.values(),
+        key=lambda item: (item["start"], item["end"], item["label"].casefold(), item["source"]),
+    )
+    for event_id, event in enumerate(events):
+        event["id"] = f"event-{event_id:06d}"
+
+    segment_ids_by_word: dict[int, list[int]] = {}
+    for segment in segments:
+        for word_id in segment[4]:
+            segment_ids_by_word.setdefault(int(word_id), []).append(int(segment[0]))
+    if words:
+        speech_items = [
+            {
+                "id": f"word-{int(word[0]):06d}",
+                "unit_type": "word",
+                "start": word[1],
+                "end": word[2],
+                "text": word[3],
+                "segment_ids": segment_ids_by_word.get(int(word[0]), []),
+            }
+            for word in words
+        ]
+    else:
+        speech_items = [
+            {
+                "id": f"segment-{int(segment[0]):06d}",
+                "unit_type": "segment",
+                "start": segment[1],
+                "end": segment[2],
+                "text": segment[3],
+            }
+            for segment in segments
+        ]
+
     return {
         "timestamp_mode": "word" if words else "segment",
         "segments": segments,
         "words": words,
+        "events": events,
+        "tracks": [
+            {"type": "speech", "items": speech_items},
+            {"type": "sound_events", "items": events},
+        ],
     }
 
 
@@ -208,9 +275,24 @@ def write_analysis_timeline_jsonl(
                 )
                 + "\n"
             )
+        for event in timeline.get("events", []):
+            record = {
+                "schema_version": 1,
+                "unit_id": str(event["id"]),
+                "unit_type": "sound_event",
+                "start": event["start"],
+                "end": event["end"],
+                "label": event["label"],
+                "confidence": event["confidence"],
+                "source": event["source"],
+            }
+            handle.write(
+                json.dumps(record, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+                + "\n"
+            )
     return {
         "path": str(path),
-        "record_count": len(timeline.get("segments", [])),
+        "record_count": len(timeline.get("segments", [])) + len(timeline.get("events", [])),
         "bytes": path.stat().st_size,
         "timestamp_mode": timeline.get("timestamp_mode", "segment"),
     }
@@ -254,11 +336,17 @@ def compact_timeline_for_prompt(
         for word in timeline.get("words", [])
         if int(word[0]) in selected_word_ids
     ]
+    selected_events = [
+        dict(event)
+        for event in timeline.get("events", [])
+        if _intersects(event["start"], event["end"], context_start, context_end)
+    ]
     return {
         "timestamp_mode": timeline.get("timestamp_mode", "segment"),
         "range": [context_start, context_end],
         "segments": selected_segments,
         "words": selected_words,
+        "tracks": [{"type": "sound_events", "items": selected_events}],
     }
 
 

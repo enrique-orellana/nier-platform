@@ -7,10 +7,23 @@ import subprocess
 import tempfile
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from ai_client import chat_json, load_ai_config, transcribe_audio_openrouter
+from analysis_job_lock import analysis_job_lock, analysis_locked
+from analysis_providers import (
+    AudioEventProvider,
+    TranscriptionProvider,
+    create_audio_event_provider,
+    create_transcription_provider,
+    dedupe_audio_events,
+    load_audio_event_config,
+    load_transcription_config,
+    normalize_audio_events,
+    normalize_transcription_result,
+)
 from highlight_selection import normalize_target, select_segments
 from media_probe import probe_media
 from transcript_windows import (
@@ -48,6 +61,7 @@ WINDOW_CORE_AND_CONTEXT_SECONDS: {window_metadata}
 TIMESTAMPED_TRANSCRIPT (lossless segment records plus canonical word records):
 Segments are [SEGMENT_ID, ABSOLUTE_START_SECONDS, ABSOLUTE_END_SECONDS, COMPLETE_TEXT, WORD_IDS].
 Words are [WORD_ID, ABSOLUTE_START_SECONDS, ABSOLUTE_END_SECONDS, TEXT].
+The payload may also include a separate sound_events track with timed labels such as laughter or applause. Use events as contextual signals for ranking; do not treat them as spoken words or subtitle text.
 Use canonical word IDs whenever available; use segment IDs only when no word IDs are present. Never invent IDs or timestamps outside this window.
 {timestamped_transcript}
 """.strip()
@@ -55,12 +69,14 @@ Use canonical word IDs whenever available; use segment IDs only when no word IDs
 MAX_PROMPT_CHARS = 48000
 MAX_TRANSCRIPT_CHARS_PER_CHUNK = 24000
 HIGHLIGHT_ANALYSIS_TIMEOUT_SECONDS = 120.0
-OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS = 300.0
+TRANSCRIPTION_CHUNK_SECONDS = 300.0
+TRANSCRIPTION_OVERLAP_SECONDS = 5.0
+OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS = TRANSCRIPTION_CHUNK_SECONDS
 HIGHLIGHT_ANALYSIS_CORE_SECONDS = 90.0
 HIGHLIGHT_ANALYSIS_OVERLAP_SECONDS = 61.0
 HIGHLIGHT_ANALYSIS_DISCOVERY_LIMIT = 12
 HIGHLIGHT_ANALYSIS_RETRY_COUNT = 1
-OPENROUTER_TRANSCRIPTION_OVERLAP_SECONDS = 5.0
+OPENROUTER_TRANSCRIPTION_OVERLAP_SECONDS = TRANSCRIPTION_OVERLAP_SECONDS
 
 
 def _transcript_text(transcript: Mapping[str, Any]) -> str:
@@ -110,8 +126,8 @@ def merge_transcript_segments(segments: list[Mapping[str, Any]]) -> list[dict[st
 def plan_transcription_chunks(
     duration_seconds: float,
     *,
-    chunk_seconds: float = OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS,
-    overlap_seconds: float = OPENROUTER_TRANSCRIPTION_OVERLAP_SECONDS,
+    chunk_seconds: float = TRANSCRIPTION_CHUNK_SECONDS,
+    overlap_seconds: float = TRANSCRIPTION_OVERLAP_SECONDS,
 ) -> list[tuple[float, float]]:
     duration = float(duration_seconds)
     chunk = float(chunk_seconds)
@@ -141,6 +157,167 @@ def _extract_openrouter_audio_chunk(source_path: Path, start: float, end: float,
     ])
 
 
+class ChunkedTranscriptionService:
+    """Compose an injected speech provider and optional event provider over audio chunks."""
+
+    def __init__(
+        self,
+        transcription_provider: TranscriptionProvider,
+        event_provider: AudioEventProvider | None = None,
+        *,
+        chunk_seconds: float = TRANSCRIPTION_CHUNK_SECONDS,
+        overlap_seconds: float = TRANSCRIPTION_OVERLAP_SECONDS,
+        extract_chunk: Callable[[Path, float, float, Path], None] | None = None,
+    ):
+        self.transcription_provider = transcription_provider
+        self.event_provider = event_provider
+        self.chunk_seconds = chunk_seconds
+        self.overlap_seconds = overlap_seconds
+        self.extract_chunk = extract_chunk or _extract_openrouter_audio_chunk
+
+    def transcribe(
+        self,
+        video_path: str | Path,
+        duration_seconds: float,
+        emit_log: Callable[[str], None] | None = None,
+        *,
+        start_seconds: float = 0.0,
+        end_seconds: float | None = None,
+        absolute_timestamps: bool = False,
+    ) -> dict[str, Any]:
+        source_duration = max(0.0, float(duration_seconds))
+        range_start = max(0.0, min(source_duration, float(start_seconds or 0.0)))
+        range_end = source_duration if end_seconds is None else max(
+            range_start,
+            min(source_duration, float(end_seconds)),
+        )
+        range_duration = range_end - range_start
+        chunks = plan_transcription_chunks(
+            range_duration,
+            chunk_seconds=self.chunk_seconds,
+            overlap_seconds=self.overlap_seconds,
+        )
+        if not chunks:
+            raise ValueError("source video has no duration")
+
+        transcript_segments: list[dict[str, Any]] = []
+        sound_events: list[dict[str, Any]] = []
+        language = "und"
+        time_origin = range_start if absolute_timestamps else 0.0
+        provider_id = getattr(
+            getattr(self.transcription_provider, "config", None),
+            "provider",
+            type(self.transcription_provider).__name__,
+        )
+        with analysis_job_lock():
+            with tempfile.TemporaryDirectory(prefix="openshorts-audio-analysis-") as directory:
+                directory_path = Path(directory)
+                for index, (chunk_start, chunk_end) in enumerate(chunks, start=1):
+                    if emit_log:
+                        emit_log(f"Transcribing chunk {index}/{len(chunks)} with {provider_id}")
+                    chunk_path = directory_path / f"chunk-{index:04d}.mp3"
+                    self.extract_chunk(
+                        Path(video_path),
+                        range_start + chunk_start,
+                        range_start + chunk_end,
+                        chunk_path,
+                    )
+                    try:
+                        raw_transcript = self.transcription_provider.transcribe_chunk(chunk_path)
+                        transcript = normalize_transcription_result(raw_transcript, provider=str(provider_id))
+                    except Exception as exc:
+                        raise RuntimeError(
+                            f"{provider_id} transcription failed for chunk {index}/{len(chunks)} "
+                            f"({chunk_start:.3f}-{chunk_end:.3f}s): {exc}"
+                        ) from exc
+                    chunk_duration = chunk_end - chunk_start
+                    for segment in transcript["segments"]:
+                        if float(segment["start"]) >= chunk_duration or float(segment["end"]) > chunk_duration:
+                            raise RuntimeError(
+                                f"{provider_id} transcription failed for chunk {index}/{len(chunks)}: "
+                                "segment timing falls outside the submitted audio chunk"
+                            )
+                        if any(
+                            float(word["start"]) >= chunk_duration or float(word["end"]) > chunk_duration
+                            for word in segment.get("words", [])
+                        ):
+                            raise RuntimeError(
+                                f"{provider_id} transcription failed for chunk {index}/{len(chunks)}: "
+                                "word timing falls outside the submitted audio chunk"
+                            )
+                    language = str(transcript.get("language") or language)
+                    chunk_origin = time_origin + chunk_start
+                    max_time = time_origin + range_duration
+                    for segment in transcript["segments"]:
+                        segment_start = chunk_origin + float(segment["start"])
+                        segment_end = chunk_origin + float(segment["end"])
+                        if segment_end <= segment_start:
+                            segment_end = segment_start + 0.1
+                        words = [
+                            {
+                                "word": word["word"],
+                                "start": round(chunk_origin + float(word["start"]), 3),
+                                "end": round(min(max_time, chunk_origin + float(word["end"])), 3),
+                            }
+                            for word in segment.get("words", [])
+                        ]
+                        transcript_segments.append({
+                            "text": segment["text"],
+                            "start": round(chunk_origin + float(segment["start"]), 3),
+                            "end": round(min(max_time, max(segment_start + 0.1, segment_end)), 3),
+                            "words": words,
+                        })
+
+                    if self.event_provider is not None:
+                        event_id = getattr(
+                            getattr(self.event_provider, "config", None),
+                            "provider",
+                            type(self.event_provider).__name__,
+                        )
+                        try:
+                            raw_events = self.event_provider.detect_events(
+                                chunk_path,
+                                transcript=raw_transcript,
+                            )
+                            normalized_events = normalize_audio_events(
+                                raw_events,
+                                provider=str(event_id),
+                                min_confidence=float(
+                                    getattr(
+                                        getattr(self.event_provider, "config", None),
+                                        "min_confidence",
+                                        0.0,
+                                    )
+                                ),
+                            )
+                        except Exception as exc:
+                            raise RuntimeError(
+                                f"{event_id} sound-event analysis failed for chunk {index}/{len(chunks)} "
+                                f"({chunk_start:.3f}-{chunk_end:.3f}s): {exc}"
+                            ) from exc
+                        for event in normalized_events:
+                            if float(event["start"]) >= chunk_duration or float(event["end"]) > chunk_duration:
+                                raise RuntimeError(
+                                    f"{event_id} sound-event analysis failed for chunk "
+                                    f"{index}/{len(chunks)}: event timing falls outside the submitted audio chunk"
+                                )
+                            sound_events.append({
+                                **event,
+                                "start": round(chunk_origin + float(event["start"]), 3),
+                                "end": round(min(max_time, chunk_origin + float(event["end"])), 3),
+                            })
+                    chunk_path.unlink(missing_ok=True)
+
+        transcript_segments = merge_transcript_segments(transcript_segments)
+        unique_events = dedupe_audio_events(sound_events)
+        return {
+            "text": " ".join(segment["text"] for segment in transcript_segments).strip(),
+            "segments": transcript_segments,
+            "language": language,
+            "events": unique_events,
+        }
+
+
 def transcribe_video_with_config(
     video_path: str | Path,
     duration_seconds: float,
@@ -150,75 +327,27 @@ def transcribe_video_with_config(
     start_seconds: float = 0.0,
     end_seconds: float | None = None,
 ) -> dict[str, Any]:
-    """Transcribe through OpenRouter with bounded audio chunks."""
-    config = load_ai_config(headers)
-
-    source_duration = max(0.0, float(duration_seconds))
-    range_start = max(0.0, min(source_duration, float(start_seconds or 0.0)))
-    range_end = source_duration if end_seconds is None else max(
-        range_start,
-        min(source_duration, float(end_seconds)),
+    """Transcribe audio with the environment-selected provider and bounded chunks."""
+    ai_config = load_ai_config(headers)
+    transcription_config = load_transcription_config()
+    language_hint = getattr(ai_config, "transcription_language", "auto")
+    if isinstance(language_hint, str) and language_hint != "auto":
+        transcription_config = replace(transcription_config, language=language_hint)
+    transcription_provider = create_transcription_provider(
+        transcription_config,
+        ai_config=ai_config,
+        transcribe_fn=transcribe_audio_openrouter,
     )
-    range_duration = range_end - range_start
-    chunks = plan_transcription_chunks(
-        range_duration,
-        chunk_seconds=OPENROUTER_TRANSCRIPTION_CHUNK_SECONDS,
-        overlap_seconds=OPENROUTER_TRANSCRIPTION_OVERLAP_SECONDS,
+    event_config = load_audio_event_config()
+    event_provider = create_audio_event_provider(event_config)
+    service = ChunkedTranscriptionService(transcription_provider, event_provider)
+    return service.transcribe(
+        video_path,
+        duration_seconds,
+        emit_log,
+        start_seconds=start_seconds,
+        end_seconds=end_seconds,
     )
-    if not chunks:
-        raise ValueError("source video has no duration")
-    segments: list[dict[str, Any]] = []
-    language = "und"
-    with tempfile.TemporaryDirectory(prefix="openshorts-openrouter-transcription-") as directory:
-        directory_path = Path(directory)
-        for index, (start, end) in enumerate(chunks, start=1):
-            if emit_log:
-                emit_log(f"Transcribing chunk {index}/{len(chunks)} with OpenRouter")
-            chunk_path = directory_path / f"chunk-{index:04d}.mp3"
-            _extract_openrouter_audio_chunk(
-                Path(video_path),
-                range_start + start,
-                range_start + end,
-                chunk_path,
-            )
-            try:
-                transcript = transcribe_audio_openrouter(str(chunk_path), config)
-            except RuntimeError as exc:
-                raise RuntimeError(
-                    f"OpenRouter transcription failed for chunk {index}/{len(chunks)} "
-                    f"({start:.3f}-{end:.3f}s): {exc}"
-                ) from exc
-            language = str(transcript.get("language") or language)
-            for segment in transcript.get("segments", []):
-                segment_start = float(segment.get("start", 0.0))
-                segment_end = float(segment.get("end", 0.0))
-                if segment_end <= segment_start:
-                    segment_end = min(end - start, max(segment_start + 0.1, end - start))
-                words = []
-                for word in segment.get("words", []) or []:
-                    if not isinstance(word, Mapping):
-                        continue
-                    try:
-                        word_start = float(word.get("start"))
-                        word_end = float(word.get("end"))
-                    except (TypeError, ValueError):
-                        continue
-                    word_text = str(word.get("word") or word.get("text") or "").strip()
-                    if word_text and word_end > word_start:
-                        words.append({
-                            "word": word_text,
-                            "start": round(start + word_start, 3),
-                            "end": round(min(range_duration, start + word_end), 3),
-                        })
-                segments.append({
-                    "text": str(segment.get("text") or "").strip(),
-                    "start": round(start + segment_start, 3),
-                    "end": round(min(range_duration, start + segment_end), 3),
-                    "words": words,
-                })
-            chunk_path.unlink(missing_ok=True)
-    segments = merge_transcript_segments(segments)
-    return {"text": " ".join(segment["text"] for segment in segments).strip(), "segments": segments, "language": language}
 
 
 def _analysis_chunks(
@@ -250,6 +379,7 @@ def _analysis_chunks(
     )
 
 
+@analysis_locked
 def rank_highlights(
     transcript: Mapping[str, Any],
     video_duration: float,
@@ -265,8 +395,8 @@ def rank_highlights(
         ideal_minutes=(float(ideal_seconds) / 60.0) if ideal_seconds is not None else None,
     )
     prompt_context = dict(source_context or {})
-    headers = prompt_context.pop("headers", None)
-    config = load_ai_config(headers if isinstance(headers, Mapping) else None)
+    prompt_context.pop("headers", None)
+    config = load_ai_config()
     if config.is_gemini() and not config.api_key:
         raise ValueError("Gemini API key is not configured")
 
@@ -479,22 +609,23 @@ def run_highlight_generation(request: Mapping[str, Any], emit_log: Callable[[str
     ideal_minutes = request.get("ideal_minutes")
     target = normalize_target(source_duration, min_minutes=min_minutes, ideal_minutes=ideal_minutes)
 
-    emit_log("Transcribing source with the configured provider")
-    transcript = transcribe_video_with_config(
-        source_path,
-        source_duration,
-        emit_log,
-        headers=request.get("headers") if isinstance(request.get("headers"), Mapping) else None,
-    )
-    emit_log("Analyzing transcript with the configured AI provider")
-    ranked = rank_highlights(
-        transcript,
-        source_duration,
-        min_seconds=target["min_seconds"],
-        ideal_seconds=target["ideal_seconds"],
-        source_context={**(request.get("source_context") or {}), "headers": request.get("headers") or {}},
-        emit_log=emit_log,
-    )
+    with analysis_job_lock():
+        emit_log("Transcribing source with the configured provider")
+        transcript = transcribe_video_with_config(
+            source_path,
+            source_duration,
+            emit_log,
+            headers=request.get("headers") if isinstance(request.get("headers"), Mapping) else None,
+        )
+        emit_log("Analyzing transcript with the configured AI provider")
+        ranked = rank_highlights(
+            transcript,
+            source_duration,
+            min_seconds=target["min_seconds"],
+            ideal_seconds=target["ideal_seconds"],
+            source_context={**(request.get("source_context") or {}), "headers": request.get("headers") or {}},
+            emit_log=emit_log,
+        )
     analysis_metadata = ranked.get("analysis") or {}
     if analysis_metadata.get("incomplete"):
         emit_log(

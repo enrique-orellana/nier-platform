@@ -59,6 +59,8 @@ from ai_client import (
     load_ai_config,
     openai_file_analysis_json,
 )
+from analysis_job_lock import analysis_job_lock, analysis_locked
+from analysis_providers import ClipAnalysisProvider, create_clip_analysis_provider
 from highlight_generation import transcribe_video_with_config
 from master_policy import master_video_encode_args, choose_master_spec, master_video_filter
 from media_probe import probe_media
@@ -192,9 +194,10 @@ TIMESTAMP_MODE: {timestamp_mode}
 TARGET_CLIP_COUNT: {int(target_clips or 1)}
 DISCOVERY_CANDIDATE_LIMIT: {CLIP_ANALYSIS_DISCOVERY_LIMIT}
 
-The file contains one JSON object per canonical segment. Segment start/end and
-nested word start/end values are absolute seconds from the beginning of the
-video. Canonical segment IDs and word IDs are the source of truth. Never reset
+The file contains one JSON object per canonical segment and sound event.
+Segment/event start/end and nested word start/end values are absolute seconds
+from the beginning of the video. Sound-event labels are analysis context, not
+spoken words or subtitle content. Sound-event IDs are context only; never use them as clip bounds. Canonical segment IDs and word IDs are the source of truth. Never reset
 timestamps, infer timing from text, or invent an ID. When word timing is
 available, return start_word_id and end_word_id. For segment-only input, return
 start_segment_id and end_segment_id instead. You may also include numeric start
@@ -317,6 +320,7 @@ Use this context to improve titles, descriptions, and hooks. Do not invent ident
 TIMESTAMPED_TRANSCRIPT (lossless segment records plus canonical word records):
 Segments are [SEGMENT_ID, ABSOLUTE_START_SECONDS, ABSOLUTE_END_SECONDS, COMPLETE_TEXT, WORD_IDS].
 Words are [WORD_ID, ABSOLUTE_START_SECONDS, ABSOLUTE_END_SECONDS, TEXT].
+The payload also contains an independent sound_events track with timed labels such as laughter or applause. Use these as context when ranking moments; they are not spoken words or subtitle text.
 Use start_word_id/end_word_id for precise boundaries when words are available. If the window is segment-only, use start_segment_id/end_segment_id. Never invent IDs or timestamps outside this window.
 {timestamped_transcript}
 
@@ -2689,15 +2693,7 @@ def _finalize_clip_analysis_result(
 ):
     all_shorts = dedupe_clip_candidates(all_shorts)
     if not all_shorts:
-        fallback = _build_fallback_clip_plan(
-            transcript_result,
-            video_duration,
-            target_clips,
-            min_duration=local_min_duration,
-            target_duration=local_target_duration,
-        )
-        fallback["analysis"] = analysis_metadata
-        return fallback
+        raise ValueError("Clip analysis returned no valid candidates")
 
     clip_limit = max(1, min(int(target_clips or 1), 15))
     adjusted_shorts = []
@@ -2755,13 +2751,24 @@ def _finalize_clip_analysis_result(
     return result
 
 
-def get_viral_clips(transcript_result, video_duration, target_clips=6, source_context=None):
+def _discover_clip_plan(
+    transcript_result,
+    video_duration,
+    target_clips=6,
+    source_context=None,
+    *,
+    clip_analysis_provider: ClipAnalysisProvider | None = None,
+):
     ai_config = load_ai_config()
     print(f"🤖  Analyzing with {ai_config.normalized_provider()}...")
 
     if ai_config.is_gemini() and not ai_config.api_key:
-        print("❌ Error: GEMINI_API_KEY not found in environment variables.")
-        return None
+        raise RuntimeError("Clip analysis requires GEMINI_API_KEY for the configured provider")
+
+    analysis_provider = clip_analysis_provider or create_clip_analysis_provider(
+        ai_config,
+        chat_json_fn=chat_json,
+    )
 
     is_lmstudio = ai_config.is_lmstudio()
     local_min_duration = 24.0 if is_lmstudio else 15.0
@@ -2787,38 +2794,30 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
             }]
         timeline = build_analysis_timeline(analysis_source, video_duration)
         indexed_units = timeline_units_by_id(timeline)
-        analysis_mode = openai_clip_analysis_mode()
-        file_fallback_reason = None
-        if should_use_openai_file_analysis(ai_config):
-            try:
-                result_json, all_shorts, analysis_metadata = _analyze_openai_file_timeline(
-                    timeline,
-                    indexed_units,
-                    video_duration,
-                    target_clips,
-                    source_context_json,
-                    ai_config,
-                )
-                return _finalize_clip_analysis_result(
-                    result_json,
-                    all_shorts,
-                    transcript_result=transcript_result,
-                    video_duration=video_duration,
-                    target_clips=target_clips,
-                    analysis_metadata=analysis_metadata,
-                    ai_config=ai_config,
-                    model_name=analysis_metadata["model"],
-                    local_min_duration=local_min_duration,
-                    local_target_duration=local_target_duration,
-                )
-            except Exception as exc:
-                if analysis_mode == "file":
-                    raise
-                file_fallback_reason = f"{type(exc).__name__}: {exc}"
-                print(
-                    "OpenAI file clip analysis unavailable; falling back to "
-                    f"lossless windows: {file_fallback_reason}"
-                )
+        clip_adapter_id = os.environ.get(
+            "AI_CLIP_ANALYSIS_PROVIDER", "chat-json"
+        ).strip().lower()
+        if clip_adapter_id == "chat-json" and should_use_openai_file_analysis(ai_config):
+            result_json, all_shorts, analysis_metadata = _analyze_openai_file_timeline(
+                timeline,
+                indexed_units,
+                video_duration,
+                target_clips,
+                source_context_json,
+                ai_config,
+            )
+            return _finalize_clip_analysis_result(
+                result_json,
+                all_shorts,
+                transcript_result=transcript_result,
+                video_duration=video_duration,
+                target_clips=target_clips,
+                analysis_metadata=analysis_metadata,
+                ai_config=ai_config,
+                model_name=analysis_metadata["model"],
+                local_min_duration=local_min_duration,
+                local_target_duration=local_target_duration,
+            )
         windows = build_analysis_windows(
             timeline,
             video_duration,
@@ -2866,8 +2865,7 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
                 if attempt:
                     analysis_status["retried_windows"] += 1
                 try:
-                    response = chat_json(
-                        ai_config,
+                    response = analysis_provider.analyze_json(
                         prompt,
                         model=model_name,
                         reasoning_effort=ai_config.analyze_reasoning_effort,
@@ -2889,11 +2887,10 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
                     break
                 except Exception as exc:
                     if attempt >= CLIP_ANALYSIS_RETRY_COUNT:
-                        print(
-                            f"Clip analysis window {window_index + 1}/{len(windows)} failed after retry: "
-                            f"{type(exc).__name__}: {exc}"
-                        )
-                        analysis_status["failed_windows"] += 1
+                        raise RuntimeError(
+                            f"Clip analysis window {window_index + 1}/{len(windows)} failed "
+                            f"after retry: {type(exc).__name__}: {exc}"
+                        ) from exc
                     else:
                         print(
                             f"Clip analysis window {window_index + 1}/{len(windows)} failed; retrying: "
@@ -2914,8 +2911,7 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
                 )
                 if len(continuation_prompt) <= CLIP_ANALYSIS_MAX_PROMPT_CHARS:
                     try:
-                        continuation = chat_json(
-                            ai_config,
+                        continuation = analysis_provider.analyze_json(
                             continuation_prompt,
                             model=model_name,
                             reasoning_effort=ai_config.analyze_reasoning_effort,
@@ -2924,10 +2920,10 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
                         if isinstance(continuation, dict) and isinstance(continuation.get("shorts"), list):
                             shorts = list(shorts) + list(continuation["shorts"])
                     except Exception as exc:
-                        print(
+                        raise RuntimeError(
                             f"Clip analysis continuation for window {window_index + 1} failed: "
                             f"{type(exc).__name__}: {exc}"
-                        )
+                        ) from exc
 
             for raw_short in shorts:
                 if not isinstance(raw_short, dict):
@@ -2955,12 +2951,10 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
         ]
         analysis_metadata = {
             **analysis_status,
-            "mode": "windowed_fallback" if file_fallback_reason else "windowed",
+                "mode": "windowed",
             "incomplete": bool(missing_windows),
             "missing_core_ranges": missing_windows,
         }
-        if file_fallback_reason:
-            analysis_metadata["fallback_reason"] = file_fallback_reason
         return _finalize_clip_analysis_result(
             result_json,
             all_shorts,
@@ -2976,25 +2970,43 @@ def get_viral_clips(transcript_result, video_duration, target_clips=6, source_co
 
     except Exception as e:
         print(f"❌ AI Error: {e}")
-        fallback = _build_fallback_clip_plan(
+        raise RuntimeError(
+            f"Clip analysis failed with {ai_config.normalized_provider()}: {e}"
+        ) from e
+
+
+class ClipDiscoveryPipeline:
+    """Reusable clip-discovery coordinator with an injected analysis adapter."""
+
+    def __init__(self, clip_analysis_provider: ClipAnalysisProvider | None = None):
+        self.clip_analysis_provider = clip_analysis_provider
+
+    @analysis_locked
+    def discover(self, transcript_result, video_duration, target_clips=6, source_context=None):
+        return _discover_clip_plan(
             transcript_result,
             video_duration,
-            target_clips,
-            min_duration=local_min_duration,
-            target_duration=local_target_duration,
+            target_clips=target_clips,
+            source_context=source_context,
+            clip_analysis_provider=self.clip_analysis_provider,
         )
-        failure_analysis = {
-            "incomplete": True,
-            "error": str(e),
-        }
-        try:
-            failure_analysis["mode"] = (
-                "openai_file" if openai_clip_analysis_mode() == "file" else "windowed"
-            )
-        except ValueError:
-            pass
-        fallback["analysis"] = failure_analysis
-        return fallback
+
+
+def get_viral_clips(
+    transcript_result,
+    video_duration,
+    target_clips=6,
+    source_context=None,
+    *,
+    clip_analysis_provider: ClipAnalysisProvider | None = None,
+):
+    """Compatibility function backed by the reusable clip-discovery pipeline."""
+    return ClipDiscoveryPipeline(clip_analysis_provider).discover(
+        transcript_result,
+        video_duration,
+        target_clips=target_clips,
+        source_context=source_context,
+    )
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="AutoCrop-Vertical with Viral Clip Detection.")
@@ -3134,34 +3146,25 @@ if __name__ == '__main__':
         duration = float(source_media.duration_seconds)
         if duration <= 0:
             duration = source_analysis.total_frames / source_analysis.source_fps
-        with job_metrics.timed("transcription"):
-            with get_audit_emitter().stage("transcription.request"):
-                transcript = transcribe_video(processing_video, duration_seconds=duration)
+        with analysis_job_lock():
+            with job_metrics.timed("transcription"):
+                with get_audit_emitter().stage("transcription.request"):
+                    transcript = transcribe_video(processing_video, duration_seconds=duration)
 
-        source_context_record = prepare_source_context(args.source_url, transcript)
+            source_context_record = prepare_source_context(args.source_url, transcript)
+
+            # 4. Clip analysis
+            with job_metrics.timed("ai_planning"):
+                with get_audit_emitter().stage("ai.analysis"):
+                    clips_data = get_viral_clips(
+                        transcript,
+                        duration,
+                        target_clips=target_clips,
+                        source_context=source_context_record.get("source_context"),
+                    )
         
-        # 4. Gemini Analysis
-        with job_metrics.timed("ai_planning"):
-            with get_audit_emitter().stage("ai.analysis"):
-                clips_data = get_viral_clips(
-                    transcript,
-                    duration,
-                    target_clips=target_clips,
-                    source_context=source_context_record.get("source_context"),
-                )
-        
-        if not clips_data or 'shorts' not in clips_data:
-            print("❌ Failed to identify clips. Converting whole video as fallback.")
-            output_file = os.path.join(output_dir, f"{video_title}_vertical.mp4")
-            process_video_to_vertical(
-                processing_video,
-                output_file,
-                source_analysis=source_analysis,
-                source_media=source_media,
-                metrics=job_metrics,
-                layout_format=args.layout_format,
-                facecam_size=args.facecam_size,
-            )
+        if not clips_data or "shorts" not in clips_data:
+            raise RuntimeError("Clip analysis completed without a clip plan")
         else:
             print(f"🔥 Found {len(clips_data['shorts'])} viral clips!")
             attach_source_context_to_clip_plan(clips_data, source_context_record)

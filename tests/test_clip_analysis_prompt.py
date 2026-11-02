@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import main
+import pytest
 
 
 def _config():
@@ -31,6 +32,7 @@ def test_full_timeline_clip_prompt_requires_complete_absolute_timestamp_review()
     assert "start_word_id" in prompt
     assert "end_word_id" in prompt
     assert "coverage" in prompt
+    assert "Sound-event IDs are context only" in prompt
     assert "WINDOW_CORE_AND_CONTEXT_SECONDS" not in prompt
     assert "chunk index" not in prompt.lower()
     assert "overlap seconds" not in prompt.lower()
@@ -174,30 +176,23 @@ def test_get_viral_clips_uses_codex_connection_for_complete_file_without_api_key
     assert result["analysis"]["mode"] == "codex_file"
 
 
-def test_auto_file_analysis_failure_falls_back_to_lossless_windows(monkeypatch):
+def test_auto_file_analysis_failure_does_not_switch_to_windowed_analysis(monkeypatch):
     monkeypatch.setenv("OPENAI_CLIP_ANALYSIS_MODE", "auto")
     monkeypatch.setenv("OPENAI_API_KEY", "server-key")
     monkeypatch.setattr(main, "load_ai_config", lambda: _config())
     file_calls = []
-    window_prompts = []
+    window_calls = []
 
     def fail_file_analysis(*_args, **_kwargs):
         file_calls.append(True)
         raise RuntimeError("OpenAI analysis failed with HTTP 413.")
 
-    def fake_chat_json(_config, prompt, **_kwargs):
-        window_prompts.append(prompt)
-        return {
-            "shorts": [{
-                "start": 20.0,
-                "end": 40.0,
-                "score": 0.8,
-                "video_title_for_youtube_short": "Fallback moment",
-            }]
-        }
+    def fail_windowed_analysis(*_args, **_kwargs):
+        window_calls.append(True)
+        raise AssertionError("the configured file-analysis route must not switch modes")
 
     monkeypatch.setattr(main, "openai_file_analysis_json", fail_file_analysis)
-    monkeypatch.setattr(main, "chat_json", fake_chat_json)
+    monkeypatch.setattr(main, "chat_json", fail_windowed_analysis)
     transcript = {
         "segments": [
             {"start": index * 20, "end": index * 20 + 20, "text": f"segment {index}"}
@@ -205,16 +200,14 @@ def test_auto_file_analysis_failure_falls_back_to_lossless_windows(monkeypatch):
         ]
     }
 
-    result = main.get_viral_clips(transcript, 120.0, target_clips=2)
+    with pytest.raises(RuntimeError, match="Clip analysis failed.*HTTP 413"):
+        main.get_viral_clips(transcript, 120.0, target_clips=2)
 
     assert file_calls == [True]
-    assert window_prompts
-    assert result["analysis"]["mode"] == "windowed_fallback"
-    assert "HTTP 413" in result["analysis"]["fallback_reason"]
-    assert result["analysis"]["planned_windows"] > 0
+    assert window_calls == []
 
 
-def test_file_mode_failure_returns_incomplete_result_without_windowed_retry(monkeypatch):
+def test_file_mode_failure_is_reported_without_windowed_retry(monkeypatch):
     monkeypatch.setenv("OPENAI_CLIP_ANALYSIS_MODE", "file")
     monkeypatch.setenv("OPENAI_API_KEY", "server-key")
     monkeypatch.setattr(main, "load_ai_config", lambda: _config())
@@ -234,11 +227,8 @@ def test_file_mode_failure_returns_incomplete_result_without_windowed_retry(monk
         "segments": [{"start": 0, "end": 60, "text": "A complete segment."}]
     }
 
-    result = main.get_viral_clips(transcript, 60.0, target_clips=2)
-
-    assert result["analysis"]["mode"] == "openai_file"
-    assert result["analysis"]["incomplete"] is True
-    assert "HTTP 500" in result["analysis"]["error"]
+    with pytest.raises(RuntimeError, match="Clip analysis failed.*HTTP 500"):
+        main.get_viral_clips(transcript, 60.0, target_clips=2)
 
 
 def test_clip_analysis_chunks_use_timestamped_segments_without_word_data():
@@ -298,6 +288,7 @@ def test_snap_clip_boundaries_to_local_word_timestamps():
 def test_get_viral_clips_sends_bounded_compact_prompts(monkeypatch):
     prompts = []
     timeouts = []
+    monkeypatch.setenv("OPENAI_CLIP_ANALYSIS_MODE", "legacy")
     monkeypatch.setattr(main, "load_ai_config", lambda: _config())
 
     def fake_chat_json(_config, prompt, **kwargs):
@@ -344,6 +335,7 @@ def test_get_viral_clips_sends_bounded_compact_prompts(monkeypatch):
 
 def test_get_viral_clips_resolves_boundary_crossing_word_ids_before_global_dedup(monkeypatch):
     prompts = []
+    monkeypatch.setenv("OPENAI_CLIP_ANALYSIS_MODE", "legacy")
     monkeypatch.setattr(main, "load_ai_config", lambda: _config())
 
     def fake_chat_json(_config, prompt, **_kwargs):
@@ -384,3 +376,82 @@ def test_get_viral_clips_resolves_boundary_crossing_word_ids_before_global_dedup
     assert result["shorts"][0]["end"] == 120.0
     assert result["shorts"][0]["bounds_source"] == "canonical_unit"
     assert result["analysis"]["succeeded_windows"] == 3
+
+
+def test_clip_analysis_provider_is_injected_and_receives_audio_event_track(monkeypatch):
+    monkeypatch.setenv("OPENAI_CLIP_ANALYSIS_MODE", "legacy")
+    monkeypatch.setattr(main, "load_ai_config", lambda: _config())
+    calls = []
+
+    class FakeClipProvider:
+        def analyze_json(self, prompt, **_options):
+            calls.append(prompt)
+            return {"shorts": [{
+                "start": 0,
+                "end": 20,
+                "score": 0.9,
+                "video_title_for_youtube_short": "A funny moment",
+            }]}
+
+    result = main.get_viral_clips(
+        {
+            "segments": [{"start": 0, "end": 30, "text": "That was very funny."}],
+            "events": [{"start": 12, "end": 14, "label": "Laughter", "confidence": 0.95}],
+        },
+        30,
+        target_clips=1,
+        clip_analysis_provider=FakeClipProvider(),
+    )
+
+    assert result["shorts"]
+    assert len(calls) == 1
+    assert "Laughter" in calls[0]
+    assert "sound_events" in calls[0]
+
+
+def test_selected_plugin_adapter_does_not_enter_the_builtin_codex_file_route(monkeypatch):
+    monkeypatch.setenv("AI_CLIP_ANALYSIS_PROVIDER", "plugin-clips")
+    monkeypatch.setenv("OPENAI_CLIP_ANALYSIS_MODE", "file")
+    monkeypatch.setenv("OPENAI_API_KEY", "server-key")
+    monkeypatch.setattr(main, "load_ai_config", lambda: _config())
+    calls = []
+
+    class PluginClipProvider:
+        def analyze_json(self, _prompt, **_options):
+            calls.append("plugin")
+            return {"shorts": [{"start": 0, "end": 20, "score": 0.9}]}
+
+    monkeypatch.setattr(
+        main,
+        "openai_file_analysis_json",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("a selected plugin must bypass the built-in file route")
+        ),
+    )
+
+    result = main.get_viral_clips(
+        {"segments": [{"start": 0, "end": 30, "text": "A complete thought."}]},
+        30,
+        target_clips=1,
+        clip_analysis_provider=PluginClipProvider(),
+    )
+
+    assert calls == ["plugin"]
+    assert result["shorts"]
+
+
+def test_selected_clip_provider_failure_is_reported_without_heuristic_candidates(monkeypatch):
+    monkeypatch.setenv("OPENAI_CLIP_ANALYSIS_MODE", "legacy")
+    monkeypatch.setattr(main, "load_ai_config", lambda: _config())
+
+    class BrokenClipProvider:
+        def analyze_json(self, _prompt, **_options):
+            raise RuntimeError("selected local model is unavailable")
+
+    with pytest.raises(RuntimeError, match="Clip analysis failed.*selected local model is unavailable"):
+        main.get_viral_clips(
+            {"segments": [{"start": 0, "end": 30, "text": "A valid segment."}]},
+            30,
+            target_clips=1,
+            clip_analysis_provider=BrokenClipProvider(),
+        )

@@ -121,6 +121,8 @@ class AIConfig:
         provider = (self.provider or "gemini").strip().lower()
         if provider in {"local", "lmstudio-local"}:
             return "lmstudio"
+        if provider in {"openai_compatible", "openai compatible"}:
+            return "openai-compatible"
         return provider
 
     def is_gemini(self) -> bool:
@@ -135,6 +137,9 @@ class AIConfig:
     def is_openrouter(self) -> bool:
         return self.normalized_provider() == "openrouter"
 
+    def is_openai_compatible(self) -> bool:
+        return self.normalized_provider() == "openai-compatible"
+
     def resolved_base_url(self) -> str:
         if not self.base_url:
             return OPENROUTER_BASE_URL if self.is_openrouter() else ""
@@ -147,6 +152,9 @@ class AIConfig:
         parsed = urlsplit(cleaned)
         if not parsed.scheme or not parsed.netloc:
             return cleaned
+
+        if self.is_openai_compatible():
+            return urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
 
         # LM Studio requests are rooted at the service origin. Users sometimes
         # paste a nested path into the field, which would otherwise duplicate
@@ -769,7 +777,13 @@ def _transcription_audit_payload(payload: Mapping[str, Any]) -> str:
     return json.dumps(safe_payload, ensure_ascii=False, separators=(",", ":"))
 
 
-def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: float = 300.0) -> dict[str, Any]:
+def transcribe_audio_openrouter(
+    audio_path: str,
+    config: AIConfig,
+    *,
+    timeout: float = 300.0,
+    base_url: str | None = None,
+) -> dict[str, Any]:
     """Transcribe an extracted audio chunk through OpenRouter's audio endpoint."""
     if not config.api_key:
         raise RuntimeError(
@@ -796,7 +810,7 @@ def transcribe_audio_openrouter(audio_path: str, config: AIConfig, *, timeout: f
     provider = (config.transcription_openrouter_provider or "").strip()
     if provider:
         payload["provider"] = {"only": [provider]}
-    transcription_base_url = config.resolved_transcription_base_url()
+    transcription_base_url = (base_url or config.resolved_transcription_base_url()).rstrip("/")
     endpoint = f"{transcription_base_url}/audio/transcriptions"
     response_format = "verbose_json"
     for attempt in range(OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS):
@@ -1592,6 +1606,70 @@ def _openrouter_chat(
     return ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
 
 
+def _openai_compatible_chat(
+    config: AIConfig,
+    prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    json_mode: bool = False,
+    model: Optional[str] = None,
+    images: Optional[Sequence[Any]] = None,
+    timeout: float = 300.0,
+) -> str:
+    """Call a configured OpenAI-compatible chat-completions endpoint."""
+    base_url = config.resolved_base_url()
+    if not base_url:
+        raise ValueError("AI_BASE_URL is required for openai-compatible chat")
+    url = f"{base_url}/chat/completions"
+    messages: list[dict[str, Any]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append(_build_openai_message(prompt, images))
+    payload: dict[str, Any] = {
+        "model": model or config.text_model,
+        "messages": messages,
+        "temperature": 0.2,
+    }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+
+    audit_emitter, audit_event_id = _audit_request_start(
+        name="ai.analysis",
+        url=url,
+        method="POST",
+        body=payload,
+        provider="openai-compatible",
+        binary=bool(images),
+    )
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(
+                url,
+                headers=_build_bearer_headers(config.api_key),
+                json=payload,
+            )
+        response.raise_for_status()
+        data = response.json()
+    except Exception as exc:
+        _audit_request_finish(
+            audit_emitter,
+            audit_event_id,
+            response_body=getattr(locals().get("response"), "text", ""),
+            status_code=int(getattr(locals().get("response"), "status_code", 0) or 0),
+            error=str(exc),
+            binary=bool(images),
+        )
+        raise
+    _audit_request_finish(
+        audit_emitter,
+        audit_event_id,
+        response_body=getattr(response, "text", ""),
+        status_code=int(getattr(response, "status_code", 0) or 0),
+        binary=bool(images),
+    )
+    return ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+
+
 def chat_completion(
     config: AIConfig,
     prompt: str,
@@ -1627,6 +1705,17 @@ def chat_completion(
 
     if provider == "openrouter":
         return _openrouter_chat(
+            config,
+            prompt,
+            system_prompt=system_prompt,
+            json_mode=json_mode,
+            model=model or config.text_model,
+            images=images,
+            timeout=timeout,
+        )
+
+    if provider == "openai-compatible":
+        return _openai_compatible_chat(
             config,
             prompt,
             system_prompt=system_prompt,

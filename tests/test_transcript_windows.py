@@ -92,7 +92,38 @@ def test_analysis_timeline_accepts_s_and_e_aliases_and_rounds_timestamps():
         "timestamp_mode": "word",
         "segments": [[0, 5.0, 7.0, "Alias words", [0, 1]]],
         "words": [[0, 5.1, 5.6, "Alias"], [1, 5.7, 6.4, "words"]],
+        "events": [],
+        "tracks": [
+            {"type": "speech", "items": [
+                {"id": "word-000000", "unit_type": "word", "start": 5.1, "end": 5.6, "text": "Alias", "segment_ids": [0]},
+                {"id": "word-000001", "unit_type": "word", "start": 5.7, "end": 6.4, "text": "words", "segment_ids": [0]},
+            ]},
+            {"type": "sound_events", "items": []},
+        ],
     }
+
+
+def test_analysis_timeline_keeps_sound_events_in_a_separate_stable_track():
+    transcript = {
+        "segments": [{"start": 0, "end": 4, "text": "That was funny."}],
+        "events": [
+            {"start": 1.5, "end": 2.3, "label": "Laughter", "confidence": 0.92, "source": "local-detector"},
+            {"start": 7.0, "end": 8.0, "label": "Applause", "confidence": 0.8},
+        ],
+    }
+
+    timeline = build_analysis_timeline(transcript, 10)
+    window = compact_timeline_for_prompt(timeline, 1.0, 3.0)
+
+    assert timeline["tracks"][0]["type"] == "speech"
+    events_track = timeline["tracks"][1]
+    assert events_track["type"] == "sound_events"
+    assert events_track["items"][0]["id"] == "event-000000"
+    assert events_track["items"][0]["source"] == "local-detector"
+    assert window["tracks"] == [{
+        "type": "sound_events",
+        "items": [events_track["items"][0]],
+    }]
 
 
 def test_write_analysis_timeline_jsonl_preserves_every_absolute_timestamped_segment(tmp_path):
@@ -150,6 +181,29 @@ def test_write_analysis_timeline_jsonl_preserves_every_absolute_timestamped_segm
     assert metadata["record_count"] == 2
     assert metadata["bytes"] == destination.stat().st_size
     assert metadata["timestamp_mode"] == "word"
+
+
+def test_write_analysis_timeline_jsonl_includes_sound_event_records(tmp_path):
+    timeline = build_analysis_timeline({
+        "segments": [{"start": 1, "end": 2, "text": "Hello."}],
+        "events": [{"start": 2.5, "end": 3, "label": "Laughter", "confidence": 0.9}],
+    }, 5)
+    destination = tmp_path / "timeline.jsonl"
+
+    metadata = write_analysis_timeline_jsonl(timeline, destination)
+    records = [json.loads(line) for line in destination.read_text(encoding="utf-8").splitlines()]
+
+    assert records[-1] == {
+        "schema_version": 1,
+        "unit_id": "event-000000",
+        "unit_type": "sound_event",
+        "start": 2.5,
+        "end": 3.0,
+        "label": "Laughter",
+        "confidence": 0.9,
+        "source": "embedded",
+    }
+    assert metadata["record_count"] == 2
 
 
 def test_compact_prompt_payload_keeps_complete_segments_and_words():

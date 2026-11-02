@@ -96,3 +96,25 @@ def test_build_subtitle_segments_uses_provider_segments_without_word_timestamps(
         "end": 2.5,
         "text": "Hola, esto sigue funcionando.",
     }]
+
+
+def test_sound_events_are_analysis_metadata_not_subtitle_text():
+    transcript = {
+        "segments": [{
+            "start": 0,
+            "end": 1,
+            "text": "Ciao a tutti.",
+            "words": [
+                {"word": "Ciao", "start": 0, "end": 0.4},
+                {"word": "a", "start": 0.4, "end": 0.5},
+                {"word": "tutti.", "start": 0.5, "end": 1},
+            ],
+        }],
+        "events": [{"start": 0.5, "end": 0.9, "label": "Laughter", "confidence": 0.9}],
+        "tracks": [{"type": "sound_events", "items": [{"label": "Applause"}]}],
+    }
+
+    cues = build_subtitle_segments(transcript, 0, 1)
+
+    assert "Laughter" not in " ".join(cue["text"] for cue in cues)
+    assert "Applause" not in " ".join(cue["text"] for cue in cues)
