@@ -183,13 +183,17 @@ def cleanup_uploaded_clip_files(output_dir: str, job_id: str, preserve_paths=Non
 
 
 def build_clip_generation_environment(request: Mapping[str, Any]) -> dict[str, str]:
-    """Translate per-job AI headers into the environment consumed by main.py."""
+    """Apply per-job AI settings without replacing the configured transcription model."""
     from ai_client import ai_config_to_env, load_ai_config
 
     environment = os.environ.copy()
     headers = request.get("headers") or {}
     if headers:
-        environment.update(ai_config_to_env(load_ai_config(headers)))
+        request_environment = ai_config_to_env(load_ai_config(headers))
+        # UI chat headers can carry a stale model from a different ASR provider.
+        request_environment.pop("AI_TRANSCRIPTION_MODEL", None)
+        request_environment.pop("AI_TRANSCRIPTION_OPENROUTER_PROVIDER", None)
+        environment.update(request_environment)
     for key, value in (request.get("environment") or {}).items():
         if value is not None:
             environment[str(key)] = str(value)

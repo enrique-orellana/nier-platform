@@ -332,6 +332,30 @@ def test_clip_generation_environment_uses_request_ai_headers(monkeypatch):
     assert environment["AI_ANALYZE_MODEL"] == "openai/gpt-4o-mini"
 
 
+def test_clip_generation_environment_preserves_local_transcription_model(monkeypatch):
+    monkeypatch.setenv("AI_TRANSCRIPTION_PROVIDER", "openai-compatible")
+    monkeypatch.setenv("AI_TRANSCRIPTION_BASE_URL", "http://speaches:8000/v1")
+    monkeypatch.setenv("AI_TRANSCRIPTION_MODEL", "Systran/faster-whisper-small")
+
+    environment = build_clip_generation_environment(
+        {
+            "headers": {
+                "X-AI-Provider": "openai-codex",
+                "X-AI-Model": "gpt-6-luna",
+                "X-AI-Transcription-Model": "openai/whisper-large-v3-turbo",
+                "X-AI-Transcription-Language": "it",
+            }
+        }
+    )
+
+    assert environment["AI_PROVIDER"] == "openai-codex"
+    assert environment["AI_MODEL"] == "gpt-6-luna"
+    assert environment["AI_TRANSCRIPTION_PROVIDER"] == "openai-compatible"
+    assert environment["AI_TRANSCRIPTION_BASE_URL"] == "http://speaches:8000/v1"
+    assert environment["AI_TRANSCRIPTION_MODEL"] == "Systran/faster-whisper-small"
+    assert environment["AI_TRANSCRIPTION_LANGUAGE"] == "it"
+
+
 def test_handle_request_dispatches_highlight_generation(monkeypatch, capsys, tmp_path):
     calls = []
 
