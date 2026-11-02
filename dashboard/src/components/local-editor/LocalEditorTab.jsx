@@ -211,6 +211,10 @@ export default function LocalEditorTab({
   onExport = null,
   onFaceTracking = null,
   faceTrackingReady = true,
+  editorTitle = "Local Editor",
+  hideExport = false,
+  initialFeature = "details",
+  initialSubtitleView = "timeline",
 }) {
   const projectClipIndex = Number(initialClipIndex);
   const hasProjectClipSource = Boolean(
@@ -306,8 +310,8 @@ export default function LocalEditorTab({
     useState(true);
   const [subtitleCueEditingOpen, setSubtitleCueEditingOpen] = useState(true);
   const [hookOpen, setHookOpen] = useState(true);
-  const [activeFeature, setActiveFeature] = useState("details");
-  const [subtitleView, setSubtitleView] = useState("timeline");
+  const [activeFeature, setActiveFeature] = useState(initialFeature);
+  const [subtitleView, setSubtitleView] = useState(initialSubtitleView);
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [timelineHeight, setTimelineHeight] = useState(() => {
     const savedHeight = readEditorLayout().timelineHeight;
@@ -2289,7 +2293,7 @@ export default function LocalEditorTab({
       <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div>
-            <h1 className="text-lg font-bold">Local Editor</h1>
+            <h1 className="text-lg font-bold">{editorTitle}</h1>
             <p className="mt-0.5 text-xs text-zinc-500">
               Edit local videos, subtitles, and viral hooks in your browser.
             </p>
@@ -2410,7 +2414,7 @@ export default function LocalEditorTab({
         className="flex h-11 flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-1"
       >
         <div>
-          <h1 className="text-sm font-bold leading-4">Local Editor</h1>
+          <h1 className="text-sm font-bold leading-4">{editorTitle}</h1>
           <p className="text-[10px] leading-3 text-zinc-500">
             {videoFile?.name || initialVideoName || "Project video"} ·{" "}
             {videoFile ? "local-only editing" : "streamed project video"}
@@ -2487,19 +2491,20 @@ export default function LocalEditorTab({
                 Save Project
               </button>
             )}
-            {(videoFile || initialExportVideoUrl || videoUrl) && (
-              <button
-                type="button"
-                onClick={exportVideo}
-                disabled={busy}
-                className="flex items-center gap-1 rounded-md bg-fuchsia-500 px-2 py-1 text-[10px] font-semibold hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Film size={13} />
-                {busy
-                  ? `Exporting ${Math.round(progress * 100)}%`
-                  : "Export Video"}
-              </button>
-            )}
+            {!hideExport &&
+              (videoFile || initialExportVideoUrl || videoUrl) && (
+                <button
+                  type="button"
+                  onClick={exportVideo}
+                  disabled={busy}
+                  className="flex items-center gap-1 rounded-md bg-fuchsia-500 px-2 py-1 text-[10px] font-semibold hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Film size={13} />
+                  {busy
+                    ? `Exporting ${Math.round(progress * 100)}%`
+                    : "Export Video"}
+                </button>
+              )}
             {headerActions}
           </div>
           <div

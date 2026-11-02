@@ -24,6 +24,7 @@ import { activeClipRenderJobs } from "../lib/clipRenderJobs";
 import { useRenewableMediaUrl } from "../lib/videoUrls";
 import { CLIP_WORKFLOW_STATUSES } from "./clipWorkflowStatuses";
 import ResultCard from "./ResultCard";
+import SourceTranscriptEditor from "./editor/SourceTranscriptEditor";
 
 const CLIP_RENDER_POLL_INTERVAL_MS = 2000;
 const CLIP_RENDER_STATUS_TIMEOUT_MS = 15000;
@@ -262,6 +263,7 @@ export default function ProjectLibrary({
   const [search, setSearch] = useState("");
   const [selectedProject, setSelectedProject] = useState(null);
   const [projectClips, setProjectClips] = useState([]);
+  const [sourceEditorOpen, setSourceEditorOpen] = useState(false);
   const [isLoadingClips, setIsLoadingClips] = useState(false);
   const [clipStatuses, setClipStatuses] = useState({});
   const [clipRenderJobs, setClipRenderJobs] = useState({});
@@ -442,6 +444,7 @@ export default function ProjectLibrary({
     if (!projectId) {
       setSelectedProject(null);
       setProjectClips([]);
+      setSourceEditorOpen(false);
       setClipStatuses({});
       setStatusFilters([]);
       setClipRenderJobs({});
@@ -469,6 +472,7 @@ export default function ProjectLibrary({
     if (!matchingProject) return;
 
     setSelectedProject(matchingProject);
+    setSourceEditorOpen(false);
     setProjectClips(
       Array.isArray(matchingProject.clips) ? matchingProject.clips : [],
     );
@@ -496,6 +500,17 @@ export default function ProjectLibrary({
     selectedProject?.job_id ||
     selectedProject?.session_id ||
     selectedProject?.id;
+  const hasFullSourceVideo = projectClips.some((clip) =>
+    Boolean(clip.source_video_url),
+  );
+  const fullSourceDuration = Number(
+    selectedProject?.source_duration_seconds ||
+      projectClips.find((clip) => Number(clip.master_duration) > 0)
+        ?.master_duration ||
+      0,
+  );
+  const canEditFullVideo =
+    Boolean(selectedProjectId) && hasFullSourceVideo && fullSourceDuration > 0;
 
   const sourceMetadata =
     selectedProject?.source_metadata &&
@@ -521,6 +536,7 @@ export default function ProjectLibrary({
     const id = project?.job_id || project?.session_id || project?.id;
     onOpenProject?.(id);
     setSelectedProject(project);
+    setSourceEditorOpen(false);
     setProjectClips(Array.isArray(project?.clips) ? project.clips : []);
     setClipStatuses({});
     setStatusFilters(readPersistedStatusFilters(id));
@@ -1152,6 +1168,12 @@ export default function ProjectLibrary({
   if (selectedProject) {
     return (
       <div className="h-full min-h-0 overflow-y-auto custom-scrollbar">
+        {sourceEditorOpen && selectedProjectId && (
+          <SourceTranscriptEditor
+            projectId={selectedProjectId}
+            onClose={() => setSourceEditorOpen(false)}
+          />
+        )}
         <div className="max-w-[1680px] mx-auto p-4 sm:p-5 pb-8 space-y-4">
           {/* Header Navigation */}
           <div className="flex items-center justify-between">
@@ -1328,9 +1350,30 @@ export default function ProjectLibrary({
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold text-white">Generated Clips</h3>
-              <span className="text-sm text-zinc-500 font-medium px-3 py-1 rounded-full bg-white/5 border border-white/5">
-                {projectClips.length} results
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSourceEditorOpen(true)}
+                  disabled={!canEditFullVideo}
+                  title={
+                    canEditFullVideo
+                      ? "Open the full source video and transcript"
+                      : "The full source video or its duration is unavailable for this project."
+                  }
+                  className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.08] px-3 py-2 text-xs font-semibold text-cyan-100 transition-colors hover:bg-cyan-400/[0.16] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-cyan-400/[0.08]"
+                >
+                  <Film size={14} />
+                  Edit full video
+                </button>
+                {!canEditFullVideo && (
+                  <span className="max-w-40 text-[10px] leading-4 text-zinc-500">
+                    Full source video or duration unavailable
+                  </span>
+                )}
+                <span className="text-sm text-zinc-500 font-medium px-3 py-1 rounded-full bg-white/5 border border-white/5">
+                  {projectClips.length} results
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 bg-white/[0.02] border border-white/5 p-3 rounded-2xl">

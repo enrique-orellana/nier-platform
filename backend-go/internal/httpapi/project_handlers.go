@@ -23,6 +23,10 @@ func (s *Server) projectRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jobID := parts[0]
+	if len(parts) == 2 && parts[1] == "source-transcript" {
+		s.projectSourceTranscript(w, r, jobID)
+		return
+	}
 	job, exists := s.store.Get(r.Context(), jobID)
 	if !exists {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project not found"})

@@ -471,6 +471,23 @@ func (s *Server) getManifest(w http.ResponseWriter, jobID string, clipIndex int)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
 		return
 	}
+	if transcript, clipStart, clipEnd, ok := s.sourceTranscriptForClip(context.Background(), jobID, clipIndex); ok {
+		timeline, _ := manifest["timeline"].(map[string]any)
+		if timeline == nil {
+			timeline = make(map[string]any)
+		}
+		if trim, ok := timeline["trim"].(map[string]any); ok {
+			if start, valid := numericTime(trim["start_sec"]); valid {
+				clipStart = start
+			}
+			if end, valid := numericTime(trim["end_sec"]); valid {
+				clipEnd = end
+			}
+		}
+		timeline["transcript"] = transcript
+		manifest["timeline"] = timeline
+		refreshProjectTranscriptForRange(manifest, transcript, clipStart, clipEnd)
+	}
 	revision, err := manifests.CalculateRevision(manifest)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
