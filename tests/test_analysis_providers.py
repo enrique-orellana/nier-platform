@@ -196,6 +196,46 @@ def test_openai_compatible_transcriber_sends_timestamps_and_normalizes_response(
     assert result["language"] == "it"
 
 
+def test_openai_compatible_transcriber_skips_zero_duration_word_timings(tmp_path):
+    audio_path = tmp_path / "audio.mp3"
+    audio_path.write_bytes(b"audio")
+    client = RecordingClient(
+        FakeResponse(
+            {
+                "text": "Ciao mondo ancora",
+                "language": "it",
+                "segments": [
+                    {
+                        "start": 0,
+                        "end": 1,
+                        "text": "Ciao mondo ancora",
+                        "words": [
+                            {"word": "Ciao", "start": 0.1, "end": 0.3},
+                            {"word": "mondo", "start": 0.3, "end": 0.3},
+                            {"word": "ancora", "start": 0.4, "end": 0.8},
+                        ],
+                    }
+                ],
+            }
+        )
+    )
+    config = providers.TranscriptionConfig(
+        provider="openai-compatible",
+        base_url="http://127.0.0.1:8000/v1",
+        model="whisper-small",
+    )
+
+    result = providers.OpenAICompatibleTranscriptionProvider(
+        config, client=client
+    ).transcribe_chunk(audio_path)
+
+    assert result["segments"][0]["text"] == "Ciao mondo ancora"
+    assert result["segments"][0]["words"] == [
+        {"word": "Ciao", "start": 0.1, "end": 0.3},
+        {"word": "ancora", "start": 0.4, "end": 0.8},
+    ]
+
+
 def test_transcription_response_requires_valid_timestamps():
     with pytest.raises(ValueError, match="valid start and end"):
         providers.normalize_transcription_result(

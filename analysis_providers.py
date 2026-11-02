@@ -574,6 +574,53 @@ class OpenAICompatibleTranscriptionProvider(TranscriptionProvider):
     ):
         super().__init__(config, client=client, timeout=timeout)
 
+    @staticmethod
+    def _discard_zero_duration_word_timestamps(payload: Any) -> Any:
+        if not isinstance(payload, Mapping):
+            return payload
+        raw_segments = payload.get("segments")
+        if not isinstance(raw_segments, list):
+            return payload
+
+        normalized_payload = dict(payload)
+        normalized_segments = []
+        for raw_segment in raw_segments:
+            if not isinstance(raw_segment, Mapping):
+                normalized_segments.append(raw_segment)
+                continue
+            raw_words = raw_segment.get("words")
+            if not isinstance(raw_words, list):
+                normalized_segments.append(raw_segment)
+                continue
+
+            valid_words = []
+            for raw_word in raw_words:
+                if isinstance(raw_word, Mapping):
+                    word_text = str(
+                        raw_word.get("word") or raw_word.get("text") or ""
+                    ).strip()
+                    word_start = _finite_number(
+                        raw_word.get("start", raw_word.get("start_seconds"))
+                    )
+                    word_end = _finite_number(
+                        raw_word.get("end", raw_word.get("end_seconds"))
+                    )
+                    if (
+                        word_text
+                        and word_start is not None
+                        and word_start >= 0
+                        and word_end == word_start
+                    ):
+                        continue
+                valid_words.append(raw_word)
+
+            normalized_segment = dict(raw_segment)
+            normalized_segment["words"] = valid_words
+            normalized_segments.append(normalized_segment)
+
+        normalized_payload["segments"] = normalized_segments
+        return normalized_payload
+
     def transcribe_chunk(self, audio_path: str | Path) -> dict[str, Any]:
         path = Path(audio_path)
         headers = (
@@ -597,7 +644,8 @@ class OpenAICompatibleTranscriptionProvider(TranscriptionProvider):
         )
         try:
             return normalize_transcription_result(
-                payload, provider=self.config.provider
+                self._discard_zero_duration_word_timestamps(payload),
+                provider=self.config.provider,
             )
         except ProviderResponseError:
             raise
