@@ -25,10 +25,35 @@ def test_load_ai_config_reads_codex_reasoning_efforts():
     assert config.vision_reasoning_effort == "medium"
 
 
+def test_codex_reasoning_efforts_default_to_high_without_overrides(monkeypatch):
+    monkeypatch.delenv("AI_REASONING_EFFORT", raising=False)
+    monkeypatch.delenv("AI_ANALYZE_REASONING_EFFORT", raising=False)
+    monkeypatch.delenv("AI_VISION_REASONING_EFFORT", raising=False)
+
+    config = ai_client.load_ai_config({"X-AI-Provider": "openai-codex"})
+
+    assert config.reasoning_effort == "high"
+    assert config.analyze_reasoning_effort == "high"
+    assert config.vision_reasoning_effort == "high"
+
+
+def test_codex_reasoning_effort_auto_override_remains_unset():
+    config = ai_client.load_ai_config({
+        "X-AI-Provider": "openai-codex",
+        "X-AI-Reasoning-Effort": "auto",
+        "X-AI-Analyze-Reasoning-Effort": "auto",
+        "X-AI-Vision-Reasoning-Effort": "auto",
+    })
+
+    assert config.reasoning_effort == ""
+    assert config.analyze_reasoning_effort == ""
+    assert config.vision_reasoning_effort == ""
+
+
 def test_codex_default_model_uses_chatgpt_supported_luna_model(monkeypatch):
     monkeypatch.delenv("CODEX_MODEL", raising=False)
 
-    assert ai_client._codex_default_model() == "gpt-6-luna"
+    assert ai_client._codex_default_model() == "gpt-5.6-luna"
 
 
 def test_unsupported_provider_still_fails_fast():
@@ -49,6 +74,9 @@ class FakeCodexStreamResponse:
 
     def raise_for_status(self):
         return None
+
+    def read(self):
+        return b""
 
     def iter_lines(self):
         return iter(self.lines)
@@ -199,7 +227,7 @@ def test_codex_transport_aggregates_response_output_text_deltas(monkeypatch):
     assert FakeCodexStreamClient.last_url == "https://chatgpt.com/backend-api/codex/responses"
     assert FakeCodexStreamClient.last_headers["Authorization"] == "Bearer access"
     assert FakeCodexStreamClient.last_headers["ChatGPT-Account-ID"] == "account"
-    assert FakeCodexStreamClient.last_payload["model"] == "gpt-6-luna"
+    assert FakeCodexStreamClient.last_payload["model"] == "gpt-5.6-luna"
     assert FakeCodexStreamClient.last_payload["stream"] is True
     assert FakeCodexStreamClient.last_payload["store"] is False
 
@@ -227,7 +255,7 @@ def test_codex_transport_sends_selected_reasoning_effort(monkeypatch):
 
     ai_client.chat_completion(config, "Return JSON", json_mode=True)
 
-    assert FakeCodexStreamClient.last_payload["model"] == "gpt-6-luna"
+    assert FakeCodexStreamClient.last_payload["model"] == "gpt-5.6-luna"
     assert FakeCodexStreamClient.last_payload["reasoning"] == {"effort": "high"}
 
 
@@ -247,6 +275,85 @@ def test_codex_transport_refreshes_once_after_auth_rejection(monkeypatch):
 
     assert result == "ok"
     assert FakeCodexStreamClient.last_headers["Authorization"] == "Bearer new-access"
+
+
+def test_codex_transport_reads_streaming_auth_response_before_refresh(monkeypatch):
+    class StreamingAuthRejectionResponse(FakeCodexStreamResponse):
+        def __init__(self):
+            super().__init__([], status_code=401)
+            self.body_read = False
+
+        def read(self):
+            self.body_read = True
+            return b"authorization expired"
+
+        @property
+        def text(self):
+            if not self.body_read:
+                raise ai_client.httpx.ResponseNotRead()
+            return "authorization expired"
+
+    config = ai_client.AIConfig(provider="openai-codex", text_model="auto")
+    access_tokens = iter(["old-access", "new-access"])
+    rejected_response = StreamingAuthRejectionResponse()
+    FakeCodexStreamClient.responses = [
+        rejected_response,
+        FakeCodexStreamResponse(['data: {"type":"response.output_text.delta","delta":"ok"}']),
+    ]
+    refreshes = []
+    monkeypatch.setattr(ai_client, "get_access_token", lambda: next(access_tokens))
+    monkeypatch.setattr(ai_client, "get_codex_account_id", lambda: "account")
+    monkeypatch.setattr(ai_client, "refresh_credentials", lambda store: refreshes.append(store))
+    monkeypatch.setattr(ai_client.httpx, "Client", FakeCodexStreamClient)
+
+    result = ai_client.chat_completion(config, "Say ok")
+
+    assert result == "ok"
+    assert rejected_response.body_read
+    assert len(refreshes) == 1
+
+
+def test_codex_transport_preserves_http_error_when_response_is_streaming(monkeypatch):
+    class StreamingServerErrorResponse(FakeCodexStreamResponse):
+        def __init__(self):
+            super().__init__([], status_code=503)
+            self.body_read = False
+            self.stream_closed = False
+
+        def __exit__(self, exc_type, exc, tb):
+            self.stream_closed = True
+            return False
+
+        def read(self):
+            if self.stream_closed:
+                raise ai_client.httpx.StreamClosed()
+            self.body_read = True
+            return b"service unavailable"
+
+        @property
+        def text(self):
+            if not self.body_read:
+                raise ai_client.httpx.ResponseNotRead()
+            return "service unavailable"
+
+        def raise_for_status(self):
+            raise ai_client.httpx.HTTPStatusError(
+                "Server error",
+                request=ai_client.httpx.Request("POST", "https://chatgpt.com/backend-api/codex/responses"),
+                response=self,
+            )
+
+    config = ai_client.AIConfig(provider="openai-codex", text_model="auto")
+    response = StreamingServerErrorResponse()
+    FakeCodexStreamClient.responses = [response]
+    monkeypatch.setattr(ai_client, "get_access_token", lambda: "access")
+    monkeypatch.setattr(ai_client, "get_codex_account_id", lambda: "account")
+    monkeypatch.setattr(ai_client.httpx, "Client", FakeCodexStreamClient)
+
+    with pytest.raises(ai_client.httpx.HTTPStatusError, match="Server error"):
+        ai_client.chat_completion(config, "Say ok")
+
+    assert response.body_read
 
 
 def test_codex_transport_retries_an_interrupted_stream(monkeypatch):

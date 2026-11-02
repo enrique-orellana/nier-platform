@@ -32,7 +32,7 @@ OPENROUTER_TRANSCRIPTION_MAX_ATTEMPTS = 3
 OPENROUTER_TRANSCRIPTION_RETRY_BACKOFF_SECONDS = 1.0
 CODEX_STREAM_MAX_ATTEMPTS = 3
 CODEX_STREAM_RETRY_BACKOFF_SECONDS = 0.5
-CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-6-luna")
+CODEX_DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.6-luna")
 CODEX_DEFAULT_REASONING_EFFORT = "high"
 CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
 CODEX_FILE_ANALYSIS_OUTPUT_SCHEMA = {
@@ -252,15 +252,23 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
         "OPENROUTER_IMAGE_MODEL" if provider_normalized == "openrouter" else "AI_IMAGE_MODEL",
         default=GEMINI_VISION_MODEL if provider_normalized == "gemini" else OPENROUTER_DEFAULT_MODEL if provider_normalized == "openrouter" else "",
     )
+    default_reasoning_effort = (
+        CODEX_DEFAULT_REASONING_EFFORT if provider_normalized == "openai-codex" else ""
+    )
     reasoning_effort = _normalize_reasoning_effort(
-        _pick(source, "X-AI-Reasoning-Effort", "AI_REASONING_EFFORT", default="")
+        _pick(
+            source,
+            "X-AI-Reasoning-Effort",
+            "AI_REASONING_EFFORT",
+            default=default_reasoning_effort,
+        )
     )
     analyze_reasoning_effort = _normalize_reasoning_effort(
         _pick(
             source,
             "X-AI-Analyze-Reasoning-Effort",
             "AI_ANALYZE_REASONING_EFFORT",
-            default="",
+            default=default_reasoning_effort,
         )
     )
     vision_reasoning_effort = _normalize_reasoning_effort(
@@ -268,7 +276,7 @@ def load_ai_config(source: Optional[Mapping[str, Any]] = None) -> AIConfig:
             source,
             "X-AI-Vision-Reasoning-Effort",
             "AI_VISION_REASONING_EFFORT",
-            default="",
+            default=default_reasoning_effort,
         )
     )
 
@@ -1401,10 +1409,11 @@ def _codex_chat(
                     json=payload,
                 ) as response:
                     if response.status_code in {401, 403}:
+                        response_body = response.read().decode("utf-8", errors="replace")
                         _audit_request_finish(
                             audit_emitter,
                             audit_event_id,
-                            response_body=getattr(response, "text", ""),
+                            response_body=response_body,
                             status_code=response.status_code,
                             error="ChatGPT authorization was rejected",
                             binary=bool(images),
@@ -1414,7 +1423,19 @@ def _codex_chat(
                         refresh_credentials(default_codex_store())
                         auth_refreshed = True
                         continue
-                    response.raise_for_status()
+                    try:
+                        response.raise_for_status()
+                    except httpx.HTTPStatusError as exc:
+                        response_body = response.read().decode("utf-8", errors="replace")
+                        _audit_request_finish(
+                            audit_emitter,
+                            audit_event_id,
+                            response_body=response_body,
+                            status_code=int(getattr(response, "status_code", 0) or 0),
+                            error=str(exc),
+                            binary=bool(images),
+                        )
+                        raise
                     captured_lines = []
 
                     def iter_lines_with_capture():
@@ -1457,18 +1478,6 @@ def _codex_chat(
             if deadline is not None:
                 backoff = min(backoff, max(0.0, deadline - time.monotonic()))
             time.sleep(backoff)
-        except httpx.HTTPStatusError as exc:
-            response = exc.response
-            _audit_request_finish(
-                audit_emitter,
-                audit_event_id,
-                response_body=getattr(response, "text", ""),
-                status_code=int(getattr(response, "status_code", 0) or 0),
-                error=str(exc),
-                binary=bool(images),
-            )
-            raise
-
     if not text:
         raise RuntimeError("Codex returned no text output.")
     return text
