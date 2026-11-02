@@ -397,7 +397,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
       <div
         ref={timelineRef}
         data-testid="local-editor-timeline-scroll"
-        className="editor-scrollbar min-h-0 flex-1 max-w-full overflow-x-auto overflow-y-hidden"
+        className="editor-scrollbar min-h-0 flex-1 max-w-full overflow-x-auto overflow-y-auto"
       >
         <div
           data-testid="local-editor-timeline-canvas"
