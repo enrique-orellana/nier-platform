@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -668,9 +669,62 @@ func (s *Server) clipTranscript(w http.ResponseWriter, ctx context.Context, jobI
 	}
 	clipStart, clipEnd := data.Shorts[clipIndex].Start, data.Shorts[clipIndex].End
 	captions := media.BuildSubtitleCues(data.Transcript, clipStart, clipEnd)
+	soundEvents := make([]map[string]any, 0)
+	rawEvents, _ := data.Transcript["events"].([]any)
+	if len(rawEvents) == 0 {
+		if tracks, ok := data.Transcript["tracks"].([]any); ok {
+			for _, rawTrack := range tracks {
+				track, ok := rawTrack.(map[string]any)
+				if !ok {
+					continue
+				}
+				trackType, _ := track["type"].(string)
+				if trackType != "sound_events" && trackType != "audio_events" {
+					continue
+				}
+				rawEvents, _ = track["items"].([]any)
+				break
+			}
+		}
+	}
+	if clipEnd > clipStart {
+		for _, rawEvent := range rawEvents {
+			event, ok := rawEvent.(map[string]any)
+			if !ok {
+				continue
+			}
+			start, startOK := event["start"].(float64)
+			end, endOK := event["end"].(float64)
+			label, _ := event["label"].(string)
+			label = strings.TrimSpace(label)
+			if !startOK || !endOK || math.IsNaN(start) || math.IsInf(start, 0) || math.IsNaN(end) || math.IsInf(end, 0) || end <= start || label == "" {
+				continue
+			}
+			if start >= clipEnd || end <= clipStart {
+				continue
+			}
+			confidence, confidenceOK := event["confidence"].(float64)
+			if !confidenceOK || math.IsNaN(confidence) || math.IsInf(confidence, 0) || confidence < 0 || confidence > 1 {
+				confidence = 0
+			}
+			source, _ := event["source"].(string)
+			soundEvents = append(soundEvents, map[string]any{
+				"start":      math.Max(start, clipStart) - clipStart,
+				"end":        math.Min(end, clipEnd) - clipStart,
+				"label":      label,
+				"confidence": confidence,
+				"source":     source,
+			})
+		}
+	}
 	language, _ := data.Transcript["language"].(string)
 	if language == "" {
 		language = "und"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"captions": captions, "durationSec": clipEnd - clipStart, "language": language})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"captions":     captions,
+		"durationSec":  clipEnd - clipStart,
+		"language":     language,
+		"sound_events": soundEvents,
+	})
 }

@@ -673,6 +673,7 @@ export default function FullScreenEditor({
   const [activeTrackId, setActiveTrackId] = useState(
     defaultSubtitleTrackId(initialManifest),
   );
+  const [soundEvents, setSoundEvents] = useState([]);
   const [busy, setBusy] = useState(false);
   const [isLoading, setIsLoading] = useState(() => isOpen && !initialManifest);
   const [error, setError] = useState(null);
@@ -693,6 +694,33 @@ export default function FullScreenEditor({
       height: clip.source_height,
     }),
   );
+  useEffect(() => {
+    if (!isOpen || !jobId || clipIndex == null) {
+      setSoundEvents([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setSoundEvents([]);
+    fetch(getApiUrl(`/api/clip/${jobId}/${clipIndex}/transcript`))
+      .then((response) => (response.ok ? response.json() : null))
+      .then((transcript) => {
+        if (!cancelled) {
+          setSoundEvents(
+            Array.isArray(transcript?.sound_events)
+              ? transcript.sound_events
+              : [],
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSoundEvents([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clipIndex, isOpen, jobId]);
   const localDraftRef = useRef(localDraft);
   const versionRef = useRef(version);
   const activeTrackIdRef = useRef(activeTrackId);
@@ -1633,6 +1661,7 @@ export default function FullScreenEditor({
         initialVideoName={`clip-${Number(clipIndex) + 1}.mp4`}
         initialProjectId={jobId}
         initialClipIndex={clipIndex}
+        initialSoundEvents={soundEvents}
         onExport={exportVersion}
         initialPlaybackStartMs={Math.max(
           0,

@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { moveCue, resizeCue } from "../../editor/timelineModel";
 import AudioWaveform from "./AudioWaveform";
+import SoundEventTrack from "./SoundEventTrack";
 import { formatClock } from "./localEditorExport";
 
 const TRACK_LABEL_WIDTH = 144;
@@ -218,6 +219,11 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
     durationMs = 1,
     fps = 30,
     subtitleCues = [],
+    soundEvents = [],
+    selectedSoundEventId = null,
+    showSoundEventsInPreview = true,
+    onSoundEventSelect,
+    onSoundEventsPreviewChange,
     hook = null,
     layoutSegments = [],
     selectedLayoutSegmentId = null,
@@ -482,6 +488,16 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
             onChange={(cue) => onChange?.(cue, "subtitle")}
             onChangeStart={onChangeStart}
             onChangeEnd={onChangeEnd}
+          />
+          <SoundEventTrack
+            events={soundEvents}
+            durationMs={safeDuration}
+            timelineWidth={timelineWidth}
+            playheadMs={playheadMs}
+            selectedId={selectedSoundEventId}
+            showInPreview={showSoundEventsInPreview}
+            onSelect={onSoundEventSelect}
+            onTogglePreview={onSoundEventsPreviewChange}
           />
           <div
             data-testid="local-editor-audio-track"

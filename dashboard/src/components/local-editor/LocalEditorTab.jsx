@@ -46,6 +46,8 @@ import {
   X,
 } from "lucide-react";
 import LocalEditorTimeline from "./LocalEditorTimeline";
+import SoundEventPreviewOverlay from "./SoundEventPreviewOverlay";
+import { activeSoundEventAt, normalizeSoundEvents } from "./soundEventTimeline";
 import ClipMetadataPanel from "./ClipMetadataPanel";
 import SubtitleCueTable from "./SubtitleCueTable";
 import SubtitleCueModal from "./SubtitleCueModal";
@@ -189,6 +191,7 @@ export default function LocalEditorTab({
   initialClipIndex = null,
   initialPlaybackStartMs = 0,
   initialPlaybackDurationMs = null,
+  initialSoundEvents = [],
   remotionPreviewProps = null,
   initialEditorState = null,
   initialStateKey = null,
@@ -270,6 +273,9 @@ export default function LocalEditorTab({
     useState(null);
   const [gameplayFramingDraft, setGameplayFramingDraft] = useState(null);
   const [selectedMarkerId, setSelectedMarkerId] = useState(null);
+  const [selectedSoundEventId, setSelectedSoundEventId] = useState(null);
+  const [showSoundEventsInPreview, setShowSoundEventsInPreview] =
+    useState(true);
   const [editingSubtitle, setEditingSubtitle] = useState(null);
   const [pendingSubtitle, setPendingSubtitle] = useState(null);
   const [error, setError] = useState("");
@@ -462,6 +468,18 @@ export default function LocalEditorTab({
       ),
     [durationMs, layoutSegments],
   );
+  const soundEvents = useMemo(
+    () => normalizeSoundEvents(initialSoundEvents, durationMs),
+    [durationMs, initialSoundEvents],
+  );
+  const activeSoundEvent = useMemo(
+    () => activeSoundEventAt(soundEvents, playheadMs),
+    [playheadMs, soundEvents],
+  );
+  useEffect(() => {
+    setSelectedSoundEventId(null);
+    setShowSoundEventsInPreview(true);
+  }, [initialClipIndex, initialProjectId]);
   const previewLayout = useMemo(() => {
     const segments = effectiveLayoutSegments.map((segment) =>
       segment.id === gameplayFramingSegmentId && gameplayFramingDraft
@@ -2754,6 +2772,9 @@ export default function LocalEditorTab({
                       </div>
                     </>
                   )}
+                  <SoundEventPreviewOverlay
+                    event={showSoundEventsInPreview ? activeSoundEvent : null}
+                  />
                   {isReelsAspectRatio && safetyGridVisible && (
                     <img
                       src="/ig-safety-grid.png"
@@ -3464,6 +3485,14 @@ export default function LocalEditorTab({
                     durationMs={durationMs}
                     fps={remotionFps}
                     subtitleCues={subtitleCues}
+                    soundEvents={soundEvents}
+                    selectedSoundEventId={selectedSoundEventId}
+                    showSoundEventsInPreview={showSoundEventsInPreview}
+                    onSoundEventSelect={(event) => {
+                      setSelectedSoundEventId(event.id);
+                      handleSeek(event.startMs);
+                    }}
+                    onSoundEventsPreviewChange={setShowSoundEventsInPreview}
                     hook={hook}
                     layoutSegments={effectiveLayoutSegments}
                     selectedLayoutSegmentId={selectedLayoutSegmentId}
