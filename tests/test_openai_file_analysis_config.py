@@ -68,4 +68,4 @@ def test_file_analysis_settings_default_to_luna_for_connected_codex(monkeypatch)
     monkeypatch.delenv("OPENAI_ANALYZE_MODEL", raising=False)
     monkeypatch.delenv("CODEX_MODEL", raising=False)
 
-    assert main.openai_file_analysis_settings(_config(analyze_model="auto", text_model="auto"))["model"] == "gpt-5.6-luna"
+    assert main.openai_file_analysis_settings(_config(analyze_model="auto", text_model="auto"))["model"] == "gpt-6-luna"

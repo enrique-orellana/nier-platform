@@ -53,7 +53,13 @@ def test_codex_reasoning_effort_auto_override_remains_unset():
 def test_codex_default_model_uses_chatgpt_supported_luna_model(monkeypatch):
     monkeypatch.delenv("CODEX_MODEL", raising=False)
 
-    assert ai_client._codex_default_model() == "gpt-5.6-luna"
+    assert ai_client._codex_default_model() == "gpt-6-luna"
+
+
+def test_codex_client_version_uses_current_supported_runtime(monkeypatch):
+    monkeypatch.delenv("CODEX_CLIENT_VERSION", raising=False)
+
+    assert ai_client._codex_client_version() == "0.166.0"
 
 
 def test_unsupported_provider_still_fails_fast():
@@ -191,9 +197,10 @@ def test_codex_model_discovery_normalizes_available_models(monkeypatch):
         "defaultModel": "gpt-5.4",
     }
     assert FakeCodexCatalogClient.last_url == "https://chatgpt.com/backend-api/codex/models"
-    assert FakeCodexCatalogClient.last_params == {"client_version": "0.144.1"}
+    assert FakeCodexCatalogClient.last_params == {"client_version": "0.166.0"}
     assert FakeCodexCatalogClient.last_headers["Authorization"] == "Bearer access"
     assert FakeCodexCatalogClient.last_headers["ChatGPT-Account-ID"] == "account"
+    assert FakeCodexCatalogClient.last_headers["Version"] == "0.166.0"
 
 
 def test_codex_model_discovery_refreshes_once_after_auth_rejection(monkeypatch):
@@ -227,7 +234,7 @@ def test_codex_transport_aggregates_response_output_text_deltas(monkeypatch):
     assert FakeCodexStreamClient.last_url == "https://chatgpt.com/backend-api/codex/responses"
     assert FakeCodexStreamClient.last_headers["Authorization"] == "Bearer access"
     assert FakeCodexStreamClient.last_headers["ChatGPT-Account-ID"] == "account"
-    assert FakeCodexStreamClient.last_payload["model"] == "gpt-5.6-luna"
+    assert FakeCodexStreamClient.last_payload["model"] == "gpt-6-luna"
     assert FakeCodexStreamClient.last_payload["stream"] is True
     assert FakeCodexStreamClient.last_payload["store"] is False
 
@@ -255,7 +262,7 @@ def test_codex_transport_sends_selected_reasoning_effort(monkeypatch):
 
     ai_client.chat_completion(config, "Return JSON", json_mode=True)
 
-    assert FakeCodexStreamClient.last_payload["model"] == "gpt-5.6-luna"
+    assert FakeCodexStreamClient.last_payload["model"] == "gpt-6-luna"
     assert FakeCodexStreamClient.last_payload["reasoning"] == {"effort": "high"}
 
 
