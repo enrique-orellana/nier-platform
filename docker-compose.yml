@@ -42,21 +42,21 @@ services:
       MINIO_DOWNLOAD_MAX_CONCURRENCY: ${MINIO_DOWNLOAD_MAX_CONCURRENCY:-16}
       MINIO_DOWNLOAD_MULTIPART_THRESHOLD_MB: ${MINIO_DOWNLOAD_MULTIPART_THRESHOLD_MB:-32}
       MINIO_DOWNLOAD_MULTIPART_CHUNKSIZE_MB: ${MINIO_DOWNLOAD_MULTIPART_CHUNKSIZE_MB:-64}
-      AI_PROVIDER: ${AI_PROVIDER:-openrouter}
-      AI_BASE_URL: ${AI_BASE_URL:-https://openrouter.ai/api/v1}
+      AI_PROVIDER: ${AI_PROVIDER:-openai-codex}
+      AI_BASE_URL: ${AI_BASE_URL:-}
       AI_API_KEY: ${AI_API_KEY:-}
-      AI_MODEL: ${AI_MODEL:-openai/gpt-4o-mini}
-      AI_ANALYZE_MODEL: ${AI_ANALYZE_MODEL:-openai/gpt-4o-mini}
+      AI_MODEL: ${AI_MODEL:-auto}
+      AI_ANALYZE_MODEL: ${AI_ANALYZE_MODEL:-auto}
       AI_CLIP_ANALYSIS_PROVIDER: ${AI_CLIP_ANALYSIS_PROVIDER:-chat-json}
-      AI_TRANSCRIPTION_PROVIDER: ${AI_TRANSCRIPTION_PROVIDER:-}
-      AI_TRANSCRIPTION_BASE_URL: ${AI_TRANSCRIPTION_BASE_URL:-}
+      AI_TRANSCRIPTION_PROVIDER: ${AI_TRANSCRIPTION_PROVIDER:-openai-compatible}
+      AI_TRANSCRIPTION_BASE_URL: ${AI_TRANSCRIPTION_BASE_URL:-http://speaches:8000/v1}
       AI_TRANSCRIPTION_API_KEY: ${AI_TRANSCRIPTION_API_KEY:-}
-      AI_TRANSCRIPTION_MODEL: ${AI_TRANSCRIPTION_MODEL:-}
+      AI_TRANSCRIPTION_MODEL: ${AI_TRANSCRIPTION_MODEL:-Systran/faster-whisper-small}
       AI_TRANSCRIPTION_LANGUAGE: ${AI_TRANSCRIPTION_LANGUAGE:-auto}
       AI_TRANSCRIPTION_OPENROUTER_PROVIDER: ${AI_TRANSCRIPTION_OPENROUTER_PROVIDER:-}
-      AUDIO_EVENT_PROVIDER: ${AUDIO_EVENT_PROVIDER:-none}
-      AUDIO_EVENT_BASE_URL: ${AUDIO_EVENT_BASE_URL:-}
-      AUDIO_EVENT_MODEL: ${AUDIO_EVENT_MODEL:-}
+      AUDIO_EVENT_PROVIDER: ${AUDIO_EVENT_PROVIDER:-openshorts-events-v1}
+      AUDIO_EVENT_BASE_URL: ${AUDIO_EVENT_BASE_URL:-http://local-audio-events:8100/v1}
+      AUDIO_EVENT_MODEL: ${AUDIO_EVENT_MODEL:-yamnet}
       AUDIO_EVENT_API_KEY: ${AUDIO_EVENT_API_KEY:-}
       AUDIO_EVENT_MIN_CONFIDENCE: ${AUDIO_EVENT_MIN_CONFIDENCE:-0.35}
       AI_ANALYSIS_CONCURRENCY: ${AI_ANALYSIS_CONCURRENCY:-1}
@@ -64,16 +64,107 @@ services:
       CODEX_MODEL: ${CODEX_MODEL:-gpt-6-luna}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-      OPENAI_CLIP_ANALYSIS_MODE: ${OPENAI_CLIP_ANALYSIS_MODE:-auto}
+      OPENAI_CLIP_ANALYSIS_MODE: ${OPENAI_CLIP_ANALYSIS_MODE:-legacy}
       OPENAI_ANALYZE_MODEL: ${OPENAI_ANALYZE_MODEL:-}
       OPENAI_FILE_ANALYSIS_MAX_TOKENS: ${OPENAI_FILE_ANALYSIS_MAX_TOKENS:-100000}
       RENDER_SERVICE_URL: ${RENDER_SERVICE_URL:-http://host.docker.internal:13101}
       OPENSHORTS_CODEX_AUTH_FILE: /app/output/.openshorts/codex-auth.json
-      NO_PROXY: 192.168.50.2,db,renderer,host.docker.internal,localhost,127.0.0.1
+      NO_PROXY: 192.168.50.2,db,renderer,speaches,local-audio-events,host.docker.internal,localhost,127.0.0.1
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
+      speaches:
+        condition: service_healthy
+      speaches-model-init:
+        condition: service_completed_successfully
+      local-audio-events:
+        condition: service_healthy
+
+  speaches:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    container_name: openshorts-speaches
+    init: true
+    environment:
+      ENABLE_UI: "false"
+      LOG_LEVEL: warning
+      STT_MODEL_TTL: ${SPEACHES_STT_MODEL_TTL:-300}
+      WHISPER__INFERENCE_DEVICE: cpu
+      WHISPER__COMPUTE_TYPE: int8
+      WHISPER__CPU_THREADS: ${SPEACHES_CPU_THREADS:-2}
+      WHISPER__NUM_WORKERS: 1
+    volumes:
+      - speaches-cache:/home/ubuntu/.cache/huggingface/hub
+    cpus: ${SPEACHES_CPUS:-2.0}
+    mem_limit: ${SPEACHES_MEMORY_LIMIT:-4g}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+      start_period: 300s
+    restart: unless-stopped
+
+  speaches-model-init:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    container_name: openshorts-speaches-model-init
+    init: true
+    depends_on:
+      speaches:
+        condition: service_healthy
+    environment:
+      SPEACHES_MODEL_ID: ${AI_TRANSCRIPTION_MODEL:-Systran/faster-whisper-small}
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        import os, time, urllib.error, urllib.parse, urllib.request
+        model = os.environ["SPEACHES_MODEL_ID"]
+        url = "http://speaches:8000/v1/models/" + urllib.parse.quote(model, safe="")
+        request = urllib.request.Request(url, method="POST")
+        with urllib.request.urlopen(request, timeout=1800) as response:
+            response.read()
+        deadline = time.monotonic() + 1800
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(url, timeout=10) as response:
+                    if response.status == 200:
+                        print("Configured Speaches model is available.")
+                        break
+            except urllib.error.HTTPError as error:
+                if error.code != 404:
+                    raise
+            time.sleep(2)
+        else:
+            raise TimeoutError("Configured Speaches model did not become available.")
+    cpus: 0.5
+    mem_limit: 512m
+    restart: "no"
+
+  local-audio-events:
+    build:
+      context: ./services/local_audio_events
+    container_name: openshorts-local-audio-events
+    init: true
+    environment:
+      AUDIO_EVENT_DETECTOR: ${AUDIO_EVENT_DETECTOR:-yamnet}
+      AUDIO_EVENT_MODEL: ${AUDIO_EVENT_MODEL:-yamnet}
+      AUDIO_EVENT_MAX_UPLOAD_BYTES: ${AUDIO_EVENT_MAX_UPLOAD_BYTES:-26214400}
+      YAMNET_MODEL_URL: ${YAMNET_MODEL_URL:-https://tfhub.dev/google/yamnet/1}
+      YAMNET_EVENT_MIN_CONFIDENCE: ${YAMNET_EVENT_MIN_CONFIDENCE:-0.4}
+      TF_NUM_INTRAOP_THREADS: ${YAMNET_CPU_THREADS:-1}
+      TF_NUM_INTEROP_THREADS: 1
+      OMP_NUM_THREADS: ${YAMNET_CPU_THREADS:-1}
+    volumes:
+      - yamnet-cache:/home/app/.cache/tfhub_modules
+    cpus: ${YAMNET_CPUS:-1.0}
+    mem_limit: ${YAMNET_MEMORY_LIMIT:-2g}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+      start_period: 240s
+    restart: unless-stopped
 
   frontend:
     build: ./dashboard
@@ -86,11 +177,11 @@ services:
       - ./dashboard:/app
       - /app/node_modules
     environment:
-      - VITE_AI_PROVIDER=openrouter
-      - VITE_AI_BASE_URL=https://openrouter.ai/api/v1
-      - VITE_AI_MODEL=openai/gpt-4o-mini
-      - VITE_AI_ANALYZE_MODEL=openai/gpt-4o-mini
-      - VITE_AI_TRANSCRIPTION_MODEL=openai/whisper-large-v3
+      - VITE_AI_PROVIDER=openai-codex
+      - VITE_AI_BASE_URL=
+      - VITE_AI_MODEL=auto
+      - VITE_AI_ANALYZE_MODEL=auto
+      - VITE_AI_TRANSCRIPTION_MODEL=Systran/faster-whisper-small
       - VITE_BACKEND_PROXY_TARGET=http://backend:8000
       - VITE_RENDERER_PROXY_TARGET=http://host.docker.internal:13101
     restart: unless-stopped
@@ -118,3 +209,7 @@ services:
   #   restart: unless-stopped
   #   depends_on:
   #     - backend
+
+volumes:
+  speaches-cache:
+  yamnet-cache:

@@ -119,6 +119,12 @@ The stage selectors are independent: `AI_PROVIDER` selects chat transport only a
 
 Provider names select adapters, while URLs, models, and credentials are data-driven configuration. A provider that implements the configured common protocol can be selected without changing orchestration code. A provider with a different protocol needs one adapter that maps it to the shared input/output contract; after that adapter exists, switching to it remains configuration-only. Remote services are allowed when explicitly selected. A failed configured provider fails the job; it never triggers another provider or heuristic clip selection.
 
+### Active local profile
+
+The local Compose profile runs speech recognition in the CPU-only Speaches service using multilingual `Systran/faster-whisper-small` with `int8` quantization, two CPU threads, and a four-gigabyte memory cap. Sound-event detection runs in a separate CPU-only service using YAMNet, one CPU thread, and a two-gigabyte memory cap. The backend calls both services over the private Compose network; neither service publishes a host port. Their model caches persist in Docker volumes. Model artifacts download on first startup and are reused from those volumes on later starts.
+
+The active clip-selection provider remains the Codex connector. It receives the normalized transcript and sound-event timeline for selection; raw audio is sent only to the local audio services. `AI_PROVIDER=openai-codex`, `AI_TRANSCRIPTION_PROVIDER=openai-compatible`, and `AUDIO_EVENT_PROVIDER=openshorts-events-v1` select these independent stages. Their base URLs and model identifiers can be changed to compatible services without changing the timeline or clip-selection pipeline. A configured service error fails that job; no service is selected as a fallback.
+
 `AI_ANALYSIS_CONCURRENCY=1` is enforced across worker processes with a queue/lock around the complete clip-discovery AI pipeline, preventing simultaneous videos from overloading configured services. This lock covers transcription, event analysis, and clip selection, then releases before rendering. Local resource limits apply only to local services. Invalid configuration, missing credentials, service errors, and schema violations fail clearly and do not trigger provider fallback.
 
 ## Data flow

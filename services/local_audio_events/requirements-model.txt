@@ -1,0 +1,4 @@
+# Install after tensorflow-cpu with --no-deps to avoid pulling the GPU-capable
+# tensorflow distribution alongside its CPU-only equivalent.
+tensorflow-hub==0.16.1
+tf-keras==2.16.0
