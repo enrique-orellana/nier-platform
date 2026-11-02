@@ -140,6 +140,7 @@ import {
   DEFAULT_SUBTITLE_STYLE,
   hexToRgba,
   normalizeSubtitleStyle,
+  toClipGeneratorSubtitleStyle,
 } from "./localEditorStyles";
 import { getFontStack, subtitleFontFace } from "../../remotion/lib/fonts";
 import {
@@ -215,6 +216,7 @@ export default function LocalEditorTab({
   hideExport = false,
   initialFeature = "details",
   initialSubtitleView = "timeline",
+  scaleSubtitlePreviewToOutput = false,
 }) {
   const projectClipIndex = Number(initialClipIndex);
   const hasProjectClipSource = Boolean(
@@ -226,6 +228,7 @@ export default function LocalEditorTab({
   );
   const videoRef = useRef(null);
   const playerRef = useRef(null);
+  const previewCanvasRef = useRef(null);
   const workspaceRef = useRef(null);
   const layoutResizeRef = useRef(null);
   const inspectorResizeRef = useRef(null);
@@ -245,6 +248,10 @@ export default function LocalEditorTab({
   const [videoUrl, setVideoUrl] = useState("");
   const [previewVideoUrl, setPreviewVideoUrl] = useState("");
   const [sourceDimensions, setSourceDimensions] = useState(null);
+  const [previewCanvasSize, setPreviewCanvasSize] = useState({
+    width: 0,
+    height: 0,
+  });
   useEffect(() => {
     setSourceDimensions(null);
   }, [
@@ -254,6 +261,27 @@ export default function LocalEditorTab({
     remotionPreviewProps?.videoUrl,
     videoUrl,
   ]);
+  useEffect(() => {
+    if (!scaleSubtitlePreviewToOutput) return undefined;
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return undefined;
+
+    const updateSize = () => {
+      const { width, height } = canvas.getBoundingClientRect();
+      setPreviewCanvasSize((current) =>
+        Math.abs(current.width - width) < 0.5 &&
+        Math.abs(current.height - height) < 0.5
+          ? current
+          : { width, height },
+      );
+    };
+
+    updateSize();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [scaleSubtitlePreviewToOutput]);
   const editorPreferencesRef = useRef(readEditorPreferences());
   const [editHistory, setEditHistory] = useState(() => {
     const history = createEmptyEditorHistory(editorPreferencesRef.current);
@@ -2354,6 +2382,25 @@ export default function LocalEditorTab({
   const activeHook =
     hook && playheadMs >= hook.startMs && playheadMs < hook.endMs ? hook : null;
   const previewSubtitleStyle = normalizeSubtitleStyle(subtitleStyle);
+  const previewCanvasScale =
+    scaleSubtitlePreviewToOutput &&
+    previewCanvasSize.width > 0 &&
+    previewCanvasSize.height > 0 &&
+    outputDimensions.width > 0 &&
+    outputDimensions.height > 0
+      ? Math.min(
+          previewCanvasSize.width / outputDimensions.width,
+          previewCanvasSize.height / outputDimensions.height,
+        )
+      : 0;
+  const clipRenderSubtitleStyle =
+    toClipGeneratorSubtitleStyle(previewSubtitleStyle);
+  const previewSubtitleFontSize = scaleSubtitlePreviewToOutput
+    ? clipRenderSubtitleStyle.fontSize * previewCanvasScale
+    : Math.max(12, previewSubtitleStyle.fontSize);
+  const previewSubtitleOutlineWidth = scaleSubtitlePreviewToOutput
+    ? clipRenderSubtitleStyle.borderWidth * previewCanvasScale
+    : previewSubtitleStyle.borderWidth;
   const previewSubtitlePosition = getSubtitlePositionStyle(
     previewSubtitleStyle,
     outputDimensions.width,
@@ -2369,7 +2416,45 @@ export default function LocalEditorTab({
     subtitleCues,
   );
   const shouldShowPreviewSubtitle =
-    Boolean(activeSubtitle) && previewSubtitleWords.length > 0;
+    Boolean(activeSubtitle) &&
+    previewSubtitleWords.length > 0 &&
+    (!scaleSubtitlePreviewToOutput || previewCanvasScale > 0);
+  const previewSubtitleWordSpans = previewSubtitleWords.map((word, index) => {
+    const isActive =
+      previewSubtitleStyle.displayMode === "single-word" ||
+      index === activeSubtitleWordIndex;
+    const isKaraoke = previewSubtitleStyle.animation === "karaoke" && isActive;
+    const scaled = scaleSubtitlePreviewToOutput ? previewCanvasScale : 1;
+
+    return (
+      <span
+        key={`${word.startMs}-${index}`}
+        style={{
+          color: isKaraoke
+            ? previewSubtitleStyle.bgColor
+            : isActive
+              ? previewSubtitleStyle.highlightColor
+              : previewSubtitleStyle.fontColor,
+          display: "inline-block",
+          transform:
+            isActive && previewSubtitleStyle.animation === "pop"
+              ? "scale(1.1)"
+              : "none",
+          textShadow:
+            previewSubtitleStyle.animation === "word-highlight" && isActive
+              ? `0 0 ${12 * scaled}px ${previewSubtitleStyle.highlightColor}, 0 0 ${24 * scaled}px ${previewSubtitleStyle.highlightColor}40`
+              : "inherit",
+          backgroundColor: isKaraoke
+            ? previewSubtitleStyle.highlightColor
+            : "transparent",
+          borderRadius: isKaraoke ? 4 * scaled : 0,
+          padding: isKaraoke ? `${2 * scaled}px ${6 * scaled}px` : 0,
+        }}
+      >
+        {word.text}
+      </span>
+    );
+  });
   const previewSubtitles = subtitleCues.length
     ? {
         captions: previewSubtitleCaptions,
@@ -2598,6 +2683,7 @@ export default function LocalEditorTab({
                 className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#242424]"
               >
                 <div
+                  ref={previewCanvasRef}
                   className="relative h-full max-h-full w-auto max-w-full"
                   style={{
                     aspectRatio: `${outputDimensions.width} / ${outputDimensions.height}`,
@@ -2710,70 +2796,72 @@ export default function LocalEditorTab({
                             </div>
                           </div>
                         )}
-                        {shouldShowPreviewSubtitle && (
-                          <div
-                            className="absolute flex w-[88%] flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-bold shadow-lg"
-                            style={{
-                              ...previewSubtitlePosition,
-                              fontFamily: getFontStack(
-                                previewSubtitleStyle.fontFamily,
-                              ),
-                              fontSize: `${Math.max(12, previewSubtitleStyle.fontSize)}px`,
-                              fontWeight: 700,
-                              textShadow: outlineTextShadow(
-                                previewSubtitleStyle.borderWidth,
-                                previewSubtitleStyle.borderColor,
-                              ),
-                              backgroundColor:
-                                previewSubtitleStyle.bgOpacity > 0
-                                  ? hexToRgba(
-                                      previewSubtitleStyle.bgColor,
-                                      previewSubtitleStyle.bgOpacity,
-                                    )
-                                  : "transparent",
-                            }}
-                          >
-                            {previewSubtitleWords.map((word, index) => {
-                              const isActive =
-                                previewSubtitleStyle.displayMode ===
-                                  "single-word" ||
-                                index === activeSubtitleWordIndex;
-                              const isKaraoke =
-                                previewSubtitleStyle.animation === "karaoke" &&
-                                isActive;
-                              return (
-                                <span
-                                  key={`${word.startMs}-${index}`}
-                                  style={{
-                                    color: isKaraoke
-                                      ? previewSubtitleStyle.bgColor
-                                      : isActive
-                                        ? previewSubtitleStyle.highlightColor
-                                        : previewSubtitleStyle.fontColor,
-                                    display: "inline-block",
-                                    transform:
-                                      isActive &&
-                                      previewSubtitleStyle.animation === "pop"
-                                        ? "scale(1.1)"
-                                        : "none",
-                                    textShadow:
-                                      previewSubtitleStyle.animation ===
-                                        "word-highlight" && isActive
-                                        ? `0 0 12px ${previewSubtitleStyle.highlightColor}, 0 0 24px ${previewSubtitleStyle.highlightColor}40`
-                                        : "inherit",
-                                    backgroundColor: isKaraoke
-                                      ? previewSubtitleStyle.highlightColor
+                        {shouldShowPreviewSubtitle &&
+                          (scaleSubtitlePreviewToOutput ? (
+                            <div
+                              className="absolute flex w-[88%] justify-center"
+                              style={previewSubtitlePosition}
+                            >
+                              <div
+                                className="flex max-w-[85%] flex-wrap justify-center text-center font-bold"
+                                style={{
+                                  fontFamily: getFontStack(
+                                    previewSubtitleStyle.fontFamily,
+                                  ),
+                                  fontSize: `${previewSubtitleFontSize}px`,
+                                  fontWeight: 700,
+                                  lineHeight: 1.2,
+                                  gap: `${6 * previewCanvasScale}px ${8 * previewCanvasScale}px`,
+                                  textShadow: outlineTextShadow(
+                                    previewSubtitleOutlineWidth,
+                                    previewSubtitleStyle.borderColor,
+                                  ),
+                                  backgroundColor:
+                                    previewSubtitleStyle.bgOpacity > 0
+                                      ? hexToRgba(
+                                          previewSubtitleStyle.bgColor,
+                                          previewSubtitleStyle.bgOpacity,
+                                        )
                                       : "transparent",
-                                    borderRadius: isKaraoke ? 4 : 0,
-                                    padding: isKaraoke ? "2px 6px" : 0,
-                                  }}
-                                >
-                                  {word.text}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        )}
+                                  borderRadius:
+                                    previewSubtitleStyle.bgOpacity > 0
+                                      ? 8 * previewCanvasScale
+                                      : 0,
+                                  padding:
+                                    previewSubtitleStyle.bgOpacity > 0
+                                      ? `${8 * previewCanvasScale}px ${16 * previewCanvasScale}px`
+                                      : 0,
+                                }}
+                              >
+                                {previewSubtitleWordSpans}
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              className="absolute flex w-[88%] flex-wrap justify-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-center font-bold shadow-lg"
+                              style={{
+                                ...previewSubtitlePosition,
+                                fontFamily: getFontStack(
+                                  previewSubtitleStyle.fontFamily,
+                                ),
+                                fontSize: `${previewSubtitleFontSize}px`,
+                                fontWeight: 700,
+                                textShadow: outlineTextShadow(
+                                  previewSubtitleOutlineWidth,
+                                  previewSubtitleStyle.borderColor,
+                                ),
+                                backgroundColor:
+                                  previewSubtitleStyle.bgOpacity > 0
+                                    ? hexToRgba(
+                                        previewSubtitleStyle.bgColor,
+                                        previewSubtitleStyle.bgOpacity,
+                                      )
+                                    : "transparent",
+                              }}
+                            >
+                              {previewSubtitleWordSpans}
+                            </div>
+                          ))}
                       </div>
                     </>
                   )}

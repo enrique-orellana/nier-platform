@@ -4,9 +4,94 @@ import { getApiUrl } from "../../config";
 import { useRenewableMediaUrl } from "../../lib/videoUrls";
 import LocalEditorTab from "../local-editor/LocalEditorTab";
 import {
+  DEFAULT_SUBTITLE_STYLE,
+  normalizeSubtitleStyle,
+} from "../local-editor/localEditorStyles";
+import {
   applySourceEditorCues,
   transcriptToSourceEditorState,
 } from "./sourceTranscriptEditorState";
+
+const readClipSubtitleStyle = async (projectId, signal) => {
+  const fallbackStyle = normalizeSubtitleStyle(DEFAULT_SUBTITLE_STYLE);
+
+  try {
+    const clipsResponse = await fetch(
+      getApiUrl(`/api/projects/clips/${encodeURIComponent(projectId)}`),
+      { signal },
+    );
+    if (!clipsResponse.ok) return fallbackStyle;
+
+    const clipsPayload = await clipsResponse.json();
+    const clips = Array.isArray(clipsPayload?.clips)
+      ? clipsPayload.clips.slice(0, 4)
+      : [];
+
+    for (const [index, clip] of clips.entries()) {
+      const clipIndex =
+        clip?.index != null && Number.isInteger(Number(clip.index))
+          ? Number(clip.index)
+          : index;
+      const manifestResponse = await fetch(
+        getApiUrl(
+          `/api/clip/${encodeURIComponent(projectId)}/${clipIndex}/manifest`,
+        ),
+        { signal },
+      );
+      if (!manifestResponse.ok) continue;
+
+      const responsePayload = await manifestResponse.json();
+      const manifest = responsePayload?.manifest || responsePayload;
+      const tracks = Array.isArray(manifest?.subtitle_tracks)
+        ? manifest.subtitle_tracks
+        : [];
+      const originalTrack =
+        tracks.find((track) => track?.id === "original") ||
+        tracks.find((track) => track?.origin !== "translation");
+      const trackStyle = originalTrack?.style;
+      const layerStyle = manifest?.layers?.subtitles?.style;
+      const savedStyle = trackStyle || layerStyle;
+      if (!savedStyle || typeof savedStyle !== "object") continue;
+
+      const isBaseEditorStyle =
+        Boolean(trackStyle) || manifest?.subtitle_tracks_edited === true;
+      const fontSize = Number(savedStyle.fontSize);
+      const borderWidth = Number(savedStyle.borderWidth);
+      return normalizeSubtitleStyle({
+        ...savedStyle,
+        fontSize:
+          Number.isFinite(fontSize) && fontSize > 0
+            ? isBaseEditorStyle
+              ? fontSize
+              : fontSize / 2.2
+            : fallbackStyle.fontSize,
+        borderWidth:
+          Number.isFinite(borderWidth) && borderWidth >= 0
+            ? isBaseEditorStyle
+              ? borderWidth
+              : borderWidth / 1.5
+            : fallbackStyle.borderWidth,
+        position:
+          savedStyle.position ||
+          manifest?.layers?.subtitles?.position ||
+          fallbackStyle.position,
+        fontColor: savedStyle.fontColor || fallbackStyle.fontColor,
+        bgColor:
+          savedStyle.bgColor ||
+          savedStyle.backgroundColor ||
+          fallbackStyle.bgColor,
+        bgOpacity:
+          savedStyle.bgOpacity ??
+          savedStyle.backgroundOpacity ??
+          fallbackStyle.bgOpacity,
+      });
+    }
+  } catch (readError) {
+    if (readError?.name === "AbortError") throw readError;
+  }
+
+  return fallbackStyle;
+};
 
 const readError = async (response) => {
   const payload = await response.json().catch(() => null);
@@ -43,15 +128,17 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
         if (!response.ok) throw new Error(await readError(response));
         return response.json();
       })
-      .then((payload) => {
+      .then(async (payload) => {
         if (!payload?.transcript || !payload?.source_video_url) {
           throw new Error(
             "The complete source video or transcript is unavailable.",
           );
         }
-        const nextEditorState = transcriptToSourceEditorState(
-          payload.transcript,
-        );
+        const [nextEditorState, subtitleStyle] = await Promise.all([
+          Promise.resolve(transcriptToSourceEditorState(payload.transcript)),
+          readClipSubtitleStyle(projectId, controller.signal),
+        ]);
+        nextEditorState.subtitleStyle = subtitleStyle;
         setSource(payload);
         setEditorState(nextEditorState);
         setBaselineCues(nextEditorState.subtitleCues);
@@ -190,6 +277,7 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
               Number(source.source_duration_seconds) * 1000
             }
             initialEditorState={editorState}
+            scaleSubtitlePreviewToOutput
             activeSubtitleTrackId="original"
             onStateChange={setEditorState}
             onClose={onClose}
