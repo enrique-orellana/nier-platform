@@ -277,7 +277,6 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
               Number(source.source_duration_seconds) * 1000
             }
             initialEditorState={editorState}
-            scaleSubtitlePreviewToOutput
             activeSubtitleTrackId="original"
             onStateChange={setEditorState}
             onClose={onClose}
