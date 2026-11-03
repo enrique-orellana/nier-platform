@@ -2850,7 +2850,7 @@ def _discover_clip_plan(
             )
             prompt = GEMINI_PROMPT_TEMPLATE.format(
                 video_duration=video_duration,
-                target_clips=CLIP_ANALYSIS_DISCOVERY_LIMIT,
+                target_clips=target_clips,
                 discovery_limit=CLIP_ANALYSIS_DISCOVERY_LIMIT,
                 window_metadata=window_metadata,
                 source_context=source_context_json,
