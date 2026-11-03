@@ -119,9 +119,67 @@ function runFfmpeg(args: string[]): Promise<void> {
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) resolve();
-      else reject(new Error(stderr || `range proxy ffmpeg failed with code ${code}`));
+      else {
+        const safeStderr = stderr
+          .replace(/https?:\/\/[^\s"'<>]+/gi, "[remote media URL]")
+          .trim()
+          .slice(-2000);
+        reject(new Error(safeStderr || `range proxy ffmpeg failed with code ${code}`));
+      }
     });
   });
+}
+
+const DEFAULT_REMOTE_SOURCE_ORIGINS = [
+  "http://seaweedfs-s3.192.168.50.2.nip.io:32380",
+];
+
+function normalizeRemoteSourceOrigin(value: string): string | null {
+  try {
+    const origin = new URL(value);
+    if ((origin.protocol !== "http:" && origin.protocol !== "https:")
+      || origin.username
+      || origin.password
+      || origin.pathname !== "/"
+      || origin.search
+      || origin.hash) {
+      return null;
+    }
+    return origin.origin;
+  } catch {
+    return null;
+  }
+}
+
+function signedRemoteSourceUrl(videoUrl: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(videoUrl);
+  } catch {
+    return null;
+  }
+
+  if ((parsed.protocol !== "http:" && parsed.protocol !== "https:")
+    || parsed.username
+    || parsed.password) {
+    return null;
+  }
+
+  const configuredOrigins = process.env.RENDER_SOURCE_PROXY_ALLOWED_ORIGINS
+    ?.split(",")
+    .map((origin) => normalizeRemoteSourceOrigin(origin.trim()))
+    .filter((origin): origin is string => Boolean(origin));
+  const allowedOrigins = configuredOrigins?.length
+    ? configuredOrigins
+    : DEFAULT_REMOTE_SOURCE_ORIGINS;
+  if (!allowedOrigins.includes(parsed.origin)) return null;
+
+  const hasSignature = [...parsed.searchParams.entries()].some(([name, value]) => {
+    const normalizedName = name.toLowerCase();
+    return (normalizedName === "x-amz-signature" || normalizedName === "signature")
+      && Boolean(value.trim());
+  });
+  return hasSignature ? parsed.toString() : null;
 }
 
 async function ensureCachedProxy(cachePath: string, args: string[]): Promise<void> {
@@ -155,31 +213,42 @@ export function prepareRangeProxy(options: RangeProxyOptions): Promise<RangeProx
   if (!Number.isFinite(startSeconds) || startSeconds < 0 || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     return Promise.resolve({ videoUrl, videoStartSeconds: Math.max(0, startSeconds || 0) });
   }
-  const sourcePath = localOutputPath(videoUrl, outputDir);
-  if (!sourcePath || !fs.existsSync(sourcePath)) {
+  const localSourcePath = localOutputPath(videoUrl, outputDir);
+  const remoteSourceUrl = localSourcePath ? null : signedRemoteSourceUrl(videoUrl);
+  const sourcePath = localSourcePath || remoteSourceUrl;
+  if (!sourcePath) {
     return Promise.resolve({ videoUrl, videoStartSeconds: startSeconds });
   }
-  const sourceIsGeneratedClip = startSeconds === 0 && isGeneratedClipPath(sourcePath);
+  if (localSourcePath && !fs.existsSync(localSourcePath)) {
+    return Promise.resolve({ videoUrl, videoStartSeconds: startSeconds });
+  }
+
+  const sourceIsGeneratedClip = Boolean(
+    localSourcePath && startSeconds === 0 && isGeneratedClipPath(localSourcePath),
+  );
   if (sourceIsGeneratedClip && !includeStandardBackground) {
     return Promise.resolve({ videoUrl, videoStartSeconds: 0 });
   }
-  const sourceStat = fs.statSync(sourcePath);
+  const sourceStat = localSourcePath ? fs.statSync(localSourcePath) : undefined;
+  const cacheSourceIdentity = localSourcePath || videoUrl;
+  const sourceSize = sourceStat?.size ?? 0;
+  const sourceMtimeMs = sourceStat?.mtimeMs ?? 0;
   // Keep range proxies inside the owning job directory so project deletion
   // removes the cache together with the rendered output.
   const cacheDir = path.join(outputDir, jobId, "render-cache");
   const cachePath = path.join(
     cacheDir,
-    rangeProxyCacheName(sourcePath, startSeconds, durationSeconds, sourceStat.size, sourceStat.mtimeMs),
+    rangeProxyCacheName(cacheSourceIdentity, startSeconds, durationSeconds, sourceSize, sourceMtimeMs),
   );
   const standardBackgroundPath = includeStandardBackground
     ? path.join(
         cacheDir,
         standardBackgroundProxyCacheName(
-          sourcePath,
+          cacheSourceIdentity,
           startSeconds,
           durationSeconds,
-          sourceStat.size,
-          sourceStat.mtimeMs,
+          sourceSize,
+          sourceMtimeMs,
         ),
       )
     : undefined;

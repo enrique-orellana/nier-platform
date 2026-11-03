@@ -29,6 +29,34 @@ function Require-File {
     }
 }
 
+function Resolve-ExecutablePath {
+    param([string]$Path, [string]$CommandName)
+
+    Require-File $Path "$CommandName executable"
+    $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
+    if ($resolvedPath -notmatch '(?i)[\\/]+scoop[\\/]+shims[\\/]') {
+        return $resolvedPath
+    }
+
+    if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
+        throw "$CommandName resolved to a Scoop shim. Install Scoop or pass the real executable path with -FfmpegPath."
+    }
+
+    $targetOutput = & scoop which $CommandName 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not resolve the Scoop shim target for $CommandName."
+    }
+
+    $targetPath = ($targetOutput | Where-Object { $_ } | Select-Object -Last 1).Trim()
+    if ($targetPath.StartsWith('~')) {
+        $relativeTargetPath = $targetPath.Substring(1).TrimStart([char[]]@('\', '/'))
+        $targetPath = Join-Path $env:USERPROFILE $relativeTargetPath
+    }
+
+    Require-File $targetPath "$CommandName target"
+    return (Resolve-Path -LiteralPath $targetPath).Path
+}
+
 if (-not $FfmpegPath) {
     $ffmpegCommand = Get-Command ffmpeg.exe -ErrorAction SilentlyContinue
     if (-not $ffmpegCommand) {
@@ -37,8 +65,16 @@ if (-not $FfmpegPath) {
     $FfmpegPath = $ffmpegCommand.Source
 }
 
-$FfmpegPath = (Resolve-Path -LiteralPath $FfmpegPath).Path
+$FfmpegPath = Resolve-ExecutablePath -Path $FfmpegPath -CommandName "ffmpeg"
 $ffprobePath = Join-Path (Split-Path -Parent $FfmpegPath) "ffprobe.exe"
+if (-not (Test-Path -LiteralPath $ffprobePath -PathType Leaf)) {
+    $ffprobeCommand = Get-Command ffprobe.exe -ErrorAction SilentlyContinue
+    if (-not $ffprobeCommand) {
+        throw "FFprobe was not found next to FFmpeg or in PATH."
+    }
+    $ffprobePath = $ffprobeCommand.Source
+}
+$ffprobePath = Resolve-ExecutablePath -Path $ffprobePath -CommandName "ffprobe"
 $goCommand = Get-Command go.exe -ErrorAction SilentlyContinue
 if (-not $goCommand) {
     throw "Go was not found. It is required once to build the FFmpeg dispatch wrapper."
