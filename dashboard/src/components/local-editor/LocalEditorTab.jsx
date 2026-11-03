@@ -281,7 +281,7 @@ export default function LocalEditorTab({
     const observer = new ResizeObserver(updateSize);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [scaleSubtitlePreviewToOutput]);
+  }, [scaleSubtitlePreviewToOutput, videoUrl]);
   const editorPreferencesRef = useRef(readEditorPreferences());
   const [editHistory, setEditHistory] = useState(() => {
     const history = createEmptyEditorHistory(editorPreferencesRef.current);
