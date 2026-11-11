@@ -356,24 +356,6 @@ def test_clip_generation_environment_preserves_local_transcription_model(monkeyp
     assert environment["AI_TRANSCRIPTION_LANGUAGE"] == "it"
 
 
-def test_handle_request_dispatches_highlight_generation(monkeypatch, capsys, tmp_path):
-    calls = []
-
-    def fake_run(request, emit_log):
-        calls.append((request, emit_log))
-        emit_log("selected highlight")
-        return {"video_url": "/videos/job-1/highlights.mp4"}
-
-    monkeypatch.setattr("highlight_generation.run_highlight_generation", fake_run)
-    handle_request({"id": "job-1", "operation": "highlight_generation", "output_dir": str(tmp_path)})
-
-    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
-    assert events[0]["type"] == "started"
-    assert events[1]["type"] == "log"
-    assert events[-1]["type"] == "result"
-    assert calls[0][0]["id"] == "job-1"
-
-
 def test_load_generation_result_reads_metadata_for_go_status_api():
     output_dir = Path(".cache") / "python-worker-test"
     output_dir.mkdir(parents=True, exist_ok=True)

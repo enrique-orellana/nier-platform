@@ -47,7 +47,7 @@ func newFaceTrackingTestServer(t *testing.T, worker OperationClient) (*Server, *
 		t.Fatal(err)
 	}
 	store := jobs.NewMemoryStore()
-	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "highlight-generation", OutputDir: root})
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation", OutputDir: root})
 	if err != nil {
 		t.Fatal(err)
 	}

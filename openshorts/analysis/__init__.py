@@ -1,1 +1,1 @@
-"""Video analysis and highlight selection modules."""
+"""Video analysis and clip selection modules."""

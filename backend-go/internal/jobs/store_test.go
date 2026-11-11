@@ -284,19 +284,19 @@ func TestRecoverProcessingJobsAndListQueuedJobs(t *testing.T) {
 
 func TestStoreListsJobsByKindAndSupportsCancellation(t *testing.T) {
 	store := NewMemoryStore()
-	highlight, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "highlight-generation"})
+	listedJob, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "test-job"})
 	if err != nil {
-		t.Fatalf("create highlight job: %v", err)
+		t.Fatalf("create listed job: %v", err)
 	}
 	_, err = store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
 	if err != nil {
 		t.Fatalf("create clip job: %v", err)
 	}
-	jobs, err := store.ListByKind(context.Background(), "highlight-generation")
-	if err != nil || len(jobs) != 1 || jobs[0].ID != highlight.ID {
+	jobs, err := store.ListByKind(context.Background(), "test-job")
+	if err != nil || len(jobs) != 1 || jobs[0].ID != listedJob.ID {
 		t.Fatalf("unexpected jobs by kind: %#v, %v", jobs, err)
 	}
-	cancelled, err := store.Transition(context.Background(), highlight.ID, domain.JobStatusCancelled, "cancelled by user")
+	cancelled, err := store.Transition(context.Background(), listedJob.ID, domain.JobStatusCancelled, "cancelled by user")
 	if err != nil {
 		t.Fatalf("cancel job: %v", err)
 	}
@@ -305,7 +305,7 @@ func TestStoreListsJobsByKindAndSupportsCancellation(t *testing.T) {
 	}
 }
 
-func TestCreateIfNoActiveHighlightIsAtomic(t *testing.T) {
+func TestCreateIfNoActiveIsAtomic(t *testing.T) {
 	store := NewMemoryStore()
 	var wg sync.WaitGroup
 	results := make(chan error, 2)
@@ -313,7 +313,7 @@ func TestCreateIfNoActiveHighlightIsAtomic(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := store.CreateIfNoActive(context.Background(), "highlight-generation", domain.CreateJobInput{Kind: "highlight-generation"})
+			_, err := store.CreateIfNoActive(context.Background(), "clip-generation", domain.CreateJobInput{Kind: "clip-generation"})
 			results <- err
 		}()
 	}

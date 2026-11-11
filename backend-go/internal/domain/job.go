@@ -15,7 +15,6 @@ const (
 
 type CreateJobInput struct {
 	Kind        string
-	ProjectID   string
 	SourceURL   string
 	ClipCount   int
 	OutputDir   string
@@ -27,7 +26,6 @@ type CreateJobInput struct {
 type Job struct {
 	ID          string
 	Kind        string
-	ProjectID   string
 	Status      JobStatus
 	SourceURL   string
 	ClipCount   int

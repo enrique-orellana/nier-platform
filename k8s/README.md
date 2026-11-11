@@ -35,7 +35,7 @@ helm upgrade --install minio-standalone D:\workspace\kube-monorepo\minio\standal
 ## OpenShorts app bundle
 
 The local bundle includes a PostgreSQL Deployment and a 10Gi persistent volume
-claim for durable Highlights projects. The deployment helpers create the
+claim for durable job state. The deployment helpers create the
 `openshorts-postgres` Secret from `OPENSHORTS_POSTGRES_DB`,
 `OPENSHORTS_POSTGRES_USER`, and `OPENSHORTS_POSTGRES_PASSWORD`; credentials are
 not committed in this repository. The backend receives `DATABASE_URL` from the
@@ -96,9 +96,6 @@ kubectl -n openshorts get pod,svc,pvc openshorts-postgres
 kubectl -n openshorts logs deployment/openshorts-backend --tail=100
 kubectl -n openshorts get secret openshorts-postgres
 ```
-
-Deleting a Highlights project removes only its generated output and database
-records. The original source object in MinIO is preserved.
 
 OpenShorts is exposed on one host and uses path routing:
 

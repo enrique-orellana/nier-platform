@@ -216,18 +216,6 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 		}
 		request["headers"] = values
 	}
-	if job.Kind == "highlight-generation" {
-		request["operation"] = "highlight_generation"
-		if value, ok := job.Metadata["min_minutes"]; ok {
-			request["min_minutes"] = value
-		}
-		if value, ok := job.Metadata["ideal_minutes"]; ok {
-			request["ideal_minutes"] = value
-		}
-		if value, ok := job.Metadata["source_context"]; ok {
-			request["source_context"] = value
-		}
-	}
 	if job.SourceURL != "" {
 		request["source_url"] = job.SourceURL
 	}

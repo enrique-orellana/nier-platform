@@ -14,8 +14,8 @@ def transcribe_audio(
     start_seconds: float = 0.0,
     end_seconds: float | None = None,
 ):
-    """Transcribe audio through OpenRouter."""
-    from openshorts.analysis.highlight_generation import transcribe_video_with_config
+    """Transcribe audio with the configured provider."""
+    from openshorts.subtitles.transcription import transcribe_video_with_config
     from openshorts.rendering.media_probe import probe_media
 
     duration_seconds = probe_media(video_path).duration_seconds

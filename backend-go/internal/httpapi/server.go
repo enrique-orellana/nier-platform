@@ -31,8 +31,8 @@ type Server struct {
 	publicationMu       sync.Mutex
 	publishedOutputs    map[string]string
 	versionRepository   versions.Repository
-	highlightMu         sync.Mutex
-	highlightRuntime    map[string]map[string]any
+	runtimeMetadataMu   sync.Mutex
+	runtimeMetadata     map[string]map[string]any
 	faceTrackingMu      sync.Mutex
 	faceTrackingRunning map[string]*faceTrackingCall
 }
@@ -61,10 +61,10 @@ func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, 
 			versionRepository = repository
 		}
 	}
-	server := &Server{config: cfg, mux: mux, store: store, runner: runner, scheduler: scheduler, translationRunner: translationRunner, publishedOutputs: make(map[string]string), versionRepository: versionRepository, highlightRuntime: make(map[string]map[string]any), faceTrackingRunning: make(map[string]*faceTrackingCall)}
+	server := &Server{config: cfg, mux: mux, store: store, runner: runner, scheduler: scheduler, translationRunner: translationRunner, publishedOutputs: make(map[string]string), versionRepository: versionRepository, runtimeMetadata: make(map[string]map[string]any), faceTrackingRunning: make(map[string]*faceTrackingCall)}
 	if runner != nil {
-		runner.RuntimeMetadata = server.highlightRuntimeMetadata
-		runner.ReleaseRuntimeMetadata = server.releaseHighlightRuntimeMetadata
+		runner.RuntimeMetadata = server.runtimeMetadataForJob
+		runner.ReleaseRuntimeMetadata = server.releaseRuntimeMetadata
 	}
 	server.mediaRunner = media.ExecCommandRunner{}
 	if cfg.S3Bucket != "" || cfg.S3Endpoint != "" {
@@ -80,8 +80,6 @@ func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, 
 	mux.HandleFunc("/api/process", server.process)
 	mux.HandleFunc("/api/status/", server.status)
 	mux.HandleFunc("/api/jobs/", server.clipRenderRoute)
-	mux.HandleFunc("/api/highlights", server.highlights)
-	mux.HandleFunc("/api/highlights/", server.highlightRoute)
 	mux.HandleFunc("/api/render", server.renderProxy)
 	mux.HandleFunc("/api/render/", server.renderProxy)
 	mux.HandleFunc("/api/render-metrics", server.renderMetrics)

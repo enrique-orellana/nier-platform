@@ -32,7 +32,6 @@ import {
   Copy,
   CheckCircle2,
   FolderOpen,
-  Highlighter,
   Scissors,
   Loader2,
 } from "lucide-react";
@@ -50,7 +49,6 @@ import {
   setLocalTranscriptionLanguage,
   TRANSCRIPTION_LANGUAGE_CHANGE_EVENT,
 } from "./components/local-editor/localEditorAi";
-import HighlightsTab from "./components/HighlightsTab";
 import PerformanceDashboard from "./components/PerformanceDashboard";
 
 import {
@@ -1438,12 +1436,6 @@ function App() {
           activeColor="bg-fuchsia-500/10 text-fuchsia-400"
         />
         <NavItem
-          tabKey="highlights"
-          icon={Highlighter}
-          label="Highlights"
-          activeColor="bg-primary/10 text-primary"
-        />
-        <NavItem
           tabKey="ai-agent"
           icon={Bot}
           label="AI Agent"
@@ -1825,13 +1817,6 @@ function App() {
           )}
 
           {activeTab === "editor" && <LocalEditorTab />}
-
-          {activeTab === "highlights" && (
-            <HighlightsTab
-              getAiHeaders={getAiHeaders}
-              aiProvider={aiProvider}
-            />
-          )}
 
           {/* View: AI Agent */}
           {activeTab === "ai-agent" && (

@@ -2,7 +2,6 @@ const TAB_PATHS = {
   dashboard: "/",
   "ai-agent": "/ai-agent",
   editor: "/editor",
-  highlights: "/highlights",
   projects: "/projects",
   performance: "/performance",
   settings: "/settings",

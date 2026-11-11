@@ -345,25 +345,3 @@ func TestPythonWorkerAdapterReusesPersistedSourceForClipRender(t *testing.T) {
 		t.Fatalf("unexpected persisted source request: %#v", runner.request)
 	}
 }
-
-func TestPythonWorkerAdapterSendsHighlightOperationAndAIHeaders(t *testing.T) {
-	runner := &recordingProtocolRunner{}
-	adapter := PythonWorkerAdapter{Runner: runner}
-	job := domain.Job{
-		ID:   "highlight-1",
-		Kind: "highlight-generation",
-		Metadata: map[string]any{
-			"min_minutes":   12.0,
-			"ideal_minutes": 20.0,
-			"headers": map[string]any{
-				"X-AI-Provider": "ollama",
-			},
-		},
-	}
-	if err := adapter.Run(context.Background(), job, "output/highlight-1", nil); err != nil {
-		t.Fatalf("run highlight worker: %v", err)
-	}
-	if runner.request["operation"] != "highlight_generation" || runner.request["min_minutes"] != 12.0 || runner.request["headers"].(map[string]string)["X-AI-Provider"] != "ollama" {
-		t.Fatalf("unexpected highlight worker request: %#v", runner.request)
-	}
-}

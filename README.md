@@ -153,8 +153,7 @@ Navigate to **`http://localhost:18575`**
 1. Go to **Settings** and choose Gemini, LM Studio, or **OpenAI Codex (ChatGPT)**. Codex connects through ChatGPT device authorization and does not use an OpenAI API key.
 2. **Clip Generator**: Upload a long-form video to generate viral shorts
 3. **Local Editor**: refine generated clips and add edits
-4. **Highlights**: analyze and create longer highlight reels
-5. **Performance**: review processing activity and publishing
+4. **Performance**: review processing activity and publishing
 
 ### SeaweedFS S3 storage
 The Docker Compose deployment uses the migrated SeaweedFS S3-compatible endpoint

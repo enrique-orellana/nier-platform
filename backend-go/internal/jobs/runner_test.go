@@ -112,7 +112,7 @@ func TestRunnerMarksWorkerFailureAndCancellationInAuditTimeline(t *testing.T) {
 
 	t.Run("cancellation", func(t *testing.T) {
 		store := NewMemoryStore()
-		job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "highlight-generation"})
+		job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
 		if err != nil {
 			t.Fatalf("create job: %v", err)
 		}
@@ -201,7 +201,7 @@ func (contextAwareWorker) Run(ctx context.Context, _ domain.Job, _ string, _ fun
 
 func TestRunnerMarksContextCancellationAsCancelled(t *testing.T) {
 	store := NewMemoryStore()
-	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "highlight-generation"})
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
 	if err != nil {
 		t.Fatalf("create job: %v", err)
 	}
@@ -229,7 +229,7 @@ func (w *metadataWorker) Run(_ context.Context, job domain.Job, _ string, _ func
 
 func TestRunnerPassesRuntimeMetadataWithoutPersistingIt(t *testing.T) {
 	store := NewMemoryStore()
-	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "highlight-generation"})
+	job, err := store.Create(context.Background(), domain.CreateJobInput{Kind: "clip-generation"})
 	if err != nil {
 		t.Fatalf("create job: %v", err)
 	}

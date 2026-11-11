@@ -61,7 +61,7 @@ from openshorts.ai.ai_client import (
 )
 from openshorts.analysis.analysis_job_lock import analysis_job_lock, analysis_locked
 from openshorts.analysis.analysis_providers import ClipAnalysisProvider, create_clip_analysis_provider
-from openshorts.analysis.highlight_generation import transcribe_video_with_config
+from openshorts.subtitles.transcription import transcribe_video_with_config
 from openshorts.rendering.master_policy import master_video_encode_args, choose_master_spec, master_video_filter
 from openshorts.rendering.media_probe import probe_media
 from openshorts.rendering.render_manifest import register_asset, register_remote_asset, save_manifest_atomic
