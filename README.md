@@ -23,17 +23,28 @@ git config core.hooksPath .githooks
 Accepted examples include `feat: add captions`, `fix(editor): prevent a crash`,
 and `refactor!: change the rendering API`.
 
-Python application modules live in the `openshorts/` package, grouped by area:
-analysis, AI, media, observability, rendering, runtime, storage, subtitles,
-integrations, and workflows. `main.py` and `python_worker.py` remain at the root
-because the Go control plane launches them directly. Python developer utilities
-live in `scripts/python/`.
+### Python worker layout
 
+The Go control plane serves the application API. Python runs as an internal
+media and AI worker. The two worker entrypoints stay at the repository root
+because the Go launcher invokes them by filename; shared Python code is grouped
+under `openshorts/` by responsibility:
 
-### Video Tutorial: How it works
-[![OpenShorts Tutorial](https://img.youtube.com/vi/xlyjD1qCaX0/maxresdefault.jpg)](https://www.youtube.com/watch?v=xlyjD1qCaX0 "Click to watch the video on YouTube")
+| Package | Responsibility |
+| --- | --- |
+| `openshorts/ai/` | AI provider clients and Codex authentication |
+| `openshorts/analysis/` | Video analysis, clip selection, and transcript windows |
+| `openshorts/integrations/` | External service integrations |
+| `openshorts/media/` | Media hooks and streamer layouts |
+| `openshorts/observability/` | Audit capture and video metrics |
+| `openshorts/rendering/` | Clip timelines, crop tracks, rendering, and output validation |
+| `openshorts/runtime/` | Runtime acceleration support |
+| `openshorts/storage/` | S3-compatible storage and source media access |
+| `openshorts/subtitles/` | Subtitle generation, translation, and translation worker logic |
+| `openshorts/workflows/` | Editor workflow operations |
 
-*Click the image above to watch the full walkthrough.*
+`main.py` and `python_worker.py` are the root-level entrypoints. Python
+developer and verification utilities live in `scripts/python/`.
 
 ---
 
