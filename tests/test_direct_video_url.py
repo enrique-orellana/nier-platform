@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import main
-from audit_capture import AuditEmitter
+from openshorts.observability.audit_capture import AuditEmitter
 
 
 class DirectVideoUrlTests(unittest.TestCase):

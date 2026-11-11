@@ -1,6 +1,6 @@
 import pytest
 
-import ai_client
+import openshorts.ai.ai_client as ai_client
 import main
 
 

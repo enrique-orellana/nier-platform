@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import s3_uploader
+import openshorts.storage.s3_uploader as s3_uploader
 
 
 class S3ClipUrlTests(unittest.TestCase):

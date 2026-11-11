@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from version_store import VersionStore
+from openshorts.rendering.version_store import VersionStore
 
 
 def manifest(name):

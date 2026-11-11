@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import patch
 
-from media_probe import AudioProbe, MediaProbe
-from video_output_validation import validate_clip_output
+from openshorts.rendering.media_probe import AudioProbe, MediaProbe
+from openshorts.rendering.video_output_validation import validate_clip_output
 
 
 def probed_media(

@@ -23,6 +23,12 @@ git config core.hooksPath .githooks
 Accepted examples include `feat: add captions`, `fix(editor): prevent a crash`,
 and `refactor!: change the rendering API`.
 
+Python application modules live in the `openshorts/` package, grouped by area:
+analysis, AI, media, observability, rendering, runtime, storage, subtitles,
+integrations, and workflows. `main.py` and `python_worker.py` remain at the root
+because the Go control plane launches them directly. Python developer utilities
+live in `scripts/python/`.
+
 
 
 ### Video Tutorial: How it works

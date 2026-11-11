@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 import main
-from ai_client import AIConfig
+from openshorts.ai.ai_client import AIConfig
 
 
 def test_fetch_source_metadata_is_metadata_only_and_sanitized(monkeypatch):

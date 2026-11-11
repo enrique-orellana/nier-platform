@@ -1,4 +1,4 @@
-from version_store import VersionStore
+from openshorts.rendering.version_store import VersionStore
 
 
 def manifest(layer):

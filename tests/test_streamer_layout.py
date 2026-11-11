@@ -2,7 +2,7 @@ import pytest
 import cv2
 import numpy as np
 
-from streamer_layout import (
+from openshorts.media.streamer_layout import (
     ClipLayoutOptions,
     compose_streamer_stack_frame,
     clamp_focus_to_region,

@@ -7,8 +7,8 @@ from typing import Any
 
 import cv2
 
-from clip_timeline import ClipFrameRange, build_audio_seek_filter
-from master_policy import master_audio_encode_args
+from openshorts.rendering.clip_timeline import ClipFrameRange, build_audio_seek_filter
+from openshorts.rendering.master_policy import master_audio_encode_args
 
 
 def _capture_frame_position(capture: Any) -> int:

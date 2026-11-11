@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-import highlight_generation
+import openshorts.analysis.highlight_generation as highlight_generation
 
 
 def test_plan_transcription_chunks_bounds_long_sources():

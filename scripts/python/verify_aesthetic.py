@@ -1,8 +1,13 @@
 import os
 import shutil
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 # Check if PIL is installed, if not we can't run this locally but it will run in docker
 try:
-    from hooks import create_hook_image
+    from openshorts.media.hooks import create_hook_image
 except ImportError:
     print("⚠️ PIL not found locally. Please run this inside the Docker container.")
     # Mocking for local check if needed or just exit

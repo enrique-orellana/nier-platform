@@ -1,6 +1,6 @@
 import json
 
-from audit_capture import AuditBodyPolicy, AuditEmitter
+from openshorts.observability.audit_capture import AuditBodyPolicy, AuditEmitter
 import python_worker
 
 

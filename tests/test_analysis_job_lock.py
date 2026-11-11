@@ -5,13 +5,13 @@ from multiprocessing import get_context
 
 import pytest
 
-from analysis_job_lock import analysis_job_lock
+from openshorts.analysis.analysis_job_lock import analysis_job_lock
 
 
 def _cross_process_lock_worker(lock_directory, result_queue):
     import os
 
-    from analysis_job_lock import analysis_job_lock
+    from openshorts.analysis.analysis_job_lock import analysis_job_lock
 
     os.environ["AI_ANALYSIS_CONCURRENCY"] = "1"
     os.environ["LOCAL_AUDIO_ANALYSIS_LOCK_DIR"] = str(lock_directory)

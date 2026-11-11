@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 import main
-from crop_track import CropTrack
+from openshorts.rendering.crop_track import CropTrack
 
 
 class FakeStream:

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import ai_client
+import openshorts.ai.ai_client as ai_client
 
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -2,7 +2,7 @@ import os
 import re
 import subprocess
 from collections.abc import Mapping
-from master_policy import master_video_encode_args, master_video_filter
+from openshorts.rendering.master_policy import master_video_encode_args, master_video_filter
 
 
 SENTENCE_END_RE = re.compile(r"[.!?…]+(?:[\"'’”»)\]]+)?$")
@@ -15,8 +15,8 @@ def transcribe_audio(
     end_seconds: float | None = None,
 ):
     """Transcribe audio through OpenRouter."""
-    from highlight_generation import transcribe_video_with_config
-    from media_probe import probe_media
+    from openshorts.analysis.highlight_generation import transcribe_video_with_config
+    from openshorts.rendering.media_probe import probe_media
 
     duration_seconds = probe_media(video_path).duration_seconds
     if start_seconds == 0.0 and end_seconds is None:

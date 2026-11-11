@@ -1,6 +1,6 @@
 import pytest
 
-from highlight_selection import normalize_target, select_segments
+from openshorts.analysis.highlight_selection import normalize_target, select_segments
 
 
 def candidate(start, end, score, text="moment"):

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from video_metrics import JobVideoMetrics
+from openshorts.observability.video_metrics import JobVideoMetrics
 
 
 class VideoMetricsTests(unittest.TestCase):

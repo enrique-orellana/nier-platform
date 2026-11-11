@@ -11,7 +11,7 @@ import shutil
 import tempfile
 import numpy as np
 import httpx
-from audit_capture import get_audit_emitter
+from openshorts.observability.audit_capture import get_audit_emitter
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit, urlunsplit
 
@@ -50,7 +50,7 @@ from pathlib import Path
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='google.protobuf')
-from ai_client import (
+from openshorts.ai.ai_client import (
     AIConfig,
     AUTO_MODEL_VALUES,
     CODEX_DEFAULT_MODEL,
@@ -59,16 +59,16 @@ from ai_client import (
     load_ai_config,
     openai_file_analysis_json,
 )
-from analysis_job_lock import analysis_job_lock, analysis_locked
-from analysis_providers import ClipAnalysisProvider, create_clip_analysis_provider
-from highlight_generation import transcribe_video_with_config
-from master_policy import master_video_encode_args, choose_master_spec, master_video_filter
-from media_probe import probe_media
-from render_manifest import register_asset, register_remote_asset, save_manifest_atomic
-from minio_sources import validate_source_object
-from crop_track import CropKeyframe, CropRect, CropScene, CropTrack
-from clip_timeline import resolve_clip_frame_range
-from streamer_layout import (
+from openshorts.analysis.analysis_job_lock import analysis_job_lock, analysis_locked
+from openshorts.analysis.analysis_providers import ClipAnalysisProvider, create_clip_analysis_provider
+from openshorts.analysis.highlight_generation import transcribe_video_with_config
+from openshorts.rendering.master_policy import master_video_encode_args, choose_master_spec, master_video_filter
+from openshorts.rendering.media_probe import probe_media
+from openshorts.rendering.render_manifest import register_asset, register_remote_asset, save_manifest_atomic
+from openshorts.storage.minio_sources import validate_source_object
+from openshorts.rendering.crop_track import CropKeyframe, CropRect, CropScene, CropTrack
+from openshorts.rendering.clip_timeline import resolve_clip_frame_range
+from openshorts.media.streamer_layout import (
     STREAMER_STACK_LAYOUT,
     compose_streamer_stack_frame,
     filter_candidates_inside_gameplay_region,
@@ -78,14 +78,14 @@ from streamer_layout import (
     normalize_gameplay_zoom,
     normalize_webcam_region,
 )
-from video_analysis import SourceAnalysis, load_or_build_source_analysis
-from video_output_validation import validate_clip_output
-from video_frames import FFmpegVideoStream
-from video_rendering import build_audio_extract_command
-from video_metrics import JobVideoMetrics
-from runtime_acceleration import preferred_device
-from subtitles import build_subtitle_segments, burn_subtitles, generate_srt
-from transcript_windows import (
+from openshorts.analysis.video_analysis import SourceAnalysis, load_or_build_source_analysis
+from openshorts.rendering.video_output_validation import validate_clip_output
+from openshorts.analysis.video_frames import FFmpegVideoStream
+from openshorts.rendering.video_rendering import build_audio_extract_command
+from openshorts.observability.video_metrics import JobVideoMetrics
+from openshorts.runtime.runtime_acceleration import preferred_device
+from openshorts.subtitles.subtitles import build_subtitle_segments, burn_subtitles, generate_srt
+from openshorts.analysis.transcript_windows import (
     build_analysis_timeline,
     build_analysis_windows,
     dedupe_clip_candidates,

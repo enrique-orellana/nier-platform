@@ -17,7 +17,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from audit_capture import get_audit_emitter
+from openshorts.observability.audit_capture import get_audit_emitter
 
 
 def parse_request(line: str) -> dict[str, Any]:
@@ -128,7 +128,7 @@ def upload_generation_artifacts(output_dir: str, job_id: str, excluded_paths=Non
     """Publish generated media to the configured MinIO/S3 output bucket."""
     if not str(os.environ.get("AWS_S3_BUCKET") or "").strip():
         return False
-    from s3_uploader import upload_job_artifacts
+    from openshorts.storage.s3_uploader import upload_job_artifacts
 
     if excluded_paths or include_paths or clip_id:
         upload_options = {}
@@ -184,7 +184,7 @@ def cleanup_uploaded_clip_files(output_dir: str, job_id: str, preserve_paths=Non
 
 def build_clip_generation_environment(request: Mapping[str, Any]) -> dict[str, str]:
     """Apply per-job AI settings without replacing the configured transcription model."""
-    from ai_client import ai_config_to_env, load_ai_config
+    from openshorts.ai.ai_client import ai_config_to_env, load_ai_config
 
     environment = os.environ.copy()
     headers = request.get("headers") or {}
@@ -237,7 +237,7 @@ def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any
     emitter = get_audit_emitter()
     with emitter.stage("source.download", metadata={"operation": operation}):
         if operation == "clip_render":
-            from s3_uploader import hydrate_job_artifacts
+            from openshorts.storage.s3_uploader import hydrate_job_artifacts
 
             hydrate_job_artifacts(output_dir, artifact_job_id)
     command = (
@@ -355,7 +355,7 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
     root = _output_root(request)
 
     if action == "minio_objects":
-        from minio_sources import list_source_objects
+        from openshorts.storage.minio_sources import list_source_objects
         return list_source_objects(payload.get("search", ""), int(payload.get("limit") or 50), payload.get("continuation_token"))
 
     if action == "clip_video_url":
@@ -384,7 +384,7 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
         job_id = str(payload["job_id"])
         job_root = root / job_id
         if action == "subtitle":
-            from subtitles import burn_subtitles, generate_srt, generate_srt_from_video
+            from openshorts.subtitles.subtitles import burn_subtitles, generate_srt, generate_srt_from_video
             output_name = f"subtitled_{input_path.name}"
             srt_path = job_root / f"subs_{clip_index}_{int(time.time())}.srt"
             output_path = job_root / output_name
@@ -403,7 +403,7 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
             burn_subtitles(str(input_path), str(srt_path), str(output_path), alignment=payload.get("position", "bottom"), fontsize=int(payload.get("font_size") or 16), font_name=str(payload.get("font_name") or "Verdana"), font_color=str(payload.get("font_color") or "#FFFFFF"), border_color=str(payload.get("border_color") or "#000000"), border_width=int(payload.get("border_width") or 2), bg_color=str(payload.get("bg_color") or "#000000"), bg_opacity=float(payload.get("bg_opacity") or 0))
             srt_path.unlink(missing_ok=True)
         elif action == "hook":
-            from hooks import add_hook_to_video, hook_style_for_layout
+            from openshorts.media.hooks import add_hook_to_video, hook_style_for_layout
             output_name = f"hook_{input_path.name}"
             output_path = job_root / output_name
             scale = {"S": 0.8, "M": 1.0, "L": 1.3}.get(str(payload.get("size") or "M"), 1.0)
@@ -418,7 +418,7 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
                 facecam_size=clip.get("facecam_size", "medium"),
             )
         else:
-            from translate import translate_video
+            from openshorts.integrations.translate import translate_video
             target = str(payload.get("target_language") or "").strip()
             if not target or not str(request.get("headers", {}).get("X-ElevenLabs-Key") or ""):
                 raise ValueError("Missing X-ElevenLabs-Key header")
@@ -431,8 +431,8 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
 
     if action == "edit":
         input_path, metadata, clip_index = _job_paths(payload, root)
-        from editor import VideoEditor
-        from ai_client import load_ai_config
+        from openshorts.workflows.editor import VideoEditor
+        from openshorts.ai.ai_client import load_ai_config
         config = load_ai_config(request.get("headers") or {})
         editor = VideoEditor(api_key_or_config=config)
         output_name = f"edited_{input_path.name}"
@@ -453,13 +453,13 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
 
     if action == "effects":
         input_path, metadata, _ = _job_paths(payload, root)
-        from ai_client import load_ai_config
-        from editor import VideoEditor
+        from openshorts.ai.ai_client import load_ai_config
+        from openshorts.workflows.editor import VideoEditor
         editor = VideoEditor(api_key_or_config=load_ai_config(request.get("headers") or {}))
         return {"effects": editor.get_effects_config(editor.upload_video(str(input_path)), 0, transcript=metadata.get("transcript"))}
 
     if action == "subtitle_track_translate":
-        from translation_worker import perform_translation
+        from openshorts.subtitles.translation_worker import perform_translation
         body = dict(payload)
         body.pop("action", None)
         return perform_translation(body, request.get("headers") or {})
@@ -528,7 +528,7 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
             return {"thumbnails": thumbnails}
 
     if action.startswith("thumbnail_project") or action in {"thumbnail_projects", "thumbnail_describe", "thumbnail_publish", "thumbnail_publish_status"}:
-        from s3_uploader import (delete_thumbnail_project, delete_thumbnail_project_file, get_thumbnail_project,
+        from openshorts.storage.s3_uploader import (delete_thumbnail_project, delete_thumbnail_project_file, get_thumbnail_project,
                                  list_thumbnail_projects, migrate_legacy_thumbnail_projects,
                                  update_thumbnail_project, update_thumbnail_project_file, upload_thumbnail_project)
         if action == "thumbnail_projects":
@@ -611,7 +611,7 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
 
     if action.startswith("saas_"):
         headers = request.get("headers") or {}
-        from ai_client import load_ai_config
+        from openshorts.ai.ai_client import load_ai_config
         from saasshorts import (DEFAULT_VOICES, analyze_saas, generate_actor_images, generate_full_video, generate_scripts,
                                 get_elevenlabs_voices, research_saas_online, scrape_website)
         if action == "saas_analyze":
@@ -643,11 +643,11 @@ def _legacy_api(request: Mapping[str, Any]) -> dict[str, Any]:
             paths = generate_actor_images(str(payload.get("actor_description") or ""), key, str(actor_dir), "actor", int(payload.get("num_options") or 3), product_description=payload.get("product_description"))
             return {"images": [f"/videos/{p.relative_to(root).as_posix()}" for p in paths]}
         if action == "saas_gallery":
-            from s3_uploader import list_video_gallery
+            from openshorts.storage.s3_uploader import list_video_gallery
             videos = list_video_gallery(int(payload.get("limit") or 50))
             return {"videos": videos, "total": len(videos)}
         if action == "saas_actor_gallery":
-            from s3_uploader import list_actor_gallery
+            from openshorts.storage.s3_uploader import list_actor_gallery
             return {"images": list_actor_gallery()}
         if action == "saas_voices":
             key = str(headers.get("X-ElevenLabs-Key") or "")
@@ -702,14 +702,14 @@ def handle_request(request: Mapping[str, Any]) -> None:
     operation = str(request["operation"])
     try:
         if operation == "translation":
-            from translation_worker import perform_translation
+            from openshorts.subtitles.translation_worker import perform_translation
 
             track = perform_translation(request.get("payload") or {}, request.get("headers") or {})
             _emit({"id": request_id, "type": "result", "result": {"track": track}})
             return
         if operation == "transcribe":
-            from local_editor_subtitles import word_captions_from_transcript
-            from subtitles import build_subtitle_segments, transcribe_audio
+            from openshorts.subtitles.local_editor_subtitles import word_captions_from_transcript
+            from openshorts.subtitles.subtitles import build_subtitle_segments, transcribe_audio
 
             source_path = str((request.get("payload") or {}).get("source_path") or "").strip()
             if not source_path:
@@ -735,7 +735,7 @@ def handle_request(request: Mapping[str, Any]) -> None:
             })
             return
         if operation == "codex_status":
-            from codex_auth import default_codex_store
+            from openshorts.ai.codex_auth import default_codex_store
 
             pending_path = Path(str(request.get("output_dir") or "output")) / ".codex-pending.json"
             status = default_codex_store().status()
@@ -743,13 +743,13 @@ def handle_request(request: Mapping[str, Any]) -> None:
             _emit({"id": request_id, "type": "result", "result": status})
             return
         if operation == "codex_disconnect":
-            from codex_auth import default_codex_store
+            from openshorts.ai.codex_auth import default_codex_store
 
             default_codex_store().clear()
             _emit({"id": request_id, "type": "result", "result": {"connected": False, "pending": False}})
             return
         if operation == "codex_models":
-            from ai_client import discover_codex_models
+            from openshorts.ai.ai_client import discover_codex_models
 
             discovered = discover_codex_models()
             _emit({"id": request_id, "type": "result", "result": {
@@ -759,7 +759,7 @@ def handle_request(request: Mapping[str, Any]) -> None:
             }})
             return
         if operation == "codex_connect":
-            from codex_auth import start_device_login
+            from openshorts.ai.codex_auth import start_device_login
 
             root = _output_root(request)
             pending = start_device_login().pending
@@ -767,7 +767,7 @@ def handle_request(request: Mapping[str, Any]) -> None:
             _emit({"id": request_id, "type": "result", "result": {"status": "pending", "verificationUrl": "https://auth.openai.com/codex/device", "userCode": pending.user_code, "intervalSeconds": pending.interval_seconds}})
             return
         if operation == "codex_poll":
-            from codex_auth import PendingDeviceLogin, default_codex_store, poll_device_login_once
+            from openshorts.ai.codex_auth import PendingDeviceLogin, default_codex_store, poll_device_login_once
 
             root = _output_root(request)
             pending_path = root / ".codex-pending.json"
@@ -789,7 +789,7 @@ def handle_request(request: Mapping[str, Any]) -> None:
             _emit({"id": request_id, "type": "result", "result": value})
             return
         if operation == "clip_info":
-            from ai_client import chat_json, load_ai_config
+            from openshorts.ai.ai_client import chat_json, load_ai_config
 
             payload = request.get("payload") or {}
             headers = request.get("headers") or {}
@@ -839,7 +839,7 @@ def handle_request(request: Mapping[str, Any]) -> None:
             _emit({"id": request_id, "type": "result", "result": clip_info})
             return
         if operation == "hashtags":
-            from ai_client import chat_json, load_ai_config
+            from openshorts.ai.ai_client import chat_json, load_ai_config
 
             payload = request.get("payload") or {}
             headers = request.get("headers") or {}
@@ -885,7 +885,7 @@ def handle_request(request: Mapping[str, Any]) -> None:
             _emit({"id": request_id, "type": "result", "result": {"hashtags": hashtags[:12]}})
             return
         if operation == "subtitle_reactions":
-            from ai_client import chat_json, load_ai_config
+            from openshorts.ai.ai_client import chat_json, load_ai_config
 
             payload = request.get("payload") or {}
             headers = request.get("headers") or {}
@@ -935,8 +935,8 @@ def handle_request(request: Mapping[str, Any]) -> None:
         if operation == "burn_subtitles":
             import uuid
 
-            from local_editor_subtitles import subtitle_style_to_ffmpeg_options, write_local_editor_srt
-            from subtitles import burn_subtitles
+            from openshorts.subtitles.local_editor_subtitles import subtitle_style_to_ffmpeg_options, write_local_editor_srt
+            from openshorts.subtitles.subtitles import burn_subtitles
 
             payload = request.get("payload") or {}
             source_path = str(payload.get("source_path") or "").strip()
@@ -988,7 +988,7 @@ def handle_request(request: Mapping[str, Any]) -> None:
             _emit({"id": request_id, "type": "result", "result": _legacy_api(request)})
             return
         if operation == "highlight_generation":
-            from highlight_generation import run_highlight_generation
+            from openshorts.analysis.highlight_generation import run_highlight_generation
 
             _emit({"id": request_id, "type": "started", "operation": operation})
             result = run_highlight_generation(request, lambda message: _emit({"id": request_id, "type": "log", "message": message}))

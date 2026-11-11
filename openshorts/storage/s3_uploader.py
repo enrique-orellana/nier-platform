@@ -11,8 +11,8 @@ from botocore.exceptions import ClientError
 from botocore.config import Config
 from boto3.s3.transfer import TransferConfig
 import logging
-from video_output_validation import validate_clip_output
-from audit_capture import get_audit_emitter
+from openshorts.rendering.video_output_validation import validate_clip_output
+from openshorts.observability.audit_capture import get_audit_emitter
 
 # Configure silent logging for boto3 and botocore
 logging.getLogger('boto3').setLevel(logging.CRITICAL)

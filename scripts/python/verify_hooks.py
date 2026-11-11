@@ -1,6 +1,11 @@
 import os
 import shutil
-from hooks import create_hook_image
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from openshorts.media.hooks import create_hook_image
 
 def verify():
     print("🧪 Verifying Hook Image Generation...")

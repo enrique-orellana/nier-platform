@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from media_probe import MediaProbe
-from render_manifest import (
+from openshorts.rendering.media_probe import MediaProbe
+from openshorts.rendering.render_manifest import (
     calculate_revision,
     load_manifest,
     master_is_current,

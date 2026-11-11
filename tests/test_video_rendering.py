@@ -2,9 +2,9 @@ import unittest
 
 import cv2
 
-from clip_timeline import ClipFrameRange, build_audio_seek_filter
+from openshorts.rendering.clip_timeline import ClipFrameRange, build_audio_seek_filter
 from main import should_run_person_detection
-from video_rendering import build_audio_extract_command, seek_capture_to_frame
+from openshorts.rendering.video_rendering import build_audio_extract_command, seek_capture_to_frame
 
 
 class FakeCapture:

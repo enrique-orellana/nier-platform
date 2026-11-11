@@ -1,6 +1,6 @@
 import unittest
 
-from clip_timeline import build_audio_trim_filter, resolve_clip_frame_range
+from openshorts.rendering.clip_timeline import build_audio_trim_filter, resolve_clip_frame_range
 
 
 class ClipTimelineTests(unittest.TestCase):

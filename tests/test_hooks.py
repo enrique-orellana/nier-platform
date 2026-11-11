@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import python_worker
-from hooks import add_hook_to_video, hook_style_for_layout
+from openshorts.media.hooks import add_hook_to_video, hook_style_for_layout
 
 
 def test_hook_style_defaults_to_legacy_and_maps_streamer_stack():

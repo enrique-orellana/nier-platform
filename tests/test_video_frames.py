@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from video_frames import FFmpegVideoStream
+from openshorts.analysis.video_frames import FFmpegVideoStream
 
 
 class FakeProcess:

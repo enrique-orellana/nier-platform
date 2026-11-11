@@ -7,7 +7,7 @@ import struct
 import subprocess
 from pathlib import Path
 
-from media_probe import MediaProbe, probe_media
+from openshorts.rendering.media_probe import MediaProbe, probe_media
 
 
 def validate_clip_output(

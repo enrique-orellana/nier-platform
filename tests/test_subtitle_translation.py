@@ -1,4 +1,4 @@
-from subtitle_translation import map_translation_to_cues, translate_cue_texts
+from openshorts.subtitles.subtitle_translation import map_translation_to_cues, translate_cue_texts
 
 
 def cue(text, start, end):

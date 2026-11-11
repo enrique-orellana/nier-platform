@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from codex_auth import (
+from openshorts.ai.codex_auth import (
     CodexCredentialStore,
     CodexCredentials,
     CodexReauthRequired,

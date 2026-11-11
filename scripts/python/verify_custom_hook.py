@@ -1,6 +1,11 @@
 import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 try:
-    from hooks import create_hook_image
+    from openshorts.media.hooks import create_hook_image
 except ImportError:
     print("⚠️ PIL not found locally. Run inside Docker.")
     exit(1)

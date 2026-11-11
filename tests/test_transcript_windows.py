@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from transcript_windows import (
+from openshorts.analysis.transcript_windows import (
     build_analysis_timeline,
     build_analysis_windows,
     compact_timeline_for_prompt,

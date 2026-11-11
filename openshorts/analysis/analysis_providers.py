@@ -533,14 +533,14 @@ class OpenRouterJsonTranscriptionProvider(TranscriptionProvider):
     ):
         super().__init__(config)
         if transcribe_fn is None:
-            from ai_client import transcribe_audio_openrouter
+            from openshorts.ai.ai_client import transcribe_audio_openrouter
 
             transcribe_fn = transcribe_audio_openrouter
         self._transcribe_fn = transcribe_fn
         self._ai_config = ai_config
 
     def transcribe_chunk(self, audio_path: str | Path) -> dict[str, Any]:
-        from ai_client import AIConfig
+        from openshorts.ai.ai_client import AIConfig
 
         base = self._ai_config or AIConfig(
             provider="openrouter", api_key=self.config.api_key
@@ -725,7 +725,7 @@ class ConfiguredChatAnalysisProvider(ClipAnalysisProvider):
     def analyze_json(self, prompt: str, **options: Any) -> dict[str, Any]:
         chat_json_fn = self._chat_json_fn
         if chat_json_fn is None:
-            from ai_client import chat_json
+            from openshorts.ai.ai_client import chat_json
 
             chat_json_fn = chat_json
         return chat_json_fn(self.config, prompt, **options)

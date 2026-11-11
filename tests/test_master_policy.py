@@ -1,7 +1,7 @@
 import unittest
 
-from master_policy import choose_master_spec, load_master_policy, master_audio_encode_args, master_video_encode_args
-from media_probe import MediaProbe
+from openshorts.rendering.master_policy import choose_master_spec, load_master_policy, master_audio_encode_args, master_video_encode_args
+from openshorts.rendering.media_probe import MediaProbe
 
 
 def video(width, height, fps, transfer="bt709"):

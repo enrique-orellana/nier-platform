@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
 
-from media_probe import MediaProbe
+from openshorts.rendering.media_probe import MediaProbe
 
 
-POLICY_PATH = Path(__file__).with_name("master-export-policy.json")
+POLICY_PATH = Path(__file__).resolve().parents[2] / "master-export-policy.json"
 
 
 def load_master_policy() -> dict:

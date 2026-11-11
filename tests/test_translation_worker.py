@@ -1,6 +1,6 @@
 import json
 
-from translation_worker import perform_translation
+from openshorts.subtitles.translation_worker import perform_translation
 
 
 def test_perform_translation_is_framework_free(monkeypatch):

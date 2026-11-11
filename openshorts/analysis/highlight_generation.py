@@ -11,9 +11,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from ai_client import chat_json, load_ai_config, transcribe_audio_openrouter
-from analysis_job_lock import analysis_job_lock, analysis_locked
-from analysis_providers import (
+from openshorts.ai.ai_client import chat_json, load_ai_config, transcribe_audio_openrouter
+from openshorts.analysis.analysis_job_lock import analysis_job_lock, analysis_locked
+from openshorts.analysis.analysis_providers import (
     AudioEventProvider,
     TranscriptionProvider,
     create_audio_event_provider,
@@ -24,9 +24,9 @@ from analysis_providers import (
     normalize_audio_events,
     normalize_transcription_result,
 )
-from highlight_selection import normalize_target, select_segments
-from media_probe import probe_media
-from transcript_windows import (
+from openshorts.analysis.highlight_selection import normalize_target, select_segments
+from openshorts.rendering.media_probe import probe_media
+from openshorts.analysis.transcript_windows import (
     build_analysis_timeline,
     build_analysis_windows,
     dedupe_clip_candidates,

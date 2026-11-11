@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-import runtime_acceleration
+import openshorts.runtime.runtime_acceleration as runtime_acceleration
 
 
 class RuntimeAccelerationTests(unittest.TestCase):

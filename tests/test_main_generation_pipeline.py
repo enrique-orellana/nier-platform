@@ -10,10 +10,10 @@ from unittest.mock import Mock, patch
 
 import main
 import numpy as np
-from media_probe import AudioProbe, MediaProbe
-from streamer_layout import streamer_panel_heights
-from video_analysis import SourceAnalysis
-from video_metrics import JobVideoMetrics
+from openshorts.rendering.media_probe import AudioProbe, MediaProbe
+from openshorts.media.streamer_layout import streamer_panel_heights
+from openshorts.analysis.video_analysis import SourceAnalysis
+from openshorts.observability.video_metrics import JobVideoMetrics
 
 
 WEBCAM_REGION = {"x": 0.02, "y": 0.18, "width": 0.23, "height": 0.43}

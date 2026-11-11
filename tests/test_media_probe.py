@@ -1,6 +1,6 @@
 import unittest
 
-from media_probe import parse_probe_payload
+from openshorts.rendering.media_probe import parse_probe_payload
 
 
 class MediaProbeTests(unittest.TestCase):

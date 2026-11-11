@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from video_analysis import SourceAnalysis, load_or_build_source_analysis
+from openshorts.analysis.video_analysis import SourceAnalysis, load_or_build_source_analysis
 
 
 class VideoAnalysisTests(unittest.TestCase):

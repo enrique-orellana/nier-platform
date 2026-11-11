@@ -1,4 +1,4 @@
-from local_editor_subtitles import (
+from openshorts.subtitles.local_editor_subtitles import (
     build_local_editor_srt,
     subtitle_style_to_ffmpeg_options,
     word_captions_from_transcript,

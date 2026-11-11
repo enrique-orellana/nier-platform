@@ -4,8 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-import minio_sources
-from minio_sources import download_source_object, list_source_objects, validate_source_object
+import openshorts.storage.minio_sources as minio_sources
+from openshorts.storage.minio_sources import download_source_object, list_source_objects, validate_source_object
 
 
 class FakeS3:

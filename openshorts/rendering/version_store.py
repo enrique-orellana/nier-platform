@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from render_manifest import calculate_revision
+from openshorts.rendering.render_manifest import calculate_revision
 
 
 @dataclass(frozen=True)

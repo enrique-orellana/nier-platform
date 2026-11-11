@@ -1,4 +1,4 @@
-from audit_capture import AuditBodyPolicy
+from openshorts.observability.audit_capture import AuditBodyPolicy
 
 
 def test_allowlisted_body_capture_redacts_sensitive_values_without_truncating():

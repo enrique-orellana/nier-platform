@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-import ai_client
+import openshorts.ai.ai_client as ai_client
 
 
 class DummyDiscoveryResponse:

@@ -5,8 +5,8 @@ import subprocess
 import time
 from google import genai
 from google.genai import types
-from ai_client import AIConfig, load_ai_config, chat_json
-from master_policy import master_video_encode_args, master_video_filter
+from openshorts.ai.ai_client import AIConfig, load_ai_config, chat_json
+from openshorts.rendering.master_policy import master_video_encode_args, master_video_filter
 
 class VideoEditor:
     def __init__(self, api_key):

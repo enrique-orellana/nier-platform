@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from media_probe import MediaProbe
+from openshorts.rendering.media_probe import MediaProbe
 
 
 MANIFEST_SCHEMA_VERSION = 1

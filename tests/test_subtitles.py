@@ -1,4 +1,4 @@
-from subtitles import build_subtitle_segments
+from openshorts.subtitles.subtitles import build_subtitle_segments
 
 
 def test_build_subtitle_segments_matches_clip_generator_chunking_rules():

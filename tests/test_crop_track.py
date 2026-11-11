@@ -1,6 +1,6 @@
 import unittest
 
-from crop_track import CropKeyframe, CropRect, CropScene, CropTrack
+from openshorts.rendering.crop_track import CropKeyframe, CropRect, CropScene, CropTrack
 
 
 class CropTrackTests(unittest.TestCase):

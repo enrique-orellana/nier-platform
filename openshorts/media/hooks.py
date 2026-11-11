@@ -3,8 +3,8 @@ import textwrap
 import subprocess
 import urllib.request
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from master_policy import master_video_encode_args, master_video_filter
-from streamer_layout import FACECAM_HEIGHT_RATIOS
+from openshorts.rendering.master_policy import master_video_encode_args, master_video_filter
+from openshorts.media.streamer_layout import FACECAM_HEIGHT_RATIOS
 try:
     from pilmoji import Pilmoji
 except ImportError:

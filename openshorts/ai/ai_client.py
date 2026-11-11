@@ -14,7 +14,7 @@ from urllib.parse import urlsplit, urlunsplit
 from typing import Any, Mapping, Optional, Sequence
 
 import httpx
-from codex_auth import (
+from openshorts.ai.codex_auth import (
     CodexReauthRequired,
     default_codex_store,
     get_access_token,
@@ -745,7 +745,7 @@ def codex_file_analysis_json(
 
 
 def _audit_request_start(*, name: str, url: str, method: str, body: Any, provider: str, binary: bool = False):
-    from audit_capture import get_audit_emitter
+    from openshorts.observability.audit_capture import get_audit_emitter
 
     emitter = get_audit_emitter()
     event_id = emitter.start_request(

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-import analysis_providers as providers
+import openshorts.analysis.analysis_providers as providers
 
 
 class FakeResponse:
@@ -118,7 +118,7 @@ def test_openrouter_transcription_never_reuses_a_local_chat_key(monkeypatch):
 
 
 def test_openrouter_transcription_does_not_reuse_an_unrelated_local_chat_key():
-    from ai_client import AIConfig
+    from openshorts.ai.ai_client import AIConfig
 
     seen = []
     adapter = providers.OpenRouterJsonTranscriptionProvider(
@@ -397,7 +397,7 @@ def test_registry_loads_explicit_installed_provider_plugins(monkeypatch):
 
 
 def test_clip_analysis_factory_uses_registered_plugin_provider(monkeypatch):
-    from ai_client import AIConfig
+    from openshorts.ai.ai_client import AIConfig
 
     class PluginClipProvider(providers.ClipAnalysisProvider):
         def analyze_json(self, prompt, **_options):

@@ -3,8 +3,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-import ai_client
-import audit_capture
+import openshorts.ai.ai_client as ai_client
+import openshorts.observability.audit_capture as audit_capture
 
 
 class DummyResponse:

@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any, Mapping
 
-from ai_client import chat_json, load_ai_config
-from subtitle_translation import translate_cue_texts
+from openshorts.ai.ai_client import chat_json, load_ai_config
+from openshorts.subtitles.subtitle_translation import translate_cue_texts
 
 TRANSLATION_BATCH_SIZE = 20
 TRANSLATION_BATCH_ATTEMPTS = 2

@@ -1,10 +1,10 @@
 from unittest.mock import Mock
 
-import ai_client
-import highlight_generation
-import media_probe
+import openshorts.ai.ai_client as ai_client
+import openshorts.analysis.highlight_generation as highlight_generation
+import openshorts.rendering.media_probe as media_probe
 import saasshorts
-import subtitles
+import openshorts.subtitles.subtitles as subtitles
 
 
 def test_subtitle_transcription_uses_remote_provider(monkeypatch, tmp_path):

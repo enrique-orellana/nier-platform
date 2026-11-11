@@ -1,7 +1,7 @@
 import pytest
 
-from audit_capture import AuditEmitter
-import ai_client
+from openshorts.observability.audit_capture import AuditEmitter
+import openshorts.ai.ai_client as ai_client
 
 
 def test_load_ai_config_recognizes_openai_codex_without_api_key():
@@ -419,7 +419,7 @@ class FakeOpenRouterClient:
 
 
 def test_openrouter_request_and_response_bodies_are_audited(monkeypatch):
-    import audit_capture
+    import openshorts.observability.audit_capture as audit_capture
 
     events = []
     monkeypatch.setattr(audit_capture, "_emitter", AuditEmitter(["openrouter.ai"], emit=events.append))

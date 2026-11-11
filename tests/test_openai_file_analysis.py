@@ -5,9 +5,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-import ai_client
-from audit_capture import AuditEmitter
-from codex_auth import CodexCredentialStore, CodexCredentials
+import openshorts.ai.ai_client as ai_client
+from openshorts.observability.audit_capture import AuditEmitter
+from openshorts.ai.codex_auth import CodexCredentialStore, CodexCredentials
 
 
 class FakeResponse:

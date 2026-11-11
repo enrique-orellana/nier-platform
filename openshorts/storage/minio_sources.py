@@ -10,8 +10,8 @@ from threading import Lock
 
 from botocore.exceptions import ClientError
 
-from audit_capture import get_audit_emitter
-from s3_uploader import get_s3_client, get_s3_download_config
+from openshorts.observability.audit_capture import get_audit_emitter
+from openshorts.storage.s3_uploader import get_s3_client, get_s3_download_config
 
 
 SOURCE_BUCKET = "youtube-downloads"
