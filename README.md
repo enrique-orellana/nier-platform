@@ -7,7 +7,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/mutonby/openshorts?style=social)](https://github.com/mutonby/openshorts)
 [![Last Commit](https://img.shields.io/github/last-commit/mutonby/openshorts)](https://github.com/mutonby/openshorts/commits/main)
 
-**Free & open source AI video platform** with 3 tools in one: **Clip Generator**, **AI Shorts (UGC videos with AI actors)**, and **YouTube Studio**. Self-hosted with Docker. No watermarks, no limits.
+**Free and open source video clipping platform.** Turn long-form videos into short clips with AI moment detection, vertical reframing, subtitles, optional dubbing, and social publishing. Self-host with Docker.
 
 https://github.com/user-attachments/assets/b45fa983-16b4-48b5-ac5b-a267836b9ad9
 
@@ -30,7 +30,6 @@ because the Go control plane launches them directly. Python developer utilities
 live in `scripts/python/`.
 
 
-
 ### Video Tutorial: How it works
 [![OpenShorts Tutorial](https://img.youtube.com/vi/xlyjD1qCaX0/maxresdefault.jpg)](https://www.youtube.com/watch?v=xlyjD1qCaX0 "Click to watch the video on YouTube")
 
@@ -38,45 +37,12 @@ live in `scripts/python/`.
 
 ---
 
-## 3 Tools in 1 Platform
+## Clip Generation
 
 ### 1. Clip Generator
 Turn your long-form videos — podcasts, webinars, livestreams, vlogs, interviews — into viral-ready 9:16 shorts for TikTok, Instagram Reels, and YouTube Shorts.
 
 ![Clip Results](screenshots/clip-results.png)
-
-### 2. AI Shorts (UGC Video Creator)
-Generate marketing videos with AI actors for **any product or business**. No camera, no studio, no influencer budget. Just describe your product or paste a URL.
-
-![AI Shorts Setup](screenshots/ai-shorts.png)
-
-- **Two cost modes**: Low Cost (~$0.65/video) and Premium (~$2/video)
-- Works for any business: SaaS, restaurants, e-commerce, coaching, local businesses
-- AI-generated actors with lip-sync, voiceover, b-roll, and TikTok-style subtitles
-- Choose from a shared avatar gallery or upload your own photo
-- Publish directly to TikTok, Instagram, and YouTube
-
-### 3. YouTube Studio
-Complete free AI YouTube toolkit: thumbnails, titles, descriptions, and direct publishing.
-
-![YouTube Studio](screenshots/youtube-studio.png)
-
-- AI thumbnail generator with face overlay
-- 10 viral title suggestions with refinement chat
-- Auto-generated descriptions with chapter timestamps
-- One-click publish to YouTube
-
-### UGC Video Gallery
-All generated videos and avatars are saved to a public gallery with SEO pages for each video.
-
-![UGC Gallery](screenshots/ugc-gallery.png)
-
-- Public gallery page with hover-to-play (`/gallery`)
-- Individual SEO video pages with og:video meta tags (`/video/{id}`)
-- JSON-LD structured data for search engines
-- Avatar gallery with prompt history
-
----
 
 ## Key Features
 
@@ -88,23 +54,6 @@ All generated videos and avatars are saved to a public gallery with SEO pages fo
 - **Hook Text Overlays**: AI-generated attention-grabbing text overlays
 - **AI Video Effects**: Gemini-generated FFmpeg filters for professional effects
 
-### AI Shorts Pipeline
-1. **Analyze**: Scrape website URL + web research, or generate from manual description
-2. **Script**: AI writes viral scripts (hook - problem - solution - CTA format)
-3. **Actor**: Generate AI actors with Flux 2 Pro or select from shared gallery
-4. **Voice**: ElevenLabs TTS voiceover (English/Spanish, male/female)
-5. **Video**: Talking head generation (Hailuo 2.3 Fast img2video + VEED Lipsync)
-6. **B-roll**: AI-generated visuals with Ken Burns effect
-7. **Composite**: FFmpeg final assembly with subtitles and hook overlays
-8. **Publish**: Direct posting to TikTok, Instagram Reels, YouTube Shorts via Upload-Post
-
-### YouTube Studio
-- AI-powered title generation with 10 viral options
-- Interactive refinement chat for titles
-- AI thumbnail generation with custom face + background
-- Auto descriptions with chapter timestamps from Whisper transcript
-- Direct YouTube publishing via Upload-Post
-
 ### Social Auto-Publishing
 - **One-click posting** to TikTok, Instagram Reels, and YouTube Shorts simultaneously
 - **Schedule uploads** for any date and time — plan your content calendar and let OpenShorts publish automatically
@@ -112,9 +61,8 @@ All generated videos and avatars are saved to a public gallery with SEO pages fo
 - Upload-Post integration with async uploads
 
 ### Infrastructure
-- S3 cloud backup (private bucket for clips, public bucket for gallery/avatars)
+- S3 cloud backup for generated clips
 - Go control plane serves API and media routes; the Python process is used only as an internal ML/media worker
-- Shared avatar gallery across all users
 - Async job queue with configurable concurrency
 
 The remaining Python entrypoints and their supporting modules are tracked as
@@ -125,25 +73,9 @@ only because the Go control plane still launches the media/AI worker.
 
 ## Who Is This For?
 
-- **Content creators** — Turn long videos into shorts automatically, publish to all platforms at once
-- **Marketing agencies** — Generate UGC videos for clients at scale, no actors or studios needed
-- **SaaS founders** — Create product demos and marketing shorts from just a URL
-- **E-commerce brands** — Product videos with AI actors for TikTok Shop, Instagram, YouTube
-- **Local businesses** — Restaurants, gyms, real estate, coaching — affordable video marketing
-- **Developers** — Self-host, customize the pipeline, integrate via API
-
----
-
-## AI Shorts Showcase
-
-Videos generated with OpenShorts AI Shorts — no camera, no studio, no actors:
-
-| | | |
-|:---:|:---:|:---:|
-| [![Biohacking for Investors](https://test-videos-upload-post.s3.eu-west-3.amazonaws.com/videos/cdceec1b/actor.png)](https://openshorts.app/video/cdceec1b) | [![Secret Weapon for Devs](https://test-videos-upload-post.s3.eu-west-3.amazonaws.com/videos/d3a80b6b/actor.png)](https://openshorts.app/video/d3a80b6b) | [![El Secreto de los Agentes de IA](https://test-videos-upload-post.s3.eu-west-3.amazonaws.com/videos/8ab7de92/actor.png)](https://openshorts.app/video/8ab7de92) |
-| **Biohacking for Investors** · LOW COST | **Secret Weapon for Devs** · LOW COST | **El Secreto de los Agentes de IA** · PREMIUM |
-
-> Browse all videos at [openshorts.app/gallery](https://openshorts.app/gallery)
+- **Content creators, podcasters, and educators** — repurpose long-form videos into short clips.
+- **Social media teams** — prepare and publish clips across platforms.
+- **Developers** — self-host and customize the workflow.
 
 ---
 
@@ -160,10 +92,8 @@ Videos generated with OpenShorts AI Shorts — no camera, no studio, no actors:
 | **Smart 9:16 reframing** | Yes | Yes | Yes | Yes | Yes | No |
 | **Auto subtitles** | Yes | Yes | Yes | Yes | Yes | Yes |
 | **Voice dubbing (30+ langs)** | Yes | No | Pro only | No | Pro only | Business only |
-| **AI UGC actors** | **Yes** | No | No | No | No | No |
 | **AI video effects** | Yes | No | Yes | No | No | No |
 | **Hook text overlays** | Yes | No | No | No | No | No |
-| **YouTube Studio (titles, thumbnails)** | **Yes** | No | No | No | No | No |
 | **Social auto-publishing** | Yes | Pro only | TikTok only | Paid only | Paid only | No |
 | **Schedule uploads** | Yes | Pro only | No | Paid only | Paid only | No |
 | **Data privacy** | **Your server** | Their cloud | Their cloud | Their cloud | Their cloud | Their cloud |
@@ -176,12 +106,11 @@ OpenShorts is free. You only pay for the AI APIs you use — and most have gener
 
 | Service | Free Tier | Paid Cost | Used For |
 |---------|-----------|-----------|----------|
-| **Google Gemini** | Free trial with generous limits | < $0.01 per 10-min video | Viral moment detection, script generation, web research |
+| **Google Gemini** | Free trial with generous limits | < $0.01 per 10-min video | Clip analysis and video effects |
 | **OpenAI Codex (ChatGPT)** | Included with eligible ChatGPT plans | Plan-dependent | AI clip detection and generation through your ChatGPT subscription |
-| **fal.ai** | Pay-per-use | ~$0.50-1.50 per AI Short | Actor generation, talking head video, lip-sync |
 | **ElevenLabs** | Free tier available | Pay-per-use | Voiceover, voice dubbing |
 | **Upload-Post** | **10 free uploads/month** to all networks (no credit card) | Pay-per-use | Auto-publishing to TikTok, Instagram, YouTube |
-| **AWS S3** | Optional | ~$0.023/GB | Cloud backup for clips and gallery |
+| **AWS S3** | Optional | ~$0.023/GB | Cloud backup for clips |
 
 **Bottom line:** You can clip videos for practically free with Gemini, and publish 10 videos/month to all social networks at zero cost with Upload-Post.
 
@@ -193,8 +122,7 @@ OpenShorts is free. You only pay for the AI APIs you use — and most have gener
 
 - **Docker & Docker Compose**
 - **Google Gemini API Key** ([Free — get it here](https://aistudio.google.com/app/apikey)) — required for Gemini AI features; use OpenAI Codex as an alternative.
-- **fal.ai API Key** ([Pay-per-use](https://fal.ai)) — required for AI Shorts (actor generation, video, lip-sync)
-- **ElevenLabs API Key** ([Free tier](https://elevenlabs.io)) — required for voiceover/dubbing
+- **ElevenLabs API Key** ([Free tier](https://elevenlabs.io)) — optional for voice dubbing
 - **Upload-Post API Key** ([free tier](https://upload-post.com)) — required for direct social posting
 
 ---
@@ -224,9 +152,9 @@ Navigate to **`http://localhost:18575`**
 
 1. Go to **Settings** and choose Gemini, LM Studio, or **OpenAI Codex (ChatGPT)**. Codex connects through ChatGPT device authorization and does not use an OpenAI API key.
 2. **Clip Generator**: Upload a long-form video to generate viral shorts
-3. **AI Shorts**: Describe your product or paste a URL to generate UGC marketing videos
-4. **YouTube Studio**: Generate thumbnails, titles, and descriptions for YouTube
-5. **UGC Gallery**: Browse all generated videos and avatars
+3. **Local Editor**: refine generated clips and add edits
+4. **Highlights**: analyze and create longer highlight reels
+5. **Performance**: review processing activity and publishing
 
 ### SeaweedFS S3 storage
 The Docker Compose deployment uses the migrated SeaweedFS S3-compatible endpoint
@@ -249,26 +177,13 @@ deployment references.
 7. **Effects** — Subtitles, hooks, AI video effects
 8. **Publish** — S3 backup + Upload-Post social distribution
 
-### AI Shorts
-1. **Analyze** — Website scraping + Gemini web research (or manual description)
-2. **Script** — Gemini generates viral scripts with segments
-3. **Actor** — Flux 2 Pro portrait generation (or gallery/upload)
-4. **Voice** — ElevenLabs TTS voiceover
-5. **Video** — Hailuo 2.3 Fast img2video + VEED Lipsync (Low Cost) or Kling Avatar v2 (Premium)
-6. **B-roll** — Flux 2 Pro image generation + Ken Burns effect
-7. **Composite** — FFmpeg assembly with ASS subtitles and hook overlays
-8. **Gallery** — Upload to public S3 with metadata for SEO pages
-9. **Publish** — Upload-Post to TikTok, Instagram, YouTube
-
----
-
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Backend | Go control plane, Python JSON-lines ML/media worker, Codex CLI, google-genai, ultralytics (YOLOv8), mediapipe, opencv-python, yt-dlp, FFmpeg, httpx |
 | Frontend | React 18, Vite 4, Tailwind CSS 3.4 |
-| AI APIs | Google Gemini, fal.ai (Flux, Hailuo, VEED, Kling), ElevenLabs |
+| AI APIs | Configured AI provider, optional ElevenLabs dubbing |
 | Infrastructure | Docker + Docker Compose, AWS S3 |
 | Publishing | Upload-Post API (TikTok, Instagram, YouTube) |
 
@@ -283,7 +198,7 @@ deployment references.
 | `AWS_SECRET_ACCESS_KEY` | S3 secret key, including SeaweedFS |
 | `AWS_REGION` | Region label used for S3 signing and fallback URLs |
 | `AWS_S3_BUCKET` | Private bucket for clip backup |
-| `AWS_S3_PUBLIC_BUCKET` | Public bucket for gallery/avatars |
+| `AWS_S3_PUBLIC_BUCKET` | Optional public media bucket |
 | `AWS_S3_ENDPOINT_URL` | Custom S3 endpoint, such as SeaweedFS |
 | `AWS_S3_PUBLIC_URL_BASE` | Browser-facing base URL for public media links |
 | `AWS_S3_PUBLIC_ENDPOINT_URL` | Endpoint used to generate presigned URLs for public access |
@@ -304,8 +219,7 @@ deployment references.
 |-----|------------|
 | `GEMINI_API_KEY` | Google Gemini — required |
 | `ai_provider_v1` | Selected provider; use `openai-codex` for a ChatGPT subscription |
-| `FAL_KEY` | fal.ai — required for AI Shorts |
-| `ELEVENLABS_API_KEY` | ElevenLabs — required for voiceover/dubbing |
+| `ELEVENLABS_API_KEY` | ElevenLabs — optional for voice dubbing |
 | `UPLOAD_POST_API_KEY` | Upload-Post — required, for social posting |
 
 ---

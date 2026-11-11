@@ -1,9 +1,6 @@
 const TAB_PATHS = {
   dashboard: "/",
-  saasshorts: "/ai-shorts",
   "ai-agent": "/ai-agent",
-  "ugc-gallery": "/ugc-gallery",
-  thumbnails: "/thumbnails",
   editor: "/editor",
   highlights: "/highlights",
   projects: "/projects",

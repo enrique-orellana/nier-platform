@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/mutonby/openshorts/backend-go/internal/config"
@@ -78,9 +76,6 @@ func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, 
 	mux.HandleFunc("/health", server.health)
 	mux.HandleFunc("/ready", server.readiness)
 	mux.HandleFunc("/videos/", server.legacyVideoRedirect)
-	mux.HandleFunc("/thumbnails/", server.staticThumbnail)
-	mux.HandleFunc("/gallery", server.galleryPage)
-	mux.HandleFunc("/video/", server.videoPage)
 	mux.HandleFunc("/api/config", server.runtimeConfig)
 	mux.HandleFunc("/api/process", server.process)
 	mux.HandleFunc("/api/status/", server.status)
@@ -114,8 +109,6 @@ func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, 
 	mux.HandleFunc("/api/hook", server.legacyJSONRoute("hook"))
 	mux.HandleFunc("/api/translate", server.translateClip)
 	mux.HandleFunc("/api/social/post", server.socialPost)
-	mux.HandleFunc("/api/thumbnail/", server.thumbnailRoute)
-	mux.HandleFunc("/api/saasshorts/", server.saasRoute)
 	mux.HandleFunc("/api/clip/", server.clipRoutes)
 	mux.HandleFunc("/api/projects/", server.projectRoutes)
 	mux.HandleFunc("/api/projects/history", server.projectHistory)
@@ -144,9 +137,4 @@ func (s *Server) readiness(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
-}
-
-func (s *Server) staticThumbnail(w http.ResponseWriter, r *http.Request) {
-	root := filepath.Join(s.config.OutputDir, "thumbnails")
-	s.serveStatic(w, r, strings.TrimPrefix(r.URL.Path, "/thumbnails/"), root)
 }

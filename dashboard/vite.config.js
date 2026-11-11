@@ -46,18 +46,6 @@ export default defineConfig(({ mode }) => {
         target: rendererTarget,
         changeOrigin: true,
       },
-      '/thumbnails': {
-        target: backendTarget,
-        changeOrigin: true,
-      },
-      '/gallery': {
-        target: backendTarget,
-        changeOrigin: true,
-      },
-      '/video': {
-        target: backendTarget,
-        changeOrigin: true,
-      },
       '/render': {
         target: rendererTarget,
         changeOrigin: true,

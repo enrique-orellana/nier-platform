@@ -20,8 +20,6 @@ import {
   X,
   Terminal,
   Shield,
-  LayoutGrid,
-  Image as ImageIcon,
   Globe,
   RotateCcw,
   Calendar,
@@ -43,10 +41,7 @@ import MediaInput from "./components/MediaInput";
 import ResultCard from "./components/ResultCard";
 import ProcessingAnimation from "./components/ProcessingAnimation";
 // import Gallery from './components/Gallery';
-import ThumbnailStudio from "./components/ThumbnailStudio";
 import ProjectLibrary from "./components/ProjectLibrary";
-import SaaShortsTab from "./components/SaaShortsTab";
-import UGCGallery from "./components/UGCGallery";
 import ScheduleWeekModal from "./components/ScheduleWeekModal";
 import AISettingsPanel from "./components/AISettingsPanel";
 import LocalEditorTab from "./components/local-editor/LocalEditorTab";
@@ -385,13 +380,6 @@ function App() {
   // ElevenLabs API State - Load encrypted
   const [elevenLabsKey, setElevenLabsKey] = useState(() => {
     const stored = localStorage.getItem("elevenLabsKey_v1");
-    if (stored) return decrypt(stored);
-    return "";
-  });
-
-  // fal.ai API State - Load encrypted
-  const [falKey, setFalKey] = useState(() => {
-    const stored = localStorage.getItem("falKey_v1");
     if (stored) return decrypt(stored);
     return "";
   });
@@ -1038,10 +1026,8 @@ function App() {
   }, [elevenLabsKey]);
 
   useEffect(() => {
-    if (falKey) {
-      localStorage.setItem("falKey_v1", encrypt(falKey));
-    }
-  }, [falKey]);
+    localStorage.removeItem("falKey_v1");
+  }, []);
 
   const getAiHeaders = (
     contentType = null,
@@ -1458,28 +1444,10 @@ function App() {
           activeColor="bg-primary/10 text-primary"
         />
         <NavItem
-          tabKey="saasshorts"
-          icon={Sparkles}
-          label="AI Shorts"
-          activeColor="bg-violet-500/10 text-violet-400"
-        />
-        <NavItem
           tabKey="ai-agent"
           icon={Bot}
           label="AI Agent"
           activeColor="bg-emerald-500/10 text-emerald-400"
-        />
-        <NavItem
-          tabKey="ugc-gallery"
-          icon={LayoutGrid}
-          label="UGC Gallery"
-          activeColor="bg-violet-500/10 text-violet-400"
-        />
-        <NavItem
-          tabKey="thumbnails"
-          icon={ImageIcon}
-          label="YouTube Studio"
-          activeColor="bg-primary/10 text-primary"
         />
         <NavItem
           tabKey="projects"
@@ -1853,84 +1821,6 @@ function App() {
                   </div>
                 </div>
               </div>
-
-              <div className="glass-panel p-6 mt-8">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold">
-                    AI Shorts (UGC Videos)
-                  </h2>
-                  <span className="text-[10px] bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded text-violet-400 uppercase tracking-wider">
-                    New
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
-                  Generate UGC-style videos with AI actors for any product or
-                  business using <strong>fal.ai</strong>. Just describe your
-                  product or paste a URL. Requires fal.ai + ElevenLabs API keys.
-                </p>
-                <div className="space-y-4">
-                  <label className="block text-sm text-zinc-400">
-                    fal.ai API Key
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      value={falKey}
-                      onChange={(e) => setFalKey(e.target.value)}
-                      className="input-field"
-                      placeholder="fal_..."
-                    />
-                    <button
-                      onClick={() => {
-                        if (falKey) {
-                          localStorage.setItem("falKey_v1", encrypt(falKey));
-                          alert("fal.ai API Key saved!");
-                        }
-                      }}
-                      className="btn-primary py-2 px-4 text-sm"
-                    >
-                      Save
-                    </button>
-                  </div>
-                  <div className="text-xs text-zinc-500 leading-relaxed">
-                    Get your API key from fal.ai to enable AI actor video
-                    generation.
-                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <a
-                        href="https://fal.ai/dashboard/keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex flex-col gap-1"
-                      >
-                        <span className="text-zinc-400 font-medium">
-                          1. Sign Up
-                        </span>
-                        <span className="text-[10px] text-zinc-600">
-                          Create fal.ai account
-                        </span>
-                      </a>
-                      <a
-                        href="https://fal.ai/dashboard/keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex flex-col gap-1"
-                      >
-                        <span className="text-zinc-400 font-medium">
-                          2. API Key
-                        </span>
-                        <span className="text-[10px] text-zinc-600">
-                          Generate key
-                        </span>
-                      </a>
-                    </div>
-                    <br />
-                    <span className="text-zinc-600 italic">
-                      Keys are only stored in your browser. Sent to backend only
-                      to process requests.
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
@@ -1940,19 +1830,6 @@ function App() {
             <HighlightsTab
               getAiHeaders={getAiHeaders}
               aiProvider={aiProvider}
-            />
-          )}
-
-          {/* View: SaaS Shorts */}
-          {activeTab === "saasshorts" && (
-            <SaaShortsTab
-              aiProvider={aiProvider}
-              aiApiKey={apiKey}
-              getAiHeaders={getAiHeaders}
-              elevenLabsKey={elevenLabsKey}
-              falKey={falKey}
-              uploadPostKey={uploadPostKey}
-              uploadUserId={uploadUserId}
             />
           )}
 
@@ -2113,20 +1990,6 @@ function App() {
                 </div>
               </div>
             </div>
-          )}
-
-          {/* View: UGC Gallery */}
-          {activeTab === "ugc-gallery" && <UGCGallery />}
-
-          {/* View: Thumbnails */}
-          {activeTab === "thumbnails" && (
-            <ThumbnailStudio
-              aiProvider={aiProvider}
-              aiApiKey={apiKey}
-              getAiHeaders={getAiHeaders}
-              uploadPostKey={uploadPostKey}
-              uploadUserId={uploadUserId}
-            />
           )}
 
           {activeTab === "projects" && (

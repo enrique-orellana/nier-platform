@@ -3,7 +3,6 @@ from unittest.mock import Mock
 import openshorts.ai.ai_client as ai_client
 import openshorts.analysis.highlight_generation as highlight_generation
 import openshorts.rendering.media_probe as media_probe
-import saasshorts
 import openshorts.subtitles.subtitles as subtitles
 
 
@@ -49,21 +48,3 @@ def test_subtitle_transcription_forwards_clip_range(monkeypatch, tmp_path):
         start_seconds=10.0,
         end_seconds=18.5,
     )
-
-
-def test_saas_subtitles_use_remote_provider(monkeypatch, tmp_path):
-    audio = tmp_path / "voice.mp3"
-    audio.write_bytes(b"audio")
-    monkeypatch.setattr(saasshorts, "load_ai_config", lambda _headers=None: Mock())
-    monkeypatch.setattr(
-        saasshorts,
-        "transcribe_audio_openrouter",
-        lambda _path, _config: {
-            "segments": [{"start": 0.0, "end": 2.0, "text": "Remote subtitle words", "words": []}],
-        },
-    )
-
-    words = saasshorts.transcribe_audio_for_subs(str(audio), headers={"X-AI-Transcription-Language": "en"})
-
-    assert [word["word"] for word in words] == ["Remote", "subtitle", "words"]
-    assert words[-1]["end"] == 2.0

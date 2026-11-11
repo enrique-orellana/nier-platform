@@ -376,27 +376,6 @@ spec:
                 name: openshorts-renderer
                 port:
                   number: 3100
-          - path: /thumbnails
-            pathType: Prefix
-            backend:
-              service:
-                name: openshorts-backend
-                port:
-                  number: 8000
-          - path: /gallery
-            pathType: Prefix
-            backend:
-              service:
-                name: openshorts-backend
-                port:
-                  number: 8000
-          - path: /video
-            pathType: Prefix
-            backend:
-              service:
-                name: openshorts-backend
-                port:
-                  number: 8000
           - path: /
             pathType: Prefix
             backend:

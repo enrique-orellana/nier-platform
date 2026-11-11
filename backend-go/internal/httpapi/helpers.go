@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -9,50 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 )
-
-func safeJSON(value any) string {
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return "{}"
-	}
-	return strings.NewReplacer("<", "\\u003c", ">", "\\u003e", "&", "\\u0026").Replace(string(encoded))
-}
-
-func metadataFloat(value any) float64 {
-	switch typed := value.(type) {
-	case float64:
-		return typed
-	case float32:
-		return float64(typed)
-	case int:
-		return float64(typed)
-	case json.Number:
-		parsed, _ := typed.Float64()
-		return parsed
-	default:
-		return 0
-	}
-}
-
-func metadataNestedFloat(value map[string]any, key, nested string) float64 {
-	child, _ := value[key].(map[string]any)
-	return metadataFloat(child[nested])
-}
-
-func metadataStrings(value any) []string {
-	result := []string{}
-	switch typed := value.(type) {
-	case []string:
-		return typed
-	case []any:
-		for _, item := range typed {
-			if text, ok := item.(string); ok {
-				result = append(result, text)
-			}
-		}
-	}
-	return result
-}
 
 func serviceOrigin(value string) (string, error) {
 	parsed, err := url.Parse(strings.TrimRight(strings.TrimSpace(value), "/"))

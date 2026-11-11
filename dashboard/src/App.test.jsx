@@ -45,15 +45,12 @@ describe("App settings layout", () => {
     expect(container.querySelectorAll("p > div")).toHaveLength(0);
   });
 
-  it("uses a distinct sidebar icon for Highlights and AI Shorts", () => {
+  it("uses the Highlights icon in the sidebar", () => {
     render(<App />);
 
     expect(
       screen.getByText("Highlights").closest("button").querySelector("svg"),
     ).toHaveClass("lucide-highlighter");
-    expect(
-      screen.getByText("AI Shorts").closest("button").querySelector("svg"),
-    ).toHaveClass("lucide-sparkles");
   });
 
   it("places Performance immediately before Settings", () => {
