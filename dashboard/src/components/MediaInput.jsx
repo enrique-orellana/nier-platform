@@ -87,17 +87,17 @@ export default function MediaInput({
               Choose a source, then set up the clips you want to create.
             </CardDescription>
           </div>
-          <TabsList className="grid h-9 w-full grid-cols-2 rounded-md bg-muted p-1 md:w-[280px]">
+          <TabsList className="w-full md:w-[280px]">
             <TabsTrigger
               value="minio"
-              className="gap-2 rounded-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              className="min-w-0 flex-1 justify-center gap-2 px-4"
             >
               <Database className="size-4" />
               Video library
             </TabsTrigger>
             <TabsTrigger
               value="file"
-              className="gap-2 rounded-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              className="min-w-0 flex-1 justify-center gap-2 px-4"
             >
               <Upload className="size-4" />
               Upload
