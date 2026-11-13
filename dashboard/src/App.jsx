@@ -48,7 +48,9 @@ import {
   setLocalTranscriptionLanguage,
   TRANSCRIPTION_LANGUAGE_CHANGE_EVENT,
 } from "./components/local-editor/localEditorAi";
-import PerformanceDashboard from "./components/PerformanceDashboard";
+const PerformanceDashboard = React.lazy(
+  () => import("./components/PerformanceDashboard"),
+);
 import {
   Button,
   Badge,
@@ -1614,7 +1616,18 @@ function App() {
 
         {/* Main Workspace */}
         <div className="flex-1 overflow-hidden relative">
-          {activeTab === "performance" && <PerformanceDashboard />}
+          {activeTab === "performance" && (
+            <React.Suspense
+              fallback={
+                <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Loading performance metrics…
+                </div>
+              }
+            >
+              <PerformanceDashboard />
+            </React.Suspense>
+          )}
 
           {/* View: Settings */}
           {activeTab === "settings" && (

@@ -3,8 +3,10 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  ChevronsLeft,
   ChevronLeft,
   ChevronRight,
+  ChevronsRight,
   Cpu,
   HardDrive,
   RefreshCw,
@@ -12,6 +14,7 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
+import { Area, AreaChart, CartesianGrid, Legend, XAxis, YAxis } from "recharts";
 import {
   buildRenderMetricsUrl,
   DEFAULT_RENDER_METRIC_RANGE,
@@ -22,7 +25,31 @@ import {
   normalizeRenderPerformanceSummary,
   RENDER_METRIC_RANGES,
 } from "../lib/renderPerformance";
-import { Button, Card, Input, NativeSelect } from "./ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  ChartContainer,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui";
 
 const EMPTY_SUMMARY = normalizeRenderPerformanceSummary({});
 
@@ -60,261 +87,169 @@ const formatChartDate = (value) => {
     : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
 
-const niceStep = (value) => {
-  const exponent = Math.floor(Math.log10(value));
-  const fraction = value / 10 ** exponent;
-  const niceFraction =
-    fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
-  return niceFraction * 10 ** exponent;
-};
-
-const buildChartModel = (trend, width = 640, height = 230) => {
-  const margin = { top: 16, right: 16, bottom: 38, left: 58 };
-  const plotWidth = width - margin.left - margin.right;
-  const plotHeight = height - margin.top - margin.bottom;
-  const values = trend.flatMap((point) => [
-    Number(point.average_duration_ms) || 0,
-    Number(point.p95_duration_ms) || 0,
-  ]);
-  const maximum = Math.max(1, ...values);
-  const step = niceStep(maximum / 4);
-  const yMax = Math.max(step * 4, maximum);
-  const yTicks = Array.from({ length: 5 }, (_, index) => yMax - step * index);
-  const pointFor = (point, key, index) => {
-    const value = Number(point[key]) || 0;
-    const x =
-      trend.length === 1
-        ? plotWidth / 2
-        : (index / (trend.length - 1)) * plotWidth;
-    const y = plotHeight - (value / yMax) * plotHeight;
-    return { x, y, value };
-  };
-  const xTickIndexes = Array.from(
-    new Set(
-      [0, Math.floor((trend.length - 1) / 2), trend.length - 1].filter(
-        (index) => index >= 0,
-      ),
-    ),
-  );
-  return {
-    width,
-    height,
-    margin,
-    plotWidth,
-    plotHeight,
-    yMax,
-    yTicks,
-    xTickIndexes,
-    average: trend.map((point, index) =>
-      pointFor(point, "average_duration_ms", index),
-    ),
-    p95: trend.map((point, index) => pointFor(point, "p95_duration_ms", index)),
-  };
-};
-
 const MetricCard = ({ label, value, detail, icon: Icon, tone = "cyan" }) => (
-  <Card className="rounded-2xl border-white/10 bg-white/[0.035] p-4">
+  <Card className="rounded-xl p-4">
     <div className="flex items-center justify-between gap-3">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-        {label}
-      </span>
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
       <Icon
         size={16}
         className={
           tone === "green"
-            ? "text-emerald-400"
+            ? "text-emerald-500"
             : tone === "violet"
               ? "text-violet-400"
-              : "text-cyan-400"
+              : "text-primary"
         }
       />
     </div>
-    <div className="mt-3 text-2xl font-bold tracking-tight text-white">
+    <div className="mt-3 text-2xl font-semibold tracking-tight text-card-foreground">
       {value}
     </div>
-    <div className="mt-1 text-xs text-zinc-500">{detail}</div>
+    <div className="mt-1 text-sm text-muted-foreground">{detail}</div>
   </Card>
 );
 
-const TrendChart = ({ trend }) => {
-  const chart = buildChartModel(trend);
-  const averagePoints = chart.average.map(({ x, y }) => `${x},${y}`).join(" ");
-  const p95Points = chart.p95.map(({ x, y }) => `${x},${y}`).join(" ");
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-white">Render duration</h2>
-          <p className="mt-1 text-xs text-zinc-500">Average and p95 by day</p>
-        </div>
-        <div className="flex items-center gap-4 text-[11px] text-zinc-400">
-          <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-cyan-300" /> Average
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-violet-400" /> P95
-          </span>
-        </div>
-      </div>
+const renderDurationChartConfig = {
+  average_duration_ms: {
+    label: "Average",
+    color: "hsl(var(--chart-1))",
+  },
+  p95_duration_ms: {
+    label: "P95",
+    color: "hsl(var(--chart-2))",
+  },
+};
+
+const TrendChart = ({ trend }) => (
+  <Card>
+    <CardHeader>
+      <CardTitle>Render duration</CardTitle>
+      <CardDescription>Average and p95 by day</CardDescription>
+    </CardHeader>
+    <CardContent className="px-2 pt-0 sm:px-6">
       {trend.length === 0 ? (
-        <div className="mt-8 flex h-40 items-center justify-center text-sm text-zinc-500">
+        <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
           No timing trend in this period.
         </div>
       ) : (
-        <div className="mt-5 overflow-hidden rounded-xl bg-black/10 p-2">
-          <svg
-            viewBox={`0 0 ${chart.width} ${chart.height}`}
-            className="h-56 w-full"
-            role="img"
-            aria-label="Render duration trend with duration and date axes"
+        <ChartContainer
+          config={renderDurationChartConfig}
+          className="h-[260px] w-full"
+          aria-label="Render duration trend"
+        >
+          <AreaChart
+            accessibilityLayer
+            data={trend}
+            margin={{ top: 8, right: 12, left: 4, bottom: 0 }}
           >
-            <g
-              transform={`translate(${chart.margin.left} ${chart.margin.top})`}
-            >
-              {chart.yTicks.map((value, index) => {
-                const y = (value / chart.yMax) * chart.plotHeight;
-                return (
-                  <g key={value}>
-                    <line
-                      x1="0"
-                      x2={chart.plotWidth}
-                      y1={y}
-                      y2={y}
-                      stroke="rgba(255,255,255,0.1)"
-                      strokeDasharray={
-                        index === chart.yTicks.length - 1 ? undefined : "4 6"
-                      }
-                    />
-                    <text
-                      x="-10"
-                      y={y + 4}
-                      textAnchor="end"
-                      className="fill-zinc-500 text-[11px]"
-                    >
-                      {formatAxisDuration(value)}
-                    </text>
-                  </g>
-                );
-              })}
-              <line
+            <defs>
+              <linearGradient
+                id="renderAverageFill"
                 x1="0"
-                x2={chart.plotWidth}
-                y1={chart.plotHeight}
-                y2={chart.plotHeight}
-                stroke="rgba(255,255,255,0.18)"
-              />
-              <polyline
-                points={averagePoints}
-                fill="none"
-                stroke="#67d5ff"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <polyline
-                points={p95Points}
-                fill="none"
-                stroke="#a78bfa"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              {chart.average.map((point, index) => (
-                <circle
-                  key={`average-${trend[index].date}`}
-                  cx={point.x}
-                  cy={point.y}
-                  r="4"
-                  fill="#67d5ff"
-                  tabIndex="0"
-                  aria-label={`Average on ${trend[index].date}: ${formatDuration(point.value)}`}
-                >
-                  <title>{`${trend[index].date} · Average ${formatDuration(point.value)} · P95 ${formatDuration(chart.p95[index].value)}`}</title>
-                </circle>
-              ))}
-              {chart.p95.map((point, index) => (
-                <circle
-                  key={`p95-${trend[index].date}`}
-                  cx={point.x}
-                  cy={point.y}
-                  r="4"
-                  fill="#a78bfa"
-                  tabIndex="0"
-                  aria-label={`P95 on ${trend[index].date}: ${formatDuration(point.value)}`}
-                >
-                  <title>{`${trend[index].date} · P95 ${formatDuration(point.value)} · Average ${formatDuration(chart.average[index].value)}`}</title>
-                </circle>
-              ))}
-              {chart.xTickIndexes.map((index) => {
-                const point = chart.average[index];
-                return (
-                  <g key={`x-${trend[index].date}`}>
-                    <line
-                      x1={point.x}
-                      x2={point.x}
-                      y1={chart.plotHeight}
-                      y2={chart.plotHeight + 5}
-                      stroke="rgba(255,255,255,0.25)"
-                    />
-                    <text
-                      x={point.x}
-                      y={chart.plotHeight + 22}
-                      textAnchor="middle"
-                      className="fill-zinc-500 text-[11px]"
-                    >
-                      {formatChartDate(trend[index].date)}
-                    </text>
-                  </g>
-                );
-              })}
-              <text
-                x={-chart.margin.left + 12}
-                y={chart.plotHeight / 2}
-                textAnchor="middle"
-                transform={`rotate(-90 ${-chart.margin.left + 12} ${chart.plotHeight / 2})`}
-                className="fill-zinc-600 text-[10px]"
+                y1="0"
+                x2="0"
+                y2="1"
               >
-                Duration
-              </text>
-              <text
-                x={chart.plotWidth}
-                y={chart.plotHeight + 36}
-                textAnchor="end"
-                className="fill-zinc-600 text-[10px]"
-              >
-                Date
-              </text>
-            </g>
-          </svg>
-        </div>
+                <stop
+                  offset="5%"
+                  stopColor="var(--color-average_duration_ms)"
+                  stopOpacity={0.2}
+                />
+                <stop
+                  offset="95%"
+                  stopColor="var(--color-average_duration_ms)"
+                  stopOpacity={0.02}
+                />
+              </linearGradient>
+              <linearGradient id="renderP95Fill" x1="0" y1="0" x2="0" y2="1">
+                <stop
+                  offset="5%"
+                  stopColor="var(--color-p95_duration_ms)"
+                  stopOpacity={0.12}
+                />
+                <stop
+                  offset="95%"
+                  stopColor="var(--color-p95_duration_ms)"
+                  stopOpacity={0.01}
+                />
+              </linearGradient>
+            </defs>
+            <CartesianGrid vertical={false} strokeDasharray="3 3" />
+            <XAxis
+              dataKey="date"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              minTickGap={32}
+              tickFormatter={formatChartDate}
+            />
+            <YAxis
+              width={48}
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              tickFormatter={formatAxisDuration}
+            />
+            <ChartTooltip
+              cursor={false}
+              content={
+                <ChartTooltipContent
+                  labelFormatter={formatChartDate}
+                  valueFormatter={formatDuration}
+                />
+              }
+            />
+            <Legend verticalAlign="bottom" content={<ChartLegendContent />} />
+            <Area
+              dataKey="p95_duration_ms"
+              type="monotone"
+              stroke="var(--color-p95_duration_ms)"
+              strokeWidth={2}
+              fill="url(#renderP95Fill)"
+              dot={false}
+              activeDot={{ r: 4, strokeWidth: 0 }}
+            />
+            <Area
+              dataKey="average_duration_ms"
+              type="monotone"
+              stroke="var(--color-average_duration_ms)"
+              strokeWidth={2}
+              fill="url(#renderAverageFill)"
+              dot={false}
+              activeDot={{ r: 4, strokeWidth: 0 }}
+            />
+          </AreaChart>
+        </ChartContainer>
       )}
-    </div>
-  );
-};
+    </CardContent>
+  </Card>
+);
 
 const StageBreakdown = ({ stages }) => (
-  <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
-    <h2 className="text-sm font-semibold text-white">Stage breakdown</h2>
-    <p className="mt-1 text-xs text-zinc-500">
+  <Card className="rounded-xl p-5">
+    <h2 className="text-base font-semibold text-card-foreground">
+      Stage breakdown
+    </h2>
+    <p className="mt-1 text-sm text-muted-foreground">
       Successful render time by stage
     </p>
     <div className="mt-5 space-y-4">
       {stages.length === 0 ? (
-        <div className="flex h-40 items-center justify-center text-sm text-zinc-500">
+        <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
           No stage timing recorded.
         </div>
       ) : (
         stages.map((stage, index) => (
           <div key={stage.name}>
             <div className="mb-2 flex items-center justify-between gap-3 text-xs">
-              <span className="truncate text-zinc-300">
+              <span className="truncate text-sm text-card-foreground">
                 {formatStageName(stage.name)}
               </span>
-              <span className="shrink-0 text-zinc-500">
+              <span className="shrink-0 text-sm text-muted-foreground">
                 {formatPercent(stage.share)}
               </span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-white/10">
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
               <div
                 className={`h-full rounded-full ${index % 3 === 0 ? "bg-cyan-300" : index % 3 === 1 ? "bg-violet-400" : "bg-emerald-400"}`}
                 style={{
@@ -326,18 +261,23 @@ const StageBreakdown = ({ stages }) => (
         ))
       )}
     </div>
-  </div>
+  </Card>
 );
 
 const StatusCell = ({ status }) =>
   status === "done" ? (
-    <span className="inline-flex items-center gap-1.5 text-emerald-400">
-      <CheckCircle2 size={13} /> Done
-    </span>
+    <Badge variant="outline" className="gap-1.5 px-1.5 font-normal">
+      <CheckCircle2
+        size={13}
+        className="fill-emerald-500/15 text-emerald-500"
+      />
+      Done
+    </Badge>
   ) : (
-    <span className="inline-flex items-center gap-1.5 text-rose-400">
-      <XCircle size={13} /> Failed
-    </span>
+    <Badge variant="outline" className="gap-1.5 px-1.5 font-normal">
+      <XCircle size={13} className="text-destructive" />
+      Failed
+    </Badge>
   );
 
 const RecentRenders = ({
@@ -359,178 +299,236 @@ const RecentRenders = ({
   const lastResult = Math.min(page * pageSize, total);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-white">Recent renders</h2>
-          <p className="mt-1 text-xs text-zinc-500">Newest first</p>
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            Recent renders
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Newest completed and failed renders
+          </p>
         </div>
-        <Activity size={16} className="text-zinc-600" />
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <label className="sr-only" htmlFor="performance-render-search">
           Search renders
         </label>
-        <div className="relative min-w-[220px] flex-1">
+        <div className="relative w-full sm:max-w-sm">
           <Search
-            size={14}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
+            size={16}
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
           />
           <Input
             id="performance-render-search"
             aria-label="Search renders"
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search render, job, version or clip"
-            className="w-full rounded-xl border border-white/10 bg-black/10 py-2.5 pl-9 pr-3 text-xs text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-cyan-400/50"
+            placeholder="Filter renders..."
+            className="h-9 pl-9"
           />
         </div>
-        <label className="sr-only" htmlFor="performance-status-filter">
-          Render status filter
-        </label>
-        <NativeSelect
-          id="performance-status-filter"
-          aria-label="Render status filter"
-          value={status}
-          onChange={(event) => onStatusChange(event.target.value)}
-          className="rounded-xl border border-white/10 bg-black/10 px-3 py-2.5 text-xs text-zinc-300 outline-none focus:border-cyan-400/50"
-        >
-          <option value="all">All statuses</option>
-          <option value="done">Completed</option>
-          <option value="error">Failed</option>
-        </NativeSelect>
-        <label className="sr-only" htmlFor="performance-mode-filter">
-          Acceleration filter
-        </label>
-        <NativeSelect
-          id="performance-mode-filter"
-          aria-label="Acceleration filter"
-          value={mode}
-          onChange={(event) => onModeChange(event.target.value)}
-          className="rounded-xl border border-white/10 bg-black/10 px-3 py-2.5 text-xs text-zinc-300 outline-none focus:border-cyan-400/50"
-        >
-          <option value="all">All modes</option>
-          <option value="gpu">GPU</option>
-          <option value="cpu">CPU</option>
-        </NativeSelect>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="sr-only" htmlFor="performance-status-filter">
+            Render status filter
+          </label>
+          <Select value={status} onValueChange={onStatusChange}>
+            <SelectTrigger
+              id="performance-status-filter"
+              aria-label="Render status filter"
+              className="w-[150px]"
+            >
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="done">Completed</SelectItem>
+              <SelectItem value="error">Failed</SelectItem>
+            </SelectContent>
+          </Select>
+          <label className="sr-only" htmlFor="performance-mode-filter">
+            Acceleration filter
+          </label>
+          <Select value={mode} onValueChange={onModeChange}>
+            <SelectTrigger
+              id="performance-mode-filter"
+              aria-label="Acceleration filter"
+              className="w-[140px]"
+            >
+              <SelectValue placeholder="All modes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All modes</SelectItem>
+              <SelectItem value="gpu">GPU</SelectItem>
+              <SelectItem value="cpu">CPU</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
-      <div className="mt-4 overflow-x-auto">
+
+      <div className="overflow-hidden rounded-lg border">
         {recent.length === 0 ? (
-          <div className="flex h-24 items-center justify-center text-sm text-zinc-500">
+          <div className="flex h-24 items-center justify-center bg-card text-sm text-muted-foreground">
             No renders match these filters.
           </div>
         ) : (
-          <table className="w-full min-w-[720px] text-left text-xs">
-            <thead className="text-[10px] uppercase tracking-[0.12em] text-zinc-600">
-              <tr className="border-b border-white/10">
-                <th className="px-3 py-3 font-medium">Render</th>
-                <th className="px-3 py-3 font-medium">Status</th>
-                <th className="px-3 py-3 font-medium">Duration</th>
-                <th className="px-3 py-3 font-medium">Mode</th>
-                <th className="px-3 py-3 font-medium">Output</th>
-                <th className="px-3 py-3 font-medium">Finished</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 text-zinc-300">
+          <Table className="min-w-[720px]">
+            <TableHeader className="sticky top-0 z-10 bg-muted">
+              <TableRow>
+                <TableHead>Render</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Duration</TableHead>
+                <TableHead>Mode</TableHead>
+                <TableHead>Output</TableHead>
+                <TableHead>Finished</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {recent.map((render) => (
-                <tr key={render.render_id}>
-                  <td className="whitespace-nowrap px-3 py-3">
-                    <div className="font-medium text-white">
+                <TableRow key={render.render_id}>
+                  <TableCell>
+                    <div className="font-medium text-foreground">
                       clip_
                       {String(Number(render.clip_index) + 1).padStart(2, "0")}
                     </div>
-                    <div className="mt-1 text-[10px] text-zinc-600">
+                    <div className="mt-1 max-w-[260px] truncate font-mono text-xs text-muted-foreground">
                       {render.version_id || render.render_id}
                     </div>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3">
+                  </TableCell>
+                  <TableCell>
                     <StatusCell status={render.status} />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3">
+                  </TableCell>
+                  <TableCell className="tabular-nums">
                     {formatDuration(render.total_duration_ms)}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3">
-                    <span className="inline-flex items-center gap-1.5 text-zinc-400">
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className="gap-1.5 px-1.5 font-normal text-muted-foreground"
+                    >
                       {render.acceleration_mode === "gpu" ? (
-                        <Zap size={13} className="text-amber-300" />
+                        <Zap size={13} />
                       ) : (
-                        <Cpu size={13} className="text-zinc-500" />
+                        <Cpu size={13} />
                       )}
                       {String(render.acceleration_mode || "—").toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3">
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="tabular-nums">
                     {render.output_bytes
                       ? formatBytes(render.output_bytes)
                       : "—"}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-zinc-500">
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
                     {formatRecentDate(render.finished_at)}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </div>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-3 text-xs text-zinc-500">
-        <span>
-          {firstResult}–{lastResult} of {total}
-        </span>
-        <div className="flex items-center gap-2">
-          <label className="sr-only" htmlFor="performance-page-size">
-            Results per page
-          </label>
-          <NativeSelect
-            id="performance-page-size"
-            aria-label="Results per page"
-            value={pageSize}
-            onChange={(event) => onPageSizeChange(Number(event.target.value))}
-            className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5 text-xs text-zinc-300 outline-none"
-          >
-            {[10, 25, 50].map((size) => (
-              <option key={size} value={size}>
-                {size} / page
-              </option>
-            ))}
-          </NativeSelect>
-          <Button
-            variant="ghost"
-            type="button"
-            aria-label="Previous render page"
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
-            className="rounded-lg border border-white/10 p-1.5 text-zinc-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
-          >
-            <ChevronLeft size={15} />
-          </Button>
-          <span className="min-w-16 text-center text-zinc-400">
-            {page} / {totalPages}
-          </span>
-          <Button
-            variant="ghost"
-            type="button"
-            aria-label="Next render page"
-            disabled={page >= totalPages}
-            onClick={() => onPageChange(page + 1)}
-            className="rounded-lg border border-white/10 p-1.5 text-zinc-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
-          >
-            <ChevronRight size={15} />
-          </Button>
+
+      <div className="flex flex-col gap-3 px-1 text-sm sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-muted-foreground">
+          {firstResult}–{lastResult} of {total} renders
+        </p>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="performance-page-size"
+              className="whitespace-nowrap text-sm font-medium"
+            >
+              Rows per page
+            </label>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(value) => onPageSizeChange(Number(value))}
+            >
+              <SelectTrigger
+                id="performance-page-size"
+                aria-label="Rows per page"
+                className="h-8 w-[72px]"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent side="top">
+                {[10, 25, 50].map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center justify-center text-sm font-medium text-foreground">
+            Page {page} of {totalPages}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              type="button"
+              aria-label="First render page"
+              disabled={page <= 1}
+              onClick={() => onPageChange(1)}
+              className="size-8"
+            >
+              <ChevronsLeft />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              type="button"
+              aria-label="Previous render page"
+              disabled={page <= 1}
+              onClick={() => onPageChange(page - 1)}
+              className="size-8"
+            >
+              <ChevronLeft />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              type="button"
+              aria-label="Next render page"
+              disabled={page >= totalPages}
+              onClick={() => onPageChange(page + 1)}
+              className="size-8"
+            >
+              <ChevronRight />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              type="button"
+              aria-label="Last render page"
+              disabled={page >= totalPages}
+              onClick={() => onPageChange(totalPages)}
+              className="size-8"
+            >
+              <ChevronsRight />
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 };
 
 const DashboardSkeleton = () => (
   <div data-testid="performance-loading" className="space-y-4">
-    <div className="h-24 animate-pulse rounded-2xl bg-white/5" />
-    <div className="grid gap-4 lg:grid-cols-[1.35fr_0.9fr]">
-      <div className="h-72 animate-pulse rounded-2xl bg-white/5" />
-      <div className="h-72 animate-pulse rounded-2xl bg-white/5" />
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      {Array.from({ length: 5 }, (_, index) => (
+        <div key={index} className="h-24 animate-pulse rounded-xl bg-muted" />
+      ))}
     </div>
-    <div className="h-44 animate-pulse rounded-2xl bg-white/5" />
+    <div className="grid gap-4 lg:grid-cols-[1.35fr_0.9fr]">
+      <div className="h-72 animate-pulse rounded-xl bg-muted" />
+      <div className="h-72 animate-pulse rounded-xl bg-muted" />
+    </div>
+    <div className="h-44 animate-pulse rounded-xl bg-muted" />
   </div>
 );
 
@@ -608,14 +606,14 @@ export default function PerformanceDashboard() {
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
-                <Activity size={21} />
+              <div className="flex size-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <Activity size={20} />
               </div>
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-white">
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                   Performance
                 </h1>
-                <p className="mt-1 text-sm text-zinc-500">
+                <p className="mt-1 text-sm text-muted-foreground">
                   Render performance across completed jobs.
                 </p>
               </div>
@@ -625,31 +623,34 @@ export default function PerformanceDashboard() {
             <label className="sr-only" htmlFor="performance-range">
               Performance range
             </label>
-            <NativeSelect
-              id="performance-range"
-              aria-label="Performance range"
+            <Select
               value={range}
-              onChange={(event) => {
-                setRange(event.target.value);
+              onValueChange={(value) => {
+                setRange(value);
                 setRecentPage(1);
               }}
-              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-zinc-200 outline-none transition-colors focus:border-cyan-400/50"
             >
-              {RENDER_METRIC_RANGES.map((option) => (
-                <option
-                  key={option.value}
-                  value={option.value}
-                  className="bg-zinc-900"
-                >
-                  {option.label}
-                </option>
-              ))}
-            </NativeSelect>
+              <SelectTrigger
+                id="performance-range"
+                aria-label="Performance range"
+                className="w-36"
+              >
+                <SelectValue placeholder={rangeLabel} />
+              </SelectTrigger>
+              <SelectContent>
+                {RENDER_METRIC_RANGES.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               variant="ghost"
+              size="sm"
               type="button"
               onClick={() => setRefreshToken((current) => current + 1)}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-zinc-300 transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
               aria-label="Refresh performance metrics"
             >
               <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
@@ -659,15 +660,16 @@ export default function PerformanceDashboard() {
         </header>
 
         {error && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <span className="inline-flex items-center gap-2">
               <AlertTriangle size={16} /> {error}
             </span>
             <Button
               variant="ghost"
+              size="sm"
               type="button"
               onClick={() => setRefreshToken((current) => current + 1)}
-              className="rounded-lg border border-rose-300/30 px-3 py-1.5 text-xs font-medium text-rose-100 hover:bg-rose-300/10"
+              className="rounded-md border border-destructive/50 text-destructive hover:bg-destructive/10"
             >
               Retry
             </Button>
@@ -680,19 +682,19 @@ export default function PerformanceDashboard() {
             <DashboardSkeleton />
           </>
         ) : !hasMetrics ? (
-          <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.025] px-6 py-20 text-center">
-            <HardDrive className="mx-auto text-zinc-600" size={28} />
-            <h2 className="mt-4 text-lg font-semibold text-white">
+          <Card className="rounded-xl border-dashed px-6 py-20 text-center shadow-none">
+            <HardDrive className="mx-auto text-muted-foreground" size={28} />
+            <h2 className="mt-4 text-lg font-semibold text-card-foreground">
               No render metrics yet
             </h2>
-            <p className="mx-auto mt-2 max-w-md text-sm text-zinc-500">
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
               Completed renders will appear here. The selected period is{" "}
               {rangeLabel.toLowerCase()}.
             </p>
-          </div>
+          </Card>
         ) : (
           <>
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <MetricCard
                 label="Renders"
                 value={summary.summary.render_count}
@@ -719,28 +721,17 @@ export default function PerformanceDashboard() {
                 detail={`${acceleration.cpu} CPU renders`}
                 icon={Cpu}
               />
+              <MetricCard
+                label="Output volume"
+                value={formatBytes(summary.summary.total_output_bytes)}
+                detail="Total encoded output in this period"
+                icon={HardDrive}
+              />
             </section>
 
             <section className="grid gap-4 lg:grid-cols-[1.35fr_0.9fr]">
               <TrendChart trend={summary.trend} />
               <StageBreakdown stages={summary.stages} />
-            </section>
-
-            <section className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
-              <div className="flex items-center gap-3">
-                <HardDrive size={17} className="text-cyan-300" />
-                <div>
-                  <h2 className="text-sm font-semibold text-white">
-                    Output volume
-                  </h2>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    Total encoded output in this period
-                  </p>
-                </div>
-                <span className="ml-auto text-lg font-semibold text-white">
-                  {formatBytes(summary.summary.total_output_bytes)}
-                </span>
-              </div>
             </section>
 
             <RecentRenders

@@ -10,6 +10,13 @@ export {
 } from "./card";
 export { Checkbox } from "./checkbox";
 export {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "./chart";
+export {
   Dialog,
   DialogClose,
   DialogContent,
@@ -73,6 +80,16 @@ export {
 export { useSidebar } from "./sidebar-context";
 export { Slider } from "./slider";
 export { Switch } from "./switch";
+export {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./table";
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
 export { Textarea } from "./textarea";
 export {

@@ -96,6 +96,8 @@
 - [x] Keep domain visuals, glass treatments, animation, scrollbars, and media-specific CSS that still have consumers.
 - [x] Run `npm run format`, `npm run format:check`, `npm run lint`, and `npm run build` from `dashboard`.
 - [x] Review the final diff; changes are limited to UI wrappers, styles, dependencies, and the migration documents.
+- [x] Update shared theme tokens and generic primitives to match the shadcn New York v4 dark blocks after the user's visual correction.
+- [ ] Review all major dashboard surfaces in Brave and remove remaining custom styles from generic page chrome and controls.
 - [ ] If a code commit is requested, review staged scope and run the required GitNexus change detection before committing.
 
 ## Definition of Done
@@ -112,4 +114,5 @@
 
 - Generic buttons, inputs, textareas, and selects in app source use shared primitives; native markup remains only in tests and component implementations.
 - Shared Button, Input, Textarea, NativeSelect, Card, Badge, and Dialog components are adopted across public pages, dashboard screens, and editor chrome. Full-screen editor surfaces, timelines, and the pointer-through subtitle-cue inspector keep their domain-specific wrappers.
+- Shared primitive defaults and semantic dark theme tokens now follow the shadcn New York v4 block style; generic controls use neutral dark surfaces and compact spacing.
 - Format, lint, and production build pass. Brave visual review could not run because the browser access host was unavailable in this session.

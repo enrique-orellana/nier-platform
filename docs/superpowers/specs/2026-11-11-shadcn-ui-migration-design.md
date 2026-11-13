@@ -15,15 +15,17 @@ The migration is a UI implementation change. It must preserve existing workflows
 - The dashboard is a React 18 and Vite application using JavaScript/JSX and Tailwind CSS 3.
 - The interface currently relies on hand-written Tailwind markup and a small set of custom CSS classes. There is no existing shadcn/ui or Radix component layer.
 - The dashboard includes the public landing and legal pages, generation and project views, performance and settings screens, dialogs, and a large video editor with specialized media and timeline surfaces.
-- The project already uses Lucide icons and has a dark visual theme with navy surfaces, sky-blue primary accents, purple secondary accents, and Outfit/Inter typography.
+- The project already uses Lucide icons and the approved shadcn New York v4 dark block styles as its visual baseline.
 
 ## Design decision
 
 Add shadcn/ui conventions as source code owned by this repository rather than introducing a separately versioned component package. Use a shared `components/ui` layer for generic controls and composed primitives, plus a small class-name utility. Keep React, Vite, Tailwind CSS 3, and the current icon library in place; do not combine this work with a React or Tailwind major-version upgrade.
 
-The first implementation wave will establish tokens and a small set of high-use primitives. Subsequent waves will migrate user-facing screens and editor chrome one surface at a time. Each surface keeps its existing layout and interactions unless a local inconsistency must be corrected to make the shared component usable.
+The visual baseline is the shadcn New York v4 blocks: neutral near-black and charcoal surfaces, compact controls, restrained borders and shadows, and the block's default radii and typography. This supersedes the earlier preference to retain the navy/cyan/purple product palette for generic UI. OpenShorts branding and content remain; chart series colors and specialized media/editor surfaces keep colors needed to communicate their domain state.
 
-The visual system will retain the existing dark palette, typography, spacing rhythm, and distinctive OpenShorts styling. shadcn conventions supply consistency and accessibility, not a wholesale default-theme replacement.
+The first implementation wave will establish tokens and a small set of high-use primitives. Subsequent waves will migrate user-facing screens and editor chrome one surface at a time. Each surface keeps its existing workflow and interactions, while generic controls and containers follow the native block styles.
+
+Generic UI follows the native shadcn New York v4 block palette, typography scale, spacing, borders, radii, and control states. Product-specific media surfaces and data visualization retain their required domain presentation.
 
 ## Component and styling architecture
 
@@ -31,7 +33,7 @@ The visual system will retain the existing dark palette, typography, spacing rhy
 - `dashboard/src/lib/utils.js` exposes a `cn()` helper built from `clsx` and `tailwind-merge`, and is the common way to compose variants and caller-provided classes.
 - Components use variant definitions for shared intent and size (for example, button variants), semantic HTML, visible keyboard focus, disabled/loading states, and accessible names.
 - Radix UI primitives are used for interactive controls that need managed focus, keyboard navigation, portals, or dismissal behavior. Existing Lucide icons remain the icon source.
-- Theme values are mapped through CSS variables and Tailwind 3-compatible configuration. Existing app-specific classes are retained only for domain visuals that do not belong in generic controls.
+- Theme values are mapped through CSS variables and Tailwind 3-compatible configuration, using the shadcn New York v4 dark values. App-specific styling remains only for domain visuals that do not belong in generic controls.
 - The shadcn CLI or generated source may be used only when its output is compatible with this repository's React 18, JSX, and Tailwind 3 setup; otherwise, add the corresponding local component source and configuration manually. Do not silently upgrade the styling stack to satisfy a newer generator preset.
 
 ## Migration scope
@@ -82,7 +84,7 @@ Each wave is independently reviewable and should leave the app usable. Avoid a s
 - Every user-facing page and shared interactive surface within the dashboard uses the common shadcn-based primitive layer for generic UI controls.
 - No duplicate ad hoc button, input, select, switch, tab, menu, or dialog implementations remain in the migrated scope without a documented domain-specific reason.
 - Existing product flows, URLs, state transitions, shortcuts, editor interactions, and rendering outputs are unchanged.
-- All primitive variants visually follow the existing dark brand palette and type scale.
+- All primitive variants visually follow the shadcn New York v4 dark palette and type scale.
 - Keyboard and focus behavior is usable for migrated controls, including menus and dialogs.
 - The dashboard formats, lints, and builds successfully; focused UI verification covers each migrated page group and editor-critical controls.
 
