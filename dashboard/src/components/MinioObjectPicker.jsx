@@ -67,7 +67,10 @@ export default function MinioObjectPicker({ selected, onSelect }) {
           <Database className="size-4 text-primary" />
           Source library
         </span>
-        <Badge variant="outline" className="max-w-[65%] truncate">
+        <Badge
+          variant="outline"
+          className="max-w-[65%] truncate rounded-md border-input bg-background px-2 py-1 text-xs font-medium text-muted-foreground"
+        >
           {bucket}
         </Badge>
       </div>
@@ -75,7 +78,7 @@ export default function MinioObjectPicker({ selected, onSelect }) {
       <div className="relative">
         <Search
           size={17}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
+          className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
         />
         <Input
           type="search"
@@ -83,7 +86,7 @@ export default function MinioObjectPicker({ selected, onSelect }) {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search objects by name or path"
-          className="pl-10"
+          className="h-9 rounded-md border-input bg-background py-1 pl-9 shadow-sm focus-visible:ring-1 focus-visible:ring-offset-0"
         />
       </div>
 
@@ -92,13 +95,14 @@ export default function MinioObjectPicker({ selected, onSelect }) {
       )}
 
       {!loading && error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           <p>Could not load MinIO objects: {error}</p>
           <Button
             variant="ghost"
+            size="sm"
             type="button"
             onClick={() => setReloadToken((value) => value + 1)}
-            className="mt-3 inline-flex items-center gap-2 text-red-100 underline"
+            className="mt-3 rounded-md text-destructive underline underline-offset-4 hover:bg-destructive/10 hover:text-destructive"
           >
             <RefreshCw size={14} /> Retry
           </Button>
@@ -106,7 +110,7 @@ export default function MinioObjectPicker({ selected, onSelect }) {
       )}
 
       {!loading && !error && objects.length === 0 && (
-        <p className="rounded-xl border border-border bg-card/60 p-4 text-sm text-muted-foreground">
+        <p className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
           No MinIO objects match this search.
         </p>
       )}
@@ -117,12 +121,12 @@ export default function MinioObjectPicker({ selected, onSelect }) {
             const isSelected = object.key === selectedKey;
             return (
               <Button
-                variant="ghost"
+                variant="outline"
                 key={object.key}
                 type="button"
                 aria-label={`Select ${object.name || object.key}`}
                 onClick={() => onSelect({ bucket, ...object })}
-                className={`h-auto w-full flex-col items-stretch justify-start rounded-xl border p-3 text-left transition ${isSelected ? "border-primary/50 bg-primary/10" : "border-border bg-card/60 hover:border-primary/40 hover:bg-card"}`}
+                className={`h-auto w-full flex-col items-stretch justify-start rounded-md border-input bg-background p-3 text-left shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground ${isSelected ? "border-primary bg-primary/5" : "hover:border-input"}`}
               >
                 <div className="flex w-full min-w-0 items-start justify-between gap-3">
                   <span className="min-w-0 truncate font-medium text-foreground">
@@ -144,13 +148,6 @@ export default function MinioObjectPicker({ selected, onSelect }) {
               </Button>
             );
           })}
-        </div>
-      )}
-
-      {selected && (
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm text-zinc-300">
-          Selected:{" "}
-          <span className="font-medium text-white">{selected.key}</span>
         </div>
       )}
     </div>

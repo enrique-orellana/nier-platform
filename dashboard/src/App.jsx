@@ -2048,7 +2048,7 @@ function App() {
                   <div className="max-w-3xl space-y-3">
                     <Badge
                       variant="outline"
-                      className="gap-1.5 border-primary/25 bg-primary/10 text-primary"
+                      className="gap-1.5 rounded-md border-primary/25 bg-primary/10 px-2 py-1 font-medium text-primary"
                     >
                       <Sparkles className="size-3.5" />
                       AI clip workspace
@@ -2065,13 +2065,22 @@ function App() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span className="mr-1">Ready for</span>
-                    <Badge variant="outline" className="gap-1.5">
+                    <Badge
+                      variant="secondary"
+                      className="gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 font-medium text-muted-foreground"
+                    >
                       <Youtube className="size-3.5 text-red-400" /> YouTube
                     </Badge>
-                    <Badge variant="outline" className="gap-1.5">
+                    <Badge
+                      variant="secondary"
+                      className="gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 font-medium text-muted-foreground"
+                    >
                       <Instagram className="size-3.5 text-pink-400" /> Reels
                     </Badge>
-                    <Badge variant="outline" className="gap-1.5">
+                    <Badge
+                      variant="secondary"
+                      className="gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 font-medium text-muted-foreground"
+                    >
                       <TikTokIcon /> TikTok
                     </Badge>
                   </div>

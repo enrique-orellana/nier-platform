@@ -13,7 +13,11 @@ import {
   Checkbox,
   Input,
   Label,
-  NativeSelect,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Separator,
   Tabs,
   TabsContent,
@@ -74,21 +78,27 @@ export default function MediaInput({
   };
 
   return (
-    <Card className="w-full overflow-hidden border-white/10 bg-card/90 shadow-xl shadow-black/20">
+    <Card className="w-full overflow-hidden rounded-lg border-border bg-card shadow-sm">
       <Tabs value={mode} onValueChange={setMode}>
-        <CardHeader className="gap-4 border-b border-border bg-white/[0.02] p-5 md:flex-row md:items-center md:justify-between md:p-6">
+        <CardHeader className="gap-4 border-b border-border p-5 md:flex-row md:items-center md:justify-between md:p-6">
           <div className="space-y-1.5">
             <CardTitle className="text-xl">Start with a video</CardTitle>
             <CardDescription>
               Choose a source, then set up the clips you want to create.
             </CardDescription>
           </div>
-          <TabsList className="grid h-11 w-full grid-cols-2 md:w-[280px]">
-            <TabsTrigger value="minio" className="gap-2">
+          <TabsList className="grid h-9 w-full grid-cols-2 rounded-md bg-muted p-1 md:w-[280px]">
+            <TabsTrigger
+              value="minio"
+              className="gap-2 rounded-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+            >
               <Database className="size-4" />
               Video library
             </TabsTrigger>
-            <TabsTrigger value="file" className="gap-2">
+            <TabsTrigger
+              value="file"
+              className="gap-2 rounded-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+            >
               <Upload className="size-4" />
               Upload
             </TabsTrigger>
@@ -98,14 +108,24 @@ export default function MediaInput({
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-6 p-5 md:p-6">
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-              <section className="min-w-0 space-y-3 rounded-xl border border-border bg-background/40 p-4">
+              <section className="min-w-0 space-y-3 lg:border-r lg:border-border lg:pr-6">
                 <div className="flex min-h-6 items-center justify-between gap-3">
                   <Label className="text-sm">Video source</Label>
                   {mode === "minio" && selectedObject && (
-                    <Badge variant="success">Selected</Badge>
+                    <Badge
+                      variant="success"
+                      className="rounded-md px-2 py-1 text-[11px] font-medium"
+                    >
+                      Selected
+                    </Badge>
                   )}
                   {mode === "file" && file && (
-                    <Badge variant="success">Ready to upload</Badge>
+                    <Badge
+                      variant="success"
+                      className="rounded-md px-2 py-1 text-[11px] font-medium"
+                    >
+                      Ready to upload
+                    </Badge>
                   )}
                 </div>
 
@@ -117,17 +137,17 @@ export default function MediaInput({
                 </TabsContent>
                 <TabsContent value="file" className="mt-0">
                   <div
-                    className={`flex min-h-64 items-center justify-center rounded-xl border border-dashed p-6 text-center transition-colors ${
+                    className={`flex min-h-52 items-center justify-center rounded-md border border-dashed p-6 text-center transition-colors ${
                       file
                         ? "border-primary/50 bg-primary/5"
-                        : "border-white/15 bg-white/[0.02] hover:border-primary/50 hover:bg-primary/[0.03]"
+                        : "border-input bg-muted/30 hover:border-primary/50 hover:bg-muted/50"
                     }`}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={handleDrop}
                   >
                     {file ? (
                       <div className="flex max-w-full items-center gap-3">
-                        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                           <FileVideo className="size-5" />
                         </span>
                         <span className="min-w-0 text-left">
@@ -163,7 +183,7 @@ export default function MediaInput({
                           }
                           className="sr-only"
                         />
-                        <span className="mb-4 flex size-12 items-center justify-center rounded-xl border border-border bg-card text-primary">
+                        <span className="mb-4 flex size-10 items-center justify-center rounded-md border border-border bg-background text-primary">
                           <Upload className="size-5" />
                         </span>
                         <span className="text-sm font-medium text-foreground">
@@ -194,10 +214,11 @@ export default function MediaInput({
                     value={sourceUrl}
                     onChange={(event) => setSourceUrl(event.target.value)}
                     placeholder="YouTube or Twitch link"
+                    className="h-9 rounded-md border-input bg-background px-3 py-1 shadow-sm focus-visible:ring-1 focus-visible:ring-offset-0"
                   />
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    Adds creator context for titles and clip descriptions. The
-                    video itself is still taken from the source selected here.
+                    Adds context for clip titles and descriptions; the selected
+                    video remains the source for processing.
                   </p>
                 </div>
 
@@ -208,68 +229,97 @@ export default function MediaInput({
                     <Label htmlFor="transcription-source-language">
                       Spoken language
                     </Label>
-                    <NativeSelect
-                      id="transcription-source-language"
-                      aria-label="Transcription source language"
+                    <Select
                       value={transcriptionLanguage}
-                      onChange={(event) =>
-                        setTranscriptionLanguage(event.target.value)
-                      }
+                      onValueChange={setTranscriptionLanguage}
                     >
-                      <option value="auto">Auto-detect</option>
-                      {Object.entries(SUBTITLE_LANGUAGES).map(
-                        ([code, label]) => (
-                          <option key={code} value={code}>
-                            {label}
-                          </option>
-                        ),
-                      )}
-                    </NativeSelect>
+                      <SelectTrigger
+                        id="transcription-source-language"
+                        aria-label="Transcription source language"
+                        className="h-9 rounded-md border-input bg-background px-3 py-1 shadow-sm focus:ring-1 focus:ring-offset-0"
+                      >
+                        <SelectValue placeholder="Auto-detect" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-md border-border bg-popover shadow-md">
+                        <SelectItem value="auto">Auto-detect</SelectItem>
+                        {Object.entries(SUBTITLE_LANGUAGES).map(
+                          ([code, label]) => (
+                            <SelectItem key={code} value={code}>
+                              {label}
+                            </SelectItem>
+                          ),
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="target-clips">Number of clips</Label>
-                    <NativeSelect
-                      id="target-clips"
-                      value={targetClipCount}
-                      onChange={(event) =>
-                        onTargetClipCountChange(Number(event.target.value))
+                    <Select
+                      value={String(targetClipCount)}
+                      onValueChange={(value) =>
+                        onTargetClipCountChange(Number(value))
                       }
                     >
-                      {Array.from({ length: 13 }, (_, index) => index + 3).map(
-                        (count) => (
-                          <option key={count} value={count}>
+                      <SelectTrigger
+                        id="target-clips"
+                        className="h-9 rounded-md border-input bg-background px-3 py-1 shadow-sm focus:ring-1 focus:ring-offset-0"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-md border-border bg-popover shadow-md">
+                        {Array.from(
+                          { length: 13 },
+                          (_, index) => index + 3,
+                        ).map((count) => (
+                          <SelectItem key={count} value={String(count)}>
                             {count} clips
-                          </option>
-                        ),
-                      )}
-                    </NativeSelect>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="video-format">Output layout</Label>
-                    <NativeSelect
-                      id="video-format"
+                    <Select
                       value={layoutFormat}
-                      onChange={(event) => setLayoutFormat(event.target.value)}
+                      onValueChange={setLayoutFormat}
                     >
-                      <option value="standard">Vertical · 9:16</option>
-                      <option value="streamer_stack">Streamer stack</option>
-                    </NativeSelect>
+                      <SelectTrigger
+                        id="video-format"
+                        className="h-9 rounded-md border-input bg-background px-3 py-1 shadow-sm focus:ring-1 focus:ring-offset-0"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-md border-border bg-popover shadow-md">
+                        <SelectItem value="standard">
+                          Vertical · 9:16
+                        </SelectItem>
+                        <SelectItem value="streamer_stack">
+                          Streamer stack
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                     {layoutFormat === "streamer_stack" && (
                       <div className="space-y-2 pt-2">
                         <Label htmlFor="facecam-size">Facecam size</Label>
-                        <NativeSelect
-                          id="facecam-size"
+                        <Select
                           value={facecamSize}
-                          onChange={(event) =>
-                            setFacecamSize(event.target.value)
-                          }
+                          onValueChange={setFacecamSize}
                         >
-                          <option value="small">Small</option>
-                          <option value="medium">Medium</option>
-                          <option value="large">Large</option>
-                        </NativeSelect>
+                          <SelectTrigger
+                            id="facecam-size"
+                            className="h-9 rounded-md border-input bg-background px-3 py-1 shadow-sm focus:ring-1 focus:ring-offset-0"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-md border-border bg-popover shadow-md">
+                            <SelectItem value="small">Small</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="large">Large</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     )}
                   </div>
@@ -320,7 +370,7 @@ export default function MediaInput({
                   (mode === "minio" && !selectedObject) ||
                   (mode === "file" && !file)
                 }
-                className="w-full shrink-0 sm:w-auto"
+                className="h-9 w-full rounded-md px-4 shadow-sm sm:w-auto"
               >
                 {isProcessing ? (
                   <>
