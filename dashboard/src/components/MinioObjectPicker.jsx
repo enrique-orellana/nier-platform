@@ -69,7 +69,7 @@ export default function MinioObjectPicker({ selected, onSelect }) {
         </span>
         <Badge
           variant="outline"
-          className="h-6 max-w-[65%] truncate rounded-md border-input bg-background px-2.5 text-xs font-medium text-muted-foreground"
+          className="h-6 max-w-[65%] truncate rounded-md border-input bg-background px-2.5 text-xs font-medium leading-none text-muted-foreground"
         >
           {bucket}
         </Badge>
