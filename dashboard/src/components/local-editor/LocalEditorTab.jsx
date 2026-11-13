@@ -173,6 +173,7 @@ import {
   normalizeSubtitleReactions,
   reactionRequestCues,
 } from "./subtitleReactions";
+import { Button, Input, NativeSelect } from "../ui";
 
 const MIN_TIMELINE_HEIGHT = 220;
 const MIN_PREVIEW_HEIGHT = 260;
@@ -2328,24 +2329,26 @@ export default function LocalEditorTab({
           </div>
           <div className="flex items-center gap-2">
             {!initialProjectId && (
-              <button
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={openProjects}
                 className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5"
               >
                 <FolderOpen size={13} />
                 Projects
-              </button>
+              </Button>
             )}
             {onClose && (
-              <button
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={onClose}
                 aria-label="Close editor"
                 className="rounded-lg p-2 text-zinc-400 hover:bg-white/10 hover:text-white"
               >
                 <X size={18} />
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -2514,14 +2517,15 @@ export default function LocalEditorTab({
               data-testid="local-editor-header-workspace"
               className="flex items-center gap-1"
             >
-              <button
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={openProjects}
                 className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5"
               >
                 <FolderOpen size={13} />
                 Projects
-              </button>
+              </Button>
             </div>
           )}
           {!initialProjectId && (
@@ -2530,7 +2534,8 @@ export default function LocalEditorTab({
               className="flex items-center gap-1 border-l border-white/10 pl-2"
             >
               {editHistory.past.length > 0 && (
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   onClick={undo}
                   disabled={busy}
@@ -2540,10 +2545,11 @@ export default function LocalEditorTab({
                 >
                   <Undo2 size={13} />
                   Undo
-                </button>
+                </Button>
               )}
               {editHistory.future.length > 0 && (
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   onClick={redo}
                   disabled={busy}
@@ -2553,7 +2559,7 @@ export default function LocalEditorTab({
                 >
                   <Redo2 size={13} />
                   Redo
-                </button>
+                </Button>
               )}
             </div>
           )}
@@ -2566,7 +2572,8 @@ export default function LocalEditorTab({
             }
           >
             {videoFile && (
-              <button
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={openSaveProjectDialog}
                 disabled={busy}
@@ -2574,11 +2581,12 @@ export default function LocalEditorTab({
               >
                 <Save size={13} />
                 Save Project
-              </button>
+              </Button>
             )}
             {!hideExport &&
               (videoFile || initialExportVideoUrl || videoUrl) && (
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   onClick={exportVideo}
                   disabled={busy}
@@ -2588,7 +2596,7 @@ export default function LocalEditorTab({
                   {busy
                     ? `Exporting ${Math.round(progress * 100)}%`
                     : "Export Video"}
-                </button>
+                </Button>
               )}
             {headerActions}
           </div>
@@ -2596,7 +2604,8 @@ export default function LocalEditorTab({
             data-testid="local-editor-header-utility"
             className="flex items-center gap-1 border-l border-white/10 pl-2"
           >
-            <button
+            <Button
+              variant="ghost"
               type="button"
               onClick={reset}
               disabled={busy}
@@ -2605,9 +2614,10 @@ export default function LocalEditorTab({
             >
               <RotateCcw size={13} />
               Reset
-            </button>
+            </Button>
             {onClose && (
-              <button
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={onClose}
                 aria-label="Close editor"
@@ -2616,7 +2626,7 @@ export default function LocalEditorTab({
               >
                 <X size={13} />
                 Close
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -2894,7 +2904,8 @@ export default function LocalEditorTab({
                   </span>
                 </div>
                 <div className="flex items-center justify-self-center gap-0.5">
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label="Go to beginning"
                     title="Go to beginning"
@@ -2902,8 +2913,9 @@ export default function LocalEditorTab({
                     className="rounded p-1 hover:bg-white/10 hover:text-white"
                   >
                     <SkipBack size={15} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label="Rewind 5 seconds"
                     title="Rewind 5 seconds"
@@ -2911,8 +2923,9 @@ export default function LocalEditorTab({
                     className="rounded p-1 hover:bg-white/10 hover:text-white"
                   >
                     <Rewind size={15} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label={isPlaying ? "Pause video" : "Play video"}
                     title={isPlaying ? "Pause video" : "Play video"}
@@ -2920,8 +2933,9 @@ export default function LocalEditorTab({
                     className="rounded p-1 hover:bg-white/10 hover:text-white"
                   >
                     {isPlaying ? <Pause size={15} /> : <Play size={15} />}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label="Stop video"
                     title="Stop video"
@@ -2929,8 +2943,9 @@ export default function LocalEditorTab({
                     className="rounded p-1 hover:bg-white/10 hover:text-white"
                   >
                     <Square size={14} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label="Fast forward 5 seconds"
                     title="Fast forward 5 seconds"
@@ -2938,8 +2953,9 @@ export default function LocalEditorTab({
                     className="rounded p-1 hover:bg-white/10 hover:text-white"
                   >
                     <FastForward size={15} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label="Go to end"
                     title="Go to end"
@@ -2947,8 +2963,9 @@ export default function LocalEditorTab({
                     className="rounded p-1 hover:bg-white/10 hover:text-white"
                   >
                     <SkipForward size={15} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label={isLooping ? "Disable loop" : "Enable loop"}
                     title={isLooping ? "Disable loop" : "Enable loop"}
@@ -2956,11 +2973,12 @@ export default function LocalEditorTab({
                     className={`rounded p-1 hover:bg-white/10 hover:text-white ${isLooping ? "text-fuchsia-300" : ""}`}
                   >
                     <Repeat size={15} />
-                  </button>
+                  </Button>
                 </div>
                 <div className="ml-auto flex items-center gap-0.5">
                   <div className="relative">
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       aria-label="Playback speed"
                       aria-haspopup="listbox"
@@ -2982,7 +3000,7 @@ export default function LocalEditorTab({
                         size={13}
                         className={`transition-transform ${playbackRateMenuOpen ? "rotate-180" : ""}`}
                       />
-                    </button>
+                    </Button>
                     {playbackRateMenuOpen && (
                       <div
                         role="listbox"
@@ -2990,7 +3008,8 @@ export default function LocalEditorTab({
                         className="absolute bottom-8 right-0 z-40 min-w-full overflow-hidden rounded-md border border-white/10 bg-[#1b1b20] p-1 shadow-xl"
                       >
                         {PLAYBACK_RATES.map((rate) => (
-                          <button
+                          <Button
+                            variant="ghost"
                             key={rate}
                             type="button"
                             role="option"
@@ -3002,12 +3021,13 @@ export default function LocalEditorTab({
                             className={`block w-full rounded px-2 py-1.5 text-left text-[11px] ${playbackRate === rate ? "bg-violet-500/20 text-violet-200" : "text-zinc-300 hover:bg-white/10 hover:text-white"}`}
                           >
                             {rate.toFixed(2)}x
-                          </button>
+                          </Button>
                         ))}
                       </div>
                     )}
                   </div>
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label={isMuted ? "Unmute video" : "Mute video"}
                     title={isMuted ? "Unmute video" : "Mute video"}
@@ -3015,8 +3035,9 @@ export default function LocalEditorTab({
                     className="rounded p-1 text-zinc-400 hover:bg-white/10 hover:text-white"
                   >
                     {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label={
                       videoViewMode === "auto"
@@ -3032,9 +3053,10 @@ export default function LocalEditorTab({
                     className="rounded px-1.5 py-1 text-[10px] font-semibold hover:bg-white/10 hover:text-white"
                   >
                     Full
-                  </button>
+                  </Button>
                   {isReelsAspectRatio && (
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       aria-pressed={safetyGridVisible}
                       title={
@@ -3052,10 +3074,10 @@ export default function LocalEditorTab({
                       }`}
                     >
                       Grid
-                    </button>
+                    </Button>
                   )}
                   {!onExport && (
-                    <select
+                    <NativeSelect
                       aria-label="Export aspect ratio"
                       title={`Output ratio ${formatAspectRatio(outputDimensions.width, outputDimensions.height)}`}
                       value={aspectRatio}
@@ -3072,9 +3094,10 @@ export default function LocalEditorTab({
                             : option.label}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                   )}
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     onClick={toggleFullscreen}
                     aria-label={
@@ -3090,7 +3113,7 @@ export default function LocalEditorTab({
                     ) : (
                       <Maximize2 size={14} />
                     )}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -3113,7 +3136,8 @@ export default function LocalEditorTab({
                   data-testid="local-editor-timeline-actions"
                   className="flex h-7 items-center gap-0.5 text-zinc-500"
                 >
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label="Add cue to timeline"
                     title="Add cue to timeline"
@@ -3121,16 +3145,18 @@ export default function LocalEditorTab({
                     className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white"
                   >
                     <Plus size={15} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label="Select timeline tool"
                     title="Select timeline tool"
                     className="flex h-7 w-7 items-center justify-center rounded bg-white/10 text-zinc-200"
                   >
                     <MousePointer2 size={14} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label={
                       activeMarker ? "Remove marker (M)" : "Add marker (M)"
@@ -3146,12 +3172,13 @@ export default function LocalEditorTab({
                       size={14}
                       fill={activeMarker ? "currentColor" : "none"}
                     />
-                  </button>
+                  </Button>
                   <span
                     className="mx-1 h-5 w-px bg-white/10"
                     aria-hidden="true"
                   />
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     onClick={undo}
                     disabled={busy || editHistory.past.length === 0}
@@ -3160,8 +3187,9 @@ export default function LocalEditorTab({
                     className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <Undo2 size={15} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     type="button"
                     onClick={redo}
                     disabled={busy || editHistory.future.length === 0}
@@ -3170,12 +3198,13 @@ export default function LocalEditorTab({
                     className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <Redo2 size={15} />
-                  </button>
+                  </Button>
                   <span
                     className="mx-1 h-5 w-px bg-white/10"
                     aria-hidden="true"
                   />
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     onClick={removeSelectedTimelineItem}
                     disabled={
@@ -3186,12 +3215,13 @@ export default function LocalEditorTab({
                     className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <Trash2 size={14} />
-                  </button>
+                  </Button>
                   <span
                     className="mx-1 h-5 w-px bg-white/10"
                     aria-hidden="true"
                   />
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label={
                       selectedLayoutSegmentId
@@ -3217,8 +3247,9 @@ export default function LocalEditorTab({
                     className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <Split size={14} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label="Delete left of playhead"
                     title="Delete left of playhead (Q)"
@@ -3227,8 +3258,9 @@ export default function LocalEditorTab({
                     className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <PanelLeftClose size={14} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label="Delete right of playhead"
                     title="Delete right of playhead (W)"
@@ -3237,7 +3269,7 @@ export default function LocalEditorTab({
                     className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <PanelRightClose size={14} />
-                  </button>
+                  </Button>
                   <span
                     className="mx-1 h-5 w-px bg-white/10"
                     aria-hidden="true"
@@ -3253,7 +3285,8 @@ export default function LocalEditorTab({
                       <span className="text-zinc-600" aria-hidden="true">
                         |
                       </span>
-                      <button
+                      <Button
+                        variant="ghost"
                         type="button"
                         aria-label="Standard layout"
                         aria-pressed={
@@ -3264,9 +3297,10 @@ export default function LocalEditorTab({
                         className={`inline-flex h-6 items-center rounded px-1.5 transition-colors hover:bg-white/10 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.format === "standard" ? "bg-cyan-300/20 text-cyan-100" : "text-zinc-400"}`}
                       >
                         Standard
-                      </button>
+                      </Button>
                       {selectedLayoutSegment.format === "standard" && (
-                        <button
+                        <Button
+                          variant="ghost"
                           type="button"
                           aria-label={`Face tracking ${selectedLayoutSegment.face_tracking_enabled === true ? "On" : "Off"}`}
                           title={
@@ -3302,12 +3336,13 @@ export default function LocalEditorTab({
                                 true
                               ? "On"
                               : "Off"}
-                        </button>
+                        </Button>
                       )}
                       <span className="text-zinc-600" aria-hidden="true">
                         |
                       </span>
-                      <button
+                      <Button
+                        variant="ghost"
                         type="button"
                         aria-label="Streamer layout"
                         aria-pressed={
@@ -3320,9 +3355,10 @@ export default function LocalEditorTab({
                         className={`inline-flex h-6 items-center rounded px-1.5 transition-colors hover:bg-white/10 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.format === "streamer_stack" ? "bg-cyan-300/20 text-cyan-100" : "text-zinc-400"}`}
                       >
                         Streamer
-                      </button>
+                      </Button>
                       {selectedLayoutSegment.format === "streamer_stack" && (
-                        <button
+                        <Button
+                          variant="ghost"
                           type="button"
                           aria-label="Edit gameplay framing"
                           title="Edit gameplay framing in preview"
@@ -3332,7 +3368,7 @@ export default function LocalEditorTab({
                         >
                           <Crop size={12} aria-hidden="true" />
                           Frame
-                        </button>
+                        </Button>
                       )}
                     </div>
                   )}
@@ -3348,7 +3384,8 @@ export default function LocalEditorTab({
                     data-testid="local-editor-transition-controls"
                     className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-cyan-300/20 bg-cyan-400/[.04] px-1 text-[10px] text-zinc-400"
                   >
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       aria-label="Cut transition"
                       title="Cut transition"
@@ -3365,8 +3402,9 @@ export default function LocalEditorTab({
                         data-testid="local-editor-cut-icon"
                       />
                       Cut
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="ghost"
                       type="button"
                       aria-label="Crossfade transition"
                       title="Crossfade transition"
@@ -3385,9 +3423,9 @@ export default function LocalEditorTab({
                         data-testid="local-editor-crossfade-icon"
                       />
                       Crossfade
-                    </button>
+                    </Button>
                     {selectedLayoutSegment?.transition === "crossfade" && (
-                      <input
+                      <Input
                         type="number"
                         min="1"
                         max="2000"
@@ -3415,7 +3453,8 @@ export default function LocalEditorTab({
                       data-testid="local-editor-timeline-zoom-controls"
                       className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-white/10 bg-black/20 px-0.5 text-zinc-400"
                     >
-                      <button
+                      <Button
+                        variant="ghost"
                         type="button"
                         aria-label="Fit timeline to window"
                         title="Fit timeline to window"
@@ -3423,8 +3462,9 @@ export default function LocalEditorTab({
                         className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white"
                       >
                         <FileScan size={14} />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="ghost"
                         type="button"
                         aria-label="Reset timeline zoom"
                         title="Reset timeline zoom"
@@ -3432,8 +3472,9 @@ export default function LocalEditorTab({
                         className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white"
                       >
                         <FileScan size={14} className="opacity-70" />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="ghost"
                         type="button"
                         aria-label="Zoom out"
                         title="Zoom out"
@@ -3452,8 +3493,8 @@ export default function LocalEditorTab({
                         className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
                       >
                         <ZoomOut size={14} />
-                      </button>
-                      <input
+                      </Button>
+                      <Input
                         type="range"
                         aria-label="Timeline zoom"
                         min={MIN_TIMELINE_ZOOM}
@@ -3465,7 +3506,8 @@ export default function LocalEditorTab({
                         }
                         className="h-4 w-16 accent-zinc-200"
                       />
-                      <button
+                      <Button
+                        variant="ghost"
                         type="button"
                         aria-label="Zoom in"
                         title="Zoom in"
@@ -3484,7 +3526,7 @@ export default function LocalEditorTab({
                         className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
                       >
                         <ZoomIn size={14} />
-                      </button>
+                      </Button>
                     </div>
                   )}
                   {subtitleView === "table" && (
@@ -3493,7 +3535,7 @@ export default function LocalEditorTab({
                       className="flex h-7 shrink-0 items-center gap-1"
                     >
                       <label className="group inline-flex h-7 shrink-0 cursor-pointer items-center">
-                        <input
+                        <Input
                           aria-label="Loop segment"
                           type="checkbox"
                           checked={loopSegment}
@@ -3507,7 +3549,7 @@ export default function LocalEditorTab({
                         </span>
                       </label>
                       <label className="group inline-flex h-7 shrink-0 cursor-pointer items-center">
-                        <input
+                        <Input
                           aria-label="Follow audio"
                           type="checkbox"
                           checked={followAudio}
@@ -3520,7 +3562,8 @@ export default function LocalEditorTab({
                           Follow
                         </span>
                       </label>
-                      <button
+                      <Button
+                        variant="ghost"
                         type="button"
                         aria-label="Scroll to current subtitle"
                         title="Scroll to current subtitle"
@@ -3529,7 +3572,7 @@ export default function LocalEditorTab({
                         className="flex h-7 shrink-0 items-center rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         Current
-                      </button>
+                      </Button>
                     </div>
                   )}
                   <div
@@ -3537,7 +3580,8 @@ export default function LocalEditorTab({
                     aria-label="Subtitle editing view"
                     className="flex h-7 shrink-0 rounded border border-white/10 bg-black/20 p-0.5"
                   >
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       role="tab"
                       aria-label="Timeline view"
@@ -3546,8 +3590,9 @@ export default function LocalEditorTab({
                       className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === "timeline" ? "bg-white text-black" : "text-zinc-400 hover:bg-white/10 hover:text-white"}`}
                     >
                       Timeline
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="ghost"
                       type="button"
                       role="tab"
                       aria-label="Subtitle table view"
@@ -3556,7 +3601,7 @@ export default function LocalEditorTab({
                       className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === "table" ? "bg-violet-500 text-white" : "text-zinc-400 hover:bg-white/10 hover:text-white"}`}
                     >
                       Cue table
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -3615,7 +3660,8 @@ export default function LocalEditorTab({
                 )}
               </div>
             </div>
-            <button
+            <Button
+              variant="ghost"
               type="button"
               role="separator"
               aria-label="Resize preview and timeline"
@@ -3632,7 +3678,7 @@ export default function LocalEditorTab({
               className="group absolute left-0 right-0 top-0 z-40 flex h-2 -translate-y-1/2 cursor-row-resize items-center justify-center border-y border-transparent bg-transparent hover:border-cyan-300/50 focus:border-cyan-300/70 focus:outline-none"
             >
               <span className="h-px w-12 bg-zinc-600/70 transition-colors group-hover:bg-cyan-300" />
-            </button>
+            </Button>
           </div>
         </main>
         <aside className="contents" aria-label="Inspector">
@@ -3640,7 +3686,8 @@ export default function LocalEditorTab({
             title={activeFeatureLabel}
             className="relative xl:col-start-2 xl:row-start-1"
             overlay={
-              <button
+              <Button
+                variant="ghost"
                 type="button"
                 role="separator"
                 aria-label="Resize details panel"
@@ -3659,7 +3706,7 @@ export default function LocalEditorTab({
                 className="group absolute right-0 top-0 z-40 flex h-full w-2 translate-x-1/2 cursor-col-resize items-center justify-center border-x border-transparent bg-transparent hover:border-cyan-300/50 focus:border-cyan-300/70 focus:outline-none"
               >
                 <span className="h-12 w-px bg-zinc-600/70 transition-colors group-hover:bg-cyan-300" />
-              </button>
+              </Button>
             }
           >
             <div className={activeFeature === "details" ? "" : "sr-only"}>
@@ -3685,7 +3732,8 @@ export default function LocalEditorTab({
               className={`overflow-hidden rounded-xl border border-white/10 bg-white/[.02] ${activeFeature === "subtitles" ? "" : "sr-only"}`}
             >
               <div className="flex items-center justify-between gap-3 px-4 py-3.5">
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   aria-label="Toggle Subtitles settings"
                   aria-expanded="true"
@@ -3700,10 +3748,11 @@ export default function LocalEditorTab({
                     {subtitleCues.length}{" "}
                     {subtitleCues.length === 1 ? "cue" : "cues"}
                   </span>
-                </button>
+                </Button>
                 <div className="flex items-center gap-2">
                   {subtitleCues.length > 0 && (
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       aria-label="Export Subtitles"
                       onClick={exportSubtitles}
@@ -3712,9 +3761,10 @@ export default function LocalEditorTab({
                     >
                       <Download size={14} aria-hidden="true" />
                       Export
-                    </button>
+                    </Button>
                   )}
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label="Open subtitle table"
                     title="Open subtitle table"
@@ -3722,7 +3772,7 @@ export default function LocalEditorTab({
                     className="flex h-7 w-7 items-center justify-center rounded-md text-violet-300 transition-colors hover:bg-violet-500/10 hover:text-violet-200"
                   >
                     <FileText size={16} aria-hidden="true" />
-                  </button>
+                  </Button>
                 </div>
               </div>
               <div
@@ -3730,7 +3780,8 @@ export default function LocalEditorTab({
                 className="border-t border-white/10 px-4 pb-4"
               >
                 <section className="border-b border-white/10 pb-3">
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label="Toggle Track actions"
                     aria-expanded={subtitleTrackActionsOpen}
@@ -3745,10 +3796,10 @@ export default function LocalEditorTab({
                     <span className="text-xs font-semibold text-zinc-100">
                       Track
                     </span>
-                  </button>
+                  </Button>
                   {subtitleTrackActionsOpen && (
                     <div id="subtitle-track-actions-panel" className="pt-2">
-                      <input
+                      <Input
                         ref={subtitleInputRef}
                         type="file"
                         accept=".srt,.vtt,text/vtt,application/x-subrip"
@@ -3763,7 +3814,7 @@ export default function LocalEditorTab({
                       <label className="mb-3 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                         Audio language
                         <div className="relative mt-1.5">
-                          <select
+                          <NativeSelect
                             aria-label="Audio language"
                             value={transcriptionLanguage}
                             onChange={handleTranscriptionLanguageChange}
@@ -3794,7 +3845,7 @@ export default function LocalEditorTab({
                                 </option>
                               ),
                             )}
-                          </select>
+                          </NativeSelect>
                           <ChevronDown
                             size={14}
                             className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
@@ -3802,15 +3853,17 @@ export default function LocalEditorTab({
                         </div>
                       </label>
                       <div className="grid grid-cols-2 gap-2">
-                        <button
+                        <Button
+                          variant="ghost"
                           type="button"
                           onClick={handleImport}
                           className="flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-transparent px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-violet-300/30 hover:bg-white/[.04] hover:text-violet-200"
                         >
                           <Upload size={14} />
                           Import subtitles
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
                           type="button"
                           onClick={generateSubtitles}
                           disabled={
@@ -3827,9 +3880,10 @@ export default function LocalEditorTab({
                           {generatingSubtitles
                             ? "Transcribing…"
                             : "Generate subtitles"}
-                        </button>
+                        </Button>
                       </div>
-                      <button
+                      <Button
+                        variant="ghost"
                         type="button"
                         aria-label="Suggest reactions"
                         onClick={suggestReactions}
@@ -3848,9 +3902,10 @@ export default function LocalEditorTab({
                         {generatingReactions
                           ? "Suggesting…"
                           : "Suggest reactions"}
-                      </button>
+                      </Button>
                       {!!subtitleReactions.length && (
-                        <button
+                        <Button
+                          variant="ghost"
                           type="button"
                           aria-label="Edit applied reactions"
                           onClick={editAppliedReactions}
@@ -3858,7 +3913,7 @@ export default function LocalEditorTab({
                           className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-transparent px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-violet-300/30 hover:bg-white/[.04] hover:text-violet-200 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Edit applied reactions
-                        </button>
+                        </Button>
                       )}
                       {reactionError && (
                         <p className="mt-2 text-xs text-red-300" role="alert">
@@ -3866,7 +3921,8 @@ export default function LocalEditorTab({
                         </p>
                       )}
                       <div className="mt-2">
-                        <button
+                        <Button
+                          variant="ghost"
                           type="button"
                           aria-label="Clean subtitle dots"
                           onClick={cleanSubtitleDots}
@@ -3874,7 +3930,7 @@ export default function LocalEditorTab({
                           className="flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-transparent px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-amber-300/30 hover:bg-white/[.04] hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Clean subtitle dots
-                        </button>
+                        </Button>
                       </div>
                       {pendingSubtitle && (
                         <p className="mt-2 truncate text-xs text-violet-300">
@@ -3891,7 +3947,7 @@ export default function LocalEditorTab({
                             <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                               Source
                               <div className="relative mt-1.5">
-                                <select
+                                <NativeSelect
                                   aria-label="Subtitle source language"
                                   value={subtitleLanguage}
                                   onChange={(event) =>
@@ -3915,7 +3971,7 @@ export default function LocalEditorTab({
                                       </option>
                                     ),
                                   )}
-                                </select>
+                                </NativeSelect>
                                 <ChevronDown
                                   size={14}
                                   className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
@@ -3925,7 +3981,7 @@ export default function LocalEditorTab({
                             <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                               Target
                               <div className="relative mt-1.5">
-                                <select
+                                <NativeSelect
                                   aria-label="Translation target language"
                                   value={translationTarget}
                                   onChange={(event) =>
@@ -3956,7 +4012,7 @@ export default function LocalEditorTab({
                                       </option>
                                     ),
                                   )}
-                                </select>
+                                </NativeSelect>
                                 <ChevronDown
                                   size={14}
                                   className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
@@ -3964,7 +4020,8 @@ export default function LocalEditorTab({
                               </div>
                             </label>
                           </div>
-                          <button
+                          <Button
+                            variant="ghost"
                             type="button"
                             aria-label="Translate subtitles"
                             onClick={translateSubtitles}
@@ -3983,7 +4040,7 @@ export default function LocalEditorTab({
                             {translatingSubtitles
                               ? "Translating…"
                               : "Translate subtitles"}
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -4019,7 +4076,8 @@ export default function LocalEditorTab({
                   </div>
                 )}
                 <section className="pt-3">
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     aria-label="Toggle Cue editing"
                     aria-expanded={cueEditingOpen}
@@ -4034,7 +4092,7 @@ export default function LocalEditorTab({
                     <span className="text-xs font-semibold text-zinc-100">
                       Style
                     </span>
-                  </button>
+                  </Button>
                   {cueEditingOpen && (
                     <div id="subtitle-cue-editing-panel" className="pt-2">
                       <LocalEditorSubtitleStyleInspector
@@ -4054,7 +4112,8 @@ export default function LocalEditorTab({
               className={`overflow-hidden rounded-xl border border-white/10 bg-white/[.02] ${activeFeature === "viral-hook" ? "" : "sr-only"}`}
             >
               <div className="flex items-center justify-between gap-3 px-4 py-3.5">
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   aria-label="Toggle Viral Hook settings"
                   aria-expanded={hookOpen}
@@ -4072,15 +4131,16 @@ export default function LocalEditorTab({
                   <span className="shrink-0 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
                     {hook ? "Set" : "Not set"}
                   </span>
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="ghost"
                   type="button"
                   onClick={addHook}
                   className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-amber-400/30 px-2 text-[11px] font-semibold text-amber-200 transition-colors hover:border-amber-300/60 hover:bg-amber-500/10"
                 >
                   {hook ? <RotateCcw size={12} /> : <Plus size={12} />}
                   {hook ? "Reset hook" : "Add Viral Hook"}
-                </button>
+                </Button>
               </div>
               {hookOpen && (
                 <div

@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import AudioInspector from "./AudioInspector";
 import HookInspector from "./HookInspector";
 import SubtitleCueInspector from "./SubtitleCueInspector";
+import { Button } from "../ui";
 
 const subtitleTracksFromState = (state) =>
   state?.tracks
@@ -35,15 +36,16 @@ export default function InspectorPanel({
         Starts at the current playhead. Select the cue to edit its text and
         timing.
       </p>
-      <button
+      <Button
+        variant="default"
         type="button"
-        className="btn-primary w-full"
+        className="w-full"
         onClick={addCue}
         disabled={!canAddSubtitleCue}
         aria-label="Add subtitle cue"
       >
         Add cue
-      </button>
+      </Button>
       {!canAddSubtitleCue && (
         <p className="mt-2 text-[11px] leading-4 text-zinc-500">
           Create or translate a subtitle track before adding cues.

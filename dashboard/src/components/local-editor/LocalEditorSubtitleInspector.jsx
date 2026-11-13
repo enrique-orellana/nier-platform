@@ -1,5 +1,6 @@
 import React from "react";
 import { X } from "lucide-react";
+import { Button, Input, Textarea } from "../ui";
 
 export default function LocalEditorSubtitleInspector({
   cue,
@@ -41,18 +42,19 @@ export default function LocalEditorSubtitleInspector({
         <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-300">
           Subtitle cue
         </h3>
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={() => onDelete(cue.id)}
           className="text-zinc-500 hover:text-red-300"
           aria-label="Delete subtitle cue"
         >
           <X size={14} />
-        </button>
+        </Button>
       </div>
       <label className="block text-xs text-zinc-400">
         Subtitle text
-        <textarea
+        <Textarea
           aria-label="Subtitle text"
           rows={3}
           value={cue.text}
@@ -63,7 +65,7 @@ export default function LocalEditorSubtitleInspector({
       <div className="grid grid-cols-2 gap-2">
         <label className="text-xs text-zinc-400">
           Start (ms)
-          <input
+          <Input
             aria-label="Subtitle start"
             type="number"
             value={cue.startMs}
@@ -75,7 +77,7 @@ export default function LocalEditorSubtitleInspector({
         </label>
         <label className="text-xs text-zinc-400">
           End (ms)
-          <input
+          <Input
             aria-label="Subtitle end"
             type="number"
             value={cue.endMs}
@@ -92,13 +94,14 @@ export default function LocalEditorSubtitleInspector({
             Word timings
           </h4>
           {!wordTimings.length && (
-            <button
+            <Button
+              variant="ghost"
               type="button"
               onClick={createWordTimings}
               className="rounded-md border border-cyan-300/30 bg-cyan-400/10 px-2 py-1 text-[10px] font-semibold text-cyan-200 hover:bg-cyan-400/20"
             >
               Create word timings
-            </button>
+            </Button>
           )}
         </div>
         {wordTimings.length ? (
@@ -108,7 +111,7 @@ export default function LocalEditorSubtitleInspector({
                 key={`${word.startMs}-${index}`}
                 className="grid grid-cols-[minmax(0,1fr)_74px_74px] gap-1.5"
               >
-                <input
+                <Input
                   aria-label={`Word ${index + 1} text`}
                   value={word.text || ""}
                   onChange={(event) =>
@@ -116,7 +119,7 @@ export default function LocalEditorSubtitleInspector({
                   }
                   className="min-w-0 rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-white"
                 />
-                <input
+                <Input
                   aria-label={`Word ${index + 1} start`}
                   type="number"
                   value={word.startMs}
@@ -125,7 +128,7 @@ export default function LocalEditorSubtitleInspector({
                   }
                   className="rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-white"
                 />
-                <input
+                <Input
                   aria-label={`Word ${index + 1} end`}
                   type="number"
                   value={word.endMs}

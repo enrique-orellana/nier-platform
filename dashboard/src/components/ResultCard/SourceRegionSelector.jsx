@@ -1,4 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  NativeSelect,
+} from "../ui";
 
 const MIN_REGION_SIZE = 0.02;
 
@@ -235,31 +243,31 @@ export default function SourceRegionSelector({
   const lowerLabel = selectionLabel.toLowerCase();
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={`${regionTestId}-title`}
-    >
-      <div className="flex max-h-[95vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#121214] shadow-2xl">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showClose={false}
+        closeOnEscape={false}
+        closeOnInteractOutside={false}
+        className="flex w-[calc(100%-2rem)] max-w-5xl max-h-[95vh] flex-col gap-0 overflow-hidden rounded-2xl border-white/10 bg-[#121214] p-0"
+      >
         <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
           <div>
-            <h2
-              id={`${regionTestId}-title`}
-              className="text-lg font-semibold text-white"
-            >
+            <DialogTitle className="text-lg font-semibold text-white">
               {title}
-            </h2>
-            <p className="mt-1 text-xs text-zinc-400">{description}</p>
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-xs text-zinc-400">
+              {description}
+            </DialogDescription>
           </div>
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={onClose}
             aria-label={`Close ${lowerLabel} selector`}
             className="rounded-lg px-2 py-1 text-zinc-400 hover:bg-white/10 hover:text-white"
           >
             ×
-          </button>
+          </Button>
         </div>
         <div className="grid min-h-0 gap-5 overflow-y-auto p-5 lg:grid-cols-[minmax(0,1fr)_240px]">
           <div
@@ -328,7 +336,8 @@ export default function SourceRegionSelector({
                     onPointerDown={(event) => beginInteraction(event, "move")}
                   >
                     {["nw", "ne", "sw", "se"].map((handle) => (
-                      <button
+                      <Button
+                        variant="ghost"
                         key={handle}
                         type="button"
                         aria-label={`Resize ${lowerLabel} ${handle === "nw" ? "northwest" : handle === "ne" ? "northeast" : handle === "sw" ? "southwest" : "southeast"}`}
@@ -373,13 +382,14 @@ export default function SourceRegionSelector({
                     </div>
                   ))}
                 </dl>
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   onClick={() => setRegion(null)}
                   className="w-full rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
                 >
                   Reset selection
-                </button>
+                </Button>
               </>
             ) : (
               <p className="text-xs text-amber-300">
@@ -394,7 +404,7 @@ export default function SourceRegionSelector({
                 >
                   {panelSizeLabel}
                 </label>
-                <select
+                <NativeSelect
                   id={`${regionTestId}-panel-size`}
                   value={panelSize}
                   onChange={(event) => setPanelSize(event.target.value)}
@@ -405,7 +415,7 @@ export default function SourceRegionSelector({
                       {option.label}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
               </div>
             ) : null}
             {error && (
@@ -416,14 +426,16 @@ export default function SourceRegionSelector({
           </aside>
         </div>
         <div className="flex justify-end gap-3 border-t border-white/10 px-5 py-4">
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={onClose}
             className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-300 hover:bg-white/10"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             type="button"
             disabled={!canSave}
             onClick={() => {
@@ -437,9 +449,9 @@ export default function SourceRegionSelector({
             className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isSaving ? "Saving…" : `Save ${lowerLabel}`}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -4,6 +4,15 @@ import { getApiUrl } from "../config";
 import RemotionPreview from "./RemotionPreview";
 import { toClipGeneratorSubtitleStyle } from "./local-editor/localEditorStyles";
 import { useRenewableMediaUrl } from "../lib/videoUrls";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Input,
+  NativeSelect,
+  Textarea,
+} from "./ui";
 
 const FONT_OPTIONS = [
   { value: "Verdana", label: "Verdana" },
@@ -166,14 +175,20 @@ export default function SubtitleModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
-      <div className="bg-[#121214] border border-white/10 p-6 rounded-2xl w-full max-w-5xl shadow-2xl relative flex flex-col md:flex-row gap-6 max-h-[90vh]">
-        <button
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose?.()}>
+      <DialogContent
+        showClose={false}
+        closeOnEscape={false}
+        closeOnInteractOutside={false}
+        className="z-[100] flex w-full max-h-[90vh] max-w-5xl flex-col gap-6 rounded-2xl border border-white/10 bg-[#121214] p-6 shadow-2xl md:flex-row"
+      >
+        <Button
+          variant="ghost"
           onClick={onClose}
           className="absolute top-4 right-4 text-zinc-500 hover:text-white z-10"
         >
           <X size={20} />
-        </button>
+        </Button>
 
         {/* Left: Preview */}
         <div className="flex-1 flex flex-col items-center justify-center bg-black rounded-lg border border-white/5 overflow-hidden relative aspect-[9/16] max-h-[600px]">
@@ -218,9 +233,9 @@ export default function SubtitleModal({
 
         {/* Right: Controls */}
         <div className="w-full md:w-80 flex flex-col">
-          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2 shrink-0">
+          <DialogTitle className="mb-4 flex shrink-0 items-center gap-2 text-xl font-bold text-white">
             <Type className="text-primary" /> Auto Subtitles
-          </h3>
+          </DialogTitle>
 
           <div className="space-y-5 flex-1 overflow-y-auto custom-scrollbar pr-1">
             {/* Position Selector */}
@@ -230,13 +245,14 @@ export default function SubtitleModal({
               </label>
               <div className="grid grid-cols-3 gap-2">
                 {["top", "middle", "bottom"].map((pos) => (
-                  <button
+                  <Button
+                    variant="ghost"
                     key={pos}
                     onClick={() => setPosition(pos)}
                     className={`p-2 rounded-lg border text-center text-xs font-medium transition-all ${position === pos ? "bg-primary/20 border-primary text-white" : "bg-white/5 border-white/5 text-zinc-400 hover:bg-white/10"}`}
                   >
                     {pos.charAt(0).toUpperCase() + pos.slice(1)}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -248,13 +264,14 @@ export default function SubtitleModal({
               </label>
               <div className="grid grid-cols-2 gap-2">
                 {ANIMATION_OPTIONS.map((opt) => (
-                  <button
+                  <Button
+                    variant="ghost"
                     key={opt.value}
                     onClick={() => setAnimation(opt.value)}
                     className={`p-2 rounded-lg border text-center text-xs font-medium transition-all ${animation === opt.value ? "bg-primary/20 border-primary text-white" : "bg-white/5 border-white/5 text-zinc-400 hover:bg-white/10"}`}
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -262,7 +279,8 @@ export default function SubtitleModal({
             {/* Editable Transcript (collapsible) */}
             {useRemotionPreview && (
               <div>
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   onClick={() => setShowTextEditor(!showTextEditor)}
                   className="w-full flex items-center justify-between text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2"
@@ -273,9 +291,9 @@ export default function SubtitleModal({
                   >
                     ▾
                   </span>
-                </button>
+                </Button>
                 {showTextEditor && (
-                  <textarea
+                  <Textarea
                     value={editableText}
                     onChange={(e) => handleTextEdit(e.target.value)}
                     rows={5}
@@ -291,10 +309,10 @@ export default function SubtitleModal({
               <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 block">
                 Font
               </label>
-              <select
+              <NativeSelect
                 value={fontName}
                 onChange={(e) => setFontName(e.target.value)}
-                className="input-field"
+                className=""
               >
                 {FONT_OPTIONS.map((f) => (
                   <option
@@ -305,7 +323,7 @@ export default function SubtitleModal({
                     {f.label}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
 
             {/* Text Color */}
@@ -315,7 +333,8 @@ export default function SubtitleModal({
               </label>
               <div className="flex flex-wrap gap-2">
                 {COLOR_PRESETS.map((c) => (
-                  <button
+                  <Button
+                    variant="ghost"
                     key={c.color}
                     onClick={() => setFontColor(c.color)}
                     className={`w-7 h-7 rounded-full border-2 transition-all ${fontColor === c.color ? "border-white scale-110" : "border-white/20 hover:border-white/50"}`}
@@ -328,7 +347,7 @@ export default function SubtitleModal({
                   title="Custom color"
                 >
                   <span className="text-[10px] text-zinc-400">+</span>
-                  <input
+                  <Input
                     type="color"
                     value={fontColor}
                     onChange={(e) => setFontColor(e.target.value)}
@@ -351,7 +370,8 @@ export default function SubtitleModal({
                   { color: "#00BBFF", label: "Blue" },
                   { color: "#FF69B4", label: "Pink" },
                 ].map((c) => (
-                  <button
+                  <Button
+                    variant="ghost"
                     key={c.color}
                     onClick={() => setHighlightColor(c.color)}
                     className={`w-7 h-7 rounded-full border-2 transition-all ${highlightColor === c.color ? "border-white scale-110" : "border-white/20 hover:border-white/50"}`}
@@ -376,7 +396,7 @@ export default function SubtitleModal({
                     className="w-full h-full"
                     style={{ backgroundColor: borderColor }}
                   />
-                  <input
+                  <Input
                     type="color"
                     value={borderColor}
                     onChange={(e) => setBorderColor(e.target.value)}
@@ -384,7 +404,7 @@ export default function SubtitleModal({
                   />
                 </label>
                 <div className="flex-1">
-                  <input
+                  <Input
                     type="range"
                     min="0"
                     max="5"
@@ -407,7 +427,7 @@ export default function SubtitleModal({
                   Background Box
                 </label>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input
+                  <Input
                     type="checkbox"
                     checked={bgOpacity > 0}
                     onChange={(e) => setBgOpacity(e.target.checked ? 0.5 : 0)}
@@ -427,7 +447,7 @@ export default function SubtitleModal({
                         className="w-full h-full"
                         style={{ backgroundColor: bgColor }}
                       />
-                      <input
+                      <Input
                         type="color"
                         value={bgColor}
                         onChange={(e) => setBgColor(e.target.value)}
@@ -435,7 +455,7 @@ export default function SubtitleModal({
                       />
                     </label>
                     <div className="flex-1">
-                      <input
+                      <Input
                         type="range"
                         min="10"
                         max="100"
@@ -456,7 +476,8 @@ export default function SubtitleModal({
             </div>
           </div>
 
-          <button
+          <Button
+            variant="ghost"
             onClick={() =>
               onGenerate({
                 position,
@@ -480,9 +501,9 @@ export default function SubtitleModal({
               <Type size={20} />
             )}
             {isProcessing ? "Generating..." : "Generate Subtitles"}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

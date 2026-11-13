@@ -1,4 +1,5 @@
 import { LOCAL_EDITOR_FEATURES } from "./localEditorFeatures";
+import { Button } from "../ui";
 
 export default function LocalEditorFeatureRail({
   activeFeature = "details",
@@ -12,7 +13,8 @@ export default function LocalEditorFeatureRail({
       {LOCAL_EDITOR_FEATURES.map(({ id, label, title, icon: Icon }) => {
         const active = activeFeature === id;
         return (
-          <button
+          <Button
+            variant="ghost"
             key={id}
             type="button"
             aria-current={active ? "page" : undefined}
@@ -22,7 +24,7 @@ export default function LocalEditorFeatureRail({
           >
             <Icon size={16} aria-hidden="true" />
             <span>{label}</span>
-          </button>
+          </Button>
         );
       })}
     </nav>

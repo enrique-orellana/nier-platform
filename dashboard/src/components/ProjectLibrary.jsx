@@ -25,6 +25,14 @@ import { useRenewableMediaUrl } from "../lib/videoUrls";
 import { CLIP_WORKFLOW_STATUSES } from "./clipWorkflowStatuses";
 import ResultCard from "./ResultCard";
 import SourceTranscriptEditor from "./editor/SourceTranscriptEditor";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  Input,
+} from "./ui";
 
 const CLIP_RENDER_POLL_INTERVAL_MS = 2000;
 const CLIP_RENDER_STATUS_TIMEOUT_MS = 15000;
@@ -1177,7 +1185,8 @@ export default function ProjectLibrary({
         <div className="max-w-[1680px] mx-auto p-4 sm:p-5 pb-8 space-y-4">
           {/* Header Navigation */}
           <div className="flex items-center justify-between">
-            <button
+            <Button
+              variant="ghost"
               onClick={() => onBackToProjects?.()}
               className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group text-sm"
             >
@@ -1186,17 +1195,19 @@ export default function ProjectLibrary({
                 className="group-hover:-translate-x-1 transition-transform"
               />
               Back to Projects
-            </button>
+            </Button>
             <div className="flex items-center gap-2">
-              <button
+              <Button
+                variant="ghost"
                 onClick={handleOpenAudit}
                 aria-label="Open processing timeline"
                 title="Open processing timeline"
                 className="p-1.5 rounded-lg border border-amber-400/20 bg-amber-400/5 hover:bg-amber-400/15 text-amber-300 transition-colors"
               >
                 <Clock size={15} />
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={loadProjects}
                 className="px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-zinc-300 flex items-center gap-1.5 transition-colors"
               >
@@ -1205,14 +1216,15 @@ export default function ProjectLibrary({
                   className={isLoading ? "animate-spin" : ""}
                 />
                 Refresh
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={(e) => handleDeleteProject(e, selectedProject)}
                 className="px-2.5 py-1.5 rounded-lg border border-red-500/20 bg-red-500/5 hover:bg-red-500/20 text-xs text-red-400 flex items-center gap-1.5 transition-colors"
               >
                 <Trash2 size={13} />
                 Delete
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -1238,7 +1250,8 @@ export default function ProjectLibrary({
               {/* Metadata Badges Strip */}
               <div className="flex flex-wrap items-center gap-2 shrink-0">
                 {hasSourceMetadata && (
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     onClick={() => setIsSourceMetadataOpen(true)}
                     aria-label="View source details"
@@ -1254,7 +1267,7 @@ export default function ProjectLibrary({
                         Details
                       </span>
                     </div>
-                  </button>
+                  </Button>
                 )}
                 <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] shadow-sm">
                   <Film size={14} className="text-cyan-400 shrink-0" />
@@ -1351,7 +1364,8 @@ export default function ProjectLibrary({
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold text-white">Generated Clips</h3>
               <div className="flex items-center gap-2">
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   onClick={() => setSourceEditorOpen(true)}
                   disabled={!canEditFullVideo}
@@ -1364,7 +1378,7 @@ export default function ProjectLibrary({
                 >
                   <Film size={14} />
                   Edit full video
-                </button>
+                </Button>
                 {!canEditFullVideo && (
                   <span className="max-w-40 text-[10px] leading-4 text-zinc-500">
                     Full source video or duration unavailable
@@ -1378,7 +1392,8 @@ export default function ProjectLibrary({
 
             <div className="flex flex-wrap items-center justify-between gap-3 bg-white/[0.02] border border-white/5 p-3 rounded-2xl">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <button
+                <Button
+                  variant="ghost"
                   onClick={() => setStatusFilters([])}
                   aria-pressed={statusFilters.length === 0}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
@@ -1388,13 +1403,14 @@ export default function ProjectLibrary({
                   }`}
                 >
                   All ({normalizedProjectClips.length})
-                </button>
+                </Button>
                 {CLIP_WORKFLOW_STATUSES.map(({ value, label }) => {
                   const count = normalizedProjectClips.filter(
                     (clip, idx) => statusForClip(clip, idx) === value,
                   ).length;
                   return (
-                    <button
+                    <Button
+                      variant="ghost"
                       key={value}
                       onClick={() =>
                         setStatusFilters((current) =>
@@ -1411,7 +1427,7 @@ export default function ProjectLibrary({
                       }`}
                     >
                       {label} ({count})
-                    </button>
+                    </Button>
                   );
                 })}
               </div>
@@ -1515,42 +1531,36 @@ export default function ProjectLibrary({
           </div>
         </div>
         {isSourceMetadataOpen && sourceMetadata && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-            <button
-              type="button"
-              aria-label="Close source details"
-              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-              onClick={() => setIsSourceMetadataOpen(false)}
-            />
-            <section
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="source-details-title"
-              className="relative flex max-h-[min(90vh,900px)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#101216] shadow-2xl"
+          <Dialog
+            open={isSourceMetadataOpen}
+            onOpenChange={(open) => !open && setIsSourceMetadataOpen(false)}
+          >
+            <DialogContent
+              showClose={false}
+              closeOnEscape={false}
+              className="flex w-[calc(100%-2rem)] max-w-4xl max-h-[min(90vh,900px)] flex-col gap-0 overflow-hidden rounded-2xl border-cyan-400/20 bg-[#101216] p-0"
             >
               <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 bg-gradient-to-r from-cyan-400/[0.08] to-transparent p-5">
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-300">
                     Source metadata
                   </p>
-                  <h2
-                    id="source-details-title"
-                    className="mt-1 truncate text-xl font-bold text-white"
-                  >
+                  <DialogTitle className="mt-1 truncate text-xl font-bold text-white">
                     Source details
-                  </h2>
-                  <p className="mt-1 text-xs text-zinc-500">
+                  </DialogTitle>
+                  <DialogDescription className="mt-1 text-xs text-zinc-500">
                     Complete information from the original source.
-                  </p>
+                  </DialogDescription>
                 </div>
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   onClick={() => setIsSourceMetadataOpen(false)}
                   aria-label="Close source details"
                   className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
                 >
                   <X size={18} />
-                </button>
+                </Button>
               </div>
 
               <div className="min-h-0 space-y-5 overflow-y-auto p-5">
@@ -1702,39 +1712,35 @@ export default function ProjectLibrary({
                   ))}
                 </div>
               </div>
-            </section>
-          </div>
+            </DialogContent>
+          </Dialog>
         )}
         {isAuditOpen && (
-          <div className="fixed inset-0 z-50" role="presentation">
-            <button
-              aria-label="Close processing timeline"
-              className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
-              onClick={() => setIsAuditOpen(false)}
-            />
-            <aside
-              className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col overflow-hidden border-l border-white/10 bg-[#101216] shadow-2xl"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="processing-timeline-title"
+          <Dialog
+            open={isAuditOpen}
+            onOpenChange={(open) => !open && setIsAuditOpen(false)}
+          >
+            <DialogContent
+              showClose={false}
+              closeOnEscape={false}
+              overlayClassName="bg-black/60 backdrop-blur-[2px]"
+              className="fixed left-auto right-0 top-0 flex h-full w-full max-w-xl translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-l border-white/10 bg-[#101216] p-0 shadow-2xl"
             >
               <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 bg-[#101216] p-5">
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">
                     Run auditor
                   </p>
-                  <h2
-                    id="processing-timeline-title"
-                    className="mt-1 text-xl font-bold text-white"
-                  >
+                  <DialogTitle className="mt-1 text-xl font-bold text-white">
                     Processing timeline
-                  </h2>
-                  <p className="mt-1 max-w-sm truncate font-mono text-[11px] text-zinc-500">
+                  </DialogTitle>
+                  <DialogDescription className="mt-1 max-w-sm truncate font-mono text-[11px] text-zinc-500">
                     {selectedProjectId}
-                  </p>
+                  </DialogDescription>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button
+                  <Button
+                    variant="ghost"
                     onClick={() => loadProjectAudit(selectedProject)}
                     aria-label="Refresh processing timeline"
                     title="Refresh timeline"
@@ -1744,14 +1750,15 @@ export default function ProjectLibrary({
                       size={16}
                       className={isLoadingAudit ? "animate-spin" : ""}
                     />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     onClick={() => setIsAuditOpen(false)}
                     aria-label="Close processing timeline"
                     className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
                   >
                     <X size={18} />
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -1918,8 +1925,8 @@ export default function ProjectLibrary({
                   </div>
                 )}
               </div>
-            </aside>
-          </div>
+            </DialogContent>
+          </Dialog>
         )}
       </div>
     );
@@ -1946,13 +1953,14 @@ export default function ProjectLibrary({
             </div>
           </div>
 
-          <button
+          <Button
+            variant="ghost"
             onClick={loadProjects}
             className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm text-zinc-300 flex items-center gap-2 transition-colors"
           >
             <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
             Refresh
-          </button>
+          </Button>
         </div>
 
         <div className="glass-panel p-4 flex flex-col md:flex-row md:items-center gap-3">
@@ -1960,12 +1968,12 @@ export default function ProjectLibrary({
             <Search size={14} />
             <span className="text-xs uppercase tracking-widest">Search</span>
           </div>
-          <input
+          <Input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search projects..."
-            className="input-field flex-1 text-sm"
+            className="flex-1 text-sm"
           />
         </div>
 
@@ -2028,13 +2036,14 @@ export default function ProjectLibrary({
                         <FolderOpen size={32} />
                       </div>
                     )}
-                    <button
+                    <Button
+                      variant="ghost"
                       onClick={(e) => handleDeleteProject(e, project)}
                       className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-zinc-400 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 z-10"
                       title="Delete Project"
                     >
                       <Trash2 size={14} />
-                    </button>
+                    </Button>
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <span className="text-xs font-bold text-white bg-cyan-500 px-3 py-1.5 rounded-full shadow-xl">
                         VIEW CLIPS

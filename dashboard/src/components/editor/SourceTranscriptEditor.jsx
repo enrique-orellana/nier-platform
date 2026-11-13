@@ -11,6 +11,7 @@ import {
   applySourceEditorCues,
   transcriptToSourceEditorState,
 } from "./sourceTranscriptEditorState";
+import { Button } from "../ui";
 
 const readClipSubtitleStyle = async (projectId, signal) => {
   const fallbackStyle = normalizeSubtitleStyle(DEFAULT_SUBTITLE_STYLE);
@@ -206,7 +207,8 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
   }, [editorState, projectId, saving, source]);
 
   const saveAction = (
-    <button
+    <Button
+      variant="ghost"
       type="button"
       onClick={saveTranscript}
       disabled={!isDirty || saving}
@@ -218,7 +220,7 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
         <Save size={13} />
       )}
       {saving ? "Saving…" : "Save subtitles to clips"}
-    </button>
+    </Button>
   );
 
   return (
@@ -233,14 +235,15 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
             cuts stay unchanged.
           </p>
         </div>
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={onClose}
           aria-label="Close full source editor"
           className="ml-3 rounded-md p-2 text-zinc-400 hover:bg-white/10 hover:text-white"
         >
           <X size={16} />
-        </button>
+        </Button>
       </div>
 
       {error && (

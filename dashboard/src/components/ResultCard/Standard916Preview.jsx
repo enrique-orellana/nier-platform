@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Plus, RotateCcw, X } from "lucide-react";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "../ui";
 
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 2;
@@ -137,30 +144,32 @@ export default function Standard916Preview({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Standard 9:16 gameplay preview"
-    >
-      <div className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#121214] shadow-2xl">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showClose={false}
+        closeOnEscape={false}
+        closeOnInteractOutside={false}
+        overlayClassName="bg-black/80 backdrop-blur-sm"
+        className="flex w-[calc(100%-2rem)] max-w-3xl max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden rounded-2xl border-white/10 bg-[#121214] p-0"
+      >
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div>
-            <h2 className="text-sm font-bold text-white">
+            <DialogTitle className="text-sm font-bold text-white">
               Standard 9:16 Preview
-            </h2>
-            <p className="text-[11px] text-zinc-500">
+            </DialogTitle>
+            <DialogDescription className="text-[11px] text-zinc-500">
               Adjust the gameplay framing, then save it for the final render.
-            </p>
+            </DialogDescription>
           </div>
-          <button
+          <Button
+            variant="ghost"
             type="button"
             aria-label="Close preview"
             onClick={onClose}
             className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
           >
             <X size={18} />
-          </button>
+          </Button>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col items-center gap-3 overflow-auto p-4">
@@ -191,7 +200,8 @@ export default function Standard916Preview({
           </div>
 
           <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-2">
-            <button
+            <Button
+              variant="ghost"
               type="button"
               aria-label="Zoom out"
               onClick={() => changeZoom(-ZOOM_STEP)}
@@ -199,11 +209,12 @@ export default function Standard916Preview({
               className="rounded-lg p-2 text-zinc-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Minus size={16} />
-            </button>
+            </Button>
             <span className="min-w-12 text-center text-xs font-semibold text-white">
               {Math.round(zoom * 100)}%
             </span>
-            <button
+            <Button
+              variant="ghost"
               type="button"
               aria-label="Zoom in"
               onClick={() => changeZoom(ZOOM_STEP)}
@@ -211,8 +222,9 @@ export default function Standard916Preview({
               className="rounded-lg p-2 text-zinc-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Plus size={16} />
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
               type="button"
               aria-label="Reset zoom"
               onClick={() => setZoom(1)}
@@ -220,9 +232,10 @@ export default function Standard916Preview({
               className="ml-1 rounded-lg p-2 text-zinc-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <RotateCcw size={15} />
-            </button>
+            </Button>
             {onSaveZoom && (
-              <button
+              <Button
+                variant="ghost"
                 type="button"
                 aria-label="Save zoom"
                 onClick={handleSaveZoom}
@@ -230,12 +243,12 @@ export default function Standard916Preview({
                 className="ml-1 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-200 transition-colors hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSavingZoom ? "Saving…" : "Save zoom"}
-              </button>
+              </Button>
             )}
           </div>
           {saveError && <p className="text-xs text-red-300">{saveError}</p>}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

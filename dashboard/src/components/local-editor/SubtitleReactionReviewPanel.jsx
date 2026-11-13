@@ -7,6 +7,7 @@ import {
   SUBTITLE_REACTION_SPACING_MIN,
   normalizeSubtitleReactionStyle,
 } from "./subtitleReactions";
+import { Button, Input, NativeSelect } from "../ui";
 
 const formatCueTime = (milliseconds) => {
   const seconds = Math.max(0, Number(milliseconds) || 0) / 1000;
@@ -35,18 +36,19 @@ const ReactionReviewRow = ({ suggestion, onChange }) => {
             {formatCueTime(suggestion.endMs)}
           </p>
         </div>
-        <button
+        <Button
+          variant="ghost"
           type="button"
           aria-label={`${suggestion.enabled ? "Remove" : "Enable"} reaction for ${suggestion.text || "cue"}`}
           onClick={() => update({ enabled: !suggestion.enabled })}
           className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[10px] font-semibold text-zinc-300 hover:border-violet-300/40 hover:text-violet-200"
         >
           {suggestion.enabled ? "Remove" : "Enable"}
-        </button>
+        </Button>
       </div>
       <label className="mt-3 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
         Emoji reaction
-        <input
+        <Input
           aria-label={`Emoji reaction for ${suggestion.text || "cue"}`}
           value={(suggestion.emojis || []).join(" ")}
           onChange={(event) =>
@@ -58,7 +60,7 @@ const ReactionReviewRow = ({ suggestion, onChange }) => {
                 .slice(0, 2),
             })
           }
-          className="input-field mt-1.5 text-lg"
+          className="mt-1.5 text-lg"
           disabled={!suggestion.enabled}
         />
       </label>
@@ -75,36 +77,36 @@ const ReactionStyleControls = ({ value, onChange }) => {
       <div className="grid grid-cols-2 gap-2">
         <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
           Position
-          <select
+          <NativeSelect
             aria-label="Reaction position"
             value={current.position}
             onChange={(event) => update("position", event.target.value)}
-            className="input-field mt-1.5 text-xs"
+            className="mt-1.5 text-xs"
           >
             <option value="above">Above</option>
             <option value="left">Left</option>
             <option value="right">Right</option>
-          </select>
+          </NativeSelect>
         </label>
         <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
           Animation
-          <select
+          <NativeSelect
             aria-label="Reaction animation"
             value={current.animation}
             onChange={(event) => update("animation", event.target.value)}
-            className="input-field mt-1.5 text-xs"
+            className="mt-1.5 text-xs"
           >
             <option value="pop">Pop</option>
             <option value="shake">Shake</option>
             <option value="fade">Fade</option>
-          </select>
+          </NativeSelect>
         </label>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
           Size relative to text
           <div className="mt-1.5 flex items-center gap-2">
-            <input
+            <Input
               aria-label="Reaction size"
               type="range"
               min={SUBTITLE_REACTION_SCALE_MIN}
@@ -122,7 +124,7 @@ const ReactionStyleControls = ({ value, onChange }) => {
         <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
           Spacing
           <div className="mt-1.5 flex items-center gap-2">
-            <input
+            <Input
               aria-label="Reaction spacing"
               type="range"
               min={SUBTITLE_REACTION_SPACING_MIN}
@@ -217,21 +219,24 @@ export default function SubtitleReactionReviewPanel({
         onChange={onStyleChange || (() => {})}
       />
       <div className="flex gap-2 border-t border-white/10 pt-3">
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={onRetry}
           className="rounded-md border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-300 hover:border-violet-300/40 hover:text-violet-200"
         >
           Retry
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           type="button"
           onClick={onClose}
           className="ml-auto rounded-md border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-300 hover:border-white/25"
         >
           Cancel
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           type="button"
           onClick={() =>
             onApply?.(enabled, normalizeSubtitleReactionStyle(style))
@@ -240,7 +245,7 @@ export default function SubtitleReactionReviewPanel({
           className="rounded-md bg-violet-500 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Apply reactions
-        </button>
+        </Button>
       </div>
     </div>
   );

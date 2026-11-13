@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Database, Upload, FileVideo, X } from "lucide-react";
 import MinioObjectPicker from "./MinioObjectPicker";
 import { SUBTITLE_LANGUAGES } from "./subtitleLanguages";
+import { Button, Input, NativeSelect } from "./ui";
 
 export default function MediaInput({
   onProcess,
@@ -58,7 +59,8 @@ export default function MediaInput({
   return (
     <div className="bg-surface border border-white/5 rounded-2xl p-6 animate-[fadeIn_0.6s_ease-out]">
       <div className="flex gap-4 mb-6 border-b border-white/5 pb-4">
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={() => setMode("minio")}
           className={`flex items-center gap-2 pb-2 px-2 transition-all ${
@@ -69,8 +71,9 @@ export default function MediaInput({
         >
           <Database size={18} />
           Select from MinIO
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           type="button"
           onClick={() => setMode("file")}
           className={`flex items-center gap-2 pb-2 px-2 transition-all ${
@@ -81,7 +84,7 @@ export default function MediaInput({
         >
           <Upload size={18} />
           Upload File
-        </button>
+        </Button>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -104,17 +107,18 @@ export default function MediaInput({
               <div className="flex items-center justify-center gap-3 text-white">
                 <FileVideo className="text-primary" />
                 <span className="font-medium">{file.name}</span>
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   onClick={() => setFile(null)}
                   className="p-1 hover:bg-white/10 rounded-full"
                 >
                   <X size={16} />
-                </button>
+                </Button>
               </div>
             ) : (
               <label className="cursor-pointer block">
-                <input
+                <Input
                   type="file"
                   accept="video/*"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
@@ -142,13 +146,13 @@ export default function MediaInput({
               (optional)
             </span>
           </label>
-          <input
+          <Input
             id="original-source-url"
             type="url"
             value={sourceUrl}
             onChange={(e) => setSourceUrl(e.target.value)}
             placeholder="https://www.twitch.tv/videos/2842570758"
-            className="input-field"
+            className=""
           />
           <p className="text-xs text-zinc-500">
             Add the original YouTube or Twitch page so the AI can research the
@@ -165,12 +169,12 @@ export default function MediaInput({
           >
             Transcription source language
           </label>
-          <select
+          <NativeSelect
             id="transcription-source-language"
             aria-label="Transcription source language"
             value={transcriptionLanguage}
             onChange={(e) => setTranscriptionLanguage(e.target.value)}
-            className="input-field mt-2"
+            className="mt-2"
           >
             <option value="auto">Auto-detect</option>
             {Object.entries(SUBTITLE_LANGUAGES).map(([code, label]) => (
@@ -178,7 +182,7 @@ export default function MediaInput({
                 {label}
               </option>
             ))}
-          </select>
+          </NativeSelect>
           <p className="mt-2 text-xs text-zinc-500">
             Choose the spoken language to keep the transcript in its original
             language for this generation only.
@@ -192,15 +196,15 @@ export default function MediaInput({
           >
             Video format
           </label>
-          <select
+          <NativeSelect
             id="video-format"
             value={layoutFormat}
             onChange={(e) => setLayoutFormat(e.target.value)}
-            className="input-field mt-2"
+            className="mt-2"
           >
             <option value="standard">Standard 9:16</option>
             <option value="streamer_stack">Streamer Stack</option>
-          </select>
+          </NativeSelect>
           {layoutFormat === "streamer_stack" && (
             <>
               <label
@@ -209,16 +213,16 @@ export default function MediaInput({
               >
                 Facecam size
               </label>
-              <select
+              <NativeSelect
                 id="facecam-size"
                 value={facecamSize}
                 onChange={(e) => setFacecamSize(e.target.value)}
-                className="input-field mt-2"
+                className="mt-2"
               >
                 <option value="small">Small</option>
                 <option value="medium">Medium</option>
                 <option value="large">Large</option>
-              </select>
+              </NativeSelect>
             </>
           )}
         </div>
@@ -230,17 +234,17 @@ export default function MediaInput({
               {targetClipCount} clips
             </span>
           </label>
-          <select
+          <NativeSelect
             value={targetClipCount}
             onChange={(e) => onTargetClipCountChange(Number(e.target.value))}
-            className="input-field"
+            className=""
           >
             {Array.from({ length: 13 }, (_, i) => i + 3).map((count) => (
               <option key={count} value={count}>
                 {count} clips
               </option>
             ))}
-          </select>
+          </NativeSelect>
           <p className="mt-2 text-xs text-zinc-500">
             The model will aim for this many viral moments. Longer videos can
             still return fewer if the content is weak.
@@ -248,7 +252,7 @@ export default function MediaInput({
         </div>
 
         <label className="flex items-start gap-2 mt-5 text-xs text-zinc-400 cursor-pointer select-none">
-          <input
+          <Input
             type="checkbox"
             checked={acknowledged}
             onChange={(e) => setAcknowledged(e.target.checked)}
@@ -270,7 +274,8 @@ export default function MediaInput({
           </span>
         </label>
 
-        <button
+        <Button
+          variant="default"
           type="submit"
           disabled={
             isProcessing ||
@@ -278,7 +283,7 @@ export default function MediaInput({
             (mode === "minio" && !selectedObject) ||
             (mode === "file" && !file)
           }
-          className="w-full btn-primary mt-4 flex items-center justify-center gap-2"
+          className="w-full mt-4 flex items-center justify-center gap-2"
         >
           {isProcessing ? (
             <>
@@ -288,7 +293,7 @@ export default function MediaInput({
           ) : (
             <>Generate Clips</>
           )}
-        </button>
+        </Button>
       </form>
     </div>
   );

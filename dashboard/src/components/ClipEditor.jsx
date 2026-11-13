@@ -8,6 +8,7 @@ import HookInspector from "./editor/HookInspector";
 import SubtitleCueInspector from "./editor/SubtitleCueInspector";
 import VersionHistory from "./editor/VersionHistory";
 import { makeEditorDraft, msToFrame } from "../editor/timelineModel";
+import { Button } from "./ui";
 
 const normalizeTracks = (manifest) => {
   const tracks = manifest?.subtitle_tracks || [];
@@ -318,9 +319,13 @@ export default function ClipEditor({
               Edits are saved as immutable versions
             </p>
           </div>
-          <button onClick={onClose} className="text-zinc-400 hover:text-white">
+          <Button
+            variant="ghost"
+            onClick={onClose}
+            className="text-zinc-400 hover:text-white"
+          >
             <X />
-          </button>
+          </Button>
         </header>
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto p-4 lg:grid-cols-[1fr_280px]">
           <main className="min-w-0 space-y-4">
@@ -371,14 +376,15 @@ export default function ClipEditor({
             <section className="rounded-xl border border-white/10 p-3">
               <div className="mb-2 flex items-center justify-between text-xs font-semibold text-zinc-300">
                 <span>Version history</span>
-                <button
+                <Button
+                  variant="ghost"
                   onClick={() =>
                     selectedVersion && branch(selectedVersion.version_id)
                   }
                   className="text-cyan-300"
                 >
                   <GitBranch size={14} />
-                </button>
+                </Button>
               </div>
               <VersionHistory
                 versions={versions}
@@ -414,15 +420,17 @@ export default function ClipEditor({
         <footer className="flex items-center justify-between border-t border-white/10 px-5 py-3">
           <span className="text-xs text-red-300">{error}</span>
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="ghost"
               onClick={() =>
                 selectedVersion && loadVersion(selectedVersion.version_id)
               }
               className="rounded-lg px-4 py-2 text-xs text-zinc-300"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
               onClick={saveVersion}
               disabled={busy || !selectedVersion}
               className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white"
@@ -433,7 +441,7 @@ export default function ClipEditor({
                 <Save size={14} />
               )}{" "}
               Save as new version
-            </button>
+            </Button>
           </div>
         </footer>
       </div>

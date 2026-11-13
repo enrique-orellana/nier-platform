@@ -2,6 +2,7 @@ import React from "react";
 import { Clock, Hash } from "lucide-react";
 import { CLIP_WORKFLOW_STATUSES } from "./clipWorkflowStatuses";
 import { formatClock } from "./local-editor/localEditorExport";
+import { Badge, NativeSelect } from "./ui";
 
 const formatSourceTime = (seconds, fps = 30) =>
   formatClock(Math.max(0, Number(seconds) || 0) * 1000, fps);
@@ -100,13 +101,14 @@ export default function ClipWorkflowStatus({
 
       {/* 3. Clip Status Tag & Select Dropdown Row (placed BELOW the title and metadata) */}
       <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-white/[0.06] min-w-0">
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider shrink-0 ${currentDefinition.className}`}
+        <Badge
+          variant="outline"
+          className={`gap-1.5 rounded-md px-2 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider shrink-0 ${currentDefinition.className}`}
         >
           <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
           <span className="truncate">{currentDefinition.label}</span>
-        </span>
-        <select
+        </Badge>
+        <NativeSelect
           aria-label="Clip status"
           value={currentStatus}
           disabled={saving}
@@ -122,7 +124,7 @@ export default function ClipWorkflowStatus({
               {item.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
     </div>
   );

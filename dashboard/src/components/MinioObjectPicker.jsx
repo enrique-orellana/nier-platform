@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Check, Database, RefreshCw, Search } from "lucide-react";
 import { getApiUrl } from "../config";
+import { Button, Input } from "./ui";
 
 const formatBytes = (value) => {
   const size = Number(value || 0);
@@ -73,13 +74,13 @@ export default function MinioObjectPicker({ selected, onSelect }) {
           size={17}
           className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
         />
-        <input
+        <Input
           type="search"
           aria-label="Search MinIO objects"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search objects by name or path"
-          className="input-field pl-10"
+          className="pl-10"
         />
       </div>
 
@@ -90,13 +91,14 @@ export default function MinioObjectPicker({ selected, onSelect }) {
       {!loading && error && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
           <p>Could not load MinIO objects: {error}</p>
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={() => setReloadToken((value) => value + 1)}
             className="mt-3 inline-flex items-center gap-2 text-red-100 underline"
           >
             <RefreshCw size={14} /> Retry
-          </button>
+          </Button>
         </div>
       )}
 
@@ -111,7 +113,8 @@ export default function MinioObjectPicker({ selected, onSelect }) {
           {objects.map((object) => {
             const isSelected = object.key === selectedKey;
             return (
-              <button
+              <Button
+                variant="ghost"
                 key={object.key}
                 type="button"
                 aria-label={`Select ${object.name || object.key}`}
@@ -133,7 +136,7 @@ export default function MinioObjectPicker({ selected, onSelect }) {
                   <span>{formatBytes(object.size)}</span>
                   <span>{formatDate(object.last_modified)}</span>
                 </div>
-              </button>
+              </Button>
             );
           })}
         </div>

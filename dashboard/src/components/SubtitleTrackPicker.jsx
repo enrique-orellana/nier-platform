@@ -1,4 +1,5 @@
 import { Trash2 } from "lucide-react";
+import { Button } from "./ui";
 
 export default function SubtitleTrackPicker({
   tracks = [],
@@ -17,7 +18,8 @@ export default function SubtitleTrackPicker({
           key={track.id}
           className="flex items-stretch overflow-hidden rounded-lg"
         >
-          <button
+          <Button
+            variant="ghost"
             type="button"
             role="option"
             aria-selected={track.id === activeTrackId}
@@ -29,9 +31,10 @@ export default function SubtitleTrackPicker({
             }`}
           >
             {track.label || track.language}
-          </button>
+          </Button>
           {track.origin === "translation" && onRemove && (
-            <button
+            <Button
+              variant="ghost"
               type="button"
               aria-label={`Delete ${track.label || track.language} translation`}
               title={`Delete ${track.label || track.language} translation`}
@@ -39,7 +42,7 @@ export default function SubtitleTrackPicker({
               className="border-y border-r border-red-400/20 bg-red-500/10 px-2 text-red-300 transition-colors hover:bg-red-500/20 hover:text-red-200"
             >
               <Trash2 size={13} />
-            </button>
+            </Button>
           )}
         </div>
       ))}

@@ -9,6 +9,7 @@ import {
   Type,
   Wand2,
 } from "lucide-react";
+import { Button } from "../ui";
 
 const actionButton =
   "flex min-w-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60";
@@ -47,7 +48,8 @@ export default function EditorActionToolbar({
         </div>
       )}
       <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={onAutoEdit}
           disabled={isEditing}
@@ -59,8 +61,9 @@ export default function EditorActionToolbar({
             <Wand2 size={14} />
           )}
           {isEditing ? "Editing…" : "Auto Edit"}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           type="button"
           onClick={onConvertNativeShort}
           disabled={isConvertingNativeShort}
@@ -72,8 +75,9 @@ export default function EditorActionToolbar({
             <Crop size={14} />
           )}
           {isConvertingNativeShort ? "Converting…" : "Convert to Native Short"}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           type="button"
           onClick={onSubtitles}
           disabled={isSubtitling}
@@ -85,8 +89,9 @@ export default function EditorActionToolbar({
             <Type size={14} />
           )}
           {isSubtitling ? "Adding…" : "Subtitles"}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           type="button"
           onClick={onViralHook}
           disabled={isHooking}
@@ -98,8 +103,9 @@ export default function EditorActionToolbar({
             <Wand2 size={14} />
           )}
           {isHooking ? "Adding…" : "Viral Hook"}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           type="button"
           onClick={onDubVoice}
           disabled={isTranslating}
@@ -111,21 +117,23 @@ export default function EditorActionToolbar({
             <Languages size={14} />
           )}
           {isTranslating ? "Translating…" : "Dub Voice"}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           type="button"
           onClick={onPost}
           className={`${actionButton} bg-primary hover:bg-blue-600`}
         >
           <Share2 size={14} /> Post
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           type="button"
           onClick={onDownload}
           className={`${actionButton} border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-white`}
         >
           <Download size={14} /> Download
-        </button>
+        </Button>
       </div>
     </div>
   );

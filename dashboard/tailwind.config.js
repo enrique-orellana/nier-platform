@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+import tailwindcssAnimate from "tailwindcss-animate";
+
 export default {
   content: [
     "./index.html",
@@ -11,11 +13,26 @@ export default {
         inter: ['Inter', 'sans-serif'],
       },
       colors: {
-        background: "#080c14",
-        surface: "#101623",
-        surfaceLight: "#1a2333",
-        primary: "#0ea5e9", // vibrant cyan-blue
-        accent: "#a855f7", // vibrant purple
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring) / <alpha-value>)",
+        background: "hsl(var(--background) / <alpha-value>)",
+        foreground: "hsl(var(--foreground) / <alpha-value>)",
+        surface: "hsl(var(--surface) / <alpha-value>)",
+        surfaceLight: "hsl(var(--surface-light) / <alpha-value>)",
+        primary: "hsl(var(--primary) / <alpha-value>)",
+        "primary-foreground": "hsl(var(--primary-foreground) / <alpha-value>)",
+        secondary: "hsl(var(--secondary) / <alpha-value>)",
+        "secondary-foreground": "hsl(var(--secondary-foreground) / <alpha-value>)",
+        muted: "hsl(var(--muted) / <alpha-value>)",
+        "muted-foreground": "hsl(var(--muted-foreground) / <alpha-value>)",
+        accent: "hsl(var(--accent) / <alpha-value>)",
+        "accent-foreground": "hsl(var(--accent-foreground) / <alpha-value>)",
+        destructive: "hsl(var(--destructive) / <alpha-value>)",
+        card: "hsl(var(--card) / <alpha-value>)",
+        "card-foreground": "hsl(var(--card-foreground) / <alpha-value>)",
+        popover: "hsl(var(--popover) / <alpha-value>)",
+        "popover-foreground": "hsl(var(--popover-foreground) / <alpha-value>)",
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
@@ -37,5 +54,5 @@ export default {
       }
     },
   },
-  plugins: [],
+  plugins: [tailwindcssAnimate],
 }

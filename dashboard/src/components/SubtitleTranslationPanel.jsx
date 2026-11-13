@@ -3,6 +3,7 @@ import { Languages, Loader2 } from "lucide-react";
 import { getApiUrl } from "../config";
 import SubtitleTrackPicker from "./SubtitleTrackPicker";
 import { SUBTITLE_LANGUAGES } from "./subtitleLanguages";
+import { Button, NativeSelect } from "./ui";
 
 const LANGUAGES = SUBTITLE_LANGUAGES;
 
@@ -133,7 +134,7 @@ export default function SubtitleTranslationPanel({
           >
             Target Language
           </label>
-          <select
+          <NativeSelect
             id="target-language"
             value={targetLanguage}
             onChange={(event) => setTargetLanguage(event.target.value)}
@@ -163,10 +164,11 @@ export default function SubtitleTranslationPanel({
                 </option>
               );
             })}
-          </select>
+          </NativeSelect>
         </div>
 
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={translate}
           disabled={
@@ -188,7 +190,7 @@ export default function SubtitleTranslationPanel({
             )}
             <span>Translate Track</span>
           </div>
-        </button>
+        </Button>
 
         {error && (
           <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 mt-4">

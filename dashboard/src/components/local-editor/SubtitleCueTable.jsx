@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { Trash2 } from "lucide-react";
 import { formatClock } from "./localEditorExport";
+import { Button, Input } from "../ui";
 
 const formatTimecode = (value, fps) => formatClock(value, fps);
 
@@ -49,7 +50,7 @@ function CueTimeInput({ cue, field, value, fps, onCommit }) {
   const [draft, setDraft] = useState(formatTimecode(value, fps));
   useEffect(() => setDraft(formatTimecode(value, fps)), [fps, value]);
   return (
-    <input
+    <Input
       aria-label={`Subtitle cue ${field} ${cue.id}`}
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
@@ -69,7 +70,7 @@ function CueTextInput({ cue, onCommit }) {
   const [draft, setDraft] = useState(cue.text || "");
   useEffect(() => setDraft(cue.text || ""), [cue.text]);
   return (
-    <input
+    <Input
       aria-label={`Subtitle cue text ${cue.id}`}
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
@@ -231,7 +232,8 @@ export default function SubtitleCueTable({
                         </span>
                       )}
                       {onDelete && (
-                        <button
+                        <Button
+                          variant="ghost"
                           type="button"
                           aria-label={`Delete subtitle cue ${cue.id}`}
                           title="Delete subtitle cue"
@@ -242,7 +244,7 @@ export default function SubtitleCueTable({
                           className="mr-2 shrink-0 rounded p-1 text-zinc-400 hover:bg-red-500/15 hover:text-red-200"
                         >
                           <Trash2 size={14} />
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </td>

@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import { moveCue, resizeCue } from "../../editor/timelineModel";
+import { Button } from "../ui";
 
 export default function TimelineCue({
   cue,
@@ -44,12 +45,14 @@ export default function TimelineCue({
       style={{ left, width, background: color }}
     >
       <span className="pointer-events-none">{cue.text || "Hook"}</span>
-      <button
+      <Button
+        variant="ghost"
         aria-label="resize start"
         className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 hover:opacity-100"
         onPointerDown={(e) => drag(e, "start")}
       />
-      <button
+      <Button
+        variant="ghost"
         aria-label="resize end"
         className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 hover:opacity-100"
         onPointerDown={(e) => drag(e, "end")}

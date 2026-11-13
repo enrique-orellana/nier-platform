@@ -3,6 +3,7 @@ import StateManager from "@designcombo/state";
 import { moveCue, resizeCue } from "../../editor/timelineModel";
 import TrackControls from "./TrackControls";
 import { formatClock } from "../local-editor/localEditorExport";
+import { Input } from "../ui";
 
 const colors = {
   video: "#2563eb",
@@ -184,7 +185,7 @@ export default function DesignComboTimeline({
         }}
       >
         {isEditing ? (
-          <input
+          <Input
             autoFocus
             aria-label={`Edit subtitle ${label}`}
             value={draftText}

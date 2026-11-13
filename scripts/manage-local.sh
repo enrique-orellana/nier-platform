@@ -245,9 +245,13 @@ wait_for_renderer_from_backend() {
 }
 
 start_components() {
+  local -a compose_args=(up -d --force-recreate --remove-orphans)
   ensure_data_directories
   printf 'Starting selected services: %s\n' "${compose_services[*]}"
-  compose up -d --force-recreate --remove-orphans "${compose_services[@]}"
+  if [[ "$needs_frontend" -eq 1 ]]; then
+    compose_args+=(--renew-anon-volumes)
+  fi
+  compose "${compose_args[@]}" "${compose_services[@]}"
   if [[ "$needs_renderer" -eq 1 ]]; then
     wait_for_renderer_from_backend
   fi

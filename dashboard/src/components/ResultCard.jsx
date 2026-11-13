@@ -37,6 +37,7 @@ import PostModal from "./ResultCard/PostModal";
 import ClipSourceRangeEditor from "./ResultCard/ClipSourceRangeEditor";
 import SubtitleDetailsModal from "./ResultCard/SubtitleDetailsModal";
 import ClipControlsModal from "./ResultCard/ClipControlsModal";
+import { Button } from "./ui";
 
 export default function ResultCard({
   clip,
@@ -769,7 +770,8 @@ export default function ResultCard({
         />
 
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={() =>
               onEditorOpen ? onEditorOpen() : setShowControlsModal(true)
@@ -781,15 +783,16 @@ export default function ResultCard({
               className="group-hover/btn:scale-110 transition-transform text-cyan-400 shrink-0"
             />
             <span>Edit Timeline</span>
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             type="button"
             onClick={() => setShowControlsModal(true)}
             title="Clip Controls & Actions"
             className="flex items-center justify-center p-2.5 rounded-xl text-xs bg-white/[0.04] hover:bg-white/[0.1] text-zinc-400 hover:text-zinc-200 border border-white/10 hover:border-white/20 transition-all active:scale-[0.98] shadow-sm cursor-pointer shrink-0"
           >
             <Sliders size={14} className="transition-transform" />
-          </button>
+          </Button>
         </div>
       </div>
 

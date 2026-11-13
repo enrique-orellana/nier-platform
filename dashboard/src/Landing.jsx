@@ -19,6 +19,7 @@ import {
   Upload,
   Scissors,
 } from "lucide-react";
+import { Button, Card } from "./components/ui";
 
 const TikTokIcon = ({ size = 16, className = "" }) => (
   <svg
@@ -33,13 +34,13 @@ const TikTokIcon = ({ size = 16, className = "" }) => (
 );
 
 const FeatureCard = ({ icon: Icon, title, description }) => (
-  <div className="group bg-surface/50 backdrop-blur-xl border border-white/10 rounded-2xl p-6 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5">
+  <Card className="group bg-surface/50 backdrop-blur-xl border border-white/10 rounded-2xl p-6 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5">
     <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
       <Icon size={24} className="text-primary" />
     </div>
     <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
     <p className="text-zinc-400 text-sm leading-relaxed">{description}</p>
-  </div>
+  </Card>
 );
 
 const StepCard = ({ number, title, description }) => (
@@ -65,7 +66,8 @@ const ComparisonRow = ({ feature, openshorts, opusclip, kapwing }) => (
 
 const FAQItem = ({ question, answer, isOpen, onClick }) => (
   <div className="border border-white/10 rounded-xl overflow-hidden">
-    <button
+    <Button
+      variant="ghost"
       onClick={onClick}
       className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-white/5 transition-colors"
     >
@@ -74,7 +76,7 @@ const FAQItem = ({ question, answer, isOpen, onClick }) => (
         size={18}
         className={`text-zinc-400 flex-shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
       />
-    </button>
+    </Button>
     {isOpen && (
       <div className="px-6 pb-5">
         <p className="faq-answer text-zinc-400 text-sm leading-relaxed">
@@ -267,12 +269,13 @@ export default function Landing({ onLaunchApp }) {
               <Github size={18} />
               <span>GitHub</span>
             </a>
-            <button
+            <Button
+              variant="ghost"
               onClick={onLaunchApp}
               className="bg-primary hover:bg-blue-600 text-white px-5 py-2 rounded-xl text-sm font-medium transition-all active:scale-[0.98] shadow-lg shadow-primary/20"
             >
               Launch App
-            </button>
+            </Button>
           </div>
         </div>
       </nav>
@@ -300,13 +303,14 @@ export default function Landing({ onLaunchApp }) {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-            <button
+            <Button
+              variant="ghost"
               onClick={onLaunchApp}
               className="flex items-center gap-2 bg-primary hover:bg-blue-600 text-white px-8 py-3.5 rounded-xl font-medium transition-all active:scale-[0.98] shadow-lg shadow-primary/20 text-lg"
             >
               Get Started Free
               <ArrowRight size={20} />
-            </button>
+            </Button>
             <a
               href="https://github.com/mutonby/openshorts"
               target="_blank"
@@ -778,13 +782,14 @@ export default function Landing({ onLaunchApp }) {
             engaging short clips and self-host the workflow with Docker.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button
+            <Button
+              variant="ghost"
               onClick={onLaunchApp}
               className="flex items-center gap-2 bg-primary hover:bg-blue-600 text-white px-8 py-3.5 rounded-xl font-medium transition-all active:scale-[0.98] shadow-lg shadow-primary/20 text-lg"
             >
               Launch OpenShorts
               <ArrowRight size={20} />
-            </button>
+            </Button>
             <a
               href="https://github.com/mutonby/openshorts"
               target="_blank"

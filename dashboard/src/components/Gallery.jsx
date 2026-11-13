@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { LayoutGrid, AlertCircle, Loader2 } from "lucide-react";
 import { getApiUrl } from "../config";
 import GalleryCard from "./GalleryCard";
+import { Button } from "./ui";
 
 const CLIPS_PER_PAGE = 20;
 
@@ -90,7 +91,8 @@ export default function Gallery() {
       <div className="h-full flex flex-col items-center justify-center text-red-400 p-6">
         <AlertCircle size={32} className="mb-4" />
         <p>Error loading gallery: {error}</p>
-        <button
+        <Button
+          variant="ghost"
           onClick={() => {
             setError(null);
             setOffset(0);
@@ -99,7 +101,7 @@ export default function Gallery() {
           className="mt-4 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-white transition-colors"
         >
           Retry
-        </button>
+        </Button>
       </div>
     );
   }

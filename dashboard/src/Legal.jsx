@@ -1,5 +1,6 @@
 import React from "react";
 import { ArrowLeft } from "lucide-react";
+import { Button } from "./components/ui";
 
 const LAST_UPDATED = "2026-05-06";
 const ISSUES_URL = "https://github.com/mutonby/openshorts/issues";
@@ -24,12 +25,13 @@ export default function Legal() {
     <div className="min-h-screen bg-bg text-white">
       <header className="border-b border-white/5 sticky top-0 bg-bg/95 backdrop-blur z-10">
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center">
-          <button
+          <Button
+            variant="ghost"
             onClick={handleBack}
             className="text-zinc-400 hover:text-white flex items-center gap-2 text-sm"
           >
             <ArrowLeft size={16} /> Back
-          </button>
+          </Button>
         </div>
       </header>
 

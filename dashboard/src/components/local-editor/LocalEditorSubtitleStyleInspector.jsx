@@ -9,6 +9,7 @@ import {
 } from "./localEditorStyles";
 import { getSubtitlePositionCoordinates } from "../../remotion/lib/subtitlePosition";
 import { cleanChoiceClass, cleanLabelClass } from "./localEditorUtils";
+import { Button, Input, NativeSelect } from "../ui";
 
 export default function LocalEditorSubtitleStyleInspector({
   style,
@@ -72,7 +73,8 @@ export default function LocalEditorSubtitleStyleInspector({
               ([key, value]) => current[key] === value,
             );
             return (
-              <button
+              <Button
+                variant="ghost"
                 key={template.id}
                 type="button"
                 aria-label={template.ariaLabel}
@@ -99,7 +101,7 @@ export default function LocalEditorSubtitleStyleInspector({
                     {template.description}
                   </span>
                 </span>
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -112,20 +114,21 @@ export default function LocalEditorSubtitleStyleInspector({
           className="grid grid-cols-3 gap-2"
         >
           {["top", "middle", "bottom"].map((position) => (
-            <button
+            <Button
+              variant="ghost"
               key={position}
               type="button"
               onClick={() => selectPreset(position)}
               className={cleanChoiceClass(current.position === position)}
             >
               {position.charAt(0).toUpperCase() + position.slice(1)}
-            </button>
+            </Button>
           ))}
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <label className="text-xs text-zinc-400">
             X (px)
-            <input
+            <Input
               aria-label="Subtitle X position"
               type="number"
               min="0"
@@ -140,12 +143,12 @@ export default function LocalEditorSubtitleStyleInspector({
                 updateCoordinate("positionX", event.target.value)
               }
               onBlur={() => commitCoordinate("positionX")}
-              className="input-field mt-2"
+              className="mt-2"
             />
           </label>
           <label className="text-xs text-zinc-400">
             Y (px)
-            <input
+            <Input
               aria-label="Subtitle Y position"
               type="number"
               min="0"
@@ -160,7 +163,7 @@ export default function LocalEditorSubtitleStyleInspector({
                 updateCoordinate("positionY", event.target.value)
               }
               onBlur={() => commitCoordinate("positionY")}
-              className="input-field mt-2"
+              className="mt-2"
             />
           </label>
         </div>
@@ -172,14 +175,15 @@ export default function LocalEditorSubtitleStyleInspector({
         <span className={cleanLabelClass}>Animation</span>
         <div className="grid grid-cols-2 gap-2">
           {SUBTITLE_ANIMATION_OPTIONS.map((option) => (
-            <button
+            <Button
+              variant="ghost"
               key={option.value}
               type="button"
               onClick={() => update("animation", option.value)}
               className={cleanChoiceClass(current.animation === option.value)}
             >
               {option.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -192,7 +196,8 @@ export default function LocalEditorSubtitleStyleInspector({
             Show only the active timed word in the preview and export
           </span>
         </div>
-        <button
+        <Button
+          variant="ghost"
           type="button"
           aria-label="One word at a time"
           aria-pressed={current.displayMode === "single-word"}
@@ -207,28 +212,28 @@ export default function LocalEditorSubtitleStyleInspector({
           <span
             className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${current.displayMode === "single-word" ? "translate-x-5" : ""}`}
           />
-        </button>
+        </Button>
       </div>
       <div>
         <label className={cleanLabelClass}>
           Font
-          <select
+          <NativeSelect
             aria-label="Subtitle font"
             value={current.fontFamily}
             onChange={(event) => update("fontFamily", event.target.value)}
-            className="input-field mt-2"
+            className="mt-2"
           >
             {SUBTITLE_FONT_OPTIONS.map((font) => (
               <option key={font} value={font} style={{ fontFamily: font }}>
                 {font}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
       </div>
       <label className="block text-xs text-zinc-400">
         Font Size
-        <input
+        <Input
           aria-label="Subtitle font size"
           type="number"
           min="12"
@@ -244,7 +249,7 @@ export default function LocalEditorSubtitleStyleInspector({
               Math.min(120, Math.max(12, Number(event.target.value) || 12)),
             )
           }
-          className="input-field mt-2"
+          className="mt-2"
         />
       </label>
       <div>
@@ -254,7 +259,8 @@ export default function LocalEditorSubtitleStyleInspector({
           aria-label="Subtitle text color presets"
         >
           {SUBTITLE_COLOR_PRESETS.map((preset) => (
-            <button
+            <Button
+              variant="ghost"
               key={preset.color}
               type="button"
               aria-label={`Use subtitle color ${preset.label}`}
@@ -269,7 +275,7 @@ export default function LocalEditorSubtitleStyleInspector({
             title="Custom color"
           >
             <span className="text-[10px] text-zinc-400">+</span>
-            <input
+            <Input
               aria-label="Subtitle text color"
               type="color"
               value={current.fontColor}
@@ -286,7 +292,8 @@ export default function LocalEditorSubtitleStyleInspector({
           aria-label="Subtitle highlight color presets"
         >
           {SUBTITLE_HIGHLIGHT_PRESETS.map((preset) => (
-            <button
+            <Button
+              variant="ghost"
               key={preset.color}
               type="button"
               aria-label={`Use subtitle highlight color ${preset.label}`}
@@ -297,7 +304,7 @@ export default function LocalEditorSubtitleStyleInspector({
             />
           ))}
         </div>
-        <input
+        <Input
           aria-label="Subtitle highlight color"
           type="color"
           value={current.highlightColor}
@@ -316,7 +323,7 @@ export default function LocalEditorSubtitleStyleInspector({
               className="h-full w-full"
               style={{ backgroundColor: current.borderColor }}
             />
-            <input
+            <Input
               aria-label="Subtitle outline color"
               type="color"
               value={current.borderColor}
@@ -325,7 +332,7 @@ export default function LocalEditorSubtitleStyleInspector({
             />
           </label>
           <div className="flex-1">
-            <input
+            <Input
               aria-label="Subtitle outline width"
               type="range"
               min="0"
@@ -349,7 +356,8 @@ export default function LocalEditorSubtitleStyleInspector({
           <span className={cleanLabelClass.replace("mb-2 ", "")}>
             Background Box
           </span>
-          <button
+          <Button
+            variant="ghost"
             type="button"
             aria-label={
               current.bgOpacity > 0
@@ -363,7 +371,7 @@ export default function LocalEditorSubtitleStyleInspector({
             <span
               className={`absolute left-0 top-0 h-4 w-4 rounded-full border border-gray-300 bg-white transition-transform ${current.bgOpacity > 0 ? "translate-x-full" : ""}`}
             />
-          </button>
+          </Button>
         </div>
         {current.bgOpacity > 0 && (
           <div className="flex items-center gap-3">
@@ -375,7 +383,7 @@ export default function LocalEditorSubtitleStyleInspector({
                 className="h-full w-full"
                 style={{ backgroundColor: current.bgColor }}
               />
-              <input
+              <Input
                 aria-label="Subtitle background color"
                 type="color"
                 value={current.bgColor}
@@ -384,7 +392,7 @@ export default function LocalEditorSubtitleStyleInspector({
               />
             </label>
             <div className="flex-1">
-              <input
+              <Input
                 aria-label="Subtitle background opacity"
                 type="range"
                 min="0.1"
@@ -410,13 +418,14 @@ export default function LocalEditorSubtitleStyleInspector({
         </p>
       )}
       {hasCues && (
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={onRemove}
           className="w-full rounded-lg border border-red-400/30 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-400/10"
         >
           Remove Subtitles
-        </button>
+        </Button>
       )}
     </div>
   );

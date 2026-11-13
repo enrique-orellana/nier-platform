@@ -13,6 +13,7 @@ import {
   SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
+import { Button } from "../ui";
 
 export default function CardActions({
   handleAutoEdit,
@@ -44,7 +45,8 @@ export default function CardActions({
       )}
 
       {/* Primary Action: Timeline Editor */}
-      <button
+      <Button
+        variant="ghost"
         type="button"
         onClick={() => setShowClipEditor(true)}
         className="w-full py-2 px-3 bg-white/[0.06] hover:bg-white/[0.12] hover:border-cyan-500/40 border border-white/10 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 group shadow-sm active:scale-[0.99]"
@@ -54,12 +56,13 @@ export default function CardActions({
           className="text-cyan-400 group-hover:scale-110 transition-transform"
         />
         <span>Edit Timeline</span>
-      </button>
+      </Button>
 
       {/* AI Studio & Enhancement Tools Grid */}
       <div className="grid grid-cols-2 gap-1.5">
         {/* Auto Edit */}
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={handleAutoEdit}
           disabled={isEditing}
@@ -77,11 +80,12 @@ export default function CardActions({
           <span className="truncate">
             {isEditing ? "Editing..." : "Auto Edit"}
           </span>
-        </button>
+        </Button>
 
         {/* Adjust Range (or Native Short if range editor not available) */}
         {hasClipRangeEditor && setShowClipRangeEditor ? (
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={() => setShowClipRangeEditor(true)}
             className="py-1.5 px-2 bg-white/[0.03] hover:bg-cyan-500/10 border border-white/[0.08] hover:border-cyan-500/30 text-zinc-200 hover:text-white rounded-lg text-[11px] font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-1.5 min-w-0"
@@ -89,9 +93,10 @@ export default function CardActions({
           >
             <SlidersHorizontal size={11} className="text-cyan-400 shrink-0" />
             <span className="truncate">Trim Range</span>
-          </button>
+          </Button>
         ) : (
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={handleConvertNativeShort}
             disabled={isConvertingNativeShort}
@@ -109,12 +114,13 @@ export default function CardActions({
             <span className="truncate">
               {isConvertingNativeShort ? "Converting..." : "Native Short"}
             </span>
-          </button>
+          </Button>
         )}
 
         {/* Subtitles (Combined with direct details trigger) */}
         <div className="flex items-stretch rounded-lg border border-white/[0.08] bg-white/[0.03] hover:border-amber-500/30 transition-all overflow-hidden min-w-0">
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={() => setShowSubtitleModal(true)}
             disabled={isSubtitling}
@@ -132,8 +138,9 @@ export default function CardActions({
             <span className="truncate">
               {isSubtitling ? "Adding..." : "Subtitles"}
             </span>
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             type="button"
             onClick={() => setShowSubtitleDetails(true)}
             className="px-1.5 border-l border-white/[0.08] text-zinc-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors flex items-center justify-center shrink-0"
@@ -141,11 +148,12 @@ export default function CardActions({
             aria-label="Subtitle details"
           >
             <FileText size={11} />
-          </button>
+          </Button>
         </div>
 
         {/* Viral Hook */}
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={() => setShowHookModal(true)}
           disabled={isHooking}
@@ -163,10 +171,11 @@ export default function CardActions({
           <span className="truncate">
             {isHooking ? "Adding..." : "Viral Hook"}
           </span>
-        </button>
+        </Button>
 
         {/* Dub Voice */}
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={() => setShowTranslateModal(true)}
           disabled={isTranslating}
@@ -184,11 +193,12 @@ export default function CardActions({
           <span className="truncate">
             {isTranslating ? "Translating..." : "Dub Voice"}
           </span>
-        </button>
+        </Button>
 
         {/* Native Short (if not placed above) */}
         {hasClipRangeEditor && setShowClipRangeEditor && (
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={handleConvertNativeShort}
             disabled={isConvertingNativeShort}
@@ -206,21 +216,23 @@ export default function CardActions({
             <span className="truncate">
               {isConvertingNativeShort ? "Converting..." : "Native Short"}
             </span>
-          </button>
+          </Button>
         )}
       </div>
 
       {/* Bottom Row: Publish & Download */}
       <div className="flex items-center gap-1.5 pt-1 min-w-0">
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={() => setShowModal(true)}
           className="flex-1 min-w-0 py-2 px-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-1.5 truncate"
         >
           <Share2 size={13} className="shrink-0" />
           <span className="truncate">Post</span>
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           type="button"
           onClick={handleDownload}
           className="py-2 px-2.5 bg-white/[0.05] hover:bg-white/[0.1] text-zinc-300 hover:text-white rounded-xl text-xs font-medium border border-white/10 transition-colors flex items-center justify-center gap-1.5 shrink-0 min-w-0"
@@ -228,7 +240,7 @@ export default function CardActions({
         >
           <Download size={13} className="shrink-0" />
           <span className="truncate">Download</span>
-        </button>
+        </Button>
       </div>
     </div>
   );

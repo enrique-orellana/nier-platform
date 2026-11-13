@@ -1,4 +1,5 @@
 import React from "react";
+import { Input } from "../ui";
 
 export default function AudioInspector({ audio, onChange }) {
   if (!audio)
@@ -20,7 +21,7 @@ export default function AudioInspector({ audio, onChange }) {
       <div className="font-semibold text-zinc-300">Audio clip</div>
       <label className="flex items-center justify-between gap-2">
         <span>Mute</span>
-        <input
+        <Input
           type="checkbox"
           checked={Boolean(audio.muted)}
           onChange={(event) => set("muted", event.target.checked)}
@@ -29,7 +30,7 @@ export default function AudioInspector({ audio, onChange }) {
       </label>
       <label className="block">
         Volume
-        <input
+        <Input
           aria-label="Volume"
           type="number"
           min="0"
@@ -43,7 +44,7 @@ export default function AudioInspector({ audio, onChange }) {
       <div className="grid grid-cols-2 gap-2">
         <label>
           Start (s)
-          <input
+          <Input
             type="number"
             min="0"
             step="0.001"
@@ -54,7 +55,7 @@ export default function AudioInspector({ audio, onChange }) {
         </label>
         <label>
           End (s)
-          <input
+          <Input
             type="number"
             min="0"
             step="0.001"

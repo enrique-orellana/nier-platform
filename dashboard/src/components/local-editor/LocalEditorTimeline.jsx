@@ -10,6 +10,7 @@ import { moveCue, resizeCue } from "../../editor/timelineModel";
 import AudioWaveform from "./AudioWaveform";
 import SoundEventTrack from "./SoundEventTrack";
 import { formatClock } from "./localEditorExport";
+import { Button } from "../ui";
 
 const TRACK_LABEL_WIDTH = 144;
 const BASE_PIXELS_PER_SECOND = 80;
@@ -102,13 +103,15 @@ function CueBlock({
       <span className="pointer-events-none block truncate">
         {cue.text || "Untitled cue"}
       </span>
-      <button
+      <Button
+        variant="ghost"
         type="button"
         aria-label="Resize cue start"
         className="absolute left-0 top-0 h-full w-2 cursor-ew-resize opacity-0 hover:opacity-100 focus-visible:opacity-100"
         onPointerDown={(event) => beginDrag(event, "start")}
       />
-      <button
+      <Button
+        variant="ghost"
         type="button"
         aria-label="Resize cue end"
         className="absolute right-0 top-0 h-full w-2 cursor-ew-resize opacity-0 hover:opacity-100 focus-visible:opacity-100"
@@ -142,7 +145,8 @@ function LayoutSegmentBlock({
   const current = playheadMs >= segment.startMs && playheadMs < segment.endMs;
   const label = layoutLabel(segment.format);
   return (
-    <button
+    <Button
+      variant="ghost"
       type="button"
       role="button"
       data-testid="local-editor-layout-segment"
@@ -162,7 +166,7 @@ function LayoutSegmentBlock({
       }}
     >
       <span className="pointer-events-none block truncate">{label}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -540,7 +544,8 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
                   className="absolute bottom-0 top-0 z-20 w-px bg-amber-300/90"
                   style={{ left: `${(displayTimeMs / safeDuration) * 100}%` }}
                 >
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     data-testid="local-editor-marker"
                     aria-label={marker.label || "Timeline marker"}

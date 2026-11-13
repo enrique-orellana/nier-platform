@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect } from "react";
 import { formatClock } from "../local-editor/localEditorExport";
+import { Button, NativeSelect } from "../ui";
 
 const clampFrame = (frame, durationFrames) =>
   Math.max(0, Math.min(durationFrames - 1, frame));
@@ -47,7 +48,8 @@ export default function TransportControls({
   const time = formatClock((currentFrame / fps) * 1000, fps);
   return (
     <div className="flex items-center gap-2 border-b border-white/10 bg-[#19191d] px-3 py-2 text-xs">
-      <button
+      <Button
+        variant="ghost"
         type="button"
         aria-label="previous frame"
         onClick={() =>
@@ -56,16 +58,18 @@ export default function TransportControls({
         className="rounded px-2 py-1 text-zinc-300 hover:bg-white/10"
       >
         ◀|
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
         type="button"
         aria-label={playing ? "pause" : "play"}
         onClick={() => requestPlayback(!playing)}
         className="rounded bg-white/10 px-3 py-1 text-white"
       >
         {playing ? "Pause" : "Play"}
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
         type="button"
         aria-label="next frame"
         onClick={() =>
@@ -74,9 +78,9 @@ export default function TransportControls({
         className="rounded px-2 py-1 text-zinc-300 hover:bg-white/10"
       >
         |▶
-      </button>
+      </Button>
       <span className="ml-2 font-mono text-cyan-300">{time}</span>
-      <select
+      <NativeSelect
         aria-label="Timeline zoom"
         value={zoom}
         onChange={(event) => onZoomChange(Number(event.target.value))}
@@ -88,7 +92,7 @@ export default function TransportControls({
         <option value="2">200%</option>
         <option value="4">400%</option>
         <option value="8">800%</option>
-      </select>
+      </NativeSelect>
     </div>
   );
 }

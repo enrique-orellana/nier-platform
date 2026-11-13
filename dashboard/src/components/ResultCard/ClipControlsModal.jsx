@@ -3,6 +3,7 @@ import { Sliders, X, Film, Copy, Sparkles } from "lucide-react";
 import ClipRenderControls from "../ClipRenderControls";
 import CardContent from "./CardContent";
 import CardActions from "./CardActions";
+import { Button, Dialog, DialogContent, DialogTitle } from "../ui";
 
 export default function ClipControlsModal({
   isOpen,
@@ -43,33 +44,37 @@ export default function ClipControlsModal({
   setShowClipRangeEditor,
   onSaveClipRange,
 }) {
-  if (!isOpen) return null;
-
   const youtubeTitle =
     clip?.video_title_for_youtube_short || clip?.title || `Clip ${index + 1}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-[fadeIn_0.2s_ease-out]">
-      <div className="bg-[#121214] border border-white/10 rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden min-w-0">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showClose={false}
+        closeOnEscape={false}
+        closeOnInteractOutside={false}
+        className="flex w-[calc(100%-2rem)] max-w-xl max-h-[90vh] min-w-0 flex-col gap-0 overflow-hidden rounded-2xl border-white/10 bg-[#121214] p-0"
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between p-4 border-b border-white/10 bg-white/[0.02]">
           <div className="flex items-center gap-2 min-w-0 pr-2">
             <Sliders size={18} className="text-cyan-400 shrink-0" />
-            <h2
+            <DialogTitle
               className="text-sm font-bold text-white truncate"
               title={youtubeTitle}
             >
               {youtubeTitle} — Actions & Controls
-            </h2>
+            </DialogTitle>
           </div>
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={onClose}
             aria-label="Close modal"
             className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
           >
             <X size={18} />
-          </button>
+          </Button>
         </div>
 
         {/* Modal Body */}
@@ -144,7 +149,7 @@ export default function ClipControlsModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

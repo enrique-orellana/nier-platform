@@ -1,5 +1,6 @@
 import React from "react";
 import { Volume2 } from "lucide-react";
+import { Button, Input } from "../ui";
 
 const clampPercent = (value) => Math.max(0, Math.min(100, value));
 
@@ -33,7 +34,7 @@ export default function SoundEventTrack({
           className="flex shrink-0 cursor-pointer items-center gap-1 text-[9px] text-zinc-400"
           title="Show detected sound labels over the preview only"
         >
-          <input
+          <Input
             type="checkbox"
             aria-label="Show sound labels in preview"
             checked={showInPreview}
@@ -66,7 +67,8 @@ export default function SoundEventTrack({
             const selected = selectedId === event.id;
 
             return (
-              <button
+              <Button
+                variant="ghost"
                 key={event.id}
                 type="button"
                 data-testid="local-editor-sound-event"
@@ -83,7 +85,7 @@ export default function SoundEventTrack({
                 }}
               >
                 <span className="block truncate">{event.label}</span>
-              </button>
+              </Button>
             );
           })
         )}

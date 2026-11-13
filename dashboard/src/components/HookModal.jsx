@@ -9,6 +9,14 @@ import {
 } from "lucide-react";
 import RemotionPreview from "./RemotionPreview";
 import { useRenewableMediaUrl } from "../lib/videoUrls";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Input,
+  Textarea,
+} from "./ui";
 
 const ENTRANCE_OPTIONS = [
   { value: "spring", label: "Bounce" },
@@ -81,14 +89,20 @@ export default function HookModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
-      <div className="bg-[#121214] border border-white/10 p-6 rounded-2xl w-full max-w-4xl shadow-2xl relative flex flex-col md:flex-row gap-6 max-h-[90vh]">
-        <button
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose?.()}>
+      <DialogContent
+        showClose={false}
+        closeOnEscape={false}
+        closeOnInteractOutside={false}
+        className="z-[100] flex w-[calc(100%-2rem)] max-h-[90vh] max-w-4xl flex-col gap-6 overflow-y-auto rounded-2xl border border-white/10 bg-[#121214] p-6 shadow-2xl md:flex-row"
+      >
+        <Button
+          variant="ghost"
           onClick={onClose}
           className="absolute top-4 right-4 text-zinc-500 hover:text-white z-10"
         >
           <X size={20} />
-        </button>
+        </Button>
 
         {/* Left: Preview */}
         <div className="flex-1 flex flex-col items-center justify-center bg-black rounded-lg border border-white/5 overflow-hidden relative aspect-[9/16] max-h-[600px]">
@@ -134,9 +148,9 @@ export default function HookModal({
 
         {/* Right: Controls */}
         <div className="w-full md:w-80 flex flex-col">
-          <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+          <DialogTitle className="mb-6 flex items-center gap-2 text-xl font-bold text-white">
             <Sparkles className="text-yellow-400" /> Viral Hook
-          </h3>
+          </DialogTitle>
 
           <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-2">
             {/* Text Input */}
@@ -144,7 +158,7 @@ export default function HookModal({
               <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 block">
                 Text
               </label>
-              <textarea
+              <Textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 rows={4}
@@ -160,7 +174,8 @@ export default function HookModal({
               </label>
               <div className="grid grid-cols-3 gap-2">
                 {["top", "center", "bottom"].map((pos) => (
-                  <button
+                  <Button
+                    variant="ghost"
                     key={pos}
                     onClick={() => setPosition(pos)}
                     className={`py-2 px-1 rounded-lg text-xs font-bold capitalize transition-all border ${
@@ -170,7 +185,7 @@ export default function HookModal({
                     }`}
                   >
                     {pos}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -182,7 +197,8 @@ export default function HookModal({
               </label>
               <div className="grid grid-cols-3 gap-2">
                 {["S", "M", "L"].map((sz) => (
-                  <button
+                  <Button
+                    variant="ghost"
                     key={sz}
                     onClick={() => setSize(sz)}
                     className={`py-2 px-1 rounded-lg text-xs font-bold transition-all border ${
@@ -192,7 +208,7 @@ export default function HookModal({
                     }`}
                   >
                     {sz === "S" ? "Small" : sz === "M" ? "Medium" : "Large"}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -204,7 +220,8 @@ export default function HookModal({
               </label>
               <div className="grid grid-cols-2 gap-2">
                 {ENTRANCE_OPTIONS.map((opt) => (
-                  <button
+                  <Button
+                    variant="ghost"
                     key={opt.value}
                     onClick={() => setEntranceAnimation(opt.value)}
                     className={`py-2 px-1 rounded-lg text-xs font-bold transition-all border ${
@@ -214,7 +231,7 @@ export default function HookModal({
                     }`}
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -224,7 +241,7 @@ export default function HookModal({
               <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 block">
                 Duration: {displayDuration}s
               </label>
-              <input
+              <Input
                 type="range"
                 min="2"
                 max="15"
@@ -244,7 +261,8 @@ export default function HookModal({
             </div>
           </div>
 
-          <button
+          <Button
+            variant="ghost"
             onClick={() =>
               onGenerate({
                 text,
@@ -263,9 +281,9 @@ export default function HookModal({
               <Sparkles size={20} />
             )}
             {isProcessing ? "Generating..." : "Add Hook"}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -235,7 +235,11 @@ function Start-Components {
     if ($dockerServices.Count -gt 0) {
         Require-Command "docker"
         $env:RENDER_SERVICE_URL = Get-NativeRendererUrl
-        $composeArguments = @("up", "-d", "--force-recreate", "--remove-orphans") + $dockerServices
+        $composeArguments = @("up", "-d", "--force-recreate", "--remove-orphans")
+        if ($dockerServices -contains "frontend") {
+            $composeArguments += "--renew-anon-volumes"
+        }
+        $composeArguments += $dockerServices
         Invoke-Compose $composeArguments
     }
 

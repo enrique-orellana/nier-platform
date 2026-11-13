@@ -15,6 +15,14 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { getApiUrl } from "../config";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Input,
+  NativeSelect,
+} from "./ui";
 
 const DAYS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 const MONTHS = [
@@ -205,15 +213,21 @@ export default function ScheduleWeekModal({
   const failCount = progress.results.filter((r) => !r.success).length;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
-      <div className="bg-[#121214] border border-white/10 p-6 rounded-2xl w-full max-w-lg shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
-        <button
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose?.()}>
+      <DialogContent
+        showClose={false}
+        closeOnEscape={false}
+        closeOnInteractOutside={false}
+        className="z-[100] block max-h-[90vh] max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#121214] p-6 shadow-2xl custom-scrollbar"
+      >
+        <Button
+          variant="ghost"
           onClick={onClose}
           disabled={scheduling}
           className="absolute top-4 right-4 text-zinc-500 hover:text-white disabled:opacity-50"
         >
           <X size={20} />
-        </button>
+        </Button>
 
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
@@ -221,7 +235,9 @@ export default function ScheduleWeekModal({
             <Calendar size={20} className="text-white" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white">Programar Semana</h3>
+            <DialogTitle className="text-lg font-bold text-white">
+              Programar Semana
+            </DialogTitle>
             <p className="text-xs text-zinc-500">
               {clips?.length || 0} clips &middot; 1 por día
             </p>
@@ -242,7 +258,7 @@ export default function ScheduleWeekModal({
               <Clock size={14} className="text-purple-400" />
               Hora
             </label>
-            <input
+            <Input
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
@@ -255,18 +271,18 @@ export default function ScheduleWeekModal({
               <Globe size={14} className="text-indigo-400" />
               Zona horaria
             </label>
-            <select
+            <NativeSelect
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
               disabled={scheduling}
-              className="input-field"
+              className=""
             >
               {TIMEZONES.map((tz) => (
                 <option key={tz.value} value={tz.value}>
                   {tz.label}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
         </div>
 
@@ -274,13 +290,14 @@ export default function ScheduleWeekModal({
         <div className="mb-5 flex items-center justify-between">
           <span className="text-xs font-bold text-zinc-400">Empezar desde</span>
           <div className="flex items-center gap-2">
-            <button
+            <Button
+              variant="ghost"
               onClick={() => setStartOffset(Math.max(1, startOffset - 1))}
               disabled={startOffset <= 1 || scheduling}
               className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
             >
               <ChevronLeft size={16} />
-            </button>
+            </Button>
             <span className="text-sm text-white font-medium min-w-[90px] text-center">
               {(() => {
                 const d = new Date();
@@ -288,13 +305,14 @@ export default function ScheduleWeekModal({
                 return `${getDayLabel(d)} ${formatDate(d)}`;
               })()}
             </span>
-            <button
+            <Button
+              variant="ghost"
               onClick={() => setStartOffset(startOffset + 1)}
               disabled={scheduling}
               className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
             >
               <ChevronRight size={16} />
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -355,14 +373,16 @@ export default function ScheduleWeekModal({
             Plataformas
           </label>
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="ghost"
               onClick={() => setPlatforms((p) => ({ ...p, tiktok: !p.tiktok }))}
               disabled={scheduling}
               className={`flex-1 flex items-center justify-center gap-2 p-2.5 rounded-lg text-xs font-bold border transition-all ${platforms.tiktok ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400" : "bg-white/5 border-white/5 text-zinc-500"}`}
             >
               <Video size={14} /> TikTok
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
               onClick={() =>
                 setPlatforms((p) => ({ ...p, instagram: !p.instagram }))
               }
@@ -370,8 +390,9 @@ export default function ScheduleWeekModal({
               className={`flex-1 flex items-center justify-center gap-2 p-2.5 rounded-lg text-xs font-bold border transition-all ${platforms.instagram ? "bg-pink-500/10 border-pink-500/30 text-pink-400" : "bg-white/5 border-white/5 text-zinc-500"}`}
             >
               <Instagram size={14} /> Instagram
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
               onClick={() =>
                 setPlatforms((p) => ({ ...p, youtube: !p.youtube }))
               }
@@ -379,7 +400,7 @@ export default function ScheduleWeekModal({
               className={`flex-1 flex items-center justify-center gap-2 p-2.5 rounded-lg text-xs font-bold border transition-all ${platforms.youtube ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-white/5 border-white/5 text-zinc-500"}`}
             >
               <Youtube size={14} /> YouTube
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -418,15 +439,17 @@ export default function ScheduleWeekModal({
 
         {/* Actions */}
         <div className="flex gap-3">
-          <button
+          <Button
+            variant="ghost"
             onClick={onClose}
             disabled={scheduling}
             className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-zinc-300 rounded-xl font-medium transition-colors disabled:opacity-50"
           >
             {done ? "Cerrar" : "Cancelar"}
-          </button>
+          </Button>
           {!done ? (
-            <button
+            <Button
+              variant="ghost"
               onClick={handleScheduleAll}
               disabled={
                 scheduling || !uploadPostKey || selectedPlatforms.length === 0
@@ -444,7 +467,7 @@ export default function ScheduleWeekModal({
                   Programar {clips?.length || 0} Clips
                 </>
               )}
-            </button>
+            </Button>
           ) : (
             <a
               href="https://app.upload-post.com/calendar"
@@ -457,7 +480,7 @@ export default function ScheduleWeekModal({
             </a>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

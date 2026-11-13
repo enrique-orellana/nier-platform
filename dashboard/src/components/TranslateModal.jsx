@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { X, Loader2, Globe, Languages, AlertCircle } from "lucide-react";
 import { useRenewableMediaUrl } from "../lib/videoUrls";
+import { Button, Dialog, DialogContent, DialogTitle, NativeSelect } from "./ui";
 
 const LANGUAGES = {
   es: "Spanish",
@@ -59,22 +60,30 @@ export default function TranslateModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
-      <div className="bg-[#121214] border border-white/10 p-6 rounded-2xl w-full max-w-md shadow-2xl relative">
-        <button
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose?.()}>
+      <DialogContent
+        showClose={false}
+        closeOnEscape={false}
+        closeOnInteractOutside={false}
+        className="z-[100] block max-w-md rounded-2xl border border-white/10 bg-[#121214] p-6 shadow-2xl"
+      >
+        <Button
+          variant="ghost"
           onClick={onClose}
           disabled={isProcessing}
           className="absolute top-4 right-4 text-zinc-500 hover:text-white disabled:opacity-50"
         >
           <X size={20} />
-        </button>
+        </Button>
 
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-teal-600 flex items-center justify-center">
             <Languages size={20} className="text-white" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white">Dub Voice</h3>
+            <DialogTitle className="text-lg font-bold text-white">
+              Dub Voice
+            </DialogTitle>
             <p className="text-xs text-zinc-500">
               AI voice translation by ElevenLabs
             </p>
@@ -106,10 +115,10 @@ export default function TranslateModal({
             <Globe size={14} className="inline mr-2" />
             Target Language
           </label>
-          <select
+          <NativeSelect
             value={targetLanguage}
             onChange={(e) => setTargetLanguage(e.target.value)}
-            className="input-field"
+            className=""
             disabled={isProcessing}
           >
             {Object.entries(LANGUAGES)
@@ -119,7 +128,7 @@ export default function TranslateModal({
                   {name}
                 </option>
               ))}
-          </select>
+          </NativeSelect>
         </div>
 
         {/* Info */}
@@ -149,14 +158,16 @@ export default function TranslateModal({
 
         {/* Actions */}
         <div className="flex gap-3">
-          <button
+          <Button
+            variant="ghost"
             onClick={onClose}
             disabled={isProcessing}
             className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-zinc-300 rounded-xl font-medium transition-colors disabled:opacity-50"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             onClick={handleSubmit}
             disabled={isProcessing || !hasApiKey}
             className="flex-1 py-3 bg-gradient-to-r from-green-500 to-teal-600 hover:from-green-400 hover:to-teal-500 text-white rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
@@ -172,9 +183,9 @@ export default function TranslateModal({
                 Dub Voice
               </>
             )}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

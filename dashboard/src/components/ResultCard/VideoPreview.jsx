@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Loader2, ArrowLeftRight } from "lucide-react";
+import { Button } from "../ui";
 
 export default function VideoPreview({
   videoRef,
@@ -89,7 +90,8 @@ export default function VideoPreview({
 
       {hasEdits && (
         <div className="absolute top-3 right-3">
-          <button
+          <Button
+            variant="ghost"
             onClick={() => setViewOriginal(!viewOriginal)}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide border transition-all backdrop-blur-md ${
               viewOriginal
@@ -100,7 +102,7 @@ export default function VideoPreview({
           >
             <ArrowLeftRight size={12} />
             {viewOriginal ? "Original" : "Edited"}
-          </button>
+          </Button>
         </div>
       )}
 

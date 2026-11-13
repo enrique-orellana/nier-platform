@@ -1,5 +1,6 @@
 import React from "react";
 import { Loader2, RefreshCw, Eye, Sparkles, CheckCircle2 } from "lucide-react";
+import { Button, Input } from "./ui";
 
 const progressLabels = {
   queued: "Queued…",
@@ -26,7 +27,8 @@ function hasValidRegion(region) {
 
 function RegionButton({ label, onClick, disabled, saving }) {
   return (
-    <button
+    <Button
+      variant="ghost"
       type="button"
       onClick={onClick}
       disabled={disabled}
@@ -40,14 +42,15 @@ function RegionButton({ label, onClick, disabled, saving }) {
       ) : (
         label
       )}
-    </button>
+    </Button>
   );
 }
 
 function PreviewButton({ enabled, onClick }) {
   return (
     <div className="space-y-1">
-      <button
+      <Button
+        variant="ghost"
         type="button"
         onClick={onClick}
         disabled={!enabled}
@@ -58,7 +61,7 @@ function PreviewButton({ enabled, onClick }) {
           className={enabled ? "text-cyan-400" : "text-zinc-500"}
         />
         <span>Preview 9:16</span>
-      </button>
+      </Button>
       {!enabled && (
         <p className="text-[10px] text-zinc-500 text-center">
           Select Gameplay Area First
@@ -104,14 +107,15 @@ export default function ClipRenderControls({
     return (
       <div className="mb-3 space-y-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3">
         <p className="text-xs text-red-300">{error || "Render failed."}</p>
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={onRender}
           className="flex items-center gap-1.5 rounded-lg border border-red-400/30 bg-red-500/20 px-3 py-1.5 text-xs font-semibold text-red-200 transition-colors hover:bg-red-500/30"
         >
           <RefreshCw size={12} />
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
@@ -158,7 +162,7 @@ export default function ClipRenderControls({
           <p className="text-xs text-red-300">{gameplayRegionError}</p>
         )}
         <label className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs text-zinc-300 cursor-pointer hover:border-white/20 transition-colors">
-          <input
+          <Input
             type="checkbox"
             checked={streamerTrackingEnabled === true}
             disabled={trackingSaving}
@@ -167,7 +171,8 @@ export default function ClipRenderControls({
           />
           <span>Use Face/Person Tracking</span>
         </label>
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={onRender}
           disabled={!hasAllStreamerRegions}
@@ -175,7 +180,7 @@ export default function ClipRenderControls({
         >
           <Sparkles size={13} />
           {status === "ready" ? "Render from Master" : "Analyze & Render"}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -184,14 +189,15 @@ export default function ClipRenderControls({
     return (
       <div className="mb-3 space-y-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3">
         <p className="text-xs text-red-300">{error || "Render failed."}</p>
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={onRender}
           className="flex items-center gap-1.5 rounded-lg border border-red-400/30 bg-red-500/20 px-3 py-1.5 text-xs font-semibold text-red-200 transition-colors hover:bg-red-500/30"
         >
           <RefreshCw size={12} />
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
@@ -199,14 +205,15 @@ export default function ClipRenderControls({
   if (status === "ready" && !validGameplayRegion) {
     return (
       <div className="mb-2.5">
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={onRender}
           className="w-full rounded-xl border border-cyan-500/25 bg-cyan-500/10 hover:bg-cyan-500/20 px-3 py-1.5 text-xs font-semibold text-cyan-300 transition-all flex items-center justify-center gap-1.5 active:scale-[0.99]"
         >
           <Sparkles size={12} />
           <span>Render from Master</span>
-        </button>
+        </Button>
       </div>
     );
   }
@@ -217,14 +224,15 @@ export default function ClipRenderControls({
         enabled={validGameplayRegion}
         onClick={onPreviewGameplayRegion}
       />
-      <button
+      <Button
+        variant="ghost"
         type="button"
         onClick={onRender}
         className="w-full rounded-xl border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 px-3 py-2 text-xs font-bold text-cyan-300 transition-all flex items-center justify-center gap-1.5 active:scale-[0.99]"
       >
         <Sparkles size={13} />
         {status === "ready" ? "Render from Master" : "Analyze & Render"}
-      </button>
+      </Button>
     </div>
   );
 }

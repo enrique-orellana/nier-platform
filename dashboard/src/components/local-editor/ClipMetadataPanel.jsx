@@ -4,6 +4,7 @@ import { getApiUrl } from "../../config";
 import { getLocalAiHeaders, subtitleTextFromCues } from "./localEditorAi";
 import { formatClock } from "./localEditorExport";
 import { formatAspectRatio } from "./localEditorAspectRatio";
+import { Button } from "../ui";
 
 const finiteNumber = (value) => {
   const parsed = Number(value);
@@ -267,7 +268,8 @@ export default function ClipMetadataPanel({
         </div>
       </div>
       <div className="mt-2.5">
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={generateHashtags}
           disabled={generatingHashtags}
@@ -279,8 +281,9 @@ export default function ClipMetadataPanel({
             <Wand2 size={12} />
           )}
           {generatingHashtags ? "Generating…" : "Generate hashtags"}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           type="button"
           onClick={generateClipInfo}
           disabled={regeneratingClipInfo}
@@ -294,7 +297,7 @@ export default function ClipMetadataPanel({
           {regeneratingClipInfo
             ? "Regenerating..."
             : "Regenerate clip information"}
-        </button>
+        </Button>
         {hashtagError && (
           <p role="alert" className="mt-1.5 text-[10px] leading-4 text-red-300">
             {hashtagError}

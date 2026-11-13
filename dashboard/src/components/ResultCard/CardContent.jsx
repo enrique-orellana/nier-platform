@@ -8,6 +8,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { formatClock } from "../local-editor/localEditorExport";
+import { Button } from "../ui";
 
 const formatSourceTime = (seconds, fps = 30) =>
   formatClock(Math.max(0, Number(seconds) || 0) * 1000, fps);
@@ -67,7 +68,8 @@ export default function CardContent({ clip, masterDuration }) {
         {/* Platform Switcher & Copy Trigger */}
         <div className="flex items-center justify-between gap-1.5 min-w-0">
           <div className="flex items-center gap-0.5 bg-black/50 p-0.5 rounded-lg border border-white/5 shrink-0">
-            <button
+            <Button
+              variant="ghost"
               type="button"
               onClick={() => setActiveTab("youtube")}
               className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold transition-all ${
@@ -78,8 +80,9 @@ export default function CardContent({ clip, masterDuration }) {
             >
               <Youtube size={11} className="text-red-400 shrink-0" />
               <span>YouTube</span>
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
               type="button"
               onClick={() => setActiveTab("tiktok")}
               className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold transition-all ${
@@ -90,11 +93,12 @@ export default function CardContent({ clip, masterDuration }) {
             >
               <Instagram size={11} className="text-pink-400 shrink-0" />
               <span>Socials</span>
-            </button>
+            </Button>
           </div>
 
           {/* Copy Button */}
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={() =>
               handleCopy(
@@ -116,7 +120,7 @@ export default function CardContent({ clip, masterDuration }) {
                 <span>Copy</span>
               </>
             )}
-          </button>
+          </Button>
         </div>
 
         {/* Content Preview with Expand Option */}

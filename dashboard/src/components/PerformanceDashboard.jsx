@@ -22,6 +22,7 @@ import {
   normalizeRenderPerformanceSummary,
   RENDER_METRIC_RANGES,
 } from "../lib/renderPerformance";
+import { Button, Card, Input, NativeSelect } from "./ui";
 
 const EMPTY_SUMMARY = normalizeRenderPerformanceSummary({});
 
@@ -112,7 +113,7 @@ const buildChartModel = (trend, width = 640, height = 230) => {
 };
 
 const MetricCard = ({ label, value, detail, icon: Icon, tone = "cyan" }) => (
-  <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+  <Card className="rounded-2xl border-white/10 bg-white/[0.035] p-4">
     <div className="flex items-center justify-between gap-3">
       <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
         {label}
@@ -132,7 +133,7 @@ const MetricCard = ({ label, value, detail, icon: Icon, tone = "cyan" }) => (
       {value}
     </div>
     <div className="mt-1 text-xs text-zinc-500">{detail}</div>
-  </div>
+  </Card>
 );
 
 const TrendChart = ({ trend }) => {
@@ -375,7 +376,7 @@ const RecentRenders = ({
             size={14}
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
           />
-          <input
+          <Input
             id="performance-render-search"
             aria-label="Search renders"
             value={search}
@@ -387,7 +388,7 @@ const RecentRenders = ({
         <label className="sr-only" htmlFor="performance-status-filter">
           Render status filter
         </label>
-        <select
+        <NativeSelect
           id="performance-status-filter"
           aria-label="Render status filter"
           value={status}
@@ -397,11 +398,11 @@ const RecentRenders = ({
           <option value="all">All statuses</option>
           <option value="done">Completed</option>
           <option value="error">Failed</option>
-        </select>
+        </NativeSelect>
         <label className="sr-only" htmlFor="performance-mode-filter">
           Acceleration filter
         </label>
-        <select
+        <NativeSelect
           id="performance-mode-filter"
           aria-label="Acceleration filter"
           value={mode}
@@ -411,7 +412,7 @@ const RecentRenders = ({
           <option value="all">All modes</option>
           <option value="gpu">GPU</option>
           <option value="cpu">CPU</option>
-        </select>
+        </NativeSelect>
       </div>
       <div className="mt-4 overflow-x-auto">
         {recent.length === 0 ? (
@@ -480,7 +481,7 @@ const RecentRenders = ({
           <label className="sr-only" htmlFor="performance-page-size">
             Results per page
           </label>
-          <select
+          <NativeSelect
             id="performance-page-size"
             aria-label="Results per page"
             value={pageSize}
@@ -492,8 +493,9 @@ const RecentRenders = ({
                 {size} / page
               </option>
             ))}
-          </select>
-          <button
+          </NativeSelect>
+          <Button
+            variant="ghost"
             type="button"
             aria-label="Previous render page"
             disabled={page <= 1}
@@ -501,11 +503,12 @@ const RecentRenders = ({
             className="rounded-lg border border-white/10 p-1.5 text-zinc-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
           >
             <ChevronLeft size={15} />
-          </button>
+          </Button>
           <span className="min-w-16 text-center text-zinc-400">
             {page} / {totalPages}
           </span>
-          <button
+          <Button
+            variant="ghost"
             type="button"
             aria-label="Next render page"
             disabled={page >= totalPages}
@@ -513,7 +516,7 @@ const RecentRenders = ({
             className="rounded-lg border border-white/10 p-1.5 text-zinc-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
           >
             <ChevronRight size={15} />
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -622,7 +625,7 @@ export default function PerformanceDashboard() {
             <label className="sr-only" htmlFor="performance-range">
               Performance range
             </label>
-            <select
+            <NativeSelect
               id="performance-range"
               aria-label="Performance range"
               value={range}
@@ -641,8 +644,9 @@ export default function PerformanceDashboard() {
                   {option.label}
                 </option>
               ))}
-            </select>
-            <button
+            </NativeSelect>
+            <Button
+              variant="ghost"
               type="button"
               onClick={() => setRefreshToken((current) => current + 1)}
               className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-zinc-300 transition-colors hover:bg-white/10 hover:text-white"
@@ -650,7 +654,7 @@ export default function PerformanceDashboard() {
             >
               <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
               <span className="hidden sm:inline">Refresh</span>
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -659,13 +663,14 @@ export default function PerformanceDashboard() {
             <span className="inline-flex items-center gap-2">
               <AlertTriangle size={16} /> {error}
             </span>
-            <button
+            <Button
+              variant="ghost"
               type="button"
               onClick={() => setRefreshToken((current) => current + 1)}
               className="rounded-lg border border-rose-300/30 px-3 py-1.5 text-xs font-medium text-rose-100 hover:bg-rose-300/10"
             >
               Retry
-            </button>
+            </Button>
           </div>
         )}
 

@@ -1,4 +1,5 @@
 import React from "react";
+import { Button } from "../ui";
 
 const versionLabel = (version) =>
   `v${String(version.version_id || "").slice(0, 8)}`;
@@ -32,7 +33,8 @@ export default function MediaPool({
         <div className="space-y-2">
           {versions.length ? (
             versions.map((version) => (
-              <button
+              <Button
+                variant="ghost"
                 key={version.version_id}
                 type="button"
                 className="group flex w-full items-center justify-between rounded-xl border border-white/[0.05] bg-surfaceLight/50 px-4 py-3 text-left transition-colors hover:bg-primary/10 hover:border-primary/50 hover:shadow-glow"
@@ -44,7 +46,7 @@ export default function MediaPool({
                 <span className="text-xs font-bold text-zinc-500 group-hover:text-primary/70">
                   {version.status || "draft"}
                 </span>
-              </button>
+              </Button>
             ))
           ) : (
             <p className="text-sm font-medium text-zinc-600">
@@ -60,7 +62,8 @@ export default function MediaPool({
         <div className="space-y-2">
           {tracks.length ? (
             tracks.map((track) => (
-              <button
+              <Button
+                variant="ghost"
                 key={track.id}
                 type="button"
                 className="group flex w-full items-center justify-between rounded-xl border border-white/[0.05] bg-surfaceLight/50 px-4 py-3 text-left transition-colors hover:bg-accent/10 hover:border-accent/50 hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]"
@@ -72,7 +75,7 @@ export default function MediaPool({
                 <span className="text-xs font-bold text-zinc-500 group-hover:text-accent/70">
                   {track.language || ""}
                 </span>
-              </button>
+              </Button>
             ))
           ) : (
             <p className="text-sm font-medium text-zinc-600">

@@ -1,4 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  Input,
+} from "../ui";
 
 const MINIMUM_RANGE_SECONDS = 1;
 
@@ -181,37 +189,38 @@ export default function ClipSourceRangeEditor({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Adjust clip range"
-    >
-      <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-[#121214] p-5 shadow-2xl">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showClose={false}
+        closeOnEscape={false}
+        closeOnInteractOutside={false}
+        className="block w-[calc(100%-2rem)] max-w-xl rounded-2xl border-white/10 bg-[#121214] p-5"
+      >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-white">
+            <DialogTitle className="text-lg font-semibold text-white">
               Adjust clip range
-            </h2>
-            <p className="mt-1 text-xs text-zinc-400">
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-xs text-zinc-400">
               Extend or compact the clip before rendering.
-            </p>
+            </DialogDescription>
           </div>
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={onClose}
             className="text-zinc-400 hover:text-white"
             aria-label="Close clip range editor"
           >
             ×
-          </button>
+          </Button>
         </div>
 
         <div className="mt-6 space-y-5">
           <label className="block text-xs text-zinc-300">
             <span className="flex items-center justify-between gap-3">
               <span>Start</span>
-              <input
+              <Input
                 type="text"
                 value={startInput}
                 onChange={(event) =>
@@ -224,7 +233,7 @@ export default function ClipSourceRangeEditor({
                 className="w-20 rounded-md border border-cyan-400/40 bg-black/30 px-2 py-1 text-right font-mono text-primary outline-none focus:border-cyan-300"
               />
             </span>
-            <input
+            <Input
               type="range"
               min="0"
               max={maximum}
@@ -241,7 +250,7 @@ export default function ClipSourceRangeEditor({
           <label className="block text-xs text-zinc-300">
             <span className="flex items-center justify-between gap-3">
               <span>End</span>
-              <input
+              <Input
                 type="text"
                 value={endInput}
                 onChange={(event) => handleTimeInput("end", event.target.value)}
@@ -252,7 +261,7 @@ export default function ClipSourceRangeEditor({
                 className="w-20 rounded-md border border-cyan-400/40 bg-black/30 px-2 py-1 text-right font-mono text-primary outline-none focus:border-cyan-300"
               />
             </span>
-            <input
+            <Input
               type="range"
               min="0"
               max={maximum}
@@ -272,14 +281,16 @@ export default function ClipSourceRangeEditor({
         {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
 
         <div className="mt-5 flex justify-end gap-3">
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={onClose}
             className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             type="button"
             onClick={handleSave}
             disabled={isSaving}
@@ -287,9 +298,9 @@ export default function ClipSourceRangeEditor({
             aria-label="Save clip range"
           >
             {isSaving ? "Saving…" : "Save clip range"}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

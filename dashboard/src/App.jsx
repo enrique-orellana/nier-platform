@@ -50,6 +50,29 @@ import {
   TRANSCRIPTION_LANGUAGE_CHANGE_EVENT,
 } from "./components/local-editor/localEditorAi";
 import PerformanceDashboard from "./components/PerformanceDashboard";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Input,
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar,
+} from "./components/ui";
 
 import {
   pickLmStudioModel,
@@ -150,74 +173,75 @@ const UserProfileSelector = ({ profiles, selectedUserId, onSelect }) => {
     profiles.find((p) => p.username === selectedUserId) || profiles[0];
 
   return (
-    <div className="relative z-50">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between bg-surface border border-white/10 rounded-lg px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 transition-colors min-w-[180px]"
-      >
-        <span className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center text-[10px] font-bold text-white">
-            {selectedProfile?.username?.substring(0, 1).toUpperCase() || "U"}
-          </div>
-          <span className="font-medium text-white truncate max-w-[100px]">
-            {selectedProfile?.username || "Select User"}
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          className="flex min-w-[180px] items-center justify-between rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-white/5"
+        >
+          <span className="flex items-center gap-2">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-primary to-purple-600 text-[10px] font-bold text-white">
+              {selectedProfile?.username?.substring(0, 1).toUpperCase() || "U"}
+            </span>
+            <span className="max-w-[100px] truncate font-medium text-white">
+              {selectedProfile?.username || "Select User"}
+            </span>
           </span>
-        </span>
-        <ChevronDown
-          size={14}
-          className={`text-zinc-500 transition-transform ${isOpen ? "rotate-180" : ""}`}
-        />
-      </button>
+          <ChevronDown
+            size={14}
+            className={`text-zinc-500 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          />
+        </Button>
+      </DropdownMenuTrigger>
 
-      {isOpen && (
-        <div className="absolute top-full mt-2 right-0 w-64 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
-          <div className="max-h-60 overflow-y-auto custom-scrollbar">
-            {profiles.map((profile) => (
-              <button
-                key={profile.username}
-                onClick={() => {
-                  onSelect(profile.username);
-                  setIsOpen(false);
-                }}
-                className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors text-left group border-b border-white/5 last:border-0"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center text-xs font-bold text-white border border-white/10 shrink-0">
-                    {profile.username.substring(0, 2).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-zinc-200 group-hover:text-white transition-colors truncate">
-                      {profile.username}
-                    </div>
-                    <div className="flex gap-2 mt-0.5">
-                      {/* Status indicators */}
-                      <div
-                        className={`flex items-center gap-1 text-[10px] ${profile.connected.includes("tiktok") ? "text-zinc-300" : "text-zinc-600"}`}
-                      >
-                        <TikTokIcon size={10} />
-                      </div>
-                      <div
-                        className={`flex items-center gap-1 text-[10px] ${profile.connected.includes("instagram") ? "text-pink-400" : "text-zinc-600"}`}
-                      >
-                        <Instagram size={10} />
-                      </div>
-                      <div
-                        className={`flex items-center gap-1 text-[10px] ${profile.connected.includes("youtube") ? "text-red-400" : "text-zinc-600"}`}
-                      >
-                        <Youtube size={10} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                {selectedUserId === profile.username && (
-                  <Check size={14} className="text-primary shrink-0" />
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+      <DropdownMenuContent
+        align="end"
+        className="max-h-60 w-64 overflow-y-auto custom-scrollbar"
+      >
+        {profiles.map((profile) => (
+          <DropdownMenuItem
+            key={profile.username}
+            onSelect={() => {
+              onSelect(profile.username);
+              setIsOpen(false);
+            }}
+            className="flex w-full justify-between border-b border-white/5 px-4 py-3 text-left last:border-0 focus:bg-white/5"
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-primary/20 to-purple-500/20 text-xs font-bold text-white">
+                {profile.username.substring(0, 2).toUpperCase()}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium text-zinc-200">
+                  {profile.username}
+                </span>
+                <span className="mt-0.5 flex gap-2">
+                  <span
+                    className={`flex items-center gap-1 text-[10px] ${profile.connected.includes("tiktok") ? "text-zinc-300" : "text-zinc-600"}`}
+                  >
+                    <TikTokIcon size={10} />
+                  </span>
+                  <span
+                    className={`flex items-center gap-1 text-[10px] ${profile.connected.includes("instagram") ? "text-pink-400" : "text-zinc-600"}`}
+                  >
+                    <Instagram size={10} />
+                  </span>
+                  <span
+                    className={`flex items-center gap-1 text-[10px] ${profile.connected.includes("youtube") ? "text-red-400" : "text-zinc-600"}`}
+                  >
+                    <Youtube size={10} />
+                  </span>
+                </span>
+              </span>
+            </span>
+            {selectedUserId === profile.username && (
+              <Check size={14} className="shrink-0 text-primary" />
+            )}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 
@@ -1334,16 +1358,14 @@ function App() {
     }
   });
 
-  const toggleSidebar = () => {
-    setSidebarCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("openshorts_sidebar_collapsed", String(next));
-      } catch (error) {
-        console.warn("Unable to persist sidebar preference", error);
-      }
-      return next;
-    });
+  const handleSidebarOpenChange = (open) => {
+    const collapsed = !open;
+    setSidebarCollapsed(collapsed);
+    try {
+      localStorage.setItem("openshorts_sidebar_collapsed", String(collapsed));
+    } catch (error) {
+      console.warn("Unable to persist sidebar preference", error);
+    }
   };
 
   const NavItem = ({
@@ -1352,120 +1374,143 @@ function App() {
     label,
     activeColor = "bg-primary/10 text-primary",
   }) => {
+    const { isMobile, state, toggleSidebar } = useSidebar();
+    const isCollapsed = state === "collapsed" && !isMobile;
     const isActive = activeTab === tabKey;
     return (
-      <div className="relative group/nav">
-        <button
-          onClick={() => navigateToTab(tabKey)}
-          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
-            isActive
-              ? activeColor
-              : "text-zinc-400 hover:text-white hover:bg-white/5"
-          }`}
-        >
-          <Icon size={20} className="shrink-0" />
-          <span
-            className={`font-medium whitespace-nowrap overflow-hidden transition-all duration-300 ${
-              sidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
+      <SidebarMenuItem>
+        <div className="relative group/nav">
+          <SidebarMenuButton
+            isActive={isActive}
+            onClick={() => {
+              navigateToTab(tabKey);
+              if (isMobile) toggleSidebar();
+            }}
+            aria-label={label}
+            title={isCollapsed ? label : undefined}
+            className={`transition-colors ${
+              isActive
+                ? activeColor
+                : "text-zinc-400 hover:text-white hover:bg-white/5"
             }`}
           >
-            {label}
-          </span>
-        </button>
-        {sidebarCollapsed && (
-          <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 px-2.5 py-1.5 rounded-lg bg-zinc-800 text-white text-xs font-medium shadow-xl opacity-0 group-hover/nav:opacity-100 transition-opacity duration-150 whitespace-nowrap">
-            {label}
-          </div>
-        )}
-      </div>
+            <Icon size={20} className="size-5 shrink-0" />
+            <span className={isCollapsed ? "sr-only" : "font-medium"}>
+              {label}
+            </span>
+          </SidebarMenuButton>
+          {isCollapsed && (
+            <div className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-lg bg-zinc-800 px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-xl transition-opacity duration-150 group-hover/nav:opacity-100">
+              {label}
+            </div>
+          )}
+        </div>
+      </SidebarMenuItem>
     );
   };
 
-  const Sidebar = () => (
-    <div
-      className="bg-surface border-r border-white/5 flex flex-col h-full shrink-0 transition-all duration-300 relative"
-      style={{ width: sidebarCollapsed ? "72px" : "256px" }}
-    >
-      {/* Logo + toggle */}
-      <div
-        className={`flex items-center transition-all duration-300 ${
-          sidebarCollapsed ? "p-4 justify-center" : "px-4 py-5"
-        }`}
-      >
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center shrink-0 overflow-hidden border border-white/5">
-            <img
-              src="/logo-openshorts.png"
-              alt="Logo"
-              className="w-full h-full object-cover"
-            />
-          </div>
-          <span
-            className={`font-bold text-lg text-white tracking-tight whitespace-nowrap overflow-hidden transition-all duration-300 ${
-              sidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
-            }`}
-          >
-            OpenShorts
-          </span>
-        </div>
-        <button
-          onClick={toggleSidebar}
-          className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/8 transition-colors"
-          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {sidebarCollapsed ? (
-            <ChevronRight size={14} />
-          ) : (
-            <ChevronLeft size={14} />
-          )}
-        </button>
-      </div>
+  const AppSidebar = () => {
+    const { isMobile, state } = useSidebar();
+    const isCollapsed = state === "collapsed" && !isMobile;
 
-      {/* Nav items */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        <NavItem
-          tabKey="dashboard"
-          icon={LayoutDashboard}
-          label="Clip Generator"
-          activeColor="bg-primary/10 text-primary"
-        />
-        <NavItem
-          tabKey="editor"
-          icon={Scissors}
-          label="Local Editor"
-          activeColor="bg-fuchsia-500/10 text-fuchsia-400"
-        />
-        <NavItem
-          tabKey="ai-agent"
-          icon={Bot}
-          label="AI Agent"
-          activeColor="bg-emerald-500/10 text-emerald-400"
-        />
-        <NavItem
-          tabKey="projects"
-          icon={FolderOpen}
-          label="Projects"
-          activeColor="bg-cyan-500/10 text-cyan-400"
-        />
-        <NavItem
-          tabKey="performance"
-          icon={Activity}
-          label="Performance"
-          activeColor="bg-cyan-500/10 text-cyan-400"
-        />
-        <NavItem
-          tabKey="settings"
-          icon={Settings}
-          label="Settings"
-          activeColor="bg-primary/10 text-primary"
-        />
-      </nav>
-    </div>
-  );
+    return (
+      <Sidebar collapsible="icon">
+        <SidebarHeader
+          className={`transition-all duration-300 ${
+            isCollapsed
+              ? "items-center gap-2 p-2"
+              : "flex-row items-center justify-between px-4 py-5"
+          }`}
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/5 bg-white/5">
+              <img
+                src="/logo-openshorts.png"
+                alt="OpenShorts"
+                className="h-full w-full object-cover"
+              />
+            </div>
+            <span
+              className={`overflow-hidden whitespace-nowrap text-lg font-bold tracking-tight text-white transition-all duration-300 ${
+                isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
+              }`}
+            >
+              OpenShorts
+            </span>
+          </div>
+          <SidebarTrigger
+            className="shrink-0 hover:bg-white/5"
+            title={
+              isMobile
+                ? "Close navigation"
+                : isCollapsed
+                  ? "Expand sidebar"
+                  : "Collapse sidebar"
+            }
+          >
+            {isMobile ? (
+              <X size={14} />
+            ) : isCollapsed ? (
+              <ChevronRight size={14} />
+            ) : (
+              <ChevronLeft size={14} />
+            )}
+          </SidebarTrigger>
+        </SidebarHeader>
+
+        <SidebarContent>
+          <SidebarGroup className="px-3 py-4">
+            <SidebarMenu>
+              <NavItem
+                tabKey="dashboard"
+                icon={LayoutDashboard}
+                label="Clip Generator"
+                activeColor="bg-primary/10 text-primary"
+              />
+              <NavItem
+                tabKey="editor"
+                icon={Scissors}
+                label="Local Editor"
+                activeColor="bg-fuchsia-500/10 text-fuchsia-400"
+              />
+              <NavItem
+                tabKey="ai-agent"
+                icon={Bot}
+                label="AI Agent"
+                activeColor="bg-emerald-500/10 text-emerald-400"
+              />
+              <NavItem
+                tabKey="projects"
+                icon={FolderOpen}
+                label="Projects"
+                activeColor="bg-cyan-500/10 text-cyan-400"
+              />
+              <NavItem
+                tabKey="performance"
+                icon={Activity}
+                label="Performance"
+                activeColor="bg-cyan-500/10 text-cyan-400"
+              />
+              <NavItem
+                tabKey="settings"
+                icon={Settings}
+                label="Settings"
+                activeColor="bg-primary/10 text-primary"
+              />
+            </SidebarMenu>
+          </SidebarGroup>
+        </SidebarContent>
+      </Sidebar>
+    );
+  };
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden selection:bg-primary/30">
-      <Sidebar />
+    <SidebarProvider
+      open={!sidebarCollapsed}
+      onOpenChange={handleSidebarOpenChange}
+      className="bg-background selection:bg-primary/30"
+    >
+      <AppSidebar />
 
       {route.editor && (
         <div
@@ -1483,7 +1528,12 @@ function App() {
         </div>
       )}
 
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+      <SidebarInset className="flex h-full flex-1 flex-col overflow-hidden relative">
+        {activeTab === "editor" && (
+          <SidebarTrigger className="fixed left-3 top-3 z-50 bg-surface/90 md:hidden">
+            <Menu size={16} />
+          </SidebarTrigger>
+        )}
         {/* Background Gradients */}
         <div className="absolute inset-0 overflow-hidden -z-10 pointer-events-none">
           <div className="absolute -top-[10%] -right-[10%] w-[50%] h-[50%] bg-primary/5 rounded-full blur-[120px]" />
@@ -1493,14 +1543,21 @@ function App() {
         {activeTab !== "editor" && (
           <header className="h-16 border-b border-white/5 bg-background/50 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-10">
             <div className="flex items-center gap-4">
+              <SidebarTrigger
+                className="md:hidden"
+                aria-label="Open navigation"
+              >
+                <Menu size={16} />
+              </SidebarTrigger>
               {status !== "idle" && (
-                <button
+                <Button
+                  variant="ghost"
                   onClick={handleReset}
                   className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
                 >
                   <PlusCircle size={16} />
                   <span className="hidden sm:inline">New Project</span>
-                </button>
+                </Button>
               )}
             </div>
 
@@ -1514,7 +1571,8 @@ function App() {
               )}
 
               {needsAiConnection && (
-                <button
+                <Button
+                  variant="ghost"
                   onClick={() => navigateToTab("settings")}
                   className="text-xs text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1 rounded-full border border-amber-500/30 transition-colors flex items-center gap-1.5"
                   title="Click to configure your API keys"
@@ -1523,7 +1581,7 @@ function App() {
                   {aiProvider === "openai-codex" && !needsOpenRouterKey
                     ? "Connect ChatGPT"
                     : `${needsOpenRouterKey ? "OpenRouter" : "Gemini"} API Key Missing`}
-                </button>
+                </Button>
               )}
             </div>
           </header>
@@ -1547,12 +1605,13 @@ function App() {
                 </span>
               </div>
             </div>
-            <button
+            <Button
+              variant="ghost"
               onClick={() => navigateToTab("settings")}
               className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black transition-colors"
             >
               Go to Settings
-            </button>
+            </Button>
           </div>
         )}
 
@@ -1566,12 +1625,13 @@ function App() {
                 Your previous work has been restored.
               </span>
             </div>
-            <button
+            <Button
+              variant="ghost"
               onClick={() => setSessionRecovered(false)}
               className="text-zinc-500 hover:text-white transition-colors"
             >
               <X size={14} />
-            </button>
+            </Button>
           </div>
         )}
 
@@ -1666,19 +1726,19 @@ function App() {
                     Upload-Post API Key
                   </label>
                   <div className="flex gap-2">
-                    <input
+                    <Input
                       type="password"
                       value={uploadPostKey}
                       onChange={(e) => setUploadPostKey(e.target.value)}
-                      className="input-field"
                       placeholder="ey..."
                     />
-                    <button
+                    <Button
+                      variant="default"
                       onClick={fetchUserProfiles}
-                      className="btn-primary py-2 px-4 text-sm"
+                      className="py-2 px-4 text-sm"
                     >
                       Connect
-                    </button>
+                    </Button>
                   </div>
                   <div className="text-xs text-zinc-500 leading-relaxed">
                     Connect your Upload-Post account if you want publishing
@@ -1751,14 +1811,14 @@ function App() {
                     ElevenLabs API Key
                   </label>
                   <div className="flex gap-2">
-                    <input
+                    <Input
                       type="password"
                       value={elevenLabsKey}
                       onChange={(e) => setElevenLabsKey(e.target.value)}
-                      className="input-field"
                       placeholder="sk_..."
                     />
-                    <button
+                    <Button
+                      variant="default"
                       onClick={() => {
                         if (elevenLabsKey) {
                           localStorage.setItem(
@@ -1768,10 +1828,10 @@ function App() {
                           alert("ElevenLabs API Key saved!");
                         }
                       }}
-                      className="btn-primary py-2 px-4 text-sm"
+                      className="py-2 px-4 text-sm"
                     >
                       Save
-                    </button>
+                    </Button>
                   </div>
                   <div className="text-xs text-zinc-500 leading-relaxed">
                     Get your API key from ElevenLabs to enable video
@@ -1913,21 +1973,24 @@ function App() {
                         of clips.
                       </p>
                     </div>
-                    <a
-                      href="https://github.com/mutonby/skill-autoshorts"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-primary py-2 px-4 text-sm flex items-center gap-2 shrink-0"
-                    >
-                      View on GitHub <ExternalLink size={14} />
-                    </a>
+                    <Button variant="default" asChild>
+                      <a
+                        href="https://github.com/mutonby/skill-autoshorts"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-2 px-4 text-sm flex items-center gap-2 shrink-0"
+                      >
+                        View on GitHub <ExternalLink size={14} />
+                      </a>
+                    </Button>
                   </div>
 
                   <div className="bg-[#0c0c0e] border border-white/10 rounded-lg p-4 font-mono text-xs text-zinc-300 flex items-center justify-between gap-3">
                     <span className="truncate">
                       git clone https://github.com/mutonby/skill-autoshorts
                     </span>
-                    <button
+                    <Button
+                      variant="ghost"
                       onClick={() =>
                         navigator.clipboard.writeText(
                           "git clone https://github.com/mutonby/skill-autoshorts",
@@ -1937,7 +2000,7 @@ function App() {
                       title="Copy"
                     >
                       <Copy size={14} />
-                    </button>
+                    </Button>
                   </div>
 
                   <div className="grid sm:grid-cols-2 gap-3 text-sm">
@@ -2098,7 +2161,8 @@ function App() {
                       <span className="text-xs font-mono text-zinc-400 flex items-center gap-2">
                         <Terminal size={12} /> System Logs
                       </span>
-                      <button
+                      <Button
+                        variant="ghost"
                         onClick={() => setLogsVisible(!logsVisible)}
                         className="text-zinc-500 hover:text-white transition-colors"
                       >
@@ -2107,7 +2171,7 @@ function App() {
                         ) : (
                           <ChevronDown size={14} className="rotate-180" />
                         )}
-                      </button>
+                      </Button>
                     </div>
                     {logsVisible && (
                       <div className="flex-1 p-4 overflow-y-auto font-mono text-xs space-y-1.5 custom-scrollbar text-zinc-400">
@@ -2154,13 +2218,14 @@ function App() {
                       </span>
                     )}
                     {results?.clips?.length > 1 && status === "complete" && (
-                      <button
+                      <Button
+                        variant="ghost"
                         onClick={() => setShowScheduleWeek(true)}
                         className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500/20 to-indigo-500/20 hover:from-purple-500/30 hover:to-indigo-500/30 border border-purple-500/30 text-purple-300 hover:text-purple-200 rounded-full text-xs font-bold transition-all"
                       >
                         <Calendar size={14} />
                         Programar Semana
-                      </button>
+                      </Button>
                     )}
                   </h2>
 
@@ -2218,29 +2283,31 @@ function App() {
               </div>
             )}
         </div>
-      </main>
+      </SidebarInset>
 
       {/* Missing API Key Modal */}
       {showKeyModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-          onClick={() => setShowKeyModal(false)}
+        <Dialog
+          open={showKeyModal}
+          onOpenChange={(open) => !open && setShowKeyModal(false)}
         >
-          <div
-            className="bg-[#18181b] border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 space-y-4 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+          <DialogContent
+            showClose={false}
+            closeOnEscape={false}
+            overlayClassName="bg-black/60 backdrop-blur-sm"
+            className="block w-[calc(100%-2rem)] max-w-md space-y-4 rounded-2xl border-white/10 bg-[#18181b] p-6"
           >
-            <h2 className="text-lg font-bold text-white">
+            <DialogTitle className="text-lg font-bold text-white">
               {!apiKey
                 ? "Gemini API Key Required"
                 : "Optional Publishing Setup"}
-            </h2>
-            <p className="text-sm text-zinc-400">
+            </DialogTitle>
+            <DialogDescription className="text-sm text-zinc-400">
               OpenShorts needs a{" "}
               <strong className="text-zinc-200">Gemini</strong> API key for
               generation. <strong className="text-zinc-200">Upload-Post</strong>{" "}
               is optional and only used for social publishing.
-            </p>
+            </DialogDescription>
 
             {/* Gemini block */}
             <div
@@ -2273,7 +2340,7 @@ function App() {
                     <li>Click "Create API Key"</li>
                     <li>Copy the key and paste it below</li>
                   </ol>
-                  <input
+                  <Input
                     type="text"
                     placeholder="Paste your Gemini API key here..."
                     className="w-full bg-black/50 border border-white/20 rounded-lg px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500"
@@ -2334,7 +2401,7 @@ function App() {
                     </li>
                     <li>Paste it below</li>
                   </ol>
-                  <input
+                  <Input
                     type="text"
                     placeholder="Paste your Upload-Post API key here..."
                     className="w-full bg-black/50 border border-white/20 rounded-lg px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500"
@@ -2349,13 +2416,15 @@ function App() {
             </div>
 
             <div className="flex gap-3">
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => setShowKeyModal(false)}
                 className="flex-1 text-sm text-zinc-400 py-2 rounded-lg border border-white/10 hover:bg-white/5 transition-colors"
               >
                 Close
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={() => {
                   setShowKeyModal(false);
                   navigateToTab("settings");
@@ -2363,10 +2432,10 @@ function App() {
                 className="flex-1 text-sm text-white py-2 rounded-lg bg-blue-600 hover:bg-blue-500 transition-colors font-medium"
               >
                 Open Settings
-              </button>
+              </Button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       <ScheduleWeekModal
@@ -2377,7 +2446,7 @@ function App() {
         uploadPostKey={uploadPostKey}
         uploadUserId={uploadUserId}
       />
-    </div>
+    </SidebarProvider>
   );
 }
 

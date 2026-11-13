@@ -10,6 +10,7 @@ import {
   getHookPositionCoordinates,
   normalizeHookBoxStyle,
 } from "../../remotion/lib/hookVisual";
+import { Button, Input, Textarea } from "../ui";
 
 const sectionClass = "space-y-3 border-t border-white/10 pt-4";
 const sectionHeadingClass =
@@ -79,7 +80,7 @@ export default function LocalEditorHookInspector({
           </h4>
           <label className="block">
             <span className={cleanLabelClass}>Text</span>
-            <textarea
+            <Textarea
               aria-label="Hook text"
               rows={4}
               value={hook.text}
@@ -108,7 +109,8 @@ export default function LocalEditorHookInspector({
           </div>
           <div className="grid grid-cols-3 gap-2">
             {["top", "center", "bottom"].map((position) => (
-              <button
+              <Button
+                variant="ghost"
                 key={position}
                 type="button"
                 aria-label={
@@ -118,13 +120,13 @@ export default function LocalEditorHookInspector({
                 className={cleanChoiceClass(hook.position === position)}
               >
                 {position}
-              </button>
+              </Button>
             ))}
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <label className="text-xs text-zinc-400">
               X (px)
-              <input
+              <Input
                 aria-label="Hook X position"
                 type="number"
                 min="0"
@@ -139,7 +141,7 @@ export default function LocalEditorHookInspector({
             </label>
             <label className="text-xs text-zinc-400">
               Y (px)
-              <input
+              <Input
                 aria-label="Hook Y position"
                 type="number"
                 min="0"
@@ -161,7 +163,8 @@ export default function LocalEditorHookInspector({
           <span className={cleanLabelClass}>Size</span>
           <div className="grid grid-cols-3 gap-2">
             {HOOK_SIZE_OPTIONS.map((option) => (
-              <button
+              <Button
+                variant="ghost"
                 key={option.value}
                 type="button"
                 onClick={() => onChange({ ...hook, size: option.value })}
@@ -170,7 +173,7 @@ export default function LocalEditorHookInspector({
                 )}
               >
                 {option.label}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -178,7 +181,8 @@ export default function LocalEditorHookInspector({
           <span className={cleanLabelClass}>Entrance</span>
           <div className="grid grid-cols-2 gap-2">
             {HOOK_ENTRANCE_OPTIONS.map((option) => (
-              <button
+              <Button
+                variant="ghost"
                 key={option.value}
                 type="button"
                 onClick={() =>
@@ -189,7 +193,7 @@ export default function LocalEditorHookInspector({
                 )}
               >
                 {option.label}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -206,7 +210,7 @@ export default function LocalEditorHookInspector({
             <span>Duration</span>
             <span>{displayDuration}s</span>
           </label>
-          <input
+          <Input
             aria-label="Hook duration"
             type="range"
             min="2"
@@ -223,7 +227,7 @@ export default function LocalEditorHookInspector({
         <div className="grid grid-cols-2 gap-2">
           <label className="text-xs text-zinc-400">
             Start (ms)
-            <input
+            <Input
               aria-label="Hook start"
               type="number"
               value={hook.startMs}
@@ -235,7 +239,7 @@ export default function LocalEditorHookInspector({
           </label>
           <label className="text-xs text-zinc-400">
             End (ms)
-            <input
+            <Input
               aria-label="Hook end"
               type="number"
               value={hook.endMs}
@@ -262,7 +266,8 @@ export default function LocalEditorHookInspector({
               { value: "rounded", label: "Rounded" },
               { value: "headline_cards", label: "Headline cards" },
             ].map((option) => (
-              <button
+              <Button
+                variant="ghost"
                 key={option.value}
                 type="button"
                 aria-label={option.label}
@@ -275,7 +280,7 @@ export default function LocalEditorHookInspector({
                 )}
               >
                 {option.label}
-              </button>
+              </Button>
             ))}
           </div>
           <p className="mt-2 text-[10px] text-zinc-500">
@@ -290,7 +295,8 @@ export default function LocalEditorHookInspector({
               aria-label="Hook text color presets"
             >
               {SUBTITLE_COLOR_PRESETS.map((preset) => (
-                <button
+                <Button
+                  variant="ghost"
                   key={preset.color}
                   type="button"
                   aria-label={`Use hook text color ${preset.label}`}
@@ -305,7 +311,7 @@ export default function LocalEditorHookInspector({
                 title="Custom color"
               >
                 <span className="text-[10px] text-zinc-400">+</span>
-                <input
+                <Input
                   aria-label="Hook text color"
                   type="color"
                   value={hook.color}
@@ -319,7 +325,7 @@ export default function LocalEditorHookInspector({
           </div>
           <label className="block text-xs text-zinc-400">
             Size
-            <input
+            <Input
               aria-label="Hook font size"
               type="number"
               min="12"
@@ -339,7 +345,8 @@ export default function LocalEditorHookInspector({
             aria-label="Hook background color presets"
           >
             {SUBTITLE_COLOR_PRESETS.map((preset) => (
-              <button
+              <Button
+                variant="ghost"
                 key={preset.color}
                 type="button"
                 aria-label={`Use hook background ${preset.label}`}
@@ -354,7 +361,7 @@ export default function LocalEditorHookInspector({
               title="Custom background color"
             >
               <span className="text-[10px] text-zinc-400">+</span>
-              <input
+              <Input
                 aria-label="Hook background"
                 type="color"
                 value={hook.background}
@@ -369,13 +376,14 @@ export default function LocalEditorHookInspector({
       </section>
 
       <div className="border-t border-white/10 pt-4">
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={onRemove}
           className="w-full rounded-lg border border-red-400/30 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-400/10"
         >
           Remove Hook
-        </button>
+        </Button>
       </div>
     </div>
   );

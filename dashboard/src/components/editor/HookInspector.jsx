@@ -1,4 +1,5 @@
 import React from "react";
+import { Input, NativeSelect } from "../ui";
 
 export default function HookInspector({ hook, onChange }) {
   if (!hook)
@@ -19,7 +20,7 @@ export default function HookInspector({ hook, onChange }) {
     <div className="space-y-2 text-xs">
       <label className="block">
         Text
-        <input
+        <Input
           className="mt-1 w-full rounded bg-black/30 p-2"
           value={hook.text || ""}
           onChange={(e) => set("text", e.target.value)}
@@ -28,7 +29,7 @@ export default function HookInspector({ hook, onChange }) {
       <div className="grid grid-cols-2 gap-2">
         <label>
           Start (ms)
-          <input
+          <Input
             type="number"
             className="mt-1 w-full rounded bg-black/30 p-2"
             value={hook.startMs || 0}
@@ -37,7 +38,7 @@ export default function HookInspector({ hook, onChange }) {
         </label>
         <label>
           End (ms)
-          <input
+          <Input
             type="number"
             className="mt-1 w-full rounded bg-black/30 p-2"
             value={hook.endMs || hook.displayDurationSec * 1000 || 1000}
@@ -47,7 +48,7 @@ export default function HookInspector({ hook, onChange }) {
       </div>
       <label className="block">
         Position
-        <select
+        <NativeSelect
           className="mt-1 w-full rounded bg-black/30 p-2"
           value={hook.position || "top"}
           onChange={(e) => set("position", e.target.value)}
@@ -55,7 +56,7 @@ export default function HookInspector({ hook, onChange }) {
           <option>top</option>
           <option>center</option>
           <option>bottom</option>
-        </select>
+        </NativeSelect>
       </label>
     </div>
   );

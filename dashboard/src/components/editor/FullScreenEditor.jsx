@@ -40,6 +40,7 @@ import {
   normalizeFaceTrackingCache,
   requestFaceTracking,
 } from "../../editor/faceTracking";
+import { Button } from "../ui";
 
 const defaultSubtitleTrackId = (nextManifest) =>
   nextManifest?.active_subtitle_track_id ||
@@ -1702,7 +1703,8 @@ export default function FullScreenEditor({
         onClose={onClose}
         headerActions={
           <>
-            <button
+            <Button
+              variant="ghost"
               type="button"
               onClick={() => saveVersion()}
               disabled={busy}
@@ -1714,7 +1716,7 @@ export default function FullScreenEditor({
                 <Save size={13} />
               )}
               {busy ? "Saving..." : "Save as new version"}
-            </button>
+            </Button>
             {error && (
               <span className="text-xs text-red-300" role="alert">
                 {error}

@@ -1,4 +1,5 @@
 import React from "react";
+import { Button, Input, NativeSelect, Textarea } from "../ui";
 
 export default function SubtitleCueInspector({
   cue,
@@ -24,7 +25,7 @@ export default function SubtitleCueInspector({
     <div className="space-y-2 text-xs">
       <label className="block">
         Subtitle track
-        <select
+        <NativeSelect
           className="mt-1 w-full rounded bg-black/30 p-2"
           value={activeTrackId || ""}
           onChange={(e) => onTrackChange?.(e.target.value)}
@@ -34,11 +35,11 @@ export default function SubtitleCueInspector({
               {track.label || track.language}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </label>
       <label className="block">
         Text
-        <textarea
+        <Textarea
           autoFocus={Boolean(cue.isNew)}
           className="mt-1 w-full rounded bg-black/30 p-2"
           rows={3}
@@ -49,7 +50,7 @@ export default function SubtitleCueInspector({
       <div className="grid grid-cols-2 gap-2">
         <label>
           Start (ms)
-          <input
+          <Input
             type="number"
             className="mt-1 w-full rounded bg-black/30 p-2"
             value={cue.startMs || 0}
@@ -58,7 +59,7 @@ export default function SubtitleCueInspector({
         </label>
         <label>
           End (ms)
-          <input
+          <Input
             type="number"
             className="mt-1 w-full rounded bg-black/30 p-2"
             value={cue.endMs || 0}
@@ -66,7 +67,8 @@ export default function SubtitleCueInspector({
           />
         </label>
       </div>
-      <button
+      <Button
+        variant="ghost"
         type="button"
         className="w-full rounded border border-red-400/40 px-3 py-2 text-red-300 hover:bg-red-400/10"
         onClick={() =>
@@ -75,7 +77,7 @@ export default function SubtitleCueInspector({
         aria-label="Delete subtitle cue"
       >
         Delete subtitle cue
-      </button>
+      </Button>
     </div>
   );
 }

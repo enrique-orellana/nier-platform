@@ -3,6 +3,7 @@ import React from "react";
 import { buildVisibleProviders } from "../lib/lmStudio";
 import { codexStatusLabel } from "../lib/openaiCodex";
 import { SUBTITLE_LANGUAGES } from "./subtitleLanguages";
+import { Button, Input, NativeSelect } from "./ui";
 
 export default function AISettingsPanel({
   aiProvider,
@@ -63,14 +64,14 @@ export default function AISettingsPanel({
   const renderCodexModelSelect = (label, value, onChange, options) => (
     <label className="block" key={label}>
       <span className="block text-sm text-zinc-400 mb-2">{label}</span>
-      <select
+      <NativeSelect
         aria-label={label}
         value={value}
         onChange={(e) => {
           setAiQualityPreset("custom");
           onChange(e.target.value);
         }}
-        className="input-field"
+        className=""
         disabled={codexModelDisabled}
       >
         <option value="auto">Auto (Codex default)</option>
@@ -79,7 +80,7 @@ export default function AISettingsPanel({
             {model.label}
           </option>
         ))}
-      </select>
+      </NativeSelect>
     </label>
   );
 
@@ -95,14 +96,14 @@ export default function AISettingsPanel({
     return (
       <label className="block" key={label}>
         <span className="block text-sm text-zinc-400 mb-2">{label}</span>
-        <select
+        <NativeSelect
           aria-label={label}
           value={value}
           onChange={(e) => {
             setAiQualityPreset("custom");
             onChange(e.target.value);
           }}
-          className="input-field"
+          className=""
           disabled={codexModelDisabled || efforts.length === 0}
         >
           <option value="auto">Auto (model default)</option>
@@ -115,7 +116,7 @@ export default function AISettingsPanel({
               {effort.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </label>
     );
   };
@@ -131,10 +132,10 @@ export default function AISettingsPanel({
       <div className="grid md:grid-cols-2 gap-4">
         <label className="block">
           <span className="block text-sm text-zinc-400 mb-2">Provider</span>
-          <select
+          <NativeSelect
             value={aiProvider}
             onChange={(e) => setAiProvider(e.target.value)}
-            className="input-field"
+            className=""
           >
             {providerOptions.includes("gemini") && (
               <option value="gemini">Gemini (Cloud)</option>
@@ -148,7 +149,7 @@ export default function AISettingsPanel({
             {providerOptions.includes("openai-codex") && (
               <option value="openai-codex">OpenAI Codex (ChatGPT)</option>
             )}
-          </select>
+          </NativeSelect>
         </label>
         {isCodex ? (
           <div className="rounded-lg border border-white/10 bg-black/20 p-4">
@@ -177,14 +178,15 @@ export default function AISettingsPanel({
             {codexError && (
               <p className="mt-3 text-xs text-red-400">{codexError}</p>
             )}
-            <button
+            <Button
+              variant="default"
               type="button"
               onClick={
                 codexStatus.connected || codexStatus.pending
                   ? onDisconnectCodex
                   : onConnectCodex
               }
-              className="btn-primary mt-4 py-2 px-4 text-sm disabled:opacity-50"
+              className="mt-4 py-2 px-4 text-sm disabled:opacity-50"
             >
               {codexStatus.connected
                 ? "Disconnect ChatGPT"
@@ -193,7 +195,7 @@ export default function AISettingsPanel({
                   : codexStatus.requiresReconnect
                     ? "Reconnect ChatGPT"
                     : "Connect ChatGPT"}
-            </button>
+            </Button>
           </div>
         ) : (
           !isOpenRouter && (
@@ -201,11 +203,11 @@ export default function AISettingsPanel({
               <span className="block text-sm text-zinc-400 mb-2">
                 API / Access Key
               </span>
-              <input
+              <Input
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                className="input-field"
+                className=""
                 placeholder={
                   aiProvider === "gemini"
                     ? "AIza..."
@@ -220,7 +222,7 @@ export default function AISettingsPanel({
         {!isCodex && (
           <label className="block">
             <span className="block text-sm text-zinc-400 mb-2">Base URL</span>
-            <input
+            <Input
               type="text"
               value={
                 isOpenRouter
@@ -228,7 +230,7 @@ export default function AISettingsPanel({
                   : aiBaseUrl
               }
               onChange={(e) => setAiBaseUrl(e.target.value)}
-              className="input-field"
+              className=""
               readOnly={isOpenRouter}
               placeholder={
                 isOpenRouter
@@ -252,16 +254,16 @@ export default function AISettingsPanel({
           <span className="block text-sm text-zinc-400 mb-2">
             Quality Preset
           </span>
-          <select
+          <NativeSelect
             value={aiQualityPreset}
             onChange={(e) => setAiQualityPreset(e.target.value)}
-            className="input-field"
+            className=""
           >
             <option value="lite">Lite</option>
             <option value="balanced">Balanced</option>
             <option value="best">Best</option>
             <option value="custom">Custom</option>
-          </select>
+          </NativeSelect>
         </label>
 
         {isCodex ? (
@@ -278,14 +280,15 @@ export default function AISettingsPanel({
                         ? "No account models discovered yet."
                         : "Connect ChatGPT to load account models."}
               </p>
-              <button
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={onRefreshCodexModels}
                 disabled={!codexStatus.connected || codexModelsLoading}
                 className="text-xs text-primary hover:underline disabled:text-zinc-600 disabled:no-underline"
               >
                 {codexModelsLoading ? "Refreshing..." : "Refresh models"}
-              </button>
+              </Button>
             </div>
             {renderCodexModelSelect(
               "Text Model",
@@ -335,11 +338,11 @@ export default function AISettingsPanel({
                 <span className="block text-sm text-zinc-400 mb-2">
                   {label}
                 </span>
-                <input
+                <Input
                   aria-label={label}
                   value={value || "openai/gpt-4o-mini"}
                   readOnly
-                  className="input-field"
+                  className=""
                 />
               </label>
             ))}
@@ -350,70 +353,70 @@ export default function AISettingsPanel({
               <span className="block text-sm text-zinc-400 mb-2">
                 Text Model
               </span>
-              <select
+              <NativeSelect
                 value={aiTextModel}
                 onChange={(e) => {
                   setAiQualityPreset("custom");
                   setAiTextModel(e.target.value);
                 }}
-                className="input-field"
+                className=""
               >
                 <option value="auto">Auto (recommended)</option>
                 <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-              </select>
+              </NativeSelect>
             </label>
             <label className="block">
               <span className="block text-sm text-zinc-400 mb-2">
                 Clip Analysis Model
               </span>
-              <select
+              <NativeSelect
                 value={aiAnalyzeModel}
                 onChange={(e) => {
                   setAiQualityPreset("custom");
                   setAiAnalyzeModel(e.target.value);
                 }}
-                className="input-field"
+                className=""
               >
                 <option value="auto">Auto (recommended)</option>
                 <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-              </select>
+              </NativeSelect>
             </label>
             <label className="block">
               <span className="block text-sm text-zinc-400 mb-2">
                 Vision Model
               </span>
-              <select
+              <NativeSelect
                 aria-label="Vision Model"
                 value={aiVisionModel}
                 onChange={(e) => {
                   setAiQualityPreset("custom");
                   setAiVisionModel(e.target.value);
                 }}
-                className="input-field"
+                className=""
               >
                 <option value="auto">Auto (recommended)</option>
                 <option value="gemini-3.1-flash-image-preview">
                   Gemini 3.1 Flash Image Preview
                 </option>
-              </select>
+              </NativeSelect>
             </label>
             <label className="block">
               <span className="block text-sm text-zinc-400 mb-2">
                 Image Generation Model
               </span>
-              <select
+              <NativeSelect
                 value={aiImageModel}
                 onChange={(e) => {
                   setAiQualityPreset("custom");
                   setAiImageModel(e.target.value);
                 }}
-                className="input-field"
+                className=""
               >
                 <option value="">None (skip image generation)</option>
                 <option value="gemini-2.5-flash-image">
                   Gemini 2.5 Flash Image
                 </option>
-              </select>
+              </NativeSelect>
             </label>
           </>
         ) : (
@@ -422,52 +425,52 @@ export default function AISettingsPanel({
               <span className="block text-sm text-zinc-400 mb-2">
                 Text Model
               </span>
-              <select
+              <NativeSelect
                 value={aiTextModel}
                 onChange={(e) => {
                   setAiQualityPreset("custom");
                   setAiTextModel(e.target.value);
                 }}
-                className="input-field"
+                className=""
               >
                 {textOptions.map((model) => (
                   <option key={model.id} value={model.id}>
                     {model.label}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
             <label className="block">
               <span className="block text-sm text-zinc-400 mb-2">
                 Clip Analysis Model
               </span>
-              <select
+              <NativeSelect
                 value={aiAnalyzeModel}
                 onChange={(e) => {
                   setAiQualityPreset("custom");
                   setAiAnalyzeModel(e.target.value);
                 }}
-                className="input-field"
+                className=""
               >
                 {textOptions.map((model) => (
                   <option key={model.id} value={model.id}>
                     {model.label}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
             <label className="block">
               <span className="block text-sm text-zinc-400 mb-2">
                 Vision Model
               </span>
-              <select
+              <NativeSelect
                 aria-label="Vision Model"
                 value={aiVisionModel}
                 onChange={(e) => {
                   setAiQualityPreset("custom");
                   setAiVisionModel(e.target.value);
                 }}
-                className="input-field"
+                className=""
                 disabled={
                   aiProvider === "lmstudio" && visionOptions.length === 0
                 }
@@ -477,22 +480,22 @@ export default function AISettingsPanel({
                     {model.label}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
             <label className="block">
               <span className="block text-sm text-zinc-400 mb-2">
                 Image Generation Model
               </span>
-              <select
+              <NativeSelect
                 value={aiImageModel}
                 onChange={(e) => {
                   setAiQualityPreset("custom");
                   setAiImageModel(e.target.value);
                 }}
-                className="input-field"
+                className=""
               >
                 <option value="">None (skip image generation)</option>
-              </select>
+              </NativeSelect>
             </label>
           </>
         )}
@@ -501,12 +504,12 @@ export default function AISettingsPanel({
             <span className="block text-sm text-zinc-300 mb-2">
               OpenRouter API key
             </span>
-            <input
+            <Input
               aria-label="OpenRouter API key"
               type="password"
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
-              className="input-field"
+              className=""
               placeholder="sk-or-v1-..."
               autoComplete="off"
             />
@@ -514,22 +517,22 @@ export default function AISettingsPanel({
               Used for remote audio transcription. Paste your key here.
             </p>
           </label>
-          <input
+          <Input
             aria-label="Transcription model"
             value={transcriptionModel}
             onChange={(event) => setTranscriptionModel(event.target.value)}
-            className="input-field"
+            className=""
             placeholder="openai/whisper-large-v3"
           />
           <label className="block">
             <span className="block text-sm text-zinc-300 mb-2">
               Source language
             </span>
-            <select
+            <NativeSelect
               aria-label="Transcription source language"
               value={transcriptionLanguage}
               onChange={(event) => setTranscriptionLanguage(event.target.value)}
-              className="input-field"
+              className=""
             >
               <option value="auto">Auto-detect</option>
               {Object.entries(SUBTITLE_LANGUAGES).map(([code, label]) => (
@@ -537,7 +540,7 @@ export default function AISettingsPanel({
                   {label}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
             <p className="mt-2 text-xs text-zinc-500">
               Choose the spoken language to keep transcription in the original
               language. Auto-detect is used when this is not known.
@@ -547,13 +550,13 @@ export default function AISettingsPanel({
             <span className="block text-sm text-zinc-300 mb-2">
               OpenRouter transcription provider
             </span>
-            <input
+            <Input
               aria-label="OpenRouter transcription provider"
               value={transcriptionOpenRouterProvider}
               onChange={(event) =>
                 setTranscriptionOpenRouterProvider(event.target.value)
               }
-              className="input-field"
+              className=""
               placeholder="deepinfra"
             />
           </label>

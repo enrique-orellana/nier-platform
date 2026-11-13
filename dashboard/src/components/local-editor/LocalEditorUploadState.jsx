@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import { Upload } from "lucide-react";
+import { Button, Input } from "../ui";
 
 export default function LocalEditorUploadState({ onFile, error }) {
   const inputRef = useRef(null);
@@ -20,7 +21,7 @@ export default function LocalEditorUploadState({ onFile, error }) {
           chooseFile(event.dataTransfer.files?.[0]);
         }}
       >
-        <input
+        <Input
           ref={inputRef}
           type="file"
           accept="video/*"
@@ -38,13 +39,14 @@ export default function LocalEditorUploadState({ onFile, error }) {
           Your video stays in your browser. Nothing is uploaded to OpenShorts
           while you edit locally.
         </p>
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={() => inputRef.current?.click()}
           className="mt-6 rounded-xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white hover:bg-fuchsia-400"
         >
           Choose local video
-        </button>
+        </Button>
         <p className="mt-4 text-xs text-zinc-600">
           Drag and drop a playable MP4, WebM, or MOV file
         </p>

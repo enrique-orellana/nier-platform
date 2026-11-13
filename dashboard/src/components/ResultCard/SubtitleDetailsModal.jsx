@@ -4,6 +4,13 @@ import { getApiUrl } from "../../config";
 import RemotionPreview from "../RemotionPreview";
 import { normalizeSubtitleStyle } from "../local-editor/localEditorStyles";
 import { formatClock } from "../local-editor/localEditorExport";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "../ui";
 
 const toCueList = (track) =>
   (track?.cues || track?.captions || [])
@@ -134,32 +141,33 @@ export default function SubtitleDetailsModal({
   const masterStartMs = Math.max(0, Math.round(Number(clip.start || 0) * 1000));
   const fps = Math.max(1, Number(clip.output_fps || clip.fps) || 30);
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#121214] shadow-2xl"
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showClose={false}
+        closeOnEscape={false}
+        closeOnInteractOutside={false}
+        overlayClassName="z-[110] bg-black/80 backdrop-blur-sm"
+        className="relative z-[110] flex w-[calc(100%-2rem)] max-w-6xl max-h-[92vh] flex-col gap-0 overflow-hidden rounded-2xl border-white/10 bg-[#121214] p-0"
       >
         <header className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-white">
               <FileText className="text-cyan-300" size={19} /> Subtitle details
-            </h2>
-            <p className="mt-1 text-xs text-zinc-500">
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-xs text-zinc-500">
               Verify the saved cues and their exact timing before rendering.
-            </p>
+            </DialogDescription>
           </div>
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={onClose}
             aria-label="Close subtitle details"
             className="rounded-lg p-2 text-zinc-500 hover:bg-white/10 hover:text-white"
           >
             <X size={20} />
-          </button>
+          </Button>
         </header>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-y-auto p-5 lg:grid-cols-[minmax(240px,0.7fr)_minmax(420px,1.3fr)]">
@@ -244,7 +252,7 @@ export default function SubtitleDetailsModal({
             </div>
           </section>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

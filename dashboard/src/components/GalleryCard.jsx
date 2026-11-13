@@ -9,6 +9,7 @@ import {
   Play,
 } from "lucide-react";
 import { useRenewableMediaUrl } from "../lib/videoUrls";
+import { Button } from "./ui";
 
 export default function GalleryCard({ clip }) {
   const [copied, setCopied] = useState(null);
@@ -138,7 +139,8 @@ export default function GalleryCard({ clip }) {
             <p className="text-xs text-zinc-300 select-all line-clamp-2 hover:line-clamp-none transition-all">
               {clip.title}
             </p>
-            <button
+            <Button
+              variant="ghost"
               onClick={() => handleCopy(clip.title, "yt")}
               className="absolute top-2 right-2 p-1 text-zinc-500 hover:text-white transition-colors opacity-0 group-hover/item:opacity-100"
               title="Copy Title"
@@ -148,7 +150,7 @@ export default function GalleryCard({ clip }) {
               ) : (
                 <Copy size={12} />
               )}
-            </button>
+            </Button>
           </div>
 
           {/* TikTok / IG Caption */}
@@ -161,7 +163,8 @@ export default function GalleryCard({ clip }) {
             <p className="text-xs text-zinc-300 select-all line-clamp-3 hover:line-clamp-none transition-all cursor-pointer">
               {clip.tiktok_desc || clip.insta_desc}
             </p>
-            <button
+            <Button
+              variant="ghost"
               onClick={() =>
                 handleCopy(clip.tiktok_desc || clip.insta_desc, "caption")
               }
@@ -173,17 +176,18 @@ export default function GalleryCard({ clip }) {
               ) : (
                 <Copy size={12} />
               )}
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* Footer Action */}
-        <button
+        <Button
+          variant="ghost"
           onClick={handleDownload}
           className="w-full py-2 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2 border border-white/5"
         >
           <Download size={14} className="shrink-0" /> Download Clip
-        </button>
+        </Button>
       </div>
     </div>
   );

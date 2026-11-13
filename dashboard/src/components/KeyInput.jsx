@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Key, Eye, EyeOff, Check } from "lucide-react";
+import { Button, Input } from "./ui";
 
 export default function KeyInput({ onKeySet, savedKey }) {
   const [key, setKey] = useState(savedKey || "");
@@ -28,7 +29,7 @@ export default function KeyInput({ onKeySet, savedKey }) {
 
       <div className="flex gap-3">
         <div className="relative flex-1">
-          <input
+          <Input
             type={isVisible ? "text" : "password"}
             value={key}
             onChange={(e) => {
@@ -36,16 +37,18 @@ export default function KeyInput({ onKeySet, savedKey }) {
               setIsSaved(false);
             }}
             placeholder="AIzaSy..."
-            className="input-field pr-12 font-mono"
+            className="pr-12 font-mono"
           />
-          <button
+          <Button
+            variant="ghost"
             onClick={() => setIsVisible(!isVisible)}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition-colors"
           >
             {isVisible ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
+          </Button>
         </div>
-        <button
+        <Button
+          variant="ghost"
           onClick={handleSave}
           disabled={!key || isSaved}
           className={`px-6 rounded-xl font-medium transition-all flex items-center gap-2 ${
@@ -61,7 +64,7 @@ export default function KeyInput({ onKeySet, savedKey }) {
           ) : (
             "Set Key"
           )}
-        </button>
+        </Button>
       </div>
       <p className="mt-3 text-xs text-zinc-500">
         Your key is stored locally in your browser for convenience.

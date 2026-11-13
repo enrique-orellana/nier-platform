@@ -11,6 +11,14 @@ import {
   Loader2,
   Share2,
 } from "lucide-react";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Input,
+  Textarea,
+} from "../ui";
 
 export default function PostModal({
   showModal,
@@ -30,19 +38,29 @@ export default function PostModal({
   uploadPostKey,
   handlePost,
 }) {
-  if (!showModal) return null;
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
-      <div className="bg-[#121214] border border-white/10 p-6 rounded-2xl w-full max-w-md shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
-        <button
+    <Dialog
+      open={showModal}
+      onOpenChange={(open) => !open && setShowModal(false)}
+    >
+      <DialogContent
+        showClose={false}
+        closeOnEscape={false}
+        closeOnInteractOutside={false}
+        overlayClassName="z-[100] bg-black/80 backdrop-blur-sm"
+        className="z-[100] relative block w-[calc(100%-2rem)] max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#121214] p-6 custom-scrollbar"
+      >
+        <Button
+          variant="ghost"
           onClick={() => setShowModal(false)}
           className="absolute top-4 right-4 text-zinc-500 hover:text-white"
         >
           <X size={20} />
-        </button>
+        </Button>
 
-        <h3 className="text-lg font-bold text-white mb-4">Post / Schedule</h3>
+        <DialogTitle className="mb-4 text-lg font-bold text-white">
+          Post / Schedule
+        </DialogTitle>
 
         {!uploadPostKey && (
           <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 text-xs rounded-lg flex items-start gap-2">
@@ -57,7 +75,7 @@ export default function PostModal({
             <label className="block text-xs font-bold text-zinc-400 mb-1">
               Video Title
             </label>
-            <input
+            <Input
               type="text"
               value={postTitle}
               onChange={(e) => setPostTitle(e.target.value)}
@@ -70,7 +88,7 @@ export default function PostModal({
             <label className="block text-xs font-bold text-zinc-400 mb-1">
               Caption / Description
             </label>
-            <textarea
+            <Textarea
               value={postDescription}
               onChange={(e) => setPostDescription(e.target.value)}
               rows={4}
@@ -86,7 +104,7 @@ export default function PostModal({
                 <Calendar size={16} className="text-purple-400" /> Schedule Post
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
-                <input
+                <Input
                   type="checkbox"
                   checked={isScheduling}
                   onChange={(e) => setIsScheduling(e.target.checked)}
@@ -102,7 +120,7 @@ export default function PostModal({
                   Select Date & Time
                 </label>
                 <div className="relative">
-                  <input
+                  <Input
                     type="datetime-local"
                     value={scheduleDate}
                     onChange={(e) => setScheduleDate(e.target.value)}
@@ -124,7 +142,7 @@ export default function PostModal({
             </label>
             <div className="grid grid-cols-1 gap-2">
               <label className="flex items-center gap-3 p-3 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors border border-white/5">
-                <input
+                <Input
                   type="checkbox"
                   checked={platforms.tiktok}
                   onChange={(e) =>
@@ -137,7 +155,7 @@ export default function PostModal({
                 </div>
               </label>
               <label className="flex items-center gap-3 p-3 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors border border-white/5">
-                <input
+                <Input
                   type="checkbox"
                   checked={platforms.instagram}
                   onChange={(e) =>
@@ -150,7 +168,7 @@ export default function PostModal({
                 </div>
               </label>
               <label className="flex items-center gap-3 p-3 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors border border-white/5">
-                <input
+                <Input
                   type="checkbox"
                   checked={platforms.youtube}
                   onChange={(e) =>
@@ -179,7 +197,8 @@ export default function PostModal({
           </div>
         )}
 
-        <button
+        <Button
+          variant="ghost"
           onClick={handlePost}
           disabled={posting || !uploadPostKey}
           className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-bold transition-all flex items-center justify-center gap-2"
@@ -195,8 +214,8 @@ export default function PostModal({
               {isScheduling ? "Schedule Post" : "Publish Now"}
             </>
           )}
-        </button>
-      </div>
-    </div>
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }

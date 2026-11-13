@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { Button, Input, Textarea } from "../ui";
 
 const inputClass =
   "w-full rounded-md border border-white/10 bg-[#111114] px-3 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-400/70 focus:ring-1 focus:ring-violet-400/20";
@@ -40,19 +41,20 @@ export default function SubtitleCueModal({ cue, onSave, onClose }) {
           >
             Subtitle cue
           </h2>
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={onClose}
             aria-label="Close cue editor"
             className="rounded-md p-1 text-zinc-500 hover:bg-white/10 hover:text-white"
           >
             <X size={20} />
-          </button>
+          </Button>
         </div>
 
         <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400">
           Subtitle text
-          <textarea
+          <Textarea
             aria-label="Subtitle text"
             rows={2}
             value={draft.text || ""}
@@ -66,7 +68,7 @@ export default function SubtitleCueModal({ cue, onSave, onClose }) {
         <div className="mt-4 grid grid-cols-2 gap-3">
           <label className="text-xs font-medium uppercase tracking-wide text-zinc-400">
             Start (ms)
-            <input
+            <Input
               aria-label="Subtitle start"
               type="number"
               value={draft.startMs}
@@ -81,7 +83,7 @@ export default function SubtitleCueModal({ cue, onSave, onClose }) {
           </label>
           <label className="text-xs font-medium uppercase tracking-wide text-zinc-400">
             End (ms)
-            <input
+            <Input
               aria-label="Subtitle end"
               type="number"
               value={draft.endMs}
@@ -107,7 +109,7 @@ export default function SubtitleCueModal({ cue, onSave, onClose }) {
                   key={`${word.startMs}-${index}`}
                   className="grid grid-cols-[minmax(0,1fr)_100px_100px] gap-2"
                 >
-                  <input
+                  <Input
                     aria-label={`Word ${index + 1} text`}
                     value={word.text || ""}
                     onChange={(event) =>
@@ -115,7 +117,7 @@ export default function SubtitleCueModal({ cue, onSave, onClose }) {
                     }
                     className={inputClass}
                   />
-                  <input
+                  <Input
                     aria-label={`Word ${index + 1} start`}
                     type="number"
                     value={word.startMs}
@@ -124,7 +126,7 @@ export default function SubtitleCueModal({ cue, onSave, onClose }) {
                     }
                     className={inputClass}
                   />
-                  <input
+                  <Input
                     aria-label={`Word ${index + 1} end`}
                     type="number"
                     value={word.endMs}
@@ -147,20 +149,22 @@ export default function SubtitleCueModal({ cue, onSave, onClose }) {
         </div>
 
         <div className="mt-4 flex justify-end gap-2 border-t border-white/10 pt-4">
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={onClose}
             className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-300 hover:bg-white/10"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             type="button"
             onClick={handleSave}
             className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400"
           >
             Save cue
-          </button>
+          </Button>
         </div>
       </div>
     </div>

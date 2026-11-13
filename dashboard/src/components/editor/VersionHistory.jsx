@@ -1,6 +1,7 @@
 import React from "react";
 import { ChevronDown, ExternalLink, Trash2 } from "lucide-react";
 import { getApiUrl } from "../../config";
+import { Button } from "../ui";
 
 const buildVersionTree = (versions) => {
   const nodes = new Map(
@@ -44,7 +45,8 @@ const VersionTreeNode = ({
       <div
         className={`group flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-sm transition-colors hover:border-primary/50 hover:bg-primary/10 ${isSelected ? "border-primary/50 bg-primary/10 shadow-[0_0_15px_rgba(14,165,233,0.2)]" : "border-white/10 bg-black/20"}`}
       >
-        <button
+        <Button
+          variant="ghost"
           type="button"
           className="min-w-0 flex-1 text-left font-semibold drop-shadow-sm"
           onClick={() => onSelect?.(version)}
@@ -60,14 +62,15 @@ const VersionTreeNode = ({
               current
             </span>
           )}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           className="flex h-7 shrink-0 items-center rounded-md border border-primary/20 bg-primary/5 px-2.5 text-xs font-semibold text-primary transition-colors hover:border-primary/50 hover:bg-primary/15 hover:text-white"
           onClick={() => onBranch?.(version.version_id)}
           type="button"
         >
           Branch
-        </button>
+        </Button>
         {hasGeneratedClip && (
           <a
             aria-label={`Open generated clip for version ${version.version_id}`}
@@ -81,7 +84,8 @@ const VersionTreeNode = ({
           </a>
         )}
         {onDelete && (
-          <button
+          <Button
+            variant="ghost"
             aria-label={`Delete version ${version.version_id}`}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[.03] text-zinc-400 transition-colors hover:border-red-400/30 hover:bg-red-500/15 hover:text-red-300"
             onClick={(event) => {
@@ -92,7 +96,7 @@ const VersionTreeNode = ({
             type="button"
           >
             <Trash2 size={14} />
-          </button>
+          </Button>
         )}
       </div>
       {children.length > 0 && (
@@ -150,7 +154,8 @@ export default function VersionHistory({
     >
       {showToggle && (
         <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3.5">
-          <button
+          <Button
+            variant="ghost"
             type="button"
             aria-expanded={isOpen}
             className="flex min-w-0 items-center gap-2 text-left"
@@ -163,7 +168,7 @@ export default function VersionHistory({
             <span className="truncate text-sm font-semibold text-white">
               Version History
             </span>
-          </button>
+          </Button>
           <span className="ml-auto flex items-center gap-2">
             {renderCompleteNotice && (
               <span
