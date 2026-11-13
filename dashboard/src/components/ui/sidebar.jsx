@@ -179,7 +179,7 @@ function Sidebar({
         <aside
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
-          className="flex size-full flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground group-data-[side=right]:border-r-0 group-data-[side=right]:border-l"
+          className="flex size-full flex-col bg-sidebar text-sidebar-foreground"
         >
           {children}
         </aside>

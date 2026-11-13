@@ -69,7 +69,7 @@ export default function MinioObjectPicker({ selected, onSelect }) {
         </span>
         <Badge
           variant="outline"
-          className="max-w-[65%] truncate rounded-md border-input bg-background px-2 py-1 text-xs font-medium text-muted-foreground"
+          className="h-6 max-w-[65%] truncate rounded-md border-input bg-background px-2.5 text-xs font-medium text-muted-foreground"
         >
           {bucket}
         </Badge>
@@ -124,8 +124,11 @@ export default function MinioObjectPicker({ selected, onSelect }) {
                 variant="outline"
                 key={object.key}
                 type="button"
-                aria-label={`Select ${object.name || object.key}`}
-                onClick={() => onSelect({ bucket, ...object })}
+                aria-label={`${isSelected ? "Deselect" : "Select"} ${object.name || object.key}`}
+                aria-pressed={isSelected}
+                onClick={() =>
+                  onSelect(isSelected ? null : { bucket, ...object })
+                }
                 className={`h-auto w-full flex-col items-stretch justify-start rounded-md border-input bg-background p-3 text-left shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground ${isSelected ? "border-primary bg-primary/5" : "hover:border-input"}`}
               >
                 <div className="flex w-full min-w-0 items-start justify-between gap-3">
