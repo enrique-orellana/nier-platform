@@ -8,8 +8,6 @@ import {
   Share2,
   LogOut,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Check,
   Activity,
   LayoutDashboard,
@@ -34,6 +32,7 @@ import {
   FolderOpen,
   Scissors,
   Loader2,
+  PanelLeft,
 } from "lucide-react";
 import KeyInput from "./components/KeyInput";
 import MediaInput from "./components/MediaInput";
@@ -52,6 +51,7 @@ import {
 import PerformanceDashboard from "./components/PerformanceDashboard";
 import {
   Button,
+  Badge,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -63,6 +63,7 @@ import {
   Input,
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarHeader,
   SidebarInset,
@@ -1368,12 +1369,7 @@ function App() {
     }
   };
 
-  const NavItem = ({
-    tabKey,
-    icon: Icon,
-    label,
-    activeColor = "bg-primary/10 text-primary",
-  }) => {
+  const NavItem = ({ tabKey, icon: Icon, label }) => {
     const { isMobile, state, toggleSidebar } = useSidebar();
     const isCollapsed = state === "collapsed" && !isMobile;
     const isActive = activeTab === tabKey;
@@ -1388,22 +1384,13 @@ function App() {
             }}
             aria-label={label}
             title={isCollapsed ? label : undefined}
-            className={`transition-colors ${
-              isActive
-                ? activeColor
-                : "text-zinc-400 hover:text-white hover:bg-white/5"
-            }`}
+            className="text-sidebar-foreground/70"
           >
-            <Icon size={20} className="size-5 shrink-0" />
-            <span className={isCollapsed ? "sr-only" : "font-medium"}>
+            <Icon className="size-4 shrink-0" />
+            <span className={isCollapsed ? "sr-only" : "truncate"}>
               {label}
             </span>
           </SidebarMenuButton>
-          {isCollapsed && (
-            <div className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-lg bg-zinc-800 px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-xl transition-opacity duration-150 group-hover/nav:opacity-100">
-              {label}
-            </div>
-          )}
         </div>
       </SidebarMenuItem>
     );
@@ -1418,44 +1405,37 @@ function App() {
         <SidebarHeader
           className={`transition-all duration-300 ${
             isCollapsed
-              ? "items-center gap-2 p-2"
+              ? "items-center gap-2 px-0 py-2"
               : "flex-row items-center justify-between px-4 py-5"
           }`}
         >
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/5 bg-white/5">
+          <div
+            className={
+              isCollapsed
+                ? "flex w-4 self-center justify-center"
+                : "flex min-w-0 flex-1 items-center gap-3"
+            }
+          >
+            <div className="flex h-4 w-4 shrink-0 items-center justify-center">
               <img
                 src="/logo-openshorts.png"
                 alt="OpenShorts"
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain"
               />
             </div>
             <span
-              className={`overflow-hidden whitespace-nowrap text-lg font-bold tracking-tight text-white transition-all duration-300 ${
-                isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
+              className={`overflow-hidden whitespace-nowrap text-sm font-semibold tracking-tight text-sidebar-foreground transition-all duration-300 ${
+                isCollapsed ? "hidden" : "opacity-100"
               }`}
             >
               OpenShorts
             </span>
           </div>
-          <SidebarTrigger
-            className="shrink-0 hover:bg-white/5"
-            title={
-              isMobile
-                ? "Close navigation"
-                : isCollapsed
-                  ? "Expand sidebar"
-                  : "Collapse sidebar"
-            }
-          >
-            {isMobile ? (
-              <X size={14} />
-            ) : isCollapsed ? (
-              <ChevronRight size={14} />
-            ) : (
-              <ChevronLeft size={14} />
-            )}
-          </SidebarTrigger>
+          {isMobile && (
+            <SidebarTrigger title="Close navigation">
+              <X size={16} />
+            </SidebarTrigger>
+          )}
         </SidebarHeader>
 
         <SidebarContent>
@@ -1465,41 +1445,34 @@ function App() {
                 tabKey="dashboard"
                 icon={LayoutDashboard}
                 label="Clip Generator"
-                activeColor="bg-primary/10 text-primary"
               />
-              <NavItem
-                tabKey="editor"
-                icon={Scissors}
-                label="Local Editor"
-                activeColor="bg-fuchsia-500/10 text-fuchsia-400"
-              />
-              <NavItem
-                tabKey="ai-agent"
-                icon={Bot}
-                label="AI Agent"
-                activeColor="bg-emerald-500/10 text-emerald-400"
-              />
-              <NavItem
-                tabKey="projects"
-                icon={FolderOpen}
-                label="Projects"
-                activeColor="bg-cyan-500/10 text-cyan-400"
-              />
+              <NavItem tabKey="editor" icon={Scissors} label="Local Editor" />
+              <NavItem tabKey="ai-agent" icon={Bot} label="AI Agent" />
+              <NavItem tabKey="projects" icon={FolderOpen} label="Projects" />
               <NavItem
                 tabKey="performance"
                 icon={Activity}
                 label="Performance"
-                activeColor="bg-cyan-500/10 text-cyan-400"
               />
-              <NavItem
-                tabKey="settings"
-                icon={Settings}
-                label="Settings"
-                activeColor="bg-primary/10 text-primary"
-              />
+              <NavItem tabKey="settings" icon={Settings} label="Settings" />
             </SidebarMenu>
           </SidebarGroup>
         </SidebarContent>
+
+        {!isMobile && (
+          <SidebarFooter
+            className={
+              isCollapsed ? "items-center px-0 py-2" : "items-start px-4 py-4"
+            }
+          >
+            <SidebarTrigger
+              className="shrink-0"
+              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              <PanelLeft size={16} />
+            </SidebarTrigger>
+          </SidebarFooter>
+        )}
       </Sidebar>
     );
   };
@@ -1530,7 +1503,7 @@ function App() {
 
       <SidebarInset className="flex h-full flex-1 flex-col overflow-hidden relative">
         {activeTab === "editor" && (
-          <SidebarTrigger className="fixed left-3 top-3 z-50 bg-surface/90 md:hidden">
+          <SidebarTrigger className="fixed left-3 top-3 z-50 border border-sidebar-border bg-sidebar/90 text-sidebar-foreground md:hidden">
             <Menu size={16} />
           </SidebarTrigger>
         )}
@@ -2068,40 +2041,49 @@ function App() {
           {activeTab === "dashboard" && status === "idle" && (
             <div
               data-testid="dashboard-scroll-container"
-              className="h-full overflow-y-auto custom-scrollbar p-6 animate-[fadeIn_0.3s_ease-out]"
+              className="h-full overflow-y-auto custom-scrollbar animate-[fadeIn_0.3s_ease-out]"
             >
-              <div className="min-h-full flex flex-col items-center justify-center">
-                <div className="max-w-xl w-full text-center space-y-8 py-8">
-                  <div className="space-y-4">
-                    <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent">
-                      Create Viral Shorts
-                    </h1>
-                    <p className="text-zinc-400 text-lg">
-                      Drop your long-form video below to instantly generate
-                      viral clips with AI.
-                    </p>
+              <div className="mx-auto flex min-h-full w-full max-w-7xl flex-col gap-7 px-5 py-8 md:px-8 md:py-10 xl:px-10">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="max-w-3xl space-y-3">
+                    <Badge
+                      variant="outline"
+                      className="gap-1.5 border-primary/25 bg-primary/10 text-primary"
+                    >
+                      <Sparkles className="size-3.5" />
+                      AI clip workspace
+                    </Badge>
+                    <div className="space-y-2">
+                      <h1 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
+                        Turn long videos into share-ready shorts.
+                      </h1>
+                      <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
+                        Choose a source and your preferred format. OpenShorts
+                        will find the moments worth sharing.
+                      </p>
+                    </div>
                   </div>
-
-                  <MediaInput
-                    onProcess={handleProcess}
-                    isProcessing={status === "processing"}
-                    targetClipCount={clipCount}
-                    onTargetClipCountChange={setClipCount}
-                    defaultTranscriptionLanguage={transcriptionLanguage}
-                  />
-
-                  <div className="flex items-center justify-center gap-8 text-zinc-500 text-sm">
-                    <span className="flex items-center gap-2">
-                      <Youtube size={16} /> YouTube
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <Instagram size={16} /> Instagram
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <TikTokIcon size={16} /> TikTok
-                    </span>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span className="mr-1">Ready for</span>
+                    <Badge variant="outline" className="gap-1.5">
+                      <Youtube className="size-3.5 text-red-400" /> YouTube
+                    </Badge>
+                    <Badge variant="outline" className="gap-1.5">
+                      <Instagram className="size-3.5 text-pink-400" /> Reels
+                    </Badge>
+                    <Badge variant="outline" className="gap-1.5">
+                      <TikTokIcon /> TikTok
+                    </Badge>
                   </div>
                 </div>
+
+                <MediaInput
+                  onProcess={handleProcess}
+                  isProcessing={status === "processing"}
+                  targetClipCount={clipCount}
+                  onTargetClipCountChange={setClipCount}
+                  defaultTranscriptionLanguage={transcriptionLanguage}
+                />
               </div>
             </div>
           )}

@@ -13,7 +13,7 @@ import {
 } from "./dialog";
 
 const SIDEBAR_WIDTH = "16rem";
-const SIDEBAR_WIDTH_ICON = "4.5rem";
+const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 
 function SidebarProvider({
@@ -115,7 +115,10 @@ function Sidebar({
     return (
       <aside
         data-slot="sidebar"
-        className={cn("flex h-full shrink-0 flex-col bg-surface", className)}
+        className={cn(
+          "flex h-full shrink-0 flex-col bg-sidebar text-sidebar-foreground",
+          className,
+        )}
         style={{ width: SIDEBAR_WIDTH }}
         {...props}
       >
@@ -134,7 +137,7 @@ function Sidebar({
         <DialogContent
           showClose={false}
           className={cn(
-            "!fixed !inset-y-0 !top-0 !h-screen !w-[min(18rem,calc(100vw-2rem))] !max-w-none !translate-x-0 !translate-y-0 !block !rounded-none !border-y-0 !border-white/10 !bg-surface !p-0 !shadow-2xl",
+            "!fixed !inset-y-0 !top-0 !h-screen !w-[min(18rem,calc(100vw-2rem))] !max-w-none !translate-x-0 !translate-y-0 !block !rounded-none !border-y-0 !border-sidebar-border !bg-sidebar !p-0 !text-sidebar-foreground !shadow-2xl",
             sidePosition,
             className,
           )}
@@ -176,7 +179,7 @@ function Sidebar({
         <aside
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
-          className="flex size-full flex-col border-r border-white/5 bg-surface text-white group-data-[side=right]:border-r-0 group-data-[side=right]:border-l"
+          className="flex size-full flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground group-data-[side=right]:border-r-0 group-data-[side=right]:border-l"
         >
           {children}
         </aside>
@@ -190,6 +193,16 @@ function SidebarHeader({ className, ...props }) {
     <div
       data-slot="sidebar-header"
       className={cn("flex flex-col gap-2 p-2", className)}
+      {...props}
+    />
+  );
+}
+
+function SidebarFooter({ className, ...props }) {
+  return (
+    <div
+      data-slot="sidebar-footer"
+      className={cn("mt-auto flex flex-col gap-2 p-2", className)}
       {...props}
     />
   );
@@ -249,8 +262,8 @@ function SidebarMenuButton({
       {
         type: "button",
         className: cn(
-          "peer/menu-button group/menu-button flex h-11 w-full items-center gap-3 overflow-hidden rounded-xl px-3 text-left text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/60 disabled:pointer-events-none disabled:opacity-50 [&>svg]:shrink-0",
-          state === "collapsed" && "justify-center px-0",
+          "peer/menu-button group/menu-button flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 text-left text-sm outline-none ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active]:bg-sidebar-accent data-[active]:font-medium data-[active]:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0 [&>span:last-child]:truncate",
+          state === "collapsed" && "size-8 justify-center p-2",
           size === "sm" && "h-8",
           size === "lg" && "h-12",
           className,
@@ -275,7 +288,7 @@ function SidebarTrigger({ className, onClick, children, ...props }) {
       variant="ghost"
       size="icon"
       className={cn(
-        "size-8 rounded-lg text-zinc-500 hover:text-white",
+        "size-8 rounded-md text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         className,
       )}
       onClick={(event) => {
@@ -303,6 +316,7 @@ function SidebarInset({ className, ...props }) {
 export {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarHeader,
   SidebarInset,

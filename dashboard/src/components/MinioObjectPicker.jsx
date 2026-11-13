@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Check, Database, RefreshCw, Search } from "lucide-react";
 import { getApiUrl } from "../config";
-import { Button, Input } from "./ui";
+import { Badge, Button, Input } from "./ui";
 
 const formatBytes = (value) => {
   const size = Number(value || 0);
@@ -62,11 +62,14 @@ export default function MinioObjectPicker({ selected, onSelect }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 text-sm text-zinc-300">
-        <Database size={18} className="text-primary" />
-        <span>
-          MinIO source bucket: <strong className="text-white">{bucket}</strong>
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="flex items-center gap-2 text-muted-foreground">
+          <Database className="size-4 text-primary" />
+          Source library
         </span>
+        <Badge variant="outline" className="max-w-[65%] truncate">
+          {bucket}
+        </Badge>
       </div>
 
       <div className="relative">
@@ -85,7 +88,7 @@ export default function MinioObjectPicker({ selected, onSelect }) {
       </div>
 
       {loading && (
-        <p className="text-sm text-zinc-500">Loading MinIO objects...</p>
+        <p className="text-sm text-muted-foreground">Loading videos...</p>
       )}
 
       {!loading && error && (
@@ -103,13 +106,13 @@ export default function MinioObjectPicker({ selected, onSelect }) {
       )}
 
       {!loading && !error && objects.length === 0 && (
-        <p className="rounded-xl border border-white/5 bg-white/[0.03] p-4 text-sm text-zinc-500">
+        <p className="rounded-xl border border-border bg-card/60 p-4 text-sm text-muted-foreground">
           No MinIO objects match this search.
         </p>
       )}
 
       {!loading && !error && objects.length > 0 && (
-        <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+        <div className="max-h-72 space-y-2 overflow-x-hidden overflow-y-auto pr-1">
           {objects.map((object) => {
             const isSelected = object.key === selectedKey;
             return (
@@ -119,22 +122,24 @@ export default function MinioObjectPicker({ selected, onSelect }) {
                 type="button"
                 aria-label={`Select ${object.name || object.key}`}
                 onClick={() => onSelect({ bucket, ...object })}
-                className={`w-full rounded-xl border p-3 text-left transition ${isSelected ? "border-primary bg-primary/10" : "border-white/10 bg-white/[0.03] hover:border-primary/50"}`}
+                className={`h-auto w-full flex-col items-stretch justify-start rounded-xl border p-3 text-left transition ${isSelected ? "border-primary/50 bg-primary/10" : "border-border bg-card/60 hover:border-primary/40 hover:bg-card"}`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <span className="min-w-0 truncate font-medium text-white">
+                <div className="flex w-full min-w-0 items-start justify-between gap-3">
+                  <span className="min-w-0 truncate font-medium text-foreground">
                     {object.name || object.key}
                   </span>
                   {isSelected && (
-                    <Check size={17} className="shrink-0 text-primary" />
+                    <Check className="size-4 shrink-0 text-primary" />
                   )}
                 </div>
-                <div className="mt-1 truncate text-xs text-zinc-500">
+                <div className="mt-1 w-full truncate text-left text-xs text-muted-foreground">
                   {object.key}
                 </div>
-                <div className="mt-2 flex gap-3 text-xs text-zinc-600">
+                <div className="mt-2 flex w-full flex-wrap gap-x-3 gap-y-1 text-left text-xs text-muted-foreground">
                   <span>{formatBytes(object.size)}</span>
-                  <span>{formatDate(object.last_modified)}</span>
+                  <span className="truncate">
+                    {formatDate(object.last_modified)}
+                  </span>
                 </div>
               </Button>
             );

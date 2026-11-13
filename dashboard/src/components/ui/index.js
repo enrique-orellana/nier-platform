@@ -59,6 +59,7 @@ export { Separator } from "./separator";
 export {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarHeader,
   SidebarInset,
