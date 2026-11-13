@@ -65,6 +65,7 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -1412,7 +1413,7 @@ function App() {
           <div
             className={
               isCollapsed
-                ? "flex w-4 self-center justify-center"
+                ? "flex h-8 w-8 self-center items-center justify-center"
                 : "flex min-w-0 flex-1 items-center gap-3"
             }
           >
@@ -1420,7 +1421,7 @@ function App() {
               <img
                 src="/logo-openshorts.png"
                 alt="OpenShorts"
-                className="h-full w-full object-contain"
+                className="h-4 w-4 object-contain"
               />
             </div>
             <span
@@ -1440,6 +1441,9 @@ function App() {
 
         <SidebarContent>
           <SidebarGroup className="px-3 py-4">
+            <SidebarGroupLabel className={isCollapsed ? "hidden" : "px-2"}>
+              Workspace
+            </SidebarGroupLabel>
             <SidebarMenu>
               <NavItem
                 tabKey="dashboard"
@@ -1462,14 +1466,14 @@ function App() {
         {!isMobile && (
           <SidebarFooter
             className={
-              isCollapsed ? "items-center px-0 py-2" : "items-start px-4 py-4"
+              isCollapsed ? "items-center px-0 py-2" : "items-end px-1 py-2"
             }
           >
             <SidebarTrigger
               className="shrink-0"
               title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-              <PanelLeft size={16} />
+              <PanelLeft className="size-4 shrink-0" />
             </SidebarTrigger>
           </SidebarFooter>
         )}

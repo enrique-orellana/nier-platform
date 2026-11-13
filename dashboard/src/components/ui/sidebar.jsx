@@ -13,7 +13,7 @@ import {
 } from "./dialog";
 
 const SIDEBAR_WIDTH = "16rem";
-const SIDEBAR_WIDTH_ICON = "3rem";
+const SIDEBAR_WIDTH_ICON = "3.5rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 
 function SidebarProvider({
@@ -228,6 +228,19 @@ function SidebarGroup({ className, ...props }) {
   );
 }
 
+function SidebarGroupLabel({ className, ...props }) {
+  return (
+    <div
+      data-slot="sidebar-group-label"
+      className={cn(
+        "flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 function SidebarMenu({ className, ...props }) {
   return (
     <ul
@@ -318,6 +331,7 @@ export {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
