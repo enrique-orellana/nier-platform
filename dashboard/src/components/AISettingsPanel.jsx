@@ -1,9 +1,21 @@
 import React from "react";
+import { ExternalLink, Eye, EyeOff } from "lucide-react";
 
 import { buildVisibleProviders } from "../lib/lmStudio";
 import { codexStatusLabel } from "../lib/openaiCodex";
-import { SUBTITLE_LANGUAGES } from "./subtitleLanguages";
-import { Button, Input, NativeSelect } from "./ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  NativeSelect,
+  Separator,
+} from "./ui";
 
 export default function AISettingsPanel({
   aiProvider,
@@ -22,12 +34,6 @@ export default function AISettingsPanel({
   setAiVisionModel,
   aiImageModel,
   setAiImageModel,
-  transcriptionModel = "openai/whisper-large-v3",
-  setTranscriptionModel = () => {},
-  transcriptionLanguage = "auto",
-  setTranscriptionLanguage = () => {},
-  transcriptionOpenRouterProvider = "",
-  setTranscriptionOpenRouterProvider = () => {},
   aiTextEffort = "auto",
   setAiTextEffort = () => {},
   aiAnalyzeEffort = "auto",
@@ -47,6 +53,7 @@ export default function AISettingsPanel({
   onRefreshCodexModels = () => {},
 }) {
   const providerOptions = buildVisibleProviders({ lmStudioAvailable });
+  const [apiKeyVisible, setApiKeyVisible] = React.useState(false);
   const isCodex = aiProvider === "openai-codex";
   const isOpenRouter = aiProvider === "openrouter";
   const textOptions =
@@ -62,8 +69,10 @@ export default function AISettingsPanel({
   const codexModelDisabled = !codexStatus.connected || codexModelsLoading;
 
   const renderCodexModelSelect = (label, value, onChange, options) => (
-    <label className="block" key={label}>
-      <span className="block text-sm text-zinc-400 mb-2">{label}</span>
+    <Label className="block" key={label}>
+      <span className="mb-2 block text-sm font-medium text-foreground">
+        {label}
+      </span>
       <NativeSelect
         aria-label={label}
         value={value}
@@ -71,7 +80,6 @@ export default function AISettingsPanel({
           setAiQualityPreset("custom");
           onChange(e.target.value);
         }}
-        className=""
         disabled={codexModelDisabled}
       >
         <option value="auto">Auto (Codex default)</option>
@@ -81,7 +89,7 @@ export default function AISettingsPanel({
           </option>
         ))}
       </NativeSelect>
-    </label>
+    </Label>
   );
 
   const renderCodexEffortSelect = (label, modelId, value, onChange) => {
@@ -94,8 +102,10 @@ export default function AISettingsPanel({
     );
     const efforts = model?.efforts || [];
     return (
-      <label className="block" key={label}>
-        <span className="block text-sm text-zinc-400 mb-2">{label}</span>
+      <Label className="block" key={label}>
+        <span className="mb-2 block text-sm font-medium text-foreground">
+          {label}
+        </span>
         <NativeSelect
           aria-label={label}
           value={value}
@@ -103,7 +113,6 @@ export default function AISettingsPanel({
             setAiQualityPreset("custom");
             onChange(e.target.value);
           }}
-          className=""
           disabled={codexModelDisabled || efforts.length === 0}
         >
           <option value="auto">Auto (model default)</option>
@@ -117,455 +126,443 @@ export default function AISettingsPanel({
             </option>
           ))}
         </NativeSelect>
-      </label>
+      </Label>
     );
   };
 
   return (
-    <div className="glass-panel p-6 mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">AI Provider</h2>
-        <span className="text-[10px] bg-white/5 border border-white/5 px-2 py-0.5 rounded text-zinc-500 uppercase tracking-wider">
-          Optional
-        </span>
-      </div>
-      <div className="grid md:grid-cols-2 gap-4">
-        <label className="block">
-          <span className="block text-sm text-zinc-400 mb-2">Provider</span>
-          <NativeSelect
-            value={aiProvider}
-            onChange={(e) => setAiProvider(e.target.value)}
-            className=""
-          >
-            {providerOptions.includes("gemini") && (
-              <option value="gemini">Gemini (Cloud)</option>
-            )}
-            {providerOptions.includes("openrouter") && (
-              <option value="openrouter">OpenRouter</option>
-            )}
-            {providerOptions.includes("lmstudio") && (
-              <option value="lmstudio">LM Studio (Local)</option>
-            )}
-            {providerOptions.includes("openai-codex") && (
-              <option value="openai-codex">OpenAI Codex (ChatGPT)</option>
-            )}
-          </NativeSelect>
-        </label>
-        {isCodex ? (
-          <div className="rounded-lg border border-white/10 bg-black/20 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-zinc-300">ChatGPT connection</span>
-              <span className="text-xs text-zinc-500">
-                {codexStatusLabel(codexStatus)}
-              </span>
-            </div>
-            {codexPending?.userCode && (
-              <p className="mt-3 text-xs text-zinc-400">
-                Enter this code at the verification page:{" "}
-                <code className="text-white">{codexPending.userCode}</code>
-              </p>
-            )}
-            {codexPending?.verificationUrl && (
-              <a
-                href={codexPending.verificationUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-block text-xs text-primary hover:underline"
-              >
-                Open ChatGPT verification page
-              </a>
-            )}
-            {codexError && (
-              <p className="mt-3 text-xs text-red-400">{codexError}</p>
-            )}
-            <Button
-              variant="default"
-              type="button"
-              onClick={
-                codexStatus.connected || codexStatus.pending
-                  ? onDisconnectCodex
-                  : onConnectCodex
-              }
-              className="mt-4 py-2 px-4 text-sm disabled:opacity-50"
-            >
-              {codexStatus.connected
-                ? "Disconnect ChatGPT"
-                : codexStatus.pending
-                  ? "Cancel connection"
-                  : codexStatus.requiresReconnect
-                    ? "Reconnect ChatGPT"
-                    : "Connect ChatGPT"}
-            </Button>
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5">
+            <CardTitle>AI provider and models</CardTitle>
+            <CardDescription>
+              Set the service and credentials, then choose a model for each AI
+              task.
+            </CardDescription>
           </div>
-        ) : (
-          !isOpenRouter && (
-            <label className="block">
-              <span className="block text-sm text-zinc-400 mb-2">
-                API / Access Key
-              </span>
-              <Input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className=""
-                placeholder={
-                  aiProvider === "gemini"
-                    ? "AIza..."
-                    : isOpenRouter
-                      ? "sk-or-v1-..."
-                      : "Optional"
-                }
-              />
-            </label>
-          )
-        )}
-        {!isCodex && (
-          <label className="block">
-            <span className="block text-sm text-zinc-400 mb-2">Base URL</span>
-            <Input
-              type="text"
-              value={
-                isOpenRouter
-                  ? aiBaseUrl || "https://openrouter.ai/api/v1"
-                  : aiBaseUrl
-              }
-              onChange={(e) => setAiBaseUrl(e.target.value)}
-              className=""
-              readOnly={isOpenRouter}
-              placeholder={
-                isOpenRouter
-                  ? "https://openrouter.ai/api/v1"
-                  : "http://localhost:11434"
-              }
-            />
-            <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
-              {isOpenRouter
-                ? "Configured automatically. Only the API key is required."
-                : "Enter the reachable endpoint for your cluster or host."}
-            </p>
-            {aiProvider === "lmstudio" && !aiBaseUrl.trim() && (
-              <p className="mt-2 text-xs text-amber-400">
-                Base URL required for local models.
-              </p>
-            )}
-          </label>
-        )}
-        <label className="block">
-          <span className="block text-sm text-zinc-400 mb-2">
-            Quality Preset
-          </span>
-          <NativeSelect
-            value={aiQualityPreset}
-            onChange={(e) => setAiQualityPreset(e.target.value)}
-            className=""
-          >
-            <option value="lite">Lite</option>
-            <option value="balanced">Balanced</option>
-            <option value="best">Best</option>
-            <option value="custom">Custom</option>
-          </NativeSelect>
-        </label>
-
-        {isCodex ? (
-          <>
-            <div className="md:col-span-2 flex items-center justify-between gap-3 -mb-2">
-              <p className="text-xs text-zinc-500">
-                {codexModelsLoading
-                  ? "Loading models available to this ChatGPT account..."
-                  : codexModelsError
-                    ? codexModelsError
-                    : codexTextOptions.length
-                      ? `${codexTextOptions.length} account model${codexTextOptions.length === 1 ? "" : "s"} available`
-                      : codexStatus.connected
-                        ? "No account models discovered yet."
-                        : "Connect ChatGPT to load account models."}
-              </p>
-              <Button
-                variant="ghost"
-                type="button"
-                onClick={onRefreshCodexModels}
-                disabled={!codexStatus.connected || codexModelsLoading}
-                className="text-xs text-primary hover:underline disabled:text-zinc-600 disabled:no-underline"
-              >
-                {codexModelsLoading ? "Refreshing..." : "Refresh models"}
-              </Button>
-            </div>
-            {renderCodexModelSelect(
-              "Text Model",
-              aiTextModel,
-              setAiTextModel,
-              codexTextOptions,
-            )}
-            {renderCodexEffortSelect(
-              "Text Effort",
-              aiTextModel,
-              aiTextEffort,
-              setAiTextEffort,
-            )}
-            {renderCodexModelSelect(
-              "Clip Analysis Model",
-              aiAnalyzeModel,
-              setAiAnalyzeModel,
-              codexTextOptions,
-            )}
-            {renderCodexEffortSelect(
-              "Clip Analysis Effort",
-              aiAnalyzeModel,
-              aiAnalyzeEffort,
-              setAiAnalyzeEffort,
-            )}
-            {renderCodexModelSelect(
-              "Vision Model",
-              aiVisionModel,
-              setAiVisionModel,
-              codexVisionOptions,
-            )}
-            {renderCodexEffortSelect(
-              "Vision Effort",
-              aiVisionModel,
-              aiVisionEffort,
-              setAiVisionEffort,
-            )}
-          </>
-        ) : isOpenRouter ? (
-          <>
-            {[
-              ["Text Model", aiTextModel],
-              ["Clip Analysis Model", aiAnalyzeModel],
-              ["Vision Model", aiVisionModel],
-            ].map(([label, value]) => (
-              <label className="block" key={label}>
-                <span className="block text-sm text-zinc-400 mb-2">
-                  {label}
-                </span>
-                <Input
-                  aria-label={label}
-                  value={value || "openai/gpt-4o-mini"}
-                  readOnly
-                  className=""
-                />
-              </label>
-            ))}
-          </>
-        ) : !textOptions ? (
-          <>
-            <label className="block">
-              <span className="block text-sm text-zinc-400 mb-2">
-                Text Model
-              </span>
-              <NativeSelect
-                value={aiTextModel}
-                onChange={(e) => {
-                  setAiQualityPreset("custom");
-                  setAiTextModel(e.target.value);
-                }}
-                className=""
-              >
-                <option value="auto">Auto (recommended)</option>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-              </NativeSelect>
-            </label>
-            <label className="block">
-              <span className="block text-sm text-zinc-400 mb-2">
-                Clip Analysis Model
-              </span>
-              <NativeSelect
-                value={aiAnalyzeModel}
-                onChange={(e) => {
-                  setAiQualityPreset("custom");
-                  setAiAnalyzeModel(e.target.value);
-                }}
-                className=""
-              >
-                <option value="auto">Auto (recommended)</option>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-              </NativeSelect>
-            </label>
-            <label className="block">
-              <span className="block text-sm text-zinc-400 mb-2">
-                Vision Model
-              </span>
-              <NativeSelect
-                aria-label="Vision Model"
-                value={aiVisionModel}
-                onChange={(e) => {
-                  setAiQualityPreset("custom");
-                  setAiVisionModel(e.target.value);
-                }}
-                className=""
-              >
-                <option value="auto">Auto (recommended)</option>
-                <option value="gemini-3.1-flash-image-preview">
-                  Gemini 3.1 Flash Image Preview
-                </option>
-              </NativeSelect>
-            </label>
-            <label className="block">
-              <span className="block text-sm text-zinc-400 mb-2">
-                Image Generation Model
-              </span>
-              <NativeSelect
-                value={aiImageModel}
-                onChange={(e) => {
-                  setAiQualityPreset("custom");
-                  setAiImageModel(e.target.value);
-                }}
-                className=""
-              >
-                <option value="">None (skip image generation)</option>
-                <option value="gemini-2.5-flash-image">
-                  Gemini 2.5 Flash Image
-                </option>
-              </NativeSelect>
-            </label>
-          </>
-        ) : (
-          <>
-            <label className="block">
-              <span className="block text-sm text-zinc-400 mb-2">
-                Text Model
-              </span>
-              <NativeSelect
-                value={aiTextModel}
-                onChange={(e) => {
-                  setAiQualityPreset("custom");
-                  setAiTextModel(e.target.value);
-                }}
-                className=""
-              >
-                {textOptions.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.label}
-                  </option>
-                ))}
-              </NativeSelect>
-            </label>
-            <label className="block">
-              <span className="block text-sm text-zinc-400 mb-2">
-                Clip Analysis Model
-              </span>
-              <NativeSelect
-                value={aiAnalyzeModel}
-                onChange={(e) => {
-                  setAiQualityPreset("custom");
-                  setAiAnalyzeModel(e.target.value);
-                }}
-                className=""
-              >
-                {textOptions.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.label}
-                  </option>
-                ))}
-              </NativeSelect>
-            </label>
-            <label className="block">
-              <span className="block text-sm text-zinc-400 mb-2">
-                Vision Model
-              </span>
-              <NativeSelect
-                aria-label="Vision Model"
-                value={aiVisionModel}
-                onChange={(e) => {
-                  setAiQualityPreset("custom");
-                  setAiVisionModel(e.target.value);
-                }}
-                className=""
-                disabled={
-                  aiProvider === "lmstudio" && visionOptions.length === 0
-                }
-              >
-                {visionOptions.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.label}
-                  </option>
-                ))}
-              </NativeSelect>
-            </label>
-            <label className="block">
-              <span className="block text-sm text-zinc-400 mb-2">
-                Image Generation Model
-              </span>
-              <NativeSelect
-                value={aiImageModel}
-                onChange={(e) => {
-                  setAiQualityPreset("custom");
-                  setAiImageModel(e.target.value);
-                }}
-                className=""
-              >
-                <option value="">None (skip image generation)</option>
-              </NativeSelect>
-            </label>
-          </>
-        )}
-        <div className="md:col-span-2 rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
-          <label className="block">
-            <span className="block text-sm text-zinc-300 mb-2">
-              OpenRouter API key
-            </span>
-            <Input
-              aria-label="OpenRouter API key"
-              type="password"
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-              className=""
-              placeholder="sk-or-v1-..."
-              autoComplete="off"
-            />
-            <p className="mt-2 text-xs text-zinc-500">
-              Used for remote audio transcription. Paste your key here.
-            </p>
-          </label>
-          <Input
-            aria-label="Transcription model"
-            value={transcriptionModel}
-            onChange={(event) => setTranscriptionModel(event.target.value)}
-            className=""
-            placeholder="openai/whisper-large-v3"
-          />
-          <label className="block">
-            <span className="block text-sm text-zinc-300 mb-2">
-              Source language
+          <Badge variant="outline">Optional</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Label className="block">
+            <span className="mb-2 block text-sm font-medium text-foreground">
+              Provider
             </span>
             <NativeSelect
-              aria-label="Transcription source language"
-              value={transcriptionLanguage}
-              onChange={(event) => setTranscriptionLanguage(event.target.value)}
-              className=""
+              value={aiProvider}
+              onChange={(e) => setAiProvider(e.target.value)}
             >
-              <option value="auto">Auto-detect</option>
-              {Object.entries(SUBTITLE_LANGUAGES).map(([code, label]) => (
-                <option key={code} value={code}>
-                  {label}
-                </option>
-              ))}
+              {providerOptions.includes("gemini") && (
+                <option value="gemini">Gemini (Cloud)</option>
+              )}
+              {providerOptions.includes("openrouter") && (
+                <option value="openrouter">OpenRouter</option>
+              )}
+              {providerOptions.includes("lmstudio") && (
+                <option value="lmstudio">LM Studio (Local)</option>
+              )}
+              {providerOptions.includes("openai-codex") && (
+                <option value="openai-codex">OpenAI Codex (ChatGPT)</option>
+              )}
             </NativeSelect>
-            <p className="mt-2 text-xs text-zinc-500">
-              Choose the spoken language to keep transcription in the original
-              language. Auto-detect is used when this is not known.
+          </Label>
+          {isCodex && (
+            <div className="flex min-h-9 flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-foreground">
+                ChatGPT
+              </span>
+              <Badge variant="outline">{codexStatusLabel(codexStatus)}</Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={
+                  codexStatus.connected || codexStatus.pending
+                    ? onDisconnectCodex
+                    : onConnectCodex
+                }
+              >
+                {codexStatus.connected
+                  ? "Disconnect"
+                  : codexStatus.pending
+                    ? "Cancel"
+                    : codexStatus.requiresReconnect
+                      ? "Reconnect"
+                      : "Connect"}
+              </Button>
+              {codexPending?.userCode && (
+                <p className="basis-full text-xs text-muted-foreground">
+                  Enter this code at the verification page:{" "}
+                  <code className="text-white">{codexPending.userCode}</code>
+                </p>
+              )}
+              {codexPending?.verificationUrl && (
+                <a
+                  href={codexPending.verificationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="basis-full text-xs text-primary hover:underline"
+                >
+                  Open ChatGPT verification page
+                </a>
+              )}
+              {codexError && (
+                <p className="basis-full text-xs text-destructive">
+                  {codexError}
+                </p>
+              )}
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label
+              htmlFor="ai-provider-api-key"
+              className="block text-sm font-medium text-foreground"
+            >
+              {isCodex || isOpenRouter
+                ? "OpenRouter API key"
+                : aiProvider === "gemini"
+                  ? "Gemini API key"
+                  : "API / Access key"}
+            </Label>
+            <div className="relative">
+              <Input
+                id="ai-provider-api-key"
+                type={apiKeyVisible ? "text" : "password"}
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder={
+                  isCodex || isOpenRouter
+                    ? "sk-or-v1-..."
+                    : aiProvider === "gemini"
+                      ? "AIza..."
+                      : "Optional"
+                }
+                autoComplete="off"
+                className="pr-11"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                type="button"
+                aria-label={apiKeyVisible ? "Hide API key" : "Show API key"}
+                onClick={() => setApiKeyVisible((visible) => !visible)}
+                className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground"
+              >
+                {apiKeyVisible ? <EyeOff /> : <Eye />}
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Saved in this browser and sent only when a request needs it.
             </p>
-          </label>
-          <label className="block">
-            <span className="block text-sm text-zinc-300 mb-2">
-              OpenRouter transcription provider
+            {(aiProvider === "gemini" || isOpenRouter || isCodex) && (
+              <Button
+                asChild
+                variant="link"
+                size="sm"
+                className="mt-1 h-auto p-0"
+              >
+                <a
+                  href={
+                    aiProvider === "gemini"
+                      ? "https://aistudio.google.com/app/apikey"
+                      : "https://openrouter.ai/keys"
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Get an API key <ExternalLink className="size-3.5" />
+                </a>
+              </Button>
+            )}
+          </div>
+          {!isCodex && (
+            <Label className="block">
+              <span className="mb-2 block text-sm font-medium text-foreground">
+                Base URL
+              </span>
+              <Input
+                type="text"
+                value={
+                  isOpenRouter
+                    ? aiBaseUrl || "https://openrouter.ai/api/v1"
+                    : aiBaseUrl
+                }
+                onChange={(e) => setAiBaseUrl(e.target.value)}
+                readOnly={isOpenRouter}
+                placeholder={
+                  isOpenRouter
+                    ? "https://openrouter.ai/api/v1"
+                    : "http://localhost:11434"
+                }
+              />
+              <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+                {isOpenRouter
+                  ? "Configured automatically. Only the API key is required."
+                  : "Enter the reachable endpoint for your cluster or host."}
+              </p>
+              {aiProvider === "lmstudio" && !aiBaseUrl.trim() && (
+                <p className="mt-2 text-xs text-amber-400">
+                  Base URL required for local models.
+                </p>
+              )}
+            </Label>
+          )}
+          <Label className="block">
+            <span className="mb-2 block text-sm font-medium text-foreground">
+              Quality Preset
             </span>
-            <Input
-              aria-label="OpenRouter transcription provider"
-              value={transcriptionOpenRouterProvider}
-              onChange={(event) =>
-                setTranscriptionOpenRouterProvider(event.target.value)
-              }
-              className=""
-              placeholder="deepinfra"
-            />
-          </label>
-          <p className="text-xs text-zinc-500">
-            Uses OpenRouter with the configured API key. Leave the provider
-            blank to let OpenRouter choose the route.
-          </p>
+            <NativeSelect
+              value={aiQualityPreset}
+              onChange={(e) => setAiQualityPreset(e.target.value)}
+            >
+              <option value="lite">Lite</option>
+              <option value="balanced">Balanced</option>
+              <option value="best">Best</option>
+              <option value="custom">Custom</option>
+            </NativeSelect>
+          </Label>
         </div>
-      </div>
-    </div>
+
+        <Separator />
+
+        <section className="space-y-4">
+          <div className="space-y-1.5">
+            <h3 className="text-base font-semibold text-foreground">Models</h3>
+            <p className="text-sm text-muted-foreground">
+              Pick the model used for each AI task. Presets can update these
+              choices together.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {isCodex ? (
+              <>
+                <div className="md:col-span-2 flex items-center justify-between gap-3 -mb-2">
+                  <p className="text-xs text-muted-foreground">
+                    {codexModelsLoading
+                      ? "Loading models available to this ChatGPT account..."
+                      : codexModelsError
+                        ? codexModelsError
+                        : codexTextOptions.length
+                          ? `${codexTextOptions.length} account model${codexTextOptions.length === 1 ? "" : "s"} available`
+                          : codexStatus.connected
+                            ? "No account models discovered yet."
+                            : "Connect ChatGPT to load account models."}
+                  </p>
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    onClick={onRefreshCodexModels}
+                    disabled={!codexStatus.connected || codexModelsLoading}
+                    className="text-xs text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
+                  >
+                    {codexModelsLoading ? "Refreshing..." : "Refresh models"}
+                  </Button>
+                </div>
+                {renderCodexModelSelect(
+                  "Text Model",
+                  aiTextModel,
+                  setAiTextModel,
+                  codexTextOptions,
+                )}
+                {renderCodexEffortSelect(
+                  "Text Effort",
+                  aiTextModel,
+                  aiTextEffort,
+                  setAiTextEffort,
+                )}
+                {renderCodexModelSelect(
+                  "Clip Analysis Model",
+                  aiAnalyzeModel,
+                  setAiAnalyzeModel,
+                  codexTextOptions,
+                )}
+                {renderCodexEffortSelect(
+                  "Clip Analysis Effort",
+                  aiAnalyzeModel,
+                  aiAnalyzeEffort,
+                  setAiAnalyzeEffort,
+                )}
+                {renderCodexModelSelect(
+                  "Vision Model",
+                  aiVisionModel,
+                  setAiVisionModel,
+                  codexVisionOptions,
+                )}
+                {renderCodexEffortSelect(
+                  "Vision Effort",
+                  aiVisionModel,
+                  aiVisionEffort,
+                  setAiVisionEffort,
+                )}
+              </>
+            ) : isOpenRouter ? (
+              <>
+                {[
+                  ["Text Model", aiTextModel],
+                  ["Clip Analysis Model", aiAnalyzeModel],
+                  ["Vision Model", aiVisionModel],
+                ].map(([label, value]) => (
+                  <Label className="block" key={label}>
+                    <span className="mb-2 block text-sm font-medium text-foreground">
+                      {label}
+                    </span>
+                    <Input
+                      aria-label={label}
+                      value={value || "openai/gpt-4o-mini"}
+                      readOnly
+                    />
+                  </Label>
+                ))}
+              </>
+            ) : !textOptions ? (
+              <>
+                <Label className="block">
+                  <span className="mb-2 block text-sm font-medium text-foreground">
+                    Text Model
+                  </span>
+                  <NativeSelect
+                    value={aiTextModel}
+                    onChange={(e) => {
+                      setAiQualityPreset("custom");
+                      setAiTextModel(e.target.value);
+                    }}
+                  >
+                    <option value="auto">Auto (recommended)</option>
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                  </NativeSelect>
+                </Label>
+                <Label className="block">
+                  <span className="mb-2 block text-sm font-medium text-foreground">
+                    Clip Analysis Model
+                  </span>
+                  <NativeSelect
+                    value={aiAnalyzeModel}
+                    onChange={(e) => {
+                      setAiQualityPreset("custom");
+                      setAiAnalyzeModel(e.target.value);
+                    }}
+                  >
+                    <option value="auto">Auto (recommended)</option>
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                  </NativeSelect>
+                </Label>
+                <Label className="block">
+                  <span className="mb-2 block text-sm font-medium text-foreground">
+                    Vision Model
+                  </span>
+                  <NativeSelect
+                    aria-label="Vision Model"
+                    value={aiVisionModel}
+                    onChange={(e) => {
+                      setAiQualityPreset("custom");
+                      setAiVisionModel(e.target.value);
+                    }}
+                  >
+                    <option value="auto">Auto (recommended)</option>
+                    <option value="gemini-3.1-flash-image-preview">
+                      Gemini 3.1 Flash Image Preview
+                    </option>
+                  </NativeSelect>
+                </Label>
+                <Label className="block">
+                  <span className="mb-2 block text-sm font-medium text-foreground">
+                    Image Generation Model
+                  </span>
+                  <NativeSelect
+                    value={aiImageModel}
+                    onChange={(e) => {
+                      setAiQualityPreset("custom");
+                      setAiImageModel(e.target.value);
+                    }}
+                  >
+                    <option value="">None (skip image generation)</option>
+                    <option value="gemini-2.5-flash-image">
+                      Gemini 2.5 Flash Image
+                    </option>
+                  </NativeSelect>
+                </Label>
+              </>
+            ) : (
+              <>
+                <Label className="block">
+                  <span className="mb-2 block text-sm font-medium text-foreground">
+                    Text Model
+                  </span>
+                  <NativeSelect
+                    value={aiTextModel}
+                    onChange={(e) => {
+                      setAiQualityPreset("custom");
+                      setAiTextModel(e.target.value);
+                    }}
+                  >
+                    {textOptions.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Label>
+                <Label className="block">
+                  <span className="mb-2 block text-sm font-medium text-foreground">
+                    Clip Analysis Model
+                  </span>
+                  <NativeSelect
+                    value={aiAnalyzeModel}
+                    onChange={(e) => {
+                      setAiQualityPreset("custom");
+                      setAiAnalyzeModel(e.target.value);
+                    }}
+                  >
+                    {textOptions.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Label>
+                <Label className="block">
+                  <span className="mb-2 block text-sm font-medium text-foreground">
+                    Vision Model
+                  </span>
+                  <NativeSelect
+                    aria-label="Vision Model"
+                    value={aiVisionModel}
+                    onChange={(e) => {
+                      setAiQualityPreset("custom");
+                      setAiVisionModel(e.target.value);
+                    }}
+                    disabled={
+                      aiProvider === "lmstudio" && visionOptions.length === 0
+                    }
+                  >
+                    {visionOptions.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Label>
+                <Label className="block">
+                  <span className="mb-2 block text-sm font-medium text-foreground">
+                    Image Generation Model
+                  </span>
+                  <NativeSelect
+                    value={aiImageModel}
+                    onChange={(e) => {
+                      setAiQualityPreset("custom");
+                      setAiImageModel(e.target.value);
+                    }}
+                  >
+                    <option value="">None (skip image generation)</option>
+                  </NativeSelect>
+                </Label>
+              </>
+            )}
+          </div>
+        </section>
+      </CardContent>
+    </Card>
   );
 }

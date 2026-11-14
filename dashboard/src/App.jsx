@@ -28,13 +28,13 @@ import {
   Loader2,
   PanelLeft,
 } from "lucide-react";
-import KeyInput from "./components/KeyInput";
 import MediaInput from "./components/MediaInput";
 import ResultCard from "./components/ResultCard";
 import ProcessingAnimation from "./components/ProcessingAnimation";
 // import Gallery from './components/Gallery';
 import ProjectLibrary from "./components/ProjectLibrary";
 import ScheduleWeekModal from "./components/ScheduleWeekModal";
+import AudioSettingsPanel from "./components/AudioSettingsPanel";
 import AISettingsPanel from "./components/AISettingsPanel";
 import AIAgentPage from "./components/AIAgentPage";
 import LocalEditorTab from "./components/local-editor/LocalEditorTab";
@@ -49,6 +49,11 @@ const PerformanceDashboard = React.lazy(
 import {
   Button,
   Badge,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -58,6 +63,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   Input,
+  Label,
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -70,6 +76,10 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   useSidebar,
 } from "./components/ui";
 
@@ -1626,237 +1636,283 @@ function App() {
 
           {/* View: Settings */}
           {activeTab === "settings" && (
-            <div className="h-full overflow-y-auto p-8 max-w-2xl mx-auto animate-[fadeIn_0.3s_ease-out]">
-              <div className="flex items-center justify-between mb-8">
-                <h1 className="text-2xl font-bold">Settings</h1>
-                <div className="px-3 py-1 bg-green-500/10 border border-green-500/20 rounded-full text-[10px] text-green-400 font-medium flex items-center gap-2">
-                  <Shield size={12} /> Privacy: keys only live in your browser
-                  (sent to backend just to process)
-                </div>
-              </div>
-              <AISettingsPanel
-                aiProvider={aiProvider}
-                setAiProvider={setAiProvider}
-                apiKey={apiKey}
-                setApiKey={setApiKey}
-                aiBaseUrl={aiBaseUrl}
-                setAiBaseUrl={setAiBaseUrl}
-                aiQualityPreset={aiQualityPreset}
-                setAiQualityPreset={setAiQualityPreset}
-                aiTextModel={aiTextModel}
-                setAiTextModel={setAiTextModel}
-                aiAnalyzeModel={aiAnalyzeModel}
-                setAiAnalyzeModel={setAiAnalyzeModel}
-                aiVisionModel={aiVisionModel}
-                setAiVisionModel={setAiVisionModel}
-                aiImageModel={aiImageModel}
-                setAiImageModel={setAiImageModel}
-                aiTextEffort={aiTextEffort}
-                setAiTextEffort={setAiTextEffort}
-                aiAnalyzeEffort={aiAnalyzeEffort}
-                setAiAnalyzeEffort={setAiAnalyzeEffort}
-                aiVisionEffort={aiVisionEffort}
-                setAiVisionEffort={setAiVisionEffort}
-                transcriptionModel={transcriptionModel}
-                setTranscriptionModel={setTranscriptionModel}
-                transcriptionLanguage={transcriptionLanguage}
-                setTranscriptionLanguage={handleTranscriptionLanguageChange}
-                transcriptionOpenRouterProvider={
-                  transcriptionOpenRouterProvider
-                }
-                setTranscriptionOpenRouterProvider={
-                  setTranscriptionOpenRouterProvider
-                }
-                lmStudioAvailable={lmStudioAvailable}
-                lmStudioModels={lmStudioModels}
-                codexStatus={codexStatus}
-                codexPending={codexPending}
-                codexError={codexError}
-                codexModels={codexModels}
-                codexModelsLoading={codexModels.loading}
-                codexModelsError={codexModels.error}
-                onConnectCodex={connectCodex}
-                onDisconnectCodex={disconnectCodex}
-                onRefreshCodexModels={refreshCodexModels}
-                onDetectLmStudio={detectLmStudio}
-              />
-
-              {aiProvider === "gemini" && (
-                <KeyInput
-                  onKeySet={(key) => {
-                    setApiKey(key);
-                    setAiProvider("gemini");
-                  }}
-                  savedKey={apiKey}
-                />
-              )}
-
-              <div
-                className={`glass-panel p-6 mt-8 ${!uploadPostKey ? "border-amber-500/30 ring-1 ring-amber-500/20" : ""}`}
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold">Social Integration</h2>
-                  <span className="text-[10px] bg-white/5 border border-white/5 px-2 py-0.5 rounded text-zinc-500 uppercase tracking-wider">
-                    Optional
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
-                  Optional. Connect <strong>Upload-Post</strong> only if you
-                  want to publish your clips to TikTok, Instagram Reels, and
-                  YouTube Shorts. The core clip generation workflow works fully
-                  locally without it.
-                </p>
-                <div className="space-y-4">
-                  <label className="block text-sm text-zinc-400">
-                    Upload-Post API Key
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="password"
-                      value={uploadPostKey}
-                      onChange={(e) => setUploadPostKey(e.target.value)}
-                      placeholder="ey..."
-                    />
-                    <Button
-                      variant="default"
-                      onClick={fetchUserProfiles}
-                      className="py-2 px-4 text-sm"
-                    >
-                      Connect
-                    </Button>
-                  </div>
-                  <div className="text-xs text-zinc-500 leading-relaxed">
-                    Connect your Upload-Post account if you want publishing
-                    features.
-                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <a
-                        href="https://app.upload-post.com/login"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex flex-col gap-1"
-                      >
-                        <span className="text-zinc-400 font-medium">
-                          1. Login
-                        </span>
-                        <span className="text-[10px] text-zinc-600">
-                          Register account
-                        </span>
-                      </a>
-                      <a
-                        href="https://app.upload-post.com/manage-users"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex flex-col gap-1"
-                      >
-                        <span className="text-zinc-400 font-medium">
-                          2. Profiles
-                        </span>
-                        <span className="text-[10px] text-zinc-600">
-                          Create & Connect
-                        </span>
-                      </a>
-                      <a
-                        href="https://app.upload-post.com/api-keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex flex-col gap-1"
-                      >
-                        <span className="text-zinc-400 font-medium">
-                          3. API Key
-                        </span>
-                        <span className="text-[10px] text-zinc-600">
-                          Generate key
-                        </span>
-                      </a>
+            <div className="h-full overflow-y-auto custom-scrollbar p-5 md:p-8">
+              <div className="mx-auto max-w-5xl space-y-4 pb-8 animate-[fadeIn_0.3s_ease-out]">
+                <header className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <Settings size={20} />
                     </div>
-                    <br />
-                    <span className="text-zinc-600 italic">
-                      Keys are only stored in your browser. They are sent to the
-                      backend only when you publish, never stored server-side.
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="glass-panel p-6 mt-8">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold">Video Translation</h2>
-                  <span className="text-[10px] bg-white/5 border border-white/5 px-2 py-0.5 rounded text-zinc-500 uppercase tracking-wider">
-                    Optional
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
-                  Translate your clips to different languages using{" "}
-                  <strong>ElevenLabs</strong> AI dubbing. Automatically
-                  translates speech while preserving the original voice
-                  characteristics.
-                </p>
-                <div className="space-y-4">
-                  <label className="block text-sm text-zinc-400">
-                    ElevenLabs API Key
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="password"
-                      value={elevenLabsKey}
-                      onChange={(e) => setElevenLabsKey(e.target.value)}
-                      placeholder="sk_..."
-                    />
-                    <Button
-                      variant="default"
-                      onClick={() => {
-                        if (elevenLabsKey) {
-                          localStorage.setItem(
-                            "elevenLabsKey_v1",
-                            encrypt(elevenLabsKey),
-                          );
-                          alert("ElevenLabs API Key saved!");
-                        }
-                      }}
-                      className="py-2 px-4 text-sm"
-                    >
-                      Save
-                    </Button>
-                  </div>
-                  <div className="text-xs text-zinc-500 leading-relaxed">
-                    Get your API key from ElevenLabs to enable video
-                    translation.
-                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <a
-                        href="https://elevenlabs.io/sign-up"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex flex-col gap-1"
-                      >
-                        <span className="text-zinc-400 font-medium">
-                          1. Sign Up
-                        </span>
-                        <span className="text-[10px] text-zinc-600">
-                          Create account
-                        </span>
-                      </a>
-                      <a
-                        href="https://elevenlabs.io/app/settings/api-keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex flex-col gap-1"
-                      >
-                        <span className="text-zinc-400 font-medium">
-                          2. API Key
-                        </span>
-                        <span className="text-[10px] text-zinc-600">
-                          Generate key
-                        </span>
-                      </a>
+                    <div>
+                      <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                        Settings
+                      </h1>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        API keys are stored locally and sent only with requests
+                        that need them.
+                      </p>
                     </div>
-                    <br />
-                    <span className="text-zinc-600 italic">
-                      Keys are only stored in your browser. They are sent to the
-                      backend only to process your request, never stored
-                      server-side.
-                    </span>
                   </div>
-                </div>
+                  <Badge
+                    variant="outline"
+                    className="h-auto gap-2 px-3 py-1.5 text-muted-foreground"
+                  >
+                    <Shield size={14} className="text-emerald-500" />
+                    Local key storage
+                  </Badge>
+                </header>
+
+                <Tabs defaultValue="ai" className="space-y-4">
+                  <TabsList className="grid h-auto w-full grid-cols-2 sm:inline-grid sm:grid-cols-4">
+                    <TabsTrigger value="ai" className="px-3 py-2">
+                      AI & models
+                    </TabsTrigger>
+                    <TabsTrigger value="audio" className="px-3 py-2">
+                      Audio
+                    </TabsTrigger>
+                    <TabsTrigger value="publishing" className="px-3 py-2">
+                      Publishing
+                    </TabsTrigger>
+                    <TabsTrigger value="translation" className="px-3 py-2">
+                      Translation
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="ai" className="mt-0">
+                    <AISettingsPanel
+                      aiProvider={aiProvider}
+                      setAiProvider={setAiProvider}
+                      apiKey={apiKey}
+                      setApiKey={setApiKey}
+                      aiBaseUrl={aiBaseUrl}
+                      setAiBaseUrl={setAiBaseUrl}
+                      aiQualityPreset={aiQualityPreset}
+                      setAiQualityPreset={setAiQualityPreset}
+                      aiTextModel={aiTextModel}
+                      setAiTextModel={setAiTextModel}
+                      aiAnalyzeModel={aiAnalyzeModel}
+                      setAiAnalyzeModel={setAiAnalyzeModel}
+                      aiVisionModel={aiVisionModel}
+                      setAiVisionModel={setAiVisionModel}
+                      aiImageModel={aiImageModel}
+                      setAiImageModel={setAiImageModel}
+                      aiTextEffort={aiTextEffort}
+                      setAiTextEffort={setAiTextEffort}
+                      aiAnalyzeEffort={aiAnalyzeEffort}
+                      setAiAnalyzeEffort={setAiAnalyzeEffort}
+                      aiVisionEffort={aiVisionEffort}
+                      setAiVisionEffort={setAiVisionEffort}
+                      lmStudioAvailable={lmStudioAvailable}
+                      lmStudioModels={lmStudioModels}
+                      codexStatus={codexStatus}
+                      codexPending={codexPending}
+                      codexError={codexError}
+                      codexModels={codexModels}
+                      codexModelsLoading={codexModels.loading}
+                      codexModelsError={codexModels.error}
+                      onConnectCodex={connectCodex}
+                      onDisconnectCodex={disconnectCodex}
+                      onRefreshCodexModels={refreshCodexModels}
+                      onDetectLmStudio={detectLmStudio}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="audio" className="mt-0">
+                    <AudioSettingsPanel
+                      apiKey={apiKey}
+                      transcriptionModel={transcriptionModel}
+                      setTranscriptionModel={setTranscriptionModel}
+                      transcriptionLanguage={transcriptionLanguage}
+                      setTranscriptionLanguage={
+                        handleTranscriptionLanguageChange
+                      }
+                      transcriptionOpenRouterProvider={
+                        transcriptionOpenRouterProvider
+                      }
+                      setTranscriptionOpenRouterProvider={
+                        setTranscriptionOpenRouterProvider
+                      }
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="publishing" className="mt-0">
+                    <Card
+                      className={
+                        !uploadPostKey ? "border-amber-500/40" : undefined
+                      }
+                    >
+                      <CardHeader>
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-1.5">
+                            <CardTitle>Social integration</CardTitle>
+                            <CardDescription>
+                              Connect Upload-Post to publish clips to TikTok,
+                              Instagram Reels, and YouTube Shorts.
+                            </CardDescription>
+                          </div>
+                          <Badge variant="outline">Optional</Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                          Clip generation works without this integration.
+                        </p>
+                        <div className="space-y-4">
+                          <Label className="block space-y-2 text-sm font-medium text-foreground">
+                            Upload-Post API key
+                            <Input
+                              type="password"
+                              value={uploadPostKey}
+                              onChange={(e) => setUploadPostKey(e.target.value)}
+                              placeholder="ey..."
+                              autoComplete="off"
+                            />
+                          </Label>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <Button
+                              variant="default"
+                              onClick={fetchUserProfiles}
+                            >
+                              Connect
+                            </Button>
+                            <span className="text-sm text-muted-foreground">
+                              Keys are stored locally and sent only when
+                              publishing.
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                            <Button
+                              asChild
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0"
+                            >
+                              <a
+                                href="https://app.upload-post.com/login"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                1. Sign in
+                              </a>
+                            </Button>
+                            <Button
+                              asChild
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0"
+                            >
+                              <a
+                                href="https://app.upload-post.com/manage-users"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                2. Connect profiles
+                              </a>
+                            </Button>
+                            <Button
+                              asChild
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0"
+                            >
+                              <a
+                                href="https://app.upload-post.com/api-keys"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                3. Create an API key
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  <TabsContent value="translation" className="mt-0">
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-1.5">
+                            <CardTitle>Video translation</CardTitle>
+                            <CardDescription>
+                              Configure ElevenLabs dubbing for translated clips.
+                            </CardDescription>
+                          </div>
+                          <Badge variant="outline">Optional</Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                          Speech is translated while preserving the original
+                          voice characteristics.
+                        </p>
+                        <div className="space-y-4">
+                          <Label className="block space-y-2 text-sm font-medium text-foreground">
+                            ElevenLabs API key
+                            <Input
+                              type="password"
+                              value={elevenLabsKey}
+                              onChange={(e) => setElevenLabsKey(e.target.value)}
+                              placeholder="sk_..."
+                              autoComplete="off"
+                            />
+                          </Label>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <Button
+                              variant="default"
+                              onClick={() => {
+                                if (elevenLabsKey) {
+                                  localStorage.setItem(
+                                    "elevenLabsKey_v1",
+                                    encrypt(elevenLabsKey),
+                                  );
+                                  alert("ElevenLabs API Key saved!");
+                                }
+                              }}
+                            >
+                              Save
+                            </Button>
+                            <span className="text-sm text-muted-foreground">
+                              The key stays in this browser and is sent only for
+                              processing.
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                            <Button
+                              asChild
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0"
+                            >
+                              <a
+                                href="https://elevenlabs.io/sign-up"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                Create an account
+                              </a>
+                            </Button>
+                            <Button
+                              asChild
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0"
+                            >
+                              <a
+                                href="https://elevenlabs.io/app/settings/api-keys"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                Manage API keys
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                </Tabs>
               </div>
             </div>
           )}

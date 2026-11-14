@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import AudioSettingsPanel from "./AudioSettingsPanel";
 import AISettingsPanel from "./AISettingsPanel";
 
 describe("AISettingsPanel", () => {
@@ -15,10 +16,19 @@ describe("AISettingsPanel", () => {
         aiAnalyzeModel="openai/gpt-4o-mini"
         aiVisionModel="openai/gpt-4o-mini"
         aiImageModel=""
-        transcriptionModel="openai/whisper-large-v3"
-        transcriptionOpenRouterProvider=""
         lmStudioAvailable={false}
         lmStudioModels={{ textModels: [], visionModels: [] }}
+      />,
+    );
+    render(
+      <AudioSettingsPanel
+        apiKey=""
+        transcriptionModel="openai/whisper-large-v3"
+        setTranscriptionModel={vi.fn()}
+        transcriptionLanguage="auto"
+        setTranscriptionLanguage={vi.fn()}
+        transcriptionOpenRouterProvider=""
+        setTranscriptionOpenRouterProvider={vi.fn()}
       />,
     );
 

@@ -27,11 +27,17 @@ import ResultCard from "./ResultCard";
 import SourceTranscriptEditor from "./editor/SourceTranscriptEditor";
 import {
   Button,
+  Badge,
+  Card,
+  CardContent,
+  CardDescription,
+  CardTitle,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
   Input,
+  Label,
 } from "./ui";
 
 const CLIP_RENDER_POLL_INTERVAL_MS = 2000;
@@ -568,14 +574,6 @@ export default function ProjectLibrary({
   const handleOpenAudit = () => {
     setIsAuditOpen(true);
     loadProjectAudit(selectedProject).catch(() => {});
-  };
-
-  const handleProjectCardKeyDown = (event, project) => {
-    if (event.target !== event.currentTarget) return;
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      handleViewProject(project);
-    }
   };
 
   const handleDeleteProject = async (e, project) => {
@@ -1934,58 +1932,62 @@ export default function ProjectLibrary({
 
   return (
     <div className="h-full min-h-0 overflow-y-auto custom-scrollbar">
-      <div className="max-w-7xl mx-auto p-6 pb-10 space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
-                <FolderOpen size={20} className="text-cyan-400" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">
-                  Projects
-                </h1>
-                <p className="text-sm text-zinc-500">
-                  Historical clip-generation jobs rendered the same way as the
-                  clip generator.
-                </p>
-              </div>
+      <main className="mx-auto flex min-h-full w-full max-w-7xl flex-col gap-6 px-5 py-8 md:px-8 md:py-10 xl:px-10">
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-3">
+            <Badge
+              variant="outline"
+              className="gap-1.5 rounded-md border-primary/25 bg-primary/10 px-2 py-1 font-medium text-primary"
+            >
+              <FolderOpen className="size-3.5" /> Project library
+            </Badge>
+            <div className="space-y-2">
+              <h1 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
+                Projects
+              </h1>
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
+                Historical clip-generation jobs rendered the same way as the
+                clip generator.
+              </p>
             </div>
           </div>
 
-          <Button
-            variant="ghost"
-            onClick={loadProjects}
-            className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm text-zinc-300 flex items-center gap-2 transition-colors"
-          >
-            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+          <Button variant="outline" onClick={loadProjects} type="button">
+            <RefreshCw
+              className={`size-4 ${isLoading ? "animate-spin" : ""}`}
+            />
             Refresh
           </Button>
-        </div>
+        </header>
 
-        <div className="glass-panel p-4 flex flex-col md:flex-row md:items-center gap-3">
-          <div className="flex items-center gap-2 text-zinc-500">
-            <Search size={14} />
-            <span className="text-xs uppercase tracking-widest">Search</span>
-          </div>
-          <Input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search projects..."
-            className="flex-1 text-sm"
-          />
-        </div>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-3">
+            <Search className="size-4 shrink-0 text-muted-foreground" />
+            <Label htmlFor="project-search" className="sr-only">
+              Search projects
+            </Label>
+            <Input
+              id="project-search"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search projects..."
+              className="border-0 bg-transparent shadow-none focus-visible:ring-0"
+            />
+          </CardContent>
+        </Card>
 
         {error && (
-          <div className="glass-panel p-4 border border-red-500/20 bg-red-500/5 text-red-200 text-sm">
-            {error}
-          </div>
+          <Card className="border-destructive/30 bg-destructive/5 shadow-none">
+            <CardContent className="p-4 text-sm text-destructive">
+              {error}
+            </CardContent>
+          </Card>
         )}
 
         {isLoading ? (
-          <div
-            className="glass-panel p-20 flex flex-col items-center justify-center gap-4 text-zinc-500"
+          <Card
+            className="flex min-h-64 flex-col items-center justify-center gap-4 text-muted-foreground"
             role={editorOpen && editorClipIndex !== null ? "status" : undefined}
             aria-label={
               editorOpen && editorClipIndex !== null
@@ -1996,20 +1998,27 @@ export default function ProjectLibrary({
               editorOpen && editorClipIndex !== null ? "polite" : undefined
             }
           >
-            <Loader2 size={32} className="animate-spin text-cyan-400" />
+            <Loader2 className="size-8 animate-spin text-primary" />
             <p>
               {editorOpen && editorClipIndex !== null
                 ? "Loading editor..."
                 : "Loading your projects..."}
             </p>
-          </div>
+          </Card>
         ) : filteredProjects.length === 0 ? (
-          <div className="glass-panel p-20 text-center text-zinc-500 border-2 border-dashed border-white/5">
-            <FolderOpen size={48} className="mx-auto mb-4 opacity-10" />
-            <p>No projects found matching your search.</p>
-          </div>
+          <Card className="border-dashed shadow-none">
+            <CardContent className="flex min-h-64 flex-col items-center justify-center p-8 text-center">
+              <FolderOpen className="mb-4 size-10 text-muted-foreground/50" />
+              <CardDescription>
+                No projects found matching your search.
+              </CardDescription>
+            </CardContent>
+          </Card>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <section
+            aria-label="Projects"
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          >
             {filteredProjects.map((project) => {
               const previewVideoUrl =
                 project.clips?.[0]?.url ||
@@ -2018,60 +2027,64 @@ export default function ProjectLibrary({
                 "";
 
               return (
-                <div
+                <Card
                   key={project.job_id}
-                  onClick={() => handleViewProject(project)}
-                  onKeyDown={(event) =>
-                    handleProjectCardKeyDown(event, project)
-                  }
-                  role="button"
-                  tabIndex={0}
-                  className="group glass-panel p-3 cursor-pointer hover:border-cyan-500/30 transition-all active:scale-[0.98] text-left"
+                  className="group relative cursor-pointer overflow-hidden transition-colors hover:border-primary/40"
                 >
-                  <div className="aspect-[9/16] rounded-lg overflow-hidden bg-white/5 mb-3 border border-white/5 relative">
+                  <div className="relative aspect-[9/16] overflow-hidden bg-muted">
                     {previewVideoUrl ? (
                       <ProjectPreviewVideo src={previewVideoUrl} />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-zinc-700">
-                        <FolderOpen size={32} />
+                      <div className="flex h-full w-full items-center justify-center text-muted-foreground/50">
+                        <FolderOpen className="size-8" />
                       </div>
                     )}
-                    <Button
-                      variant="ghost"
-                      onClick={(e) => handleDeleteProject(e, project)}
-                      className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-zinc-400 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 z-10"
-                      title="Delete Project"
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <span className="text-xs font-bold text-white bg-cyan-500 px-3 py-1.5 rounded-full shadow-xl">
-                        VIEW CLIPS
-                      </span>
+                    <div className="absolute inset-0 flex items-center justify-center bg-background/50 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                      <Badge variant="secondary" className="shadow-md">
+                        View clips
+                      </Badge>
                     </div>
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-bold text-white truncate group-hover:text-cyan-400 transition-colors">
+                  <CardContent className="space-y-3 p-4">
+                    <CardTitle className="truncate text-base transition-colors group-hover:text-primary">
                       {project.title || "Untitled Project"}
-                    </h3>
-                    <div className="flex items-center justify-between mt-1 gap-2">
-                      <span className="text-[10px] text-zinc-500 truncate">
+                    </CardTitle>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-xs text-muted-foreground">
                         {formatDate(project.created_at)}
                       </span>
-                      <span className="text-[10px] text-zinc-400 font-medium px-2 py-0.5 rounded bg-white/5 border border-white/5 whitespace-nowrap">
-                        {project.clip_count || project.clips?.length || 0} CLIPS
-                      </span>
+                      <Badge variant="secondary" className="shrink-0">
+                        {project.clip_count || project.clips?.length || 0} clips
+                      </Badge>
                     </div>
-                    <p className="text-[10px] text-zinc-600 mt-2 truncate">
+                    <code className="block truncate rounded-md bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
                       {project.job_id}
-                    </p>
-                  </div>
-                </div>
+                    </code>
+                  </CardContent>
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    aria-label={`View clips for ${project.title || "Untitled Project"}`}
+                    onClick={() => handleViewProject(project)}
+                    className="absolute inset-0 z-10 h-full w-full rounded-none bg-transparent p-0 text-transparent shadow-none hover:bg-transparent focus-visible:ring-inset active:scale-100"
+                  />
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    type="button"
+                    onClick={(e) => handleDeleteProject(e, project)}
+                    className="absolute right-3 top-3 z-20 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                    title={`Delete ${project.title || "Untitled Project"}`}
+                    aria-label={`Delete ${project.title || "Untitled Project"}`}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </Card>
               );
             })}
-          </div>
+          </section>
         )}
-      </div>
+      </main>
     </div>
   );
 }
