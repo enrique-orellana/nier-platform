@@ -9,6 +9,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogHeader,
   DialogTitle,
 } from "../ui";
 
@@ -147,15 +148,15 @@ export default function SubtitleDetailsModal({
         showClose={false}
         closeOnEscape={false}
         closeOnInteractOutside={false}
-        overlayClassName="z-[110] bg-black/80 backdrop-blur-sm"
-        className="relative z-[110] flex w-[calc(100%-2rem)] max-w-6xl max-h-[92vh] flex-col gap-0 overflow-hidden rounded-2xl border-white/10 bg-[#121214] p-0"
+        overlayClassName="z-[110]"
+        className="relative z-[110] flex max-h-[92vh] w-[calc(100%-2rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0"
       >
-        <header className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+        <DialogHeader className="flex flex-row items-start justify-between gap-4 border-b px-5 py-4 text-left sm:text-left">
           <div>
-            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-white">
-              <FileText className="text-cyan-300" size={19} /> Subtitle details
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <FileText className="size-4 text-primary" /> Subtitle details
             </DialogTitle>
-            <DialogDescription className="mt-1 text-xs text-zinc-500">
+            <DialogDescription className="mt-1">
               Verify the saved cues and their exact timing before rendering.
             </DialogDescription>
           </div>
@@ -164,17 +165,17 @@ export default function SubtitleDetailsModal({
             type="button"
             onClick={onClose}
             aria-label="Close subtitle details"
-            className="rounded-lg p-2 text-zinc-500 hover:bg-white/10 hover:text-white"
+            size="icon"
           >
-            <X size={20} />
+            <X className="size-4" />
           </Button>
-        </header>
+        </DialogHeader>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-y-auto p-5 lg:grid-cols-[minmax(240px,0.7fr)_minmax(420px,1.3fr)]">
-          <section className="flex min-h-[420px] items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black">
+          <section className="flex min-h-[420px] items-center justify-center overflow-hidden rounded-md border bg-black">
             {loading ? (
-              <div className="flex items-center gap-2 text-sm text-zinc-400">
-                <Loader2 size={16} className="animate-spin" />
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
                 Loading subtitle cues…
               </div>
             ) : cues.length > 0 ? (
@@ -188,7 +189,7 @@ export default function SubtitleDetailsModal({
                 subtitles={subtitleConfig}
               />
             ) : (
-              <div className="px-8 text-center text-sm text-zinc-500">
+              <div className="px-8 text-center text-sm text-muted-foreground">
                 No subtitle cues are saved for this clip yet.
               </div>
             )}
@@ -196,29 +197,29 @@ export default function SubtitleDetailsModal({
 
           <section className="min-w-0">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300">
-                <Clock3 size={14} className="text-cyan-300" />
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock3 className="size-4 text-primary" />
                 {cues.length} {cues.length === 1 ? "cue" : "cues"}
                 {track?.language ? ` · ${track.language}` : ""}
               </div>
               {clip.subtitle_url && (
-                <a
-                  href={getApiUrl(clip.subtitle_url)}
-                  download
-                  className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-300 hover:bg-white/10"
-                >
-                  <Download size={13} />
-                  Download SRT
-                </a>
+                <Button asChild variant="outline" size="sm">
+                  <a href={getApiUrl(clip.subtitle_url)} download>
+                    <Download className="size-4" /> Download SRT
+                  </a>
+                </Button>
               )}
             </div>
             {error && (
-              <div className="mb-3 rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+              <div
+                role="alert"
+                className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+              >
                 {error}
               </div>
             )}
-            <div className="overflow-hidden rounded-xl border border-white/10">
-              <div className="grid grid-cols-[1fr_auto] gap-3 border-b border-white/10 bg-white/5 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+            <div className="overflow-hidden rounded-md border">
+              <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted px-3 py-2 text-xs font-medium text-muted-foreground">
                 <span>Caption</span>
                 <span>Clip time · Master time</span>
               </div>
@@ -226,17 +227,17 @@ export default function SubtitleDetailsModal({
                 {cues.map((cue) => (
                   <div
                     key={cue.id}
-                    className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-white/5 px-3 py-3 last:border-b-0"
+                    className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b px-3 py-3 last:border-b-0"
                   >
-                    <span className="min-w-0 break-words text-sm text-white">
+                    <span className="min-w-0 break-words text-sm">
                       {cue.text}
                     </span>
-                    <span className="whitespace-nowrap text-right font-mono text-[10px] leading-5 text-zinc-400">
+                    <span className="whitespace-nowrap text-right font-mono text-xs leading-5 text-muted-foreground">
                       <span className="block">
                         {formatTimestamp(cue.startMs, fps)} →{" "}
                         {formatTimestamp(cue.endMs, fps)}
                       </span>
-                      <span className="block text-cyan-300/70">
+                      <span className="block text-primary">
                         {formatTimestamp(masterStartMs + cue.startMs, fps)} →{" "}
                         {formatTimestamp(masterStartMs + cue.endMs, fps)}
                       </span>
@@ -244,7 +245,7 @@ export default function SubtitleDetailsModal({
                   </div>
                 ))}
                 {!loading && !cues.length && (
-                  <div className="px-4 py-10 text-center text-sm text-zinc-500">
+                  <div className="px-4 py-10 text-center text-sm text-muted-foreground">
                     Generate subtitles first, then reopen this detail view.
                   </div>
                 )}

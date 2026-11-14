@@ -3,7 +3,15 @@ import { Sliders, X, Film, Copy, Sparkles } from "lucide-react";
 import ClipRenderControls from "../ClipRenderControls";
 import CardContent from "./CardContent";
 import CardActions from "./CardActions";
-import { Button, Dialog, DialogContent, DialogTitle } from "../ui";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  Separator,
+} from "../ui";
 
 export default function ClipControlsModal({
   isOpen,
@@ -53,38 +61,40 @@ export default function ClipControlsModal({
         showClose={false}
         closeOnEscape={false}
         closeOnInteractOutside={false}
-        className="flex w-[calc(100%-2rem)] max-w-xl max-h-[90vh] min-w-0 flex-col gap-0 overflow-hidden rounded-2xl border-white/10 bg-[#121214] p-0"
+        className="flex max-h-[90vh] min-w-0 w-[calc(100%-2rem)] max-w-xl flex-col gap-0 overflow-hidden p-0"
       >
-        {/* Modal Header */}
-        <div className="flex items-center justify-between p-4 border-b border-white/10 bg-white/[0.02]">
-          <div className="flex items-center gap-2 min-w-0 pr-2">
-            <Sliders size={18} className="text-cyan-400 shrink-0" />
-            <DialogTitle
-              className="text-sm font-bold text-white truncate"
-              title={youtubeTitle}
-            >
-              {youtubeTitle} — Actions & Controls
-            </DialogTitle>
+        <DialogHeader className="flex flex-row items-start justify-between gap-4 border-b p-6 text-left sm:text-left">
+          <div className="flex min-w-0 items-start gap-3">
+            <Sliders className="mt-1 size-4 shrink-0 text-primary" />
+            <div className="min-w-0">
+              <DialogTitle className="truncate text-lg" title={youtubeTitle}>
+                {youtubeTitle} — Actions & Controls
+              </DialogTitle>
+              <DialogDescription className="mt-1">
+                Manage this clip’s layout, captions, edits, and exports.
+              </DialogDescription>
+            </div>
           </div>
           <Button
             variant="ghost"
+            size="icon"
             type="button"
             onClick={onClose}
-            aria-label="Close modal"
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
+            aria-label="Close clip actions"
           >
-            <X size={18} />
+            <X className="size-4" />
           </Button>
-        </div>
+        </DialogHeader>
 
-        {/* Modal Body */}
-        <div className="flex-1 p-4 overflow-y-auto space-y-4 text-left">
+        <div className="flex-1 space-y-5 overflow-y-auto p-6 text-left">
           {/* Section 1: Layout & Master Render */}
           {onRenderClip && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
-                <Film size={14} className="text-cyan-400" />
-                <span>Layout & Render Controls</span>
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Film className="size-4 text-primary" />
+                <h3 className="text-sm font-medium">
+                  Layout & Render Controls
+                </h3>
               </div>
               <ClipRenderControls
                 status={effectiveRenderStatus}
@@ -108,24 +118,27 @@ export default function ClipControlsModal({
                 gameplayRegionError={gameplayRegionError || trackingError}
                 trackingSaving={trackingSaving}
               />
-            </div>
+            </section>
           )}
 
           {/* Section 2: Social Copy Hub */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
-              <Copy size={14} className="text-cyan-400" />
-              <span>Captions & Social Hub</span>
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Copy className="size-4 text-primary" />
+              <h3 className="text-sm font-medium">Captions & Social Hub</h3>
             </div>
             <CardContent clip={clip} masterDuration={masterDuration} />
-          </div>
+          </section>
 
           {/* Section 3: Quick Actions & Editing */}
           {hasVideo && (
-            <div className="space-y-2 pt-2 border-t border-white/5">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300 mb-1">
-                <Sparkles size={14} className="text-cyan-400" />
-                <span>Editing & Export Actions</span>
+            <section className="space-y-3">
+              <Separator />
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-4 text-primary" />
+                <h3 className="text-sm font-medium">
+                  Editing & Export Actions
+                </h3>
               </div>
               <CardActions
                 handleAutoEdit={handleAutoEdit}
@@ -146,7 +159,7 @@ export default function ClipControlsModal({
                 setShowClipRangeEditor={setShowClipRangeEditor}
                 hasClipRangeEditor={Boolean(onSaveClipRange)}
               />
-            </div>
+            </section>
           )}
         </div>
       </DialogContent>

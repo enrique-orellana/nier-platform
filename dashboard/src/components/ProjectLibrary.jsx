@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   Clock,
   ExternalLink,
+  Filter,
   Film,
   FolderOpen,
   HardDrive,
@@ -31,13 +32,23 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardHeader,
   CardTitle,
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogHeader,
   DialogTitle,
   Input,
   Label,
+  NativeSelect,
+  Separator,
 } from "./ui";
 
 const CLIP_RENDER_POLL_INTERVAL_MS = 2000;
@@ -181,18 +192,20 @@ function persistStatusFilters(projectId, filters) {
 function EditorLoadingScreen() {
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-[#0d0d0f] text-white"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-background/95 text-foreground"
       role="status"
       aria-label="Loading editor"
       aria-live="polite"
     >
-      <div className="flex flex-col items-center gap-3 text-zinc-300">
-        <Loader2
-          className="h-8 w-8 animate-spin text-cyan-300"
-          aria-hidden="true"
-        />
-        <span className="text-sm">Loading editor...</span>
-      </div>
+      <Card className="w-[calc(100%-2rem)] max-w-sm">
+        <CardContent className="flex flex-col items-center gap-3 p-6 text-muted-foreground">
+          <Loader2
+            className="size-8 animate-spin text-primary"
+            aria-hidden="true"
+          />
+          <span className="text-sm">Loading editor...</span>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -1180,190 +1193,186 @@ export default function ProjectLibrary({
             onClose={() => setSourceEditorOpen(false)}
           />
         )}
-        <div className="max-w-[1680px] mx-auto p-4 sm:p-5 pb-8 space-y-4">
+        <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-8 md:px-8 md:py-10 xl:px-10">
           {/* Header Navigation */}
-          <div className="flex items-center justify-between">
+          <header className="flex flex-wrap items-center justify-between gap-3">
             <Button
               variant="ghost"
+              type="button"
               onClick={() => onBackToProjects?.()}
-              className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group text-sm"
+              className="-ml-3 text-muted-foreground"
             >
-              <ChevronLeft
-                size={16}
-                className="group-hover:-translate-x-1 transition-transform"
-              />
+              <ChevronLeft className="size-4" />
               Back to Projects
             </Button>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
-                variant="ghost"
+                variant="outline"
+                size="icon"
+                type="button"
                 onClick={handleOpenAudit}
                 aria-label="Open processing timeline"
                 title="Open processing timeline"
-                className="p-1.5 rounded-lg border border-amber-400/20 bg-amber-400/5 hover:bg-amber-400/15 text-amber-300 transition-colors"
               >
-                <Clock size={15} />
+                <Clock className="size-4" />
               </Button>
-              <Button
-                variant="ghost"
-                onClick={loadProjects}
-                className="px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-zinc-300 flex items-center gap-1.5 transition-colors"
-              >
+              {hasSourceMetadata && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  type="button"
+                  onClick={() => setIsSourceMetadataOpen(true)}
+                  aria-label="View source details"
+                  title="View all source metadata"
+                >
+                  <Info className="size-4" />
+                </Button>
+              )}
+              <Button variant="outline" type="button" onClick={loadProjects}>
                 <RefreshCw
-                  size={13}
-                  className={isLoading ? "animate-spin" : ""}
+                  className={`size-4 ${isLoading ? "animate-spin" : ""}`}
                 />
                 Refresh
               </Button>
               <Button
-                variant="ghost"
+                variant="destructive"
+                type="button"
                 onClick={(e) => handleDeleteProject(e, selectedProject)}
-                className="px-2.5 py-1.5 rounded-lg border border-red-500/20 bg-red-500/5 hover:bg-red-500/20 text-xs text-red-400 flex items-center gap-1.5 transition-colors"
               >
-                <Trash2 size={13} />
+                <Trash2 className="size-4" />
                 Delete
               </Button>
             </div>
-          </div>
+          </header>
 
           {/* Project Header Card */}
-          <div className="glass-panel p-3.5 sm:p-4 rounded-xl border border-white/[0.08] bg-gradient-to-br from-white/[0.03] via-zinc-900/60 to-black/80 backdrop-blur-xl relative overflow-hidden shadow-xl space-y-3">
-            {/* Ambient background glow */}
-            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-cyan-500/[0.05] rounded-full blur-3xl pointer-events-none" />
-
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 relative z-10">
-              {/* Title and ID */}
-              <div className="min-w-0 flex-1 flex items-center gap-2.5 flex-wrap">
+          <Card>
+            <CardHeader className="space-y-3 p-5 sm:p-6">
+              <div className="min-w-0 space-y-2">
                 <h1
-                  className="text-lg sm:text-xl font-bold text-white tracking-tight leading-snug line-clamp-1"
+                  className="break-words text-2xl font-semibold tracking-tight"
                   title={selectedProject.title || "Untitled Project"}
                 >
                   {selectedProject.title || "Untitled Project"}
                 </h1>
-                <span className="font-mono text-[11px] text-zinc-400 bg-black/50 border border-white/10 px-2 py-0.5 rounded-md select-all shrink-0">
+                <Badge
+                  variant="outline"
+                  className="max-w-full break-all font-mono"
+                >
                   {selectedProject.job_id}
-                </span>
+                </Badge>
               </div>
+              {selectedProject.description && (
+                <CardDescription className="max-w-3xl leading-relaxed">
+                  {selectedProject.description}
+                </CardDescription>
+              )}
+            </CardHeader>
 
-              {/* Metadata Badges Strip */}
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                {hasSourceMetadata && (
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    onClick={() => setIsSourceMetadataOpen(true)}
-                    aria-label="View source details"
-                    title="View all source metadata"
-                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-cyan-400/25 bg-cyan-400/[0.08] text-cyan-200 shadow-sm transition-colors hover:bg-cyan-400/[0.16]"
-                  >
-                    <Info size={14} className="text-cyan-300 shrink-0" />
-                    <div className="flex flex-col text-left">
-                      <span className="text-[9px] uppercase tracking-wider text-cyan-300/70 font-bold leading-none mb-0.5">
-                        Source
-                      </span>
-                      <span className="text-xs font-bold leading-none">
-                        Details
-                      </span>
-                    </div>
-                  </Button>
-                )}
-                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] shadow-sm">
-                  <Film size={14} className="text-cyan-400 shrink-0" />
-                  <div className="flex flex-col">
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold leading-none mb-0.5">
-                      Clips
-                    </span>
-                    <span className="text-xs font-bold text-white leading-none">
-                      {projectClips.length}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] shadow-sm">
-                  <Calendar size={14} className="text-purple-400 shrink-0" />
-                  <div className="flex flex-col">
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold leading-none mb-0.5">
-                      Created
-                    </span>
-                    <span className="text-xs font-bold text-white leading-none">
-                      {formatDate(selectedProject.created_at).split(",")[0]}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] shadow-sm">
-                  <Clock size={14} className="text-amber-400 shrink-0" />
-                  <div className="flex flex-col">
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold leading-none mb-0.5">
-                      Duration
-                    </span>
-                    <span className="text-xs font-bold text-white leading-none">
-                      {formatDuration(
-                        selectedProject.source_duration_seconds ||
-                          selectedProject.total_duration,
-                      ) || "N/A"}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] shadow-sm">
-                  <HardDrive size={14} className="text-blue-400 shrink-0" />
-                  <div className="flex flex-col">
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold leading-none mb-0.5">
-                      Source
-                    </span>
-                    <span className="text-xs font-bold text-white leading-none">
-                      S3 History
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <CardContent className="space-y-5 px-5 pb-5 sm:px-6 sm:pb-6">
+              <Separator />
 
-            {/* Workflow Pipeline Status Strip */}
-            <div className="flex items-center gap-1.5 pt-2.5 border-t border-white/[0.06] flex-wrap text-xs relative z-10">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mr-1">
-                Pipeline:
-              </span>
-              {CLIP_WORKFLOW_STATUSES.map(({ value, label, className }) => {
-                const count = normalizedProjectClips.filter(
-                  (clip, index) => statusForClip(clip, index) === value,
-                ).length;
-                if (!count) return null;
-                return (
-                  <span
-                    key={value}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${className}`}
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
-                    <strong>{count}</strong>
-                    <span>{label}</span>
-                  </span>
-                );
-              })}
-              <span className="sr-only">{statusSummary || "No clips yet"}</span>
-            </div>
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+                <div className="space-y-1">
+                  <dt className="text-sm text-muted-foreground">Clips</dt>
+                  <dd className="flex items-center gap-2 text-sm font-medium">
+                    <Film className="size-4 text-muted-foreground" />
+                    {projectClips.length}
+                  </dd>
+                </div>
+                <div className="space-y-1">
+                  <dt className="text-sm text-muted-foreground">Created</dt>
+                  <dd className="flex items-center gap-2 text-sm font-medium">
+                    <Calendar className="size-4 text-muted-foreground" />
+                    {formatDate(selectedProject.created_at).split(",")[0]}
+                  </dd>
+                </div>
+                <div className="space-y-1">
+                  <dt className="text-sm text-muted-foreground">
+                    Source duration
+                  </dt>
+                  <dd className="flex items-center gap-2 text-sm font-medium">
+                    <Clock className="size-4 text-muted-foreground" />
+                    {formatDuration(
+                      selectedProject.source_duration_seconds ||
+                        selectedProject.total_duration,
+                    ) || "N/A"}
+                  </dd>
+                </div>
+                <div className="space-y-1">
+                  <dt className="text-sm text-muted-foreground">Storage</dt>
+                  <dd className="flex items-center gap-2 text-sm font-medium">
+                    <HardDrive className="size-4 text-muted-foreground" />
+                    S3 History
+                  </dd>
+                </div>
+              </dl>
 
-            {selectedProject.description && (
-              <div className="p-2.5 rounded-lg bg-black/30 border border-white/5 text-xs text-zinc-400 leading-relaxed italic max-w-3xl">
-                "{selectedProject.description}"
-              </div>
-            )}
+              <Separator />
 
-            {statusError && (
-              <div
-                role="alert"
-                className="rounded-lg border border-red-500/20 bg-red-500/5 p-2.5 text-xs text-red-200"
+              <section
+                aria-labelledby="project-processing-status"
+                className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
               >
-                {statusError}
-              </div>
-            )}
-          </div>
+                <p
+                  id="project-processing-status"
+                  className="text-sm font-medium"
+                >
+                  Processing status
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {CLIP_WORKFLOW_STATUSES.map(({ value, label }) => {
+                    const count = normalizedProjectClips.filter(
+                      (clip, index) => statusForClip(clip, index) === value,
+                    ).length;
+                    if (!count) return null;
+                    return (
+                      <Badge
+                        key={value}
+                        variant="secondary"
+                        className="gap-1.5"
+                      >
+                        <span className="size-1.5 rounded-full bg-primary" />
+                        <strong className="font-semibold">{count}</strong>
+                        <span>{label}</span>
+                      </Badge>
+                    );
+                  })}
+                </div>
+                <span className="sr-only">
+                  {statusSummary || "No clips yet"}
+                </span>
+              </section>
+
+              {statusError && (
+                <div
+                  role="alert"
+                  className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+                >
+                  {statusError}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Clips Gallery */}
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-white">Generated Clips</h3>
-              <div className="flex items-center gap-2">
+          <section
+            aria-labelledby="generated-clips-heading"
+            className="space-y-4"
+          >
+            <header className="flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-1">
+                <CardTitle id="generated-clips-heading" className="text-xl">
+                  Generated Clips
+                </CardTitle>
+                <CardDescription>
+                  Review status and edit the clips from this project.
+                </CardDescription>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
-                  variant="ghost"
+                  variant="outline"
+                  size="sm"
                   type="button"
                   onClick={() => setSourceEditorOpen(true)}
                   disabled={!canEditFullVideo}
@@ -1372,86 +1381,105 @@ export default function ProjectLibrary({
                       ? "Open the full source video and transcript"
                       : "The full source video or its duration is unavailable for this project."
                   }
-                  className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.08] px-3 py-2 text-xs font-semibold text-cyan-100 transition-colors hover:bg-cyan-400/[0.16] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-cyan-400/[0.08]"
                 >
-                  <Film size={14} />
+                  <Film className="size-4" />
                   Edit full video
                 </Button>
                 {!canEditFullVideo && (
-                  <span className="max-w-40 text-[10px] leading-4 text-zinc-500">
+                  <span className="max-w-40 text-xs text-muted-foreground">
                     Full source video or duration unavailable
                   </span>
                 )}
-                <span className="text-sm text-zinc-500 font-medium px-3 py-1 rounded-full bg-white/5 border border-white/5">
-                  {projectClips.length} results
-                </span>
               </div>
-            </div>
+            </header>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-white/[0.02] border border-white/5 p-3 rounded-2xl">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <Button
-                  variant="ghost"
-                  onClick={() => setStatusFilters([])}
-                  aria-pressed={statusFilters.length === 0}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    statusFilters.length === 0
-                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shadow-sm"
-                      : "bg-white/5 text-zinc-400 hover:text-white border border-transparent hover:border-white/10"
-                  }`}
-                >
-                  All ({normalizedProjectClips.length})
-                </Button>
-                {CLIP_WORKFLOW_STATUSES.map(({ value, label }) => {
-                  const count = normalizedProjectClips.filter(
-                    (clip, idx) => statusForClip(clip, idx) === value,
-                  ).length;
-                  return (
-                    <Button
-                      variant="ghost"
-                      key={value}
-                      onClick={() =>
-                        setStatusFilters((current) =>
-                          current.includes(value)
-                            ? current.filter((selected) => selected !== value)
-                            : [...current, value],
-                        )
-                      }
-                      aria-pressed={statusFilters.includes(value)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                        statusFilters.includes(value)
-                          ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shadow-sm"
-                          : "bg-white/5 text-zinc-400 hover:text-white border border-transparent hover:border-white/10"
-                      }`}
-                    >
-                      {label} ({count})
-                    </Button>
-                  );
-                })}
-              </div>
-              <span className="text-xs text-zinc-500 font-medium">
-                {filteredProjectClips.length}{" "}
-                {filteredProjectClips.length === 1 ? "clip" : "clips"}
-              </span>
-            </div>
+            <Card>
+              <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                <p className="text-sm font-medium">Clip status</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        aria-label="Filter clips by status"
+                      >
+                        <Filter className="size-4" />
+                        Filter status
+                        {statusFilters.length > 0 && (
+                          <Badge variant="secondary">
+                            {statusFilters.length}
+                          </Badge>
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuLabel>Filter by status</DropdownMenuLabel>
+                      <DropdownMenuCheckboxItem
+                        checked={statusFilters.length === 0}
+                        onCheckedChange={() => setStatusFilters([])}
+                      >
+                        All statuses ({normalizedProjectClips.length})
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuSeparator />
+                      {CLIP_WORKFLOW_STATUSES.map(({ value, label }) => {
+                        const count = normalizedProjectClips.filter(
+                          (clip, idx) => statusForClip(clip, idx) === value,
+                        ).length;
+                        const isSelected = statusFilters.includes(value);
+
+                        return (
+                          <DropdownMenuCheckboxItem
+                            key={value}
+                            checked={isSelected}
+                            disabled={count === 0 && !isSelected}
+                            onCheckedChange={(checked) =>
+                              setStatusFilters((current) =>
+                                checked
+                                  ? [...current, value]
+                                  : current.filter(
+                                      (selected) => selected !== value,
+                                    ),
+                              )
+                            }
+                          >
+                            {label} ({count})
+                          </DropdownMenuCheckboxItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Badge variant="outline">
+                    {filteredProjectClips.length}{" "}
+                    {filteredProjectClips.length === 1 ? "clip" : "clips"}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
 
             {isLoadingClips ? (
-              <div className="glass-panel py-24 flex flex-col items-center justify-center text-zinc-500">
-                <Loader2
-                  size={40}
-                  className="animate-spin text-cyan-500 mb-4"
-                />
-                <p className="text-lg font-medium">Loading project clips...</p>
-              </div>
+              <Card>
+                <CardContent
+                  className="flex min-h-64 flex-col items-center justify-center gap-4 text-muted-foreground"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Loader2 className="size-8 animate-spin text-primary" />
+                  <p>Loading project clips...</p>
+                </CardContent>
+              </Card>
             ) : filteredProjectClips.length === 0 ? (
-              <div className="glass-panel py-20 flex flex-col items-center justify-center border-2 border-dashed border-white/5 text-zinc-600 rounded-2xl">
-                <Play size={40} className="mb-3 opacity-20" />
-                <p className="text-sm font-medium">
-                  No clips found matching this filter
-                </p>
-              </div>
+              <Card className="border-dashed shadow-none">
+                <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 text-center">
+                  <Play className="size-8 text-muted-foreground" />
+                  <CardDescription>
+                    No clips found matching this filter
+                  </CardDescription>
+                </CardContent>
+              </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {filteredProjectClips.map((clip, index) => (
                   <ResultCard
                     key={
@@ -1459,6 +1487,9 @@ export default function ProjectLibrary({
                       `${clip.job_id || "clip"}-${clip.index ?? index}`
                     }
                     clip={clip}
+                    layout={
+                      filteredProjectClips.length === 1 ? "single" : "grid"
+                    }
                     index={clip.index ?? index}
                     jobId={clip.job_id}
                     aiProvider={aiProvider}
@@ -1526,8 +1557,8 @@ export default function ProjectLibrary({
                 ))}
               </div>
             )}
-          </div>
-        </div>
+          </section>
+        </main>
         {isSourceMetadataOpen && sourceMetadata && (
           <Dialog
             open={isSourceMetadataOpen}
@@ -1536,17 +1567,15 @@ export default function ProjectLibrary({
             <DialogContent
               showClose={false}
               closeOnEscape={false}
-              className="flex w-[calc(100%-2rem)] max-w-4xl max-h-[min(90vh,900px)] flex-col gap-0 overflow-hidden rounded-2xl border-cyan-400/20 bg-[#101216] p-0"
+              className="flex max-h-[min(90vh,900px)] w-[calc(100%-2rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0"
             >
-              <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 bg-gradient-to-r from-cyan-400/[0.08] to-transparent p-5">
+              <DialogHeader className="flex shrink-0 flex-row items-start justify-between gap-4 border-b p-6 text-left sm:text-left">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-300">
-                    Source metadata
-                  </p>
-                  <DialogTitle className="mt-1 truncate text-xl font-bold text-white">
+                  <Badge variant="outline">Source metadata</Badge>
+                  <DialogTitle className="mt-3 truncate text-xl">
                     Source details
                   </DialogTitle>
-                  <DialogDescription className="mt-1 text-xs text-zinc-500">
+                  <DialogDescription className="mt-2">
                     Complete information from the original source.
                   </DialogDescription>
                 </div>
@@ -1555,15 +1584,14 @@ export default function ProjectLibrary({
                   type="button"
                   onClick={() => setIsSourceMetadataOpen(false)}
                   aria-label="Close source details"
-                  className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
                 >
-                  <X size={18} />
+                  <X className="size-4" />
                 </Button>
-              </div>
+              </DialogHeader>
 
-              <div className="min-h-0 space-y-5 overflow-y-auto p-5">
+              <div className="min-h-0 space-y-5 overflow-y-auto p-6">
                 <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-                  <div className="overflow-hidden rounded-xl border border-white/10 bg-black/30">
+                  <Card className="overflow-hidden shadow-none">
                     {sourceMetadata.thumbnail ? (
                       <img
                         src={String(sourceMetadata.thumbnail)}
@@ -1571,28 +1599,28 @@ export default function ProjectLibrary({
                         className="aspect-video h-full w-full object-cover"
                       />
                     ) : (
-                      <div className="flex aspect-video items-center justify-center text-zinc-600">
-                        <FolderOpen size={28} />
+                      <div className="flex aspect-video items-center justify-center text-muted-foreground">
+                        <FolderOpen className="size-7" />
                       </div>
                     )}
-                  </div>
-                  <div className="min-w-0">
+                  </Card>
+                  <div className="min-w-0 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
                       {sourceMetadata.platform && (
-                        <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-200">
+                        <Badge variant="secondary">
                           {String(sourceMetadata.platform)}
-                        </span>
+                        </Badge>
                       )}
                       {sourceMetadata.channel && (
-                        <span className="text-xs text-zinc-400">
+                        <CardDescription>
                           {String(sourceMetadata.channel)}
-                        </span>
+                        </CardDescription>
                       )}
                     </div>
-                    <h3 className="mt-3 text-lg font-bold leading-snug text-white">
+                    <CardTitle className="text-lg leading-snug">
                       {String(sourceMetadata.title || "Untitled source")}
-                    </h3>
-                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-400">
+                    </CardTitle>
+                    <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
                       {String(
                         sourceMetadata.description ||
                           "No description available.",
@@ -1603,10 +1631,10 @@ export default function ProjectLibrary({
                         href={String(sourceMetadata.webpage_url)}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-300 hover:text-cyan-200"
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
                       >
                         Open source page
-                        <ExternalLink size={13} />
+                        <ExternalLink className="size-4" />
                       </a>
                     )}
                   </div>
@@ -1627,60 +1655,47 @@ export default function ProjectLibrary({
                       formatSourceUploadDate(sourceMetadata.upload_date),
                     ],
                   ].map(([label, value]) => (
-                    <div
-                      key={label}
-                      className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
-                    >
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                        {label}
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-white">
-                        {value}
-                      </p>
-                    </div>
+                    <Card key={label} className="shadow-none">
+                      <CardHeader className="space-y-1 p-4">
+                        <CardDescription>{label}</CardDescription>
+                        <CardTitle className="text-base">{value}</CardTitle>
+                      </CardHeader>
+                    </Card>
                   ))}
                 </div>
 
-                <div className="grid gap-4 border-t border-white/10 pt-5 md:grid-cols-2">
+                <Separator />
+                <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                      Categories
-                    </p>
+                    <CardTitle className="text-sm">Categories</CardTitle>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {(Array.isArray(sourceMetadata.categories)
                         ? sourceMetadata.categories
                         : []
                       ).map((category) => (
-                        <span
-                          key={category}
-                          className="rounded-full bg-purple-400/10 px-2.5 py-1 text-xs text-purple-200"
-                        >
+                        <Badge key={category} variant="secondary">
                           {String(category)}
-                        </span>
+                        </Badge>
                       ))}
                     </div>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                      Tags
-                    </p>
+                    <CardTitle className="text-sm">Tags</CardTitle>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {(Array.isArray(sourceMetadata.tags)
                         ? sourceMetadata.tags
                         : []
                       ).map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full bg-white/[0.06] px-2.5 py-1 text-xs text-zinc-300"
-                        >
+                        <Badge key={tag} variant="outline">
                           {String(tag)}
-                        </span>
+                        </Badge>
                       ))}
                     </div>
                   </div>
                 </div>
 
-                <div className="grid gap-x-5 gap-y-3 border-t border-white/10 pt-5 text-xs md:grid-cols-2">
+                <Separator />
+                <div className="grid gap-x-5 gap-y-4 text-sm md:grid-cols-2">
                   {[
                     ["Source ID", sourceMetadata.id],
                     ["Platform", sourceMetadata.platform],
@@ -1689,20 +1704,18 @@ export default function ProjectLibrary({
                     ["Thumbnail URL", sourceMetadata.thumbnail],
                   ].map(([label, value]) => (
                     <div key={label} className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                        {label}
-                      </p>
+                      <CardDescription>{label}</CardDescription>
                       {String(value || "").startsWith("http") ? (
                         <a
                           href={String(value)}
                           target="_blank"
                           rel="noreferrer"
-                          className="mt-1 block truncate text-cyan-300 hover:text-cyan-200"
+                          className="mt-1 block truncate text-primary underline-offset-4 hover:underline"
                         >
                           {String(value)}
                         </a>
                       ) : (
-                        <p className="mt-1 break-words text-zinc-300">
+                        <p className="mt-1 break-words">
                           {String(value || "Unknown")}
                         </p>
                       )}
@@ -1721,88 +1734,91 @@ export default function ProjectLibrary({
             <DialogContent
               showClose={false}
               closeOnEscape={false}
-              overlayClassName="bg-black/60 backdrop-blur-[2px]"
-              className="fixed left-auto right-0 top-0 flex h-full w-full max-w-xl translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-l border-white/10 bg-[#101216] p-0 shadow-2xl"
+              className="fixed left-auto right-0 top-0 flex h-dvh w-full max-w-xl translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-l bg-background p-0 shadow-xl"
             >
-              <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 bg-[#101216] p-5">
+              <DialogHeader className="flex shrink-0 flex-row items-start justify-between gap-4 border-b p-6 text-left sm:text-left">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">
-                    Run auditor
-                  </p>
-                  <DialogTitle className="mt-1 text-xl font-bold text-white">
+                  <Badge variant="outline">Run audit</Badge>
+                  <DialogTitle className="mt-3 text-xl">
                     Processing timeline
                   </DialogTitle>
-                  <DialogDescription className="mt-1 max-w-sm truncate font-mono text-[11px] text-zinc-500">
+                  <DialogDescription className="mt-2 max-w-sm truncate font-mono text-xs">
                     {selectedProjectId}
                   </DialogDescription>
                 </div>
                 <div className="flex items-center gap-1">
                   <Button
-                    variant="ghost"
+                    variant="outline"
+                    size="icon"
+                    type="button"
                     onClick={() => loadProjectAudit(selectedProject)}
                     aria-label="Refresh processing timeline"
                     title="Refresh timeline"
-                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
                   >
                     <RefreshCw
-                      size={16}
-                      className={isLoadingAudit ? "animate-spin" : ""}
+                      className={`size-4 ${isLoadingAudit ? "animate-spin" : ""}`}
                     />
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant="outline"
+                    size="icon"
+                    type="button"
                     onClick={() => setIsAuditOpen(false)}
                     aria-label="Close processing timeline"
-                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
                   >
-                    <X size={18} />
+                    <X className="size-4" />
                   </Button>
                 </div>
-              </div>
+              </DialogHeader>
 
               <div
                 data-testid="audit-scroll-region"
-                className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5"
+                className="min-h-0 flex-1 space-y-5 overflow-y-auto p-6"
               >
                 {auditPolicy && (
-                  <div className="rounded-xl border border-amber-300/15 bg-amber-300/5 p-3 text-xs text-zinc-400">
-                    <p className="font-semibold text-amber-200">
-                      Body capture policy
-                    </p>
-                    <p className="mt-1 leading-5">
-                      Full redacted bodies are retained for allowlisted hosts;
-                      binary and other hosts remain metadata-only. No body
-                      truncation is applied.
-                    </p>
-                    <p className="mt-2 break-words font-mono text-[10px] text-zinc-500">
-                      Hosts: {auditPolicy.body_allowlist?.join(", ") || "none"}
-                    </p>
-                  </div>
+                  <Card className="border-amber-500/30 bg-amber-500/5 shadow-none">
+                    <CardHeader className="space-y-2 p-4">
+                      <Badge variant="outline" className="w-fit">
+                        Body capture policy
+                      </Badge>
+                      <CardDescription className="leading-relaxed">
+                        Full redacted bodies are retained for allowlisted hosts;
+                        binary and other hosts remain metadata-only. No body
+                        truncation is applied.
+                      </CardDescription>
+                      <p className="break-words font-mono text-xs text-muted-foreground">
+                        Hosts:{" "}
+                        {auditPolicy.body_allowlist?.join(", ") || "none"}
+                      </p>
+                    </CardHeader>
+                  </Card>
                 )}
 
                 {isLoadingAudit ? (
-                  <div className="flex flex-col items-center justify-center gap-3 py-20 text-zinc-500">
-                    <Loader2
-                      size={28}
-                      className="animate-spin text-amber-300"
-                    />
-                    <p className="text-sm">Loading audit events...</p>
-                  </div>
+                  <Card>
+                    <CardContent className="flex min-h-48 flex-col items-center justify-center gap-3 text-muted-foreground">
+                      <Loader2 className="size-7 animate-spin text-primary" />
+                      <p>Loading audit events...</p>
+                    </CardContent>
+                  </Card>
                 ) : auditError ? (
-                  <div
+                  <Card
                     role="alert"
-                    className="rounded-xl border border-red-400/20 bg-red-400/5 p-4 text-sm text-red-200"
+                    className="border-destructive/30 bg-destructive/5 shadow-none"
                   >
-                    {auditError}
-                  </div>
+                    <CardContent className="p-4 text-sm text-destructive">
+                      {auditError}
+                    </CardContent>
+                  </Card>
                 ) : auditEvents.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-zinc-500">
-                    No audit events captured yet. New processing runs will
-                    appear here.
-                  </div>
+                  <Card className="border-dashed shadow-none">
+                    <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                      No audit events captured yet. New processing runs will
+                      appear here.
+                    </CardContent>
+                  </Card>
                 ) : (
-                  <div className="relative space-y-3">
-                    <div className="absolute bottom-3 left-[15px] top-3 w-px bg-white/10" />
+                  <div className="space-y-3">
                     {auditEvents.map((event) => {
                       const StatusIcon =
                         event.status === "failed" ? AlertCircle : CheckCircle2;
@@ -1812,112 +1828,131 @@ export default function ProjectLibrary({
                         (event.metadata &&
                           Object.keys(event.metadata).length > 0);
                       return (
-                        <div
+                        <Card
                           key={event.id || `${event.sequence}-${event.name}`}
-                          className="relative rounded-xl border border-white/10 bg-white/[0.03] p-3 pl-10"
+                          className="shadow-none"
                         >
-                          <StatusIcon
-                            size={18}
-                            className={`absolute left-1.5 top-3.5 z-10 bg-[#101216] ${
-                              event.status === "failed"
-                                ? "text-red-300"
-                                : "text-emerald-300"
-                            }`}
-                          />
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="break-words text-sm font-semibold text-white">
-                                {event.name || "Unnamed step"}
-                              </p>
-                              <p className="mt-1 text-[11px] text-zinc-500">
-                                {event.category || "processing"}
-                                {event.provider ? ` · ${event.provider}` : ""}
-                                {event.started_at
-                                  ? ` · ${formatDate(event.started_at)}`
-                                  : ""}
-                              </p>
+                          <CardHeader className="flex-row items-start justify-between gap-3 space-y-0 p-4">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <Badge
+                                variant={
+                                  event.status === "failed"
+                                    ? "destructive"
+                                    : "success"
+                                }
+                                className="mt-0.5 size-7 shrink-0 justify-center p-0"
+                                aria-label={
+                                  event.status === "failed"
+                                    ? "Failed"
+                                    : "Succeeded"
+                                }
+                              >
+                                <StatusIcon className="size-4" />
+                              </Badge>
+                              <div className="min-w-0">
+                                <CardTitle className="break-words text-base">
+                                  {event.name || "Unnamed step"}
+                                </CardTitle>
+                                <CardDescription className="mt-1">
+                                  {event.category || "processing"}
+                                  {event.provider ? ` · ${event.provider}` : ""}
+                                  {event.started_at
+                                    ? ` · ${formatDate(event.started_at)}`
+                                    : ""}
+                                </CardDescription>
+                              </div>
                             </div>
-                            <span
-                              className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                            <Badge
+                              variant={
                                 event.status === "failed"
-                                  ? "bg-red-400/10 text-red-200"
-                                  : "bg-emerald-400/10 text-emerald-200"
-                              }`}
+                                  ? "destructive"
+                                  : "success"
+                              }
+                              className="shrink-0"
                             >
                               {event.status || "unknown"}
-                            </span>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-500">
-                            {event.host && (
-                              <span className="font-mono">
-                                {event.method || ""} {event.host}
-                                {event.path || ""}
-                              </span>
+                            </Badge>
+                          </CardHeader>
+                          <CardContent className="space-y-3 p-4 pt-0">
+                            <div className="flex flex-wrap gap-2">
+                              {event.host && (
+                                <Badge variant="outline" className="font-mono">
+                                  {event.method || ""} {event.host}
+                                  {event.path || ""}
+                                </Badge>
+                              )}
+                              {event.duration_ms > 0 && (
+                                <Badge variant="secondary">
+                                  {event.duration_ms} ms
+                                </Badge>
+                              )}
+                              {event.http_status > 0 && (
+                                <Badge variant="secondary">
+                                  HTTP {event.http_status}
+                                </Badge>
+                              )}
+                              {(event.request_bytes > 0 ||
+                                event.response_bytes > 0) && (
+                                <Badge variant="secondary">
+                                  {event.request_bytes || 0} B in ·{" "}
+                                  {event.response_bytes || 0} B out
+                                </Badge>
+                              )}
+                            </div>
+                            {event.error && (
+                              <p
+                                role="alert"
+                                className="break-words text-sm text-destructive"
+                              >
+                                {event.error}
+                              </p>
                             )}
-                            {event.duration_ms > 0 && (
-                              <span>{event.duration_ms} ms</span>
-                            )}
-                            {event.http_status > 0 && (
-                              <span>HTTP {event.http_status}</span>
-                            )}
-                            {(event.request_bytes > 0 ||
-                              event.response_bytes > 0) && (
-                              <span>
-                                {event.request_bytes || 0} B in ·{" "}
-                                {event.response_bytes || 0} B out
-                              </span>
-                            )}
-                          </div>
-                          {event.error && (
-                            <p className="mt-2 break-words text-xs text-red-200">
-                              {event.error}
-                            </p>
-                          )}
-                          {hasDetails && (
-                            <details className="mt-3 border-t border-white/5 pt-2">
-                              <summary className="cursor-pointer text-xs font-semibold text-zinc-300 hover:text-white">
-                                Inspect captured details
-                              </summary>
-                              <div className="mt-3 space-y-3">
-                                {event.request_body && (
-                                  <div>
-                                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                                      Request body
-                                    </p>
-                                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-zinc-300">
-                                      {formatAuditBody(event.request_body)}
-                                    </pre>
-                                  </div>
-                                )}
-                                {event.response_body && (
-                                  <div>
-                                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                                      Response body
-                                    </p>
-                                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-zinc-300">
-                                      {formatAuditBody(event.response_body)}
-                                    </pre>
-                                  </div>
-                                )}
-                                {event.metadata &&
-                                  Object.keys(event.metadata).length > 0 && (
+                            {hasDetails && (
+                              <details className="border-t pt-3">
+                                <summary className="cursor-pointer text-sm font-medium text-foreground marker:text-muted-foreground">
+                                  Inspect captured details
+                                </summary>
+                                <div className="mt-3 space-y-3">
+                                  {event.request_body && (
                                     <div>
-                                      <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                                        Metadata
+                                      <p className="mb-2 text-sm font-medium">
+                                        Request body
                                       </p>
-                                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-zinc-300">
-                                        {JSON.stringify(
-                                          event.metadata,
-                                          null,
-                                          2,
-                                        )}
+                                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs leading-5 text-muted-foreground">
+                                        {formatAuditBody(event.request_body)}
                                       </pre>
                                     </div>
                                   )}
-                              </div>
-                            </details>
-                          )}
-                        </div>
+                                  {event.response_body && (
+                                    <div>
+                                      <p className="mb-2 text-sm font-medium">
+                                        Response body
+                                      </p>
+                                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs leading-5 text-muted-foreground">
+                                        {formatAuditBody(event.response_body)}
+                                      </pre>
+                                    </div>
+                                  )}
+                                  {event.metadata &&
+                                    Object.keys(event.metadata).length > 0 && (
+                                      <div>
+                                        <p className="mb-2 text-sm font-medium">
+                                          Metadata
+                                        </p>
+                                        <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs leading-5 text-muted-foreground">
+                                          {JSON.stringify(
+                                            event.metadata,
+                                            null,
+                                            2,
+                                          )}
+                                        </pre>
+                                      </div>
+                                    )}
+                                </div>
+                              </details>
+                            )}
+                          </CardContent>
+                        </Card>
                       );
                     })}
                   </div>

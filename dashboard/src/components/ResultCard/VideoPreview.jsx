@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Loader2, ArrowLeftRight } from "lucide-react";
-import { Button } from "../ui";
+import { Badge, Button } from "../ui";
 
 export default function VideoPreview({
   videoRef,
@@ -57,7 +57,7 @@ export default function VideoPreview({
   };
 
   return (
-    <div className="w-full bg-black relative shrink-0 aspect-[9/16] flex items-center justify-center overflow-hidden group/video">
+    <div className="group/video relative flex aspect-[9/16] w-full shrink-0 items-center justify-center overflow-hidden bg-muted">
       <video
         ref={videoRef}
         src={displayUrl}
@@ -82,25 +82,23 @@ export default function VideoPreview({
           }
         }}
       />
-      <div className="absolute top-3 left-3 flex gap-2">
-        <span className="bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 uppercase tracking-wide">
-          Clip {index + 1}
-        </span>
-      </div>
+      <Badge
+        variant="secondary"
+        className="absolute left-3 top-3 border-border/70 bg-background/80 backdrop-blur-sm"
+      >
+        Clip {index + 1}
+      </Badge>
 
       {hasEdits && (
         <div className="absolute top-3 right-3">
           <Button
-            variant="ghost"
+            variant={viewOriginal ? "outline" : "secondary"}
+            size="sm"
             onClick={() => setViewOriginal(!viewOriginal)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide border transition-all backdrop-blur-md ${
-              viewOriginal
-                ? "bg-zinc-800/80 text-zinc-300 border-zinc-700/50 hover:bg-zinc-700/80"
-                : "bg-primary/80 text-white border-primary/50 hover:bg-primary/90"
-            }`}
+            className="border-border/70 bg-background/80 backdrop-blur-sm"
             title="Toggle before/after"
           >
-            <ArrowLeftRight size={12} />
+            <ArrowLeftRight className="size-3.5" />
             {viewOriginal ? "Original" : "Edited"}
           </Button>
         </div>
@@ -108,16 +106,16 @@ export default function VideoPreview({
 
       {/* Auto Edit Overlay if Processing */}
       {(isEditing || isConvertingNativeShort || isQualityImproving) && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-10 p-4 text-center">
-          <Loader2 size={32} className="text-primary animate-spin mb-3" />
-          <span className="text-xs font-bold text-white uppercase tracking-wider">
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/80 p-4 text-center backdrop-blur-sm">
+          <Loader2 className="mb-3 size-8 animate-spin text-primary" />
+          <span className="text-sm font-semibold text-foreground">
             {isConvertingNativeShort
               ? "Converting to Native Short..."
               : isQualityImproving
                 ? "Improving Quality..."
                 : "AI Magic in Progress..."}
           </span>
-          <span className="text-[10px] text-zinc-400 mt-1">
+          <span className="mt-1 text-xs text-muted-foreground">
             {isConvertingNativeShort
               ? "Rendering master quality"
               : isQualityImproving

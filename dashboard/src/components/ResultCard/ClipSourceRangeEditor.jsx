@@ -4,8 +4,11 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
   Input,
+  Separator,
 } from "../ui";
 
 const MINIMUM_RANGE_SECONDS = 1;
@@ -194,30 +197,19 @@ export default function ClipSourceRangeEditor({
         showClose={false}
         closeOnEscape={false}
         closeOnInteractOutside={false}
-        className="block w-[calc(100%-2rem)] max-w-xl rounded-2xl border-white/10 bg-[#121214] p-5"
+        className="w-[calc(100%-2rem)] max-w-xl"
       >
-        <div className="flex items-start justify-between gap-4">
+        <DialogHeader className="text-left">
           <div>
-            <DialogTitle className="text-lg font-semibold text-white">
-              Adjust clip range
-            </DialogTitle>
-            <DialogDescription className="mt-1 text-xs text-zinc-400">
+            <DialogTitle className="text-lg">Adjust clip range</DialogTitle>
+            <DialogDescription>
               Extend or compact the clip before rendering.
             </DialogDescription>
           </div>
-          <Button
-            variant="ghost"
-            type="button"
-            onClick={onClose}
-            className="text-zinc-400 hover:text-white"
-            aria-label="Close clip range editor"
-          >
-            ×
-          </Button>
-        </div>
+        </DialogHeader>
 
-        <div className="mt-6 space-y-5">
-          <label className="block text-xs text-zinc-300">
+        <div className="space-y-5 py-4">
+          <label className="block text-sm">
             <span className="flex items-center justify-between gap-3">
               <span>Start</span>
               <Input
@@ -230,7 +222,7 @@ export default function ClipSourceRangeEditor({
                 aria-label="Start time"
                 placeholder="MM:SS"
                 inputMode="numeric"
-                className="w-20 rounded-md border border-cyan-400/40 bg-black/30 px-2 py-1 text-right font-mono text-primary outline-none focus:border-cyan-300"
+                className="w-24 text-right font-mono"
               />
             </span>
             <Input
@@ -243,11 +235,11 @@ export default function ClipSourceRangeEditor({
                 handleStartChange(Number(event.target.value))
               }
               data-testid="clip-range-start"
-              className="mt-2 w-full accent-cyan-400"
+              className="mt-3 h-2 w-full cursor-pointer accent-primary"
             />
           </label>
 
-          <label className="block text-xs text-zinc-300">
+          <label className="block text-sm">
             <span className="flex items-center justify-between gap-3">
               <span>End</span>
               <Input
@@ -258,7 +250,7 @@ export default function ClipSourceRangeEditor({
                 aria-label="End time"
                 placeholder="MM:SS"
                 inputMode="numeric"
-                className="w-20 rounded-md border border-cyan-400/40 bg-black/30 px-2 py-1 text-right font-mono text-primary outline-none focus:border-cyan-300"
+                className="w-24 text-right font-mono"
               />
             </span>
             <Input
@@ -269,37 +261,36 @@ export default function ClipSourceRangeEditor({
               value={end}
               onChange={(event) => handleEndChange(Number(event.target.value))}
               data-testid="clip-range-end"
-              className="mt-2 w-full accent-cyan-400"
+              className="mt-3 h-2 w-full cursor-pointer accent-primary"
             />
           </label>
         </div>
 
-        <div className="mt-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-mono text-zinc-300">
+        <div className="rounded-md border bg-muted/50 px-3 py-2 text-sm font-mono text-muted-foreground">
           Start {formatTime(start)} · End {formatTime(end)} · Duration{" "}
           {formatTime(duration)} · Master {formatTime(maximum)}
         </div>
-        {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
 
-        <div className="mt-5 flex justify-end gap-3">
-          <Button
-            variant="ghost"
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5"
-          >
+        <Separator className="my-4" />
+        <DialogFooter>
+          <Button variant="outline" type="button" onClick={onClose}>
             Cancel
           </Button>
           <Button
-            variant="ghost"
+            variant="default"
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-black disabled:opacity-50"
             aria-label="Save clip range"
           >
             {isSaving ? "Saving…" : "Save clip range"}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

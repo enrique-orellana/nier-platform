@@ -5,6 +5,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogHeader,
   DialogTitle,
 } from "../ui";
 
@@ -149,15 +150,14 @@ export default function Standard916Preview({
         showClose={false}
         closeOnEscape={false}
         closeOnInteractOutside={false}
-        overlayClassName="bg-black/80 backdrop-blur-sm"
-        className="flex w-[calc(100%-2rem)] max-w-3xl max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden rounded-2xl border-white/10 bg-[#121214] p-0"
+        className="flex max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0"
       >
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <DialogHeader className="flex flex-row items-start justify-between gap-4 border-b px-4 py-3 text-left sm:text-left">
           <div>
-            <DialogTitle className="text-sm font-bold text-white">
+            <DialogTitle className="text-base">
               Standard 9:16 Preview
             </DialogTitle>
-            <DialogDescription className="text-[11px] text-zinc-500">
+            <DialogDescription>
               Adjust the gameplay framing, then save it for the final render.
             </DialogDescription>
           </div>
@@ -166,11 +166,11 @@ export default function Standard916Preview({
             type="button"
             aria-label="Close preview"
             onClick={onClose}
-            className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+            size="icon"
           >
-            <X size={18} />
+            <X className="size-4" />
           </Button>
-        </div>
+        </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col items-center gap-3 overflow-auto p-4">
           <div
@@ -193,60 +193,63 @@ export default function Standard916Preview({
                 onTimeUpdate={handleTimeUpdate}
               />
             ) : (
-              <div className="flex h-full items-center justify-center p-6 text-center text-xs text-zinc-500">
+              <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
                 Select a gameplay area before opening this preview.
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-2">
+          <div className="flex items-center gap-2 rounded-md border bg-card p-2">
             <Button
               variant="ghost"
+              size="icon"
               type="button"
               aria-label="Zoom out"
               onClick={() => changeZoom(-ZOOM_STEP)}
               disabled={zoom <= MIN_ZOOM}
-              className="rounded-lg p-2 text-zinc-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Minus size={16} />
+              <Minus className="size-4" />
             </Button>
-            <span className="min-w-12 text-center text-xs font-semibold text-white">
+            <span className="min-w-12 text-center text-sm font-medium">
               {Math.round(zoom * 100)}%
             </span>
             <Button
               variant="ghost"
+              size="icon"
               type="button"
               aria-label="Zoom in"
               onClick={() => changeZoom(ZOOM_STEP)}
               disabled={zoom >= MAX_ZOOM}
-              className="rounded-lg p-2 text-zinc-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Plus size={16} />
+              <Plus className="size-4" />
             </Button>
             <Button
               variant="ghost"
+              size="icon"
               type="button"
               aria-label="Reset zoom"
               onClick={() => setZoom(1)}
               disabled={zoom === 1}
-              className="ml-1 rounded-lg p-2 text-zinc-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <RotateCcw size={15} />
+              <RotateCcw className="size-4" />
             </Button>
             {onSaveZoom && (
               <Button
-                variant="ghost"
+                variant="default"
                 type="button"
                 aria-label="Save zoom"
                 onClick={handleSaveZoom}
                 disabled={isSavingZoom}
-                className="ml-1 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-200 transition-colors hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSavingZoom ? "Saving…" : "Save zoom"}
               </Button>
             )}
           </div>
-          {saveError && <p className="text-xs text-red-300">{saveError}</p>}
+          {saveError && (
+            <p role="alert" className="text-sm text-destructive">
+              {saveError}
+            </p>
+          )}
         </div>
       </DialogContent>
     </Dialog>

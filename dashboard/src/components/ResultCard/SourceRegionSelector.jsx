@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Button,
+  Card,
+  CardContent,
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
+  Label,
   NativeSelect,
 } from "../ui";
 
@@ -248,33 +253,29 @@ export default function SourceRegionSelector({
         showClose={false}
         closeOnEscape={false}
         closeOnInteractOutside={false}
-        className="flex w-[calc(100%-2rem)] max-w-5xl max-h-[95vh] flex-col gap-0 overflow-hidden rounded-2xl border-white/10 bg-[#121214] p-0"
+        className="flex max-h-[95vh] w-[calc(100%-2rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0"
       >
-        <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
-          <div>
-            <DialogTitle className="text-lg font-semibold text-white">
-              {title}
-            </DialogTitle>
-            <DialogDescription className="mt-1 text-xs text-zinc-400">
-              {description}
-            </DialogDescription>
+        <DialogHeader className="flex flex-row items-start justify-between gap-4 border-b px-5 py-4 text-left sm:text-left">
+          <div className="space-y-1">
+            <DialogTitle className="text-lg">{title}</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
           </div>
           <Button
             variant="ghost"
             type="button"
             onClick={onClose}
             aria-label={`Close ${lowerLabel} selector`}
-            className="rounded-lg px-2 py-1 text-zinc-400 hover:bg-white/10 hover:text-white"
+            size="icon"
           >
             ×
           </Button>
-        </div>
+        </DialogHeader>
         <div className="grid min-h-0 gap-5 overflow-y-auto p-5 lg:grid-cols-[minmax(0,1fr)_240px]">
           <div
             ref={stageRef}
             data-testid={`${regionTestId}-stage`}
             onPointerDown={(event) => beginInteraction(event)}
-            className="relative aspect-video min-h-[240px] overflow-hidden rounded-xl border border-white/10 bg-black touch-none"
+            className="relative aspect-video min-h-[240px] touch-none overflow-hidden rounded-md border bg-black"
           >
             <video
               ref={videoRef}
@@ -326,7 +327,7 @@ export default function SourceRegionSelector({
                   />
                   <div
                     data-testid={`${regionTestId}-box`}
-                    className="pointer-events-auto absolute cursor-move border-2 border-red-500 bg-red-500/10 shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+                    className="pointer-events-auto absolute cursor-move border-2 border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
                     style={{
                       left: `${region.x * 100}%`,
                       top: `${region.y * 100}%`,
@@ -337,11 +338,12 @@ export default function SourceRegionSelector({
                   >
                     {["nw", "ne", "sw", "se"].map((handle) => (
                       <Button
-                        variant="ghost"
+                        variant="default"
+                        size="icon"
                         key={handle}
                         type="button"
                         aria-label={`Resize ${lowerLabel} ${handle === "nw" ? "northwest" : handle === "ne" ? "northeast" : handle === "sw" ? "southwest" : "southeast"}`}
-                        className={`pointer-events-auto absolute h-3 w-3 rounded-sm border border-white bg-red-500 ${handle.includes("n") ? "top-[-6px]" : "bottom-[-6px]"} ${handle.includes("w") ? "left-[-6px]" : "right-[-6px]"}`}
+                        className={`pointer-events-auto absolute h-3 w-3 rounded-sm border border-background p-0 ${handle.includes("n") ? "top-[-6px]" : "bottom-[-6px]"} ${handle.includes("w") ? "left-[-6px]" : "right-[-6px]"}`}
                         onPointerDown={(event) => {
                           event.stopPropagation();
                           beginInteraction(event, "resize", handle);
@@ -355,87 +357,79 @@ export default function SourceRegionSelector({
               )}
             </div>
             {!region && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm font-medium text-white">
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm font-medium text-primary-foreground">
                 Drag to draw the {lowerLabel}
               </div>
             )}
           </div>
-          <aside className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Selected area
+          <Card className="shadow-none">
+            <CardContent className="space-y-4 p-4">
+              <div>
+                <div className="text-sm font-medium">Selected area</div>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  The darkened area is excluded. The highlighted rectangle is
+                  saved for this clip.
+                </p>
               </div>
-              <p className="mt-2 text-sm leading-6 text-zinc-300">
-                The darkened area is excluded. The highlighted rectangle is
-                saved for this clip.
-              </p>
-            </div>
-            {region ? (
-              <>
-                <dl className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
-                  {Object.entries(region).map(([key, value]) => (
-                    <div key={key}>
-                      <dt className="uppercase text-zinc-600">{key}</dt>
-                      <dd className="font-mono text-zinc-200">
-                        {value.toFixed(3)}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-                <Button
-                  variant="ghost"
-                  type="button"
-                  onClick={() => setRegion(null)}
-                  className="w-full rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
-                >
-                  Reset selection
-                </Button>
-              </>
-            ) : (
-              <p className="text-xs text-amber-300">
-                Select a rectangle before saving.
-              </p>
-            )}
-            {panelSizeOptions?.length ? (
-              <div className="space-y-1.5">
-                <label
-                  htmlFor={`${regionTestId}-panel-size`}
-                  className="text-xs font-semibold uppercase tracking-wide text-zinc-500"
-                >
-                  {panelSizeLabel}
-                </label>
-                <NativeSelect
-                  id={`${regionTestId}-panel-size`}
-                  value={panelSize}
-                  onChange={(event) => setPanelSize(event.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-sm text-zinc-200 outline-none focus:border-red-400/60"
-                >
-                  {panelSizeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
-            ) : null}
-            {error && (
-              <p role="alert" className="text-xs text-red-300">
-                {error}
-              </p>
-            )}
-          </aside>
+              {region ? (
+                <>
+                  <dl className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                    {Object.entries(region).map(([key, value]) => (
+                      <div key={key}>
+                        <dt className="text-xs uppercase">{key}</dt>
+                        <dd className="font-mono text-foreground">
+                          {value.toFixed(3)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => setRegion(null)}
+                    className="w-full"
+                  >
+                    Reset selection
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Select a rectangle before saving.
+                </p>
+              )}
+              {panelSizeOptions?.length ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor={`${regionTestId}-panel-size`}>
+                    {panelSizeLabel}
+                  </Label>
+                  <NativeSelect
+                    id={`${regionTestId}-panel-size`}
+                    value={panelSize}
+                    onChange={(event) => setPanelSize(event.target.value)}
+                    className="w-full"
+                  >
+                    {panelSizeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+              ) : null}
+              {error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </div>
-        <div className="flex justify-end gap-3 border-t border-white/10 px-5 py-4">
-          <Button
-            variant="ghost"
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-300 hover:bg-white/10"
-          >
+        <DialogFooter className="border-t px-5 py-4">
+          <Button variant="outline" type="button" onClick={onClose}>
             Cancel
           </Button>
           <Button
-            variant="ghost"
+            variant="default"
             type="button"
             disabled={!canSave}
             onClick={() => {
@@ -446,11 +440,10 @@ export default function SourceRegionSelector({
                 onSave(normalizedRegion);
               }
             }}
-            className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isSaving ? "Saving…" : `Save ${lowerLabel}`}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

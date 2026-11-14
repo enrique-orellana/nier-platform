@@ -13,8 +13,11 @@ import {
   Button,
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogHeader,
   DialogTitle,
   Input,
+  Label,
   Textarea,
 } from "./ui";
 
@@ -94,18 +97,21 @@ export default function HookModal({
         showClose={false}
         closeOnEscape={false}
         closeOnInteractOutside={false}
-        className="z-[100] flex w-[calc(100%-2rem)] max-h-[90vh] max-w-4xl flex-col gap-6 overflow-y-auto rounded-2xl border border-white/10 bg-[#121214] p-6 shadow-2xl md:flex-row"
+        className="z-[100] flex max-h-[90vh] w-[calc(100%-2rem)] max-w-4xl flex-col gap-6 overflow-y-auto md:flex-row"
       >
         <Button
           variant="ghost"
+          size="icon"
+          type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-500 hover:text-white z-10"
+          className="absolute right-4 top-4 z-10"
+          aria-label="Close viral hook editor"
         >
-          <X size={20} />
+          <X className="size-4" />
         </Button>
 
         {/* Left: Preview */}
-        <div className="flex-1 flex flex-col items-center justify-center bg-black rounded-lg border border-white/5 overflow-hidden relative aspect-[9/16] max-h-[600px]">
+        <div className="relative flex max-h-[600px] flex-1 flex-col items-center justify-center overflow-hidden rounded-md border bg-black aspect-[9/16]">
           {useRemotionPreview ? (
             <RemotionPreview
               videoUrl={resolvedVideoUrl}
@@ -147,42 +153,45 @@ export default function HookModal({
         </div>
 
         {/* Right: Controls */}
-        <div className="w-full md:w-80 flex flex-col">
-          <DialogTitle className="mb-6 flex items-center gap-2 text-xl font-bold text-white">
-            <Sparkles className="text-yellow-400" /> Viral Hook
-          </DialogTitle>
+        <div className="flex w-full flex-col md:w-80">
+          <DialogHeader className="mb-6">
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Sparkles className="size-5 text-primary" /> Viral Hook
+            </DialogTitle>
+            <DialogDescription>
+              Add a short animated line over the opening of this clip.
+            </DialogDescription>
+          </DialogHeader>
 
-          <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-2">
+          <div className="flex-1 space-y-5 overflow-y-auto pr-2">
             {/* Text Input */}
             <div>
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 block">
+              <Label htmlFor="viral-hook-text" className="mb-2 block">
                 Text
-              </label>
+              </Label>
               <Textarea
+                id="viral-hook-text"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 rows={4}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-500/50 resize-none font-serif"
+                className="w-full resize-none font-serif"
                 placeholder="Enter text that will stop the scroll..."
               />
             </div>
 
             {/* Position Control */}
             <div>
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <MoveVertical size={12} /> Position
-              </label>
+              <Label className="mb-2 flex items-center gap-2">
+                <MoveVertical className="size-4" /> Position
+              </Label>
               <div className="grid grid-cols-3 gap-2">
                 {["top", "center", "bottom"].map((pos) => (
                   <Button
-                    variant="ghost"
+                    variant={position === pos ? "secondary" : "outline"}
                     key={pos}
                     onClick={() => setPosition(pos)}
-                    className={`py-2 px-1 rounded-lg text-xs font-bold capitalize transition-all border ${
-                      position === pos
-                        ? "bg-white text-black border-white"
-                        : "bg-white/5 text-zinc-400 border-white/5 hover:bg-white/10"
-                    }`}
+                    size="sm"
+                    className="w-full capitalize"
                   >
                     {pos}
                   </Button>
@@ -192,20 +201,17 @@ export default function HookModal({
 
             {/* Size Control */}
             <div>
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Maximize size={12} /> Size
-              </label>
+              <Label className="mb-2 flex items-center gap-2">
+                <Maximize className="size-4" /> Size
+              </Label>
               <div className="grid grid-cols-3 gap-2">
                 {["S", "M", "L"].map((sz) => (
                   <Button
-                    variant="ghost"
+                    variant={size === sz ? "secondary" : "outline"}
                     key={sz}
                     onClick={() => setSize(sz)}
-                    className={`py-2 px-1 rounded-lg text-xs font-bold transition-all border ${
-                      size === sz
-                        ? "bg-white text-black border-white"
-                        : "bg-white/5 text-zinc-400 border-white/5 hover:bg-white/10"
-                    }`}
+                    size="sm"
+                    className="w-full"
                   >
                     {sz === "S" ? "Small" : sz === "M" ? "Medium" : "Large"}
                   </Button>
@@ -215,20 +221,19 @@ export default function HookModal({
 
             {/* Entrance Animation (new) */}
             <div>
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Zap size={12} /> Entrance
-              </label>
+              <Label className="mb-2 flex items-center gap-2">
+                <Zap className="size-4" /> Entrance
+              </Label>
               <div className="grid grid-cols-2 gap-2">
                 {ENTRANCE_OPTIONS.map((opt) => (
                   <Button
-                    variant="ghost"
+                    variant={
+                      entranceAnimation === opt.value ? "secondary" : "outline"
+                    }
                     key={opt.value}
                     onClick={() => setEntranceAnimation(opt.value)}
-                    className={`py-2 px-1 rounded-lg text-xs font-bold transition-all border ${
-                      entranceAnimation === opt.value
-                        ? "bg-white text-black border-white"
-                        : "bg-white/5 text-zinc-400 border-white/5 hover:bg-white/10"
-                    }`}
+                    size="sm"
+                    className="w-full"
                   >
                     {opt.label}
                   </Button>
@@ -238,31 +243,29 @@ export default function HookModal({
 
             {/* Display Duration (new) */}
             <div>
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 block">
-                Duration: {displayDuration}s
-              </label>
+              <Label className="mb-2 block">Duration: {displayDuration}s</Label>
               <Input
                 type="range"
                 min="2"
                 max="15"
                 value={displayDuration}
                 onChange={(e) => setDisplayDuration(parseInt(e.target.value))}
-                className="w-full accent-yellow-500"
+                className="h-2 w-full cursor-pointer accent-primary"
               />
-              <div className="flex justify-between text-[10px] text-zinc-500">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>2s</span>
                 <span>15s</span>
               </div>
             </div>
 
-            <div className="p-3 bg-white/5 rounded-lg border border-white/5 text-[11px] text-zinc-400">
+            <div className="rounded-md border bg-muted/50 p-3 text-sm text-muted-foreground">
               <strong>Tip:</strong> Keep it short and punchy. Using "POV:" or
               specific questions works best for retention.
             </div>
           </div>
 
           <Button
-            variant="ghost"
+            variant="default"
             onClick={() =>
               onGenerate({
                 text,
@@ -273,12 +276,12 @@ export default function HookModal({
               })
             }
             disabled={isProcessing || !text.trim()}
-            className="w-full py-4 mt-4 bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-black font-bold rounded-xl shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            className="mt-4 w-full shrink-0"
           >
             {isProcessing ? (
-              <Loader2 size={20} className="animate-spin" />
+              <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Sparkles size={20} />
+              <Sparkles className="size-4" />
             )}
             {isProcessing ? "Generating..." : "Add Hook"}
           </Button>

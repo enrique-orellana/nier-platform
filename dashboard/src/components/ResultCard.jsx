@@ -31,17 +31,16 @@ import VideoPreview from "./ResultCard/VideoPreview";
 import WebcamRegionSelector from "./ResultCard/WebcamRegionSelector";
 import GameplayRegionSelector from "./ResultCard/GameplayRegionSelector";
 import Standard916Preview from "./ResultCard/Standard916Preview";
-import CardContent from "./ResultCard/CardContent";
-import CardActions from "./ResultCard/CardActions";
 import PostModal from "./ResultCard/PostModal";
 import ClipSourceRangeEditor from "./ResultCard/ClipSourceRangeEditor";
 import SubtitleDetailsModal from "./ResultCard/SubtitleDetailsModal";
 import ClipControlsModal from "./ResultCard/ClipControlsModal";
-import { Button } from "./ui";
+import { Button, Card, CardContent as UICardContent } from "./ui";
 
 export default function ResultCard({
   clip,
   index,
+  layout = "grid",
   jobId,
   uploadPostKey,
   uploadUserId,
@@ -133,6 +132,7 @@ export default function ResultCard({
   const [showStandard916Preview, setShowStandard916Preview] = useState(false);
   const [showClipRangeEditor, setShowClipRangeEditor] = useState(false);
   const [showControlsModal, setShowControlsModal] = useState(false);
+  const isSingleResult = layout === "single";
   const [editError, setEditError] = useState(null);
   const editorSessionRef = React.useRef(null);
 
@@ -733,34 +733,35 @@ export default function ResultCard({
   };
 
   return (
-    <div
-      className="bg-surface border border-white/5 rounded-2xl overflow-hidden flex flex-col group hover:border-white/10 transition-all animate-[fadeIn_0.5s_ease-out] h-full w-full shadow-lg"
-      style={{ animationDelay: `${index * 0.1}s` }}
+    <Card
+      className={`group flex h-full min-w-0 flex-col overflow-hidden transition-colors hover:border-primary/40 ${isSingleResult ? "col-span-full mx-auto w-full max-w-xs" : ""}`}
     >
-      {hasVideo ? (
-        <VideoPreview
-          videoRef={videoRef}
-          currentVideoUrl={currentVideoUrl}
-          trueOriginalUrl={trueOriginalUrl}
-          index={index}
-          isEditing={isEditing}
-          isConvertingNativeShort={isConvertingNativeShort}
-          onPlay={onPlay}
-          onPause={onPause}
-          clip={clip}
-        />
-      ) : (
-        <div className="w-full bg-black relative shrink-0 aspect-[9/16] flex items-center justify-center p-6 text-center">
-          <div>
-            <div className="text-white font-semibold">Clip {index + 1}</div>
-            <p className="mt-2 text-xs text-zinc-500">
-              Candidate found. Render it when you are ready.
-            </p>
+      <div className="min-w-0 shrink-0 bg-muted">
+        {hasVideo ? (
+          <VideoPreview
+            videoRef={videoRef}
+            currentVideoUrl={currentVideoUrl}
+            trueOriginalUrl={trueOriginalUrl}
+            index={index}
+            isEditing={isEditing}
+            isConvertingNativeShort={isConvertingNativeShort}
+            onPlay={onPlay}
+            onPause={onPause}
+            clip={clip}
+          />
+        ) : (
+          <div className="relative flex aspect-[9/16] w-full items-center justify-center p-6 text-center">
+            <div className="space-y-2">
+              <p className="font-medium">Clip {index + 1}</p>
+              <p className="text-sm text-muted-foreground">
+                Candidate found. Render it when you are ready.
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      <div className="flex-1 p-3.5 sm:p-4 flex flex-col justify-between bg-[#121214] overflow-hidden min-w-0 space-y-3">
+      <UICardContent className="flex min-w-0 flex-1 flex-col gap-4 p-4">
         <ClipWorkflowStatus
           status={workflowStatus}
           saving={workflowStatusSaving}
@@ -771,30 +772,29 @@ export default function ResultCard({
 
         <div className="flex items-center gap-2">
           <Button
-            variant="ghost"
+            variant="outline"
+            size="sm"
             type="button"
             onClick={() =>
               onEditorOpen ? onEditorOpen() : setShowControlsModal(true)
             }
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:border-cyan-400/50 transition-all active:scale-[0.98] shadow-sm group/btn cursor-pointer"
+            className="flex-1"
           >
-            <Clock3
-              size={14}
-              className="group-hover/btn:scale-110 transition-transform text-cyan-400 shrink-0"
-            />
+            <Clock3 className="size-4 shrink-0" />
             <span>Edit Timeline</span>
           </Button>
           <Button
-            variant="ghost"
+            variant="outline"
+            size="icon"
             type="button"
             onClick={() => setShowControlsModal(true)}
             title="Clip Controls & Actions"
-            className="flex items-center justify-center p-2.5 rounded-xl text-xs bg-white/[0.04] hover:bg-white/[0.1] text-zinc-400 hover:text-zinc-200 border border-white/10 hover:border-white/20 transition-all active:scale-[0.98] shadow-sm cursor-pointer shrink-0"
+            aria-label="Clip Controls & Actions"
           >
-            <Sliders size={14} className="transition-transform" />
+            <Sliders className="size-4" />
           </Button>
         </div>
-      </div>
+      </UICardContent>
 
       <ClipControlsModal
         isOpen={showControlsModal}
@@ -980,6 +980,6 @@ export default function ResultCard({
           editError,
         }}
       />
-    </div>
+    </Card>
   );
 }

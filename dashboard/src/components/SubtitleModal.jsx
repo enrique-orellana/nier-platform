@@ -8,9 +8,13 @@ import {
   Button,
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogHeader,
   DialogTitle,
   Input,
+  Label,
   NativeSelect,
+  Switch,
   Textarea,
 } from "./ui";
 
@@ -180,21 +184,24 @@ export default function SubtitleModal({
         showClose={false}
         closeOnEscape={false}
         closeOnInteractOutside={false}
-        className="z-[100] flex w-full max-h-[90vh] max-w-5xl flex-col gap-6 rounded-2xl border border-white/10 bg-[#121214] p-6 shadow-2xl md:flex-row"
+        className="z-[100] flex max-h-[90vh] w-[calc(100%-2rem)] max-w-5xl flex-col gap-6 overflow-y-auto md:flex-row"
       >
         <Button
           variant="ghost"
+          size="icon"
+          type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-500 hover:text-white z-10"
+          className="absolute right-4 top-4 z-10"
+          aria-label="Close subtitle editor"
         >
-          <X size={20} />
+          <X className="size-4" />
         </Button>
 
         {/* Left: Preview */}
-        <div className="flex-1 flex flex-col items-center justify-center bg-black rounded-lg border border-white/5 overflow-hidden relative aspect-[9/16] max-h-[600px]">
+        <div className="relative flex max-h-[600px] flex-1 flex-col items-center justify-center overflow-hidden rounded-md border bg-black aspect-[9/16]">
           {captionsLoading ? (
-            <div className="flex items-center gap-2 text-zinc-400">
-              <Loader2 size={16} className="animate-spin" />
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
               <span className="text-sm">Loading preview...</span>
             </div>
           ) : useRemotionPreview ? (
@@ -232,24 +239,28 @@ export default function SubtitleModal({
         </div>
 
         {/* Right: Controls */}
-        <div className="w-full md:w-80 flex flex-col">
-          <DialogTitle className="mb-4 flex shrink-0 items-center gap-2 text-xl font-bold text-white">
-            <Type className="text-primary" /> Auto Subtitles
-          </DialogTitle>
+        <div className="flex w-full flex-col md:w-80">
+          <DialogHeader className="mb-4">
+            <DialogTitle className="flex shrink-0 items-center gap-2 text-xl">
+              <Type className="size-5 text-primary" /> Auto Subtitles
+            </DialogTitle>
+            <DialogDescription>
+              Choose how captions appear, then generate them for this clip.
+            </DialogDescription>
+          </DialogHeader>
 
-          <div className="space-y-5 flex-1 overflow-y-auto custom-scrollbar pr-1">
+          <div className="flex-1 space-y-5 overflow-y-auto pr-1">
             {/* Position Selector */}
             <div>
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 block">
-                Position
-              </label>
+              <Label className="mb-2 block">Position</Label>
               <div className="grid grid-cols-3 gap-2">
                 {["top", "middle", "bottom"].map((pos) => (
                   <Button
-                    variant="ghost"
+                    variant={position === pos ? "secondary" : "outline"}
                     key={pos}
                     onClick={() => setPosition(pos)}
-                    className={`p-2 rounded-lg border text-center text-xs font-medium transition-all ${position === pos ? "bg-primary/20 border-primary text-white" : "bg-white/5 border-white/5 text-zinc-400 hover:bg-white/10"}`}
+                    size="sm"
+                    className="w-full"
                   >
                     {pos.charAt(0).toUpperCase() + pos.slice(1)}
                   </Button>
@@ -259,16 +270,15 @@ export default function SubtitleModal({
 
             {/* Animation Style (new) */}
             <div>
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 block">
-                Animation
-              </label>
+              <Label className="mb-2 block">Animation</Label>
               <div className="grid grid-cols-2 gap-2">
                 {ANIMATION_OPTIONS.map((opt) => (
                   <Button
-                    variant="ghost"
+                    variant={animation === opt.value ? "secondary" : "outline"}
                     key={opt.value}
                     onClick={() => setAnimation(opt.value)}
-                    className={`p-2 rounded-lg border text-center text-xs font-medium transition-all ${animation === opt.value ? "bg-primary/20 border-primary text-white" : "bg-white/5 border-white/5 text-zinc-400 hover:bg-white/10"}`}
+                    size="sm"
+                    className="w-full"
                   >
                     {opt.label}
                   </Button>
@@ -283,7 +293,7 @@ export default function SubtitleModal({
                   variant="ghost"
                   type="button"
                   onClick={() => setShowTextEditor(!showTextEditor)}
-                  className="w-full flex items-center justify-between text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2"
+                  className="mb-2 h-auto w-full justify-between px-0 text-muted-foreground"
                 >
                   <span>Edit Text ({captions.length} words)</span>
                   <span
@@ -297,7 +307,7 @@ export default function SubtitleModal({
                     value={editableText}
                     onChange={(e) => handleTextEdit(e.target.value)}
                     rows={5}
-                    className="w-full bg-black/40 border border-white/10 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-primary/50 resize-none leading-relaxed animate-[fadeIn_0.15s_ease-out]"
+                    className="w-full resize-none leading-relaxed"
                     placeholder="Edit subtitle text..."
                   />
                 )}
@@ -306,13 +316,11 @@ export default function SubtitleModal({
 
             {/* Font Family */}
             <div>
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 block">
-                Font
-              </label>
+              <Label className="mb-2 block">Font</Label>
               <NativeSelect
                 value={fontName}
                 onChange={(e) => setFontName(e.target.value)}
-                className=""
+                className="w-full"
               >
                 {FONT_OPTIONS.map((f) => (
                   <option
@@ -328,25 +336,25 @@ export default function SubtitleModal({
 
             {/* Text Color */}
             <div>
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 block">
-                Text Color
-              </label>
+              <Label className="mb-2 block">Text Color</Label>
               <div className="flex flex-wrap gap-2">
                 {COLOR_PRESETS.map((c) => (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     key={c.color}
                     onClick={() => setFontColor(c.color)}
-                    className={`w-7 h-7 rounded-full border-2 transition-all ${fontColor === c.color ? "border-white scale-110" : "border-white/20 hover:border-white/50"}`}
+                    size="icon"
+                    aria-pressed={fontColor === c.color}
+                    className={`size-7 rounded-full p-0 ${fontColor === c.color ? "ring-2 ring-ring ring-offset-2 ring-offset-background" : ""}`}
                     style={{ backgroundColor: c.color }}
                     title={c.label}
                   />
                 ))}
                 <label
-                  className="w-7 h-7 rounded-full border-2 border-dashed border-white/20 cursor-pointer flex items-center justify-center hover:border-white/50 transition-all overflow-hidden relative"
+                  className="relative flex size-7 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-dashed"
                   title="Custom color"
                 >
-                  <span className="text-[10px] text-zinc-400">+</span>
+                  <span className="text-xs text-muted-foreground">+</span>
                   <Input
                     type="color"
                     value={fontColor}
@@ -359,9 +367,7 @@ export default function SubtitleModal({
 
             {/* Highlight Color (new) */}
             <div>
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 block">
-                Highlight Color
-              </label>
+              <Label className="mb-2 block">Highlight Color</Label>
               <div className="flex flex-wrap gap-2">
                 {[
                   { color: "#FFDD00", label: "Gold" },
@@ -371,10 +377,12 @@ export default function SubtitleModal({
                   { color: "#FF69B4", label: "Pink" },
                 ].map((c) => (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     key={c.color}
                     onClick={() => setHighlightColor(c.color)}
-                    className={`w-7 h-7 rounded-full border-2 transition-all ${highlightColor === c.color ? "border-white scale-110" : "border-white/20 hover:border-white/50"}`}
+                    size="icon"
+                    aria-pressed={highlightColor === c.color}
+                    className={`size-7 rounded-full p-0 ${highlightColor === c.color ? "ring-2 ring-ring ring-offset-2 ring-offset-background" : ""}`}
                     style={{ backgroundColor: c.color }}
                     title={c.label}
                   />
@@ -384,12 +392,10 @@ export default function SubtitleModal({
 
             {/* Border / Outline */}
             <div>
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 block">
-                Border
-              </label>
+              <Label className="mb-2 block">Border</Label>
               <div className="flex items-center gap-3">
                 <label
-                  className="relative w-8 h-8 rounded-lg border border-white/10 cursor-pointer overflow-hidden shrink-0"
+                  className="relative size-8 shrink-0 cursor-pointer overflow-hidden rounded-md border"
                   title="Border color"
                 >
                   <div
@@ -412,7 +418,7 @@ export default function SubtitleModal({
                     onChange={(e) => setBorderWidth(parseInt(e.target.value))}
                     className="w-full accent-primary"
                   />
-                  <div className="flex justify-between text-[10px] text-zinc-500">
+                  <div className="flex justify-between text-xs text-muted-foreground">
                     <span>None</span>
                     <span>Thick</span>
                   </div>
@@ -423,24 +429,18 @@ export default function SubtitleModal({
             {/* Background Box */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  Background Box
-                </label>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <Input
-                    type="checkbox"
-                    checked={bgOpacity > 0}
-                    onChange={(e) => setBgOpacity(e.target.checked ? 0.5 : 0)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-8 h-4 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[0px] after:left-[0px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-                </label>
+                <Label htmlFor="subtitle-background-box">Background Box</Label>
+                <Switch
+                  id="subtitle-background-box"
+                  checked={bgOpacity > 0}
+                  onCheckedChange={(checked) => setBgOpacity(checked ? 0.5 : 0)}
+                />
               </div>
               {bgOpacity > 0 && (
                 <div className="space-y-3 animate-[fadeIn_0.2s_ease-out]">
                   <div className="flex items-center gap-3">
                     <label
-                      className="relative w-8 h-8 rounded-lg border border-white/10 cursor-pointer overflow-hidden shrink-0"
+                      className="relative size-8 shrink-0 cursor-pointer overflow-hidden rounded-md border"
                       title="Background color"
                     >
                       <div
@@ -465,7 +465,7 @@ export default function SubtitleModal({
                         }
                         className="w-full accent-primary"
                       />
-                      <div className="flex justify-between text-[10px] text-zinc-500">
+                      <div className="flex justify-between text-xs text-muted-foreground">
                         <span>Transparent</span>
                         <span>{Math.round(bgOpacity * 100)}%</span>
                       </div>
@@ -477,7 +477,7 @@ export default function SubtitleModal({
           </div>
 
           <Button
-            variant="ghost"
+            variant="default"
             onClick={() =>
               onGenerate({
                 position,
@@ -493,12 +493,12 @@ export default function SubtitleModal({
               })
             }
             disabled={isProcessing}
-            className="w-full py-3 mt-4 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black font-bold rounded-xl shadow-lg shadow-orange-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 shrink-0"
+            className="mt-4 w-full shrink-0"
           >
             {isProcessing ? (
-              <Loader2 size={20} className="animate-spin" />
+              <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Type size={20} />
+              <Type className="size-4" />
             )}
             {isProcessing ? "Generating..." : "Generate Subtitles"}
           </Button>

@@ -1,6 +1,6 @@
 import React from "react";
 import { Loader2, RefreshCw, Eye, Sparkles, CheckCircle2 } from "lucide-react";
-import { Button, Input } from "./ui";
+import { Button, Card, CardContent, Checkbox } from "./ui";
 
 const progressLabels = {
   queued: "Queued…",
@@ -28,15 +28,16 @@ function hasValidRegion(region) {
 function RegionButton({ label, onClick, disabled, saving }) {
   return (
     <Button
-      variant="ghost"
+      variant="outline"
+      size="sm"
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="w-full rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs font-semibold text-zinc-300 transition-all hover:bg-white/10 hover:text-white disabled:opacity-50 active:scale-[0.98]"
+      className="w-full"
     >
       {saving ? (
-        <span className="flex items-center justify-center gap-1.5">
-          <Loader2 size={12} className="animate-spin text-cyan-400" />
+        <span className="flex items-center justify-center gap-2">
+          <Loader2 className="size-4 animate-spin" />
           Saving…
         </span>
       ) : (
@@ -50,20 +51,18 @@ function PreviewButton({ enabled, onClick }) {
   return (
     <div className="space-y-1">
       <Button
-        variant="ghost"
+        variant="outline"
+        size="sm"
         type="button"
         onClick={onClick}
         disabled={!enabled}
-        className="w-full rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs font-semibold text-zinc-300 transition-all hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 flex items-center justify-center gap-1.5"
+        className="w-full"
       >
-        <Eye
-          size={12}
-          className={enabled ? "text-cyan-400" : "text-zinc-500"}
-        />
+        <Eye className="size-4" />
         <span>Preview 9:16</span>
       </Button>
       {!enabled && (
-        <p className="text-[10px] text-zinc-500 text-center">
+        <p className="text-center text-xs text-muted-foreground">
           Select Gameplay Area First
         </p>
       )}
@@ -91,10 +90,16 @@ export default function ClipRenderControls({
 }) {
   if (progressLabels[status]) {
     return (
-      <div className="mb-3 flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary animate-pulse">
-        <Loader2 size={13} className="animate-spin" />
-        <span>{progressLabels[status]}</span>
-      </div>
+      <Card className="mb-3 border-primary/30 bg-primary/5 shadow-none">
+        <CardContent
+          className="flex items-center justify-center gap-2 p-3 text-sm text-primary"
+          role="status"
+          aria-live="polite"
+        >
+          <Loader2 className="size-4 animate-spin" />
+          <span>{progressLabels[status]}</span>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -105,18 +110,16 @@ export default function ClipRenderControls({
 
   if (status === "failed" && !streamerStack) {
     return (
-      <div className="mb-3 space-y-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3">
-        <p className="text-xs text-red-300">{error || "Render failed."}</p>
-        <Button
-          variant="ghost"
-          type="button"
-          onClick={onRender}
-          className="flex items-center gap-1.5 rounded-lg border border-red-400/30 bg-red-500/20 px-3 py-1.5 text-xs font-semibold text-red-200 transition-colors hover:bg-red-500/30"
-        >
-          <RefreshCw size={12} />
-          Retry
-        </Button>
-      </div>
+      <Card className="mb-3 border-destructive/30 bg-destructive/5 shadow-none">
+        <CardContent className="space-y-3 p-3">
+          <p role="alert" className="text-sm text-destructive">
+            {error || "Render failed."}
+          </p>
+          <Button variant="outline" size="sm" type="button" onClick={onRender}>
+            <RefreshCw className="size-4" /> Retry
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -128,77 +131,85 @@ export default function ClipRenderControls({
       ? "Edit Gameplay Area"
       : "Select Gameplay Area";
     return (
-      <div className="mb-3 space-y-2 rounded-xl border border-white/[0.08] bg-white/[0.02] p-2.5">
-        {status === "failed" && (
-          <div className="space-y-1">
-            <p className="text-xs text-red-300">{error || "Render failed."}</p>
-            <p className="text-xs text-amber-200">
-              Select both source areas before retrying Streamer Stack analysis.
-            </p>
+      <Card className="mb-3 shadow-none">
+        <CardContent className="space-y-3 p-3">
+          {status === "failed" && (
+            <div className="space-y-1.5 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+              <p role="alert" className="text-sm text-destructive">
+                {error || "Render failed."}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Select both source areas before retrying Streamer Stack
+                analysis.
+              </p>
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <RegionButton
+              label={webcamLabel}
+              onClick={onSelectWebcamRegion}
+              disabled={isSavingWebcamRegion}
+              saving={isSavingWebcamRegion}
+            />
+            <RegionButton
+              label={gameplayLabel}
+              onClick={onSelectGameplayRegion}
+              disabled={isSavingGameplayRegion}
+              saving={isSavingGameplayRegion}
+            />
           </div>
-        )}
-        <div className="grid grid-cols-2 gap-2">
-          <RegionButton
-            label={webcamLabel}
-            onClick={onSelectWebcamRegion}
-            disabled={isSavingWebcamRegion}
-            saving={isSavingWebcamRegion}
+          <PreviewButton
+            enabled={validGameplayRegion}
+            onClick={onPreviewGameplayRegion}
           />
-          <RegionButton
-            label={gameplayLabel}
-            onClick={onSelectGameplayRegion}
-            disabled={isSavingGameplayRegion}
-            saving={isSavingGameplayRegion}
-          />
-        </div>
-        <PreviewButton
-          enabled={validGameplayRegion}
-          onClick={onPreviewGameplayRegion}
-        />
-        {webcamRegionError && (
-          <p className="text-xs text-red-300">{webcamRegionError}</p>
-        )}
-        {gameplayRegionError && (
-          <p className="text-xs text-red-300">{gameplayRegionError}</p>
-        )}
-        <label className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs text-zinc-300 cursor-pointer hover:border-white/20 transition-colors">
-          <Input
-            type="checkbox"
-            checked={streamerTrackingEnabled === true}
-            disabled={trackingSaving}
-            onChange={(event) => onTrackingChange?.(event.target.checked)}
-            className="rounded border-zinc-700 bg-zinc-900 text-cyan-500 focus:ring-cyan-400/20"
-          />
-          <span>Use Face/Person Tracking</span>
-        </label>
-        <Button
-          variant="ghost"
-          type="button"
-          onClick={onRender}
-          disabled={!hasAllStreamerRegions}
-          className="w-full rounded-xl border border-cyan-500/30 bg-cyan-500/15 hover:bg-cyan-500/25 px-3 py-2 text-xs font-bold text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40 transition-all flex items-center justify-center gap-1.5"
-        >
-          <Sparkles size={13} />
-          {status === "ready" ? "Render from Master" : "Analyze & Render"}
-        </Button>
-      </div>
+          {webcamRegionError && (
+            <p role="alert" className="text-sm text-destructive">
+              {webcamRegionError}
+            </p>
+          )}
+          {gameplayRegionError && (
+            <p role="alert" className="text-sm text-destructive">
+              {gameplayRegionError}
+            </p>
+          )}
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={streamerTrackingEnabled === true}
+              disabled={trackingSaving}
+              onCheckedChange={(checked) =>
+                onTrackingChange?.(checked === true)
+              }
+            />
+            <span>Use Face/Person Tracking</span>
+          </label>
+          <Button
+            variant="default"
+            size="sm"
+            type="button"
+            onClick={onRender}
+            disabled={!hasAllStreamerRegions}
+            className="w-full"
+          >
+            <Sparkles className="size-4" />
+            {status === "ready" ? "Render from Master" : "Analyze & Render"}
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
   if (status === "failed") {
     return (
-      <div className="mb-3 space-y-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3">
-        <p className="text-xs text-red-300">{error || "Render failed."}</p>
-        <Button
-          variant="ghost"
-          type="button"
-          onClick={onRender}
-          className="flex items-center gap-1.5 rounded-lg border border-red-400/30 bg-red-500/20 px-3 py-1.5 text-xs font-semibold text-red-200 transition-colors hover:bg-red-500/30"
-        >
-          <RefreshCw size={12} />
-          Retry
-        </Button>
-      </div>
+      <Card className="mb-3 border-destructive/30 bg-destructive/5 shadow-none">
+        <CardContent className="space-y-3 p-3">
+          <p role="alert" className="text-sm text-destructive">
+            {error || "Render failed."}
+          </p>
+          <Button variant="outline" size="sm" type="button" onClick={onRender}>
+            <RefreshCw className="size-4" /> Retry
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -206,12 +217,13 @@ export default function ClipRenderControls({
     return (
       <div className="mb-2.5">
         <Button
-          variant="ghost"
+          variant="default"
+          size="sm"
           type="button"
           onClick={onRender}
-          className="w-full rounded-xl border border-cyan-500/25 bg-cyan-500/10 hover:bg-cyan-500/20 px-3 py-1.5 text-xs font-semibold text-cyan-300 transition-all flex items-center justify-center gap-1.5 active:scale-[0.99]"
+          className="w-full"
         >
-          <Sparkles size={12} />
+          <Sparkles className="size-4" />
           <span>Render from Master</span>
         </Button>
       </div>
@@ -225,12 +237,13 @@ export default function ClipRenderControls({
         onClick={onPreviewGameplayRegion}
       />
       <Button
-        variant="ghost"
+        variant="default"
+        size="sm"
         type="button"
         onClick={onRender}
-        className="w-full rounded-xl border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 px-3 py-2 text-xs font-bold text-cyan-300 transition-all flex items-center justify-center gap-1.5 active:scale-[0.99]"
+        className="w-full"
       >
-        <Sparkles size={13} />
+        <Sparkles className="size-4" />
         {status === "ready" ? "Render from Master" : "Analyze & Render"}
       </Button>
     </div>

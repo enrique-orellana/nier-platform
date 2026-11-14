@@ -13,10 +13,18 @@ import {
 } from "lucide-react";
 import {
   Button,
+  Card,
+  CardContent,
+  Checkbox,
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
   Input,
+  Label,
+  Switch,
   Textarea,
 } from "../ui";
 
@@ -47,137 +55,138 @@ export default function PostModal({
         showClose={false}
         closeOnEscape={false}
         closeOnInteractOutside={false}
-        overlayClassName="z-[100] bg-black/80 backdrop-blur-sm"
-        className="z-[100] relative block w-[calc(100%-2rem)] max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#121214] p-6 custom-scrollbar"
+        overlayClassName="z-[100]"
+        className="z-[100] max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto"
       >
         <Button
           variant="ghost"
+          size="icon"
+          type="button"
           onClick={() => setShowModal(false)}
-          className="absolute top-4 right-4 text-zinc-500 hover:text-white"
+          aria-label="Close post dialog"
+          className="absolute right-4 top-4"
         >
-          <X size={20} />
+          <X className="size-4" />
         </Button>
 
-        <DialogTitle className="mb-4 text-lg font-bold text-white">
-          Post / Schedule
-        </DialogTitle>
+        <DialogHeader className="text-left">
+          <DialogTitle>Post / Schedule</DialogTitle>
+          <DialogDescription>
+            Prepare a clip for publishing or schedule it for later.
+          </DialogDescription>
+        </DialogHeader>
 
         {!uploadPostKey && (
-          <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 text-xs rounded-lg flex items-start gap-2">
-            <AlertCircle size={14} className="mt-0.5 shrink-0" />
-            <div>Configure API Key in Settings first.</div>
+          <div
+            role="status"
+            className="my-4 flex items-start gap-2 rounded-md border border-muted p-3 text-sm text-muted-foreground"
+          >
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <p>Configure API Key in Settings first.</p>
           </div>
         )}
 
-        <div className="space-y-4 mb-6">
+        <div className="space-y-4 py-4">
           {/* Title & Description */}
           <div>
-            <label className="block text-xs font-bold text-zinc-400 mb-1">
+            <Label htmlFor="post-title" className="mb-2 block">
               Video Title
-            </label>
+            </Label>
             <Input
+              id="post-title"
               type="text"
               value={postTitle}
               onChange={(e) => setPostTitle(e.target.value)}
-              className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-primary/50 placeholder-zinc-600"
+              className="w-full"
               placeholder="Enter a catchy title..."
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-zinc-400 mb-1">
+            <Label htmlFor="post-caption" className="mb-2 block">
               Caption / Description
-            </label>
+            </Label>
             <Textarea
+              id="post-caption"
               value={postDescription}
               onChange={(e) => setPostDescription(e.target.value)}
               rows={4}
-              className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-primary/50 placeholder-zinc-600 resize-none"
+              className="w-full resize-none"
               placeholder="Write a caption for your post..."
             />
           </div>
 
           {/* Scheduling */}
-          <div className="p-3 bg-white/5 rounded-lg border border-white/5">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-sm text-white font-medium">
-                <Calendar size={16} className="text-purple-400" /> Schedule Post
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <Input
-                  type="checkbox"
+          <Card className="shadow-none">
+            <CardContent className="space-y-3 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <Label
+                  htmlFor="schedule-post"
+                  className="flex items-center gap-2"
+                >
+                  <Calendar className="size-4 text-muted-foreground" />
+                  Schedule Post
+                </Label>
+                <Switch
+                  id="schedule-post"
                   checked={isScheduling}
-                  onChange={(e) => setIsScheduling(e.target.checked)}
-                  className="sr-only peer"
+                  onCheckedChange={setIsScheduling}
                 />
-                <div className="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-              </label>
-            </div>
-
-            {isScheduling && (
-              <div className="mt-3 animate-[fadeIn_0.2s_ease-out]">
-                <label className="block text-xs text-zinc-400 mb-1">
-                  Select Date & Time
-                </label>
-                <div className="relative">
-                  <Input
-                    type="datetime-local"
-                    value={scheduleDate}
-                    onChange={(e) => setScheduleDate(e.target.value)}
-                    className="w-full bg-black/40 border border-white/10 rounded-lg p-2 pl-9 text-sm text-white focus:outline-none focus:border-purple-500/50 [color-scheme:dark]"
-                  />
-                  <Clock
-                    size={14}
-                    className="absolute left-3 top-2.5 text-zinc-500"
-                  />
-                </div>
               </div>
-            )}
-          </div>
+
+              {isScheduling && (
+                <div className="space-y-2">
+                  <Label htmlFor="schedule-date">Select Date & Time</Label>
+                  <div className="relative">
+                    <Input
+                      id="schedule-date"
+                      type="datetime-local"
+                      value={scheduleDate}
+                      onChange={(e) => setScheduleDate(e.target.value)}
+                      className="w-full [color-scheme:dark]"
+                    />
+                    <Clock className="pointer-events-none absolute right-3 top-2.5 size-4 text-muted-foreground" />
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Platforms */}
           <div>
-            <label className="block text-xs font-bold text-zinc-400 mb-2">
-              Select Platforms
-            </label>
+            <Label className="mb-2 block">Select Platforms</Label>
             <div className="grid grid-cols-1 gap-2">
-              <label className="flex items-center gap-3 p-3 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors border border-white/5">
-                <Input
-                  type="checkbox"
+              <label className="flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors hover:bg-accent">
+                <Checkbox
                   checked={platforms.tiktok}
-                  onChange={(e) =>
-                    setPlatforms({ ...platforms, tiktok: e.target.checked })
+                  onCheckedChange={(checked) =>
+                    setPlatforms({ ...platforms, tiktok: checked === true })
                   }
-                  className="w-4 h-4 rounded border-zinc-600 bg-black/50 text-primary focus:ring-primary"
                 />
-                <div className="flex items-center gap-2 text-sm text-white">
-                  <Video size={16} className="text-cyan-400" /> TikTok
+                <div className="flex items-center gap-2 text-sm">
+                  <Video className="size-4" /> TikTok
                 </div>
               </label>
-              <label className="flex items-center gap-3 p-3 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors border border-white/5">
-                <Input
-                  type="checkbox"
+              <label className="flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors hover:bg-accent">
+                <Checkbox
                   checked={platforms.instagram}
-                  onChange={(e) =>
-                    setPlatforms({ ...platforms, instagram: e.target.checked })
+                  onCheckedChange={(checked) =>
+                    setPlatforms({ ...platforms, instagram: checked === true })
                   }
-                  className="w-4 h-4 rounded border-zinc-600 bg-black/50 text-primary focus:ring-primary"
                 />
-                <div className="flex items-center gap-2 text-sm text-white">
-                  <Instagram size={16} className="text-pink-400" /> Instagram
+                <div className="flex items-center gap-2 text-sm">
+                  <Instagram className="size-4" /> Instagram
                 </div>
               </label>
-              <label className="flex items-center gap-3 p-3 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors border border-white/5">
-                <Input
-                  type="checkbox"
+              <label className="flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors hover:bg-accent">
+                <Checkbox
                   checked={platforms.youtube}
-                  onChange={(e) =>
-                    setPlatforms({ ...platforms, youtube: e.target.checked })
+                  onCheckedChange={(checked) =>
+                    setPlatforms({ ...platforms, youtube: checked === true })
                   }
-                  className="w-4 h-4 rounded border-zinc-600 bg-black/50 text-primary focus:ring-primary"
                 />
-                <div className="flex items-center gap-2 text-sm text-white">
-                  <Youtube size={16} className="text-red-400" /> YouTube Shorts
+                <div className="flex items-center gap-2 text-sm">
+                  <Youtube className="size-4" /> YouTube Shorts
                 </div>
               </label>
             </div>
@@ -186,7 +195,8 @@ export default function PostModal({
 
         {postResult && (
           <div
-            className={`mb-4 p-3 rounded-lg text-xs flex items-start gap-2 ${postResult.success ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}
+            role={postResult.success ? "status" : "alert"}
+            className={`mb-4 flex items-start gap-2 rounded-md border p-3 text-sm ${postResult.success ? "text-primary" : "border-destructive/30 bg-destructive/5 text-destructive"}`}
           >
             {postResult.success ? (
               <CheckCircle size={14} className="mt-0.5 shrink-0" />
@@ -198,10 +208,10 @@ export default function PostModal({
         )}
 
         <Button
-          variant="ghost"
+          variant="default"
           onClick={handlePost}
           disabled={posting || !uploadPostKey}
-          className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-bold transition-all flex items-center justify-center gap-2"
+          className="w-full"
         >
           {posting ? (
             <>

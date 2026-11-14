@@ -1,7 +1,19 @@
 import React, { useState } from "react";
 import { X, Loader2, Globe, Languages, AlertCircle } from "lucide-react";
 import { useRenewableMediaUrl } from "../lib/videoUrls";
-import { Button, Dialog, DialogContent, DialogTitle, NativeSelect } from "./ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Label,
+  NativeSelect,
+} from "./ui";
 
 const LANGUAGES = {
   es: "Spanish",
@@ -65,40 +77,42 @@ export default function TranslateModal({
         showClose={false}
         closeOnEscape={false}
         closeOnInteractOutside={false}
-        className="z-[100] block max-w-md rounded-2xl border border-white/10 bg-[#121214] p-6 shadow-2xl"
+        className="z-[100] max-w-md"
       >
         <Button
           variant="ghost"
+          size="icon"
+          type="button"
           onClick={onClose}
           disabled={isProcessing}
-          className="absolute top-4 right-4 text-zinc-500 hover:text-white disabled:opacity-50"
+          className="absolute right-4 top-4"
+          aria-label="Close voice dubbing"
         >
-          <X size={20} />
+          <X className="size-4" />
         </Button>
 
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-teal-600 flex items-center justify-center">
-            <Languages size={20} className="text-white" />
-          </div>
-          <div>
-            <DialogTitle className="text-lg font-bold text-white">
-              Dub Voice
-            </DialogTitle>
-            <p className="text-xs text-zinc-500">
-              AI voice translation by ElevenLabs
-            </p>
-          </div>
-        </div>
+        <DialogHeader className="mb-6 pr-8">
+          <DialogTitle className="flex items-center gap-3">
+            <Languages className="size-5 text-primary" />
+            Dub Voice
+          </DialogTitle>
+          <DialogDescription>
+            AI voice translation by ElevenLabs
+          </DialogDescription>
+        </DialogHeader>
 
         {!hasApiKey && (
-          <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 text-xs rounded-lg flex items-start gap-2">
-            <AlertCircle size={14} className="mt-0.5 shrink-0" />
-            <div>Configure ElevenLabs API Key in Settings first.</div>
+          <div
+            role="status"
+            className="mb-4 flex items-start gap-2 rounded-md border p-3 text-sm text-muted-foreground"
+          >
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <p>Configure ElevenLabs API Key in Settings first.</p>
           </div>
         )}
 
         {/* Preview */}
-        <div className="mb-6 rounded-xl overflow-hidden bg-black aspect-video relative">
+        <div className="relative mb-6 aspect-video overflow-hidden rounded-md border bg-black">
           <video
             src={resolvedVideoUrl}
             onError={() => void refreshVideoUrl()}
@@ -111,14 +125,14 @@ export default function TranslateModal({
 
         {/* Language Selection */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-zinc-400 mb-2">
-            <Globe size={14} className="inline mr-2" />
+          <Label className="mb-2 flex items-center gap-2">
+            <Globe className="size-4" />
             Target Language
-          </label>
+          </Label>
           <NativeSelect
             value={targetLanguage}
             onChange={(e) => setTargetLanguage(e.target.value)}
-            className=""
+            className="w-full"
             disabled={isProcessing}
           >
             {Object.entries(LANGUAGES)
@@ -132,59 +146,59 @@ export default function TranslateModal({
         </div>
 
         {/* Info */}
-        <div className="mb-6 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-          <p className="text-xs text-green-400">
+        <Card className="mb-6 shadow-none">
+          <CardContent className="p-3 text-sm text-muted-foreground">
             The audio will be dubbed with AI-generated voice in the selected
             language, matching the original speaker's characteristics.
-          </p>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Processing State */}
         {isProcessing && (
-          <div className="mb-4 p-4 bg-white/5 rounded-lg border border-white/10">
-            <div className="flex items-center gap-3">
-              <Loader2 size={20} className="text-green-400 animate-spin" />
-              <div>
-                <p className="text-sm text-white font-medium">
-                  Dubbing audio...
-                </p>
-                <p className="text-xs text-zinc-500">
-                  This may take a few minutes
-                </p>
+          <Card className="mb-4 shadow-none">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <Loader2 className="size-5 animate-spin text-primary" />
+                <div>
+                  <p className="text-sm font-medium">Dubbing audio...</p>
+                  <p className="text-sm text-muted-foreground">
+                    This may take a few minutes
+                  </p>
+                </div>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Actions */}
-        <div className="flex gap-3">
+        <DialogFooter>
           <Button
-            variant="ghost"
+            variant="outline"
             onClick={onClose}
             disabled={isProcessing}
-            className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-zinc-300 rounded-xl font-medium transition-colors disabled:opacity-50"
+            className="flex-1"
           >
             Cancel
           </Button>
           <Button
-            variant="ghost"
+            variant="default"
             onClick={handleSubmit}
             disabled={isProcessing || !hasApiKey}
-            className="flex-1 py-3 bg-gradient-to-r from-green-500 to-teal-600 hover:from-green-400 hover:to-teal-500 text-white rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1"
           >
             {isProcessing ? (
               <>
-                <Loader2 size={16} className="animate-spin" />
+                <Loader2 className="size-4 animate-spin" />
                 Dubbing...
               </>
             ) : (
               <>
-                <Languages size={16} />
+                <Languages className="size-4" />
                 Dub Voice
               </>
             )}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

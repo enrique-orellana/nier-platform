@@ -8,7 +8,14 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { formatClock } from "../local-editor/localEditorExport";
-import { Button } from "../ui";
+import {
+  Button,
+  Card,
+  CardContent as UICardContent,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "../ui";
 
 const formatSourceTime = (seconds, fps = 30) =>
   formatClock(Math.max(0, Number(seconds) || 0) * 1000, fps);
@@ -64,94 +71,86 @@ export default function CardContent({ clip, masterDuration }) {
       )}
 
       {/* Social Copy Hub */}
-      <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-2 space-y-1.5 min-w-0">
-        {/* Platform Switcher & Copy Trigger */}
-        <div className="flex items-center justify-between gap-1.5 min-w-0">
-          <div className="flex items-center gap-0.5 bg-black/50 p-0.5 rounded-lg border border-white/5 shrink-0">
-            <Button
-              variant="ghost"
-              type="button"
-              onClick={() => setActiveTab("youtube")}
-              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold transition-all ${
-                activeTab === "youtube"
-                  ? "bg-red-500/20 text-red-300 border border-red-500/30"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              <Youtube size={11} className="text-red-400 shrink-0" />
-              <span>YouTube</span>
-            </Button>
-            <Button
-              variant="ghost"
-              type="button"
-              onClick={() => setActiveTab("tiktok")}
-              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold transition-all ${
-                activeTab === "tiktok"
-                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              <Instagram size={11} className="text-pink-400 shrink-0" />
-              <span>Socials</span>
-            </Button>
-          </div>
+      <Card className="min-w-0 shadow-none">
+        <UICardContent className="space-y-3 p-3">
+          {/* Platform Switcher & Copy Trigger */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList>
+                <TabsTrigger value="youtube">
+                  <Youtube className="size-4" /> YouTube
+                </TabsTrigger>
+                <TabsTrigger value="tiktok">
+                  <Instagram className="size-4" /> Socials
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
 
-          {/* Copy Button */}
-          <Button
-            variant="ghost"
-            type="button"
-            onClick={() =>
-              handleCopy(
-                activeTab === "youtube" ? youtubeTitle : socialCaption,
-                activeTab,
-              )
-            }
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-white/10 transition-all active:scale-95 shrink-0"
-            title={`Copy ${activeTab === "youtube" ? "YouTube Title" : "Social Caption"}`}
-          >
-            {copiedField === activeTab ? (
-              <>
-                <Check size={11} className="text-emerald-400 shrink-0" />
-                <span className="text-emerald-400 font-bold">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy size={11} className="text-zinc-400 shrink-0" />
-                <span>Copy</span>
-              </>
-            )}
-          </Button>
-        </div>
-
-        {/* Content Preview with Expand Option */}
-        <div
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="group/text cursor-pointer rounded-lg bg-black/30 p-2 border border-white/5 hover:border-white/10 transition-all text-xs text-zinc-300"
-        >
-          {activeTab === "youtube" ? (
-            <p
-              className={`select-all break-words ${isExpanded ? "" : "line-clamp-2"} text-zinc-300 text-[11px] leading-relaxed`}
+            {/* Copy Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              onClick={() =>
+                handleCopy(
+                  activeTab === "youtube" ? youtubeTitle : socialCaption,
+                  activeTab,
+                )
+              }
+              title={`Copy ${activeTab === "youtube" ? "YouTube Title" : "Social Caption"}`}
             >
-              {youtubeTitle}
-            </p>
-          ) : (
-            <p
-              className={`select-all break-words ${isExpanded ? "" : "line-clamp-2"} text-zinc-300 text-[11px] leading-relaxed`}
-            >
-              {socialCaption || (
-                <span className="italic text-zinc-500">
-                  No caption generated
-                </span>
+              {copiedField === activeTab ? (
+                <>
+                  <Check className="size-4" />
+                  <span>Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="size-4" />
+                  <span>Copy</span>
+                </>
               )}
-            </p>
-          )}
-
-          <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-zinc-500 group-hover/text:text-zinc-400">
-            <span>{isExpanded ? "Collapse" : "Expand"}</span>
-            {isExpanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+            </Button>
           </div>
-        </div>
-      </div>
+
+          {/* Content Preview with Expand Option */}
+          <div className="min-w-0 rounded-md border bg-muted/50 p-3">
+            {activeTab === "youtube" ? (
+              <p
+                className={`select-all break-words text-sm leading-relaxed ${isExpanded ? "" : "line-clamp-2"}`}
+              >
+                {youtubeTitle}
+              </p>
+            ) : (
+              <p
+                className={`select-all break-words text-sm leading-relaxed ${isExpanded ? "" : "line-clamp-2"}`}
+              >
+                {socialCaption || (
+                  <span className="italic text-muted-foreground">
+                    No caption generated
+                  </span>
+                )}
+              </p>
+            )}
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-expanded={isExpanded}
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="mt-2 h-8 w-full justify-between px-2 text-muted-foreground"
+            >
+              {isExpanded ? "Collapse" : "Expand"}
+              {isExpanded ? (
+                <ChevronUp className="size-4" />
+              ) : (
+                <ChevronDown className="size-4" />
+              )}
+            </Button>
+          </div>
+        </UICardContent>
+      </Card>
     </div>
   );
 }
