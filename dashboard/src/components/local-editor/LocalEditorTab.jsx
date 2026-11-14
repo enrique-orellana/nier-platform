@@ -173,7 +173,7 @@ import {
   normalizeSubtitleReactions,
   reactionRequestCues,
 } from "./subtitleReactions";
-import { Button, Input, NativeSelect } from "../ui";
+import { Button, Card, CardContent, Input, NativeSelect } from "../ui";
 
 const MIN_TIMELINE_HEIGHT = 220;
 const MIN_PREVIEW_HEIGHT = 260;
@@ -2319,42 +2319,49 @@ export default function LocalEditorTab({
 
   if (!videoFile && !videoUrl) {
     return (
-      <div className="h-full overflow-y-auto bg-[#0d0d0f] text-white">
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-          <div>
-            <h1 className="text-lg font-bold">{editorTitle}</h1>
-            <p className="mt-0.5 text-xs text-zinc-500">
+      <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background text-foreground">
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b bg-card/40 px-5 py-4 md:px-8">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {editorTitle}
+            </h1>
+            <p className="text-sm text-muted-foreground">
               Edit local videos, subtitles, and viral hooks in your browser.
             </p>
           </div>
           <div className="flex items-center gap-2">
             {!initialProjectId && (
               <Button
-                variant="ghost"
+                variant="outline"
+                size="sm"
                 type="button"
                 onClick={openProjects}
-                className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5"
               >
-                <FolderOpen size={13} />
+                <FolderOpen className="size-3.5" />
                 Projects
               </Button>
             )}
             {onClose && (
               <Button
                 variant="ghost"
+                size="icon"
                 type="button"
                 onClick={onClose}
                 aria-label="Close editor"
-                className="rounded-lg p-2 text-zinc-400 hover:bg-white/10 hover:text-white"
+                title="Close editor"
               >
-                <X size={18} />
+                <X className="size-4" />
               </Button>
             )}
           </div>
-        </div>
+        </header>
         {projectStorageWarning && (
-          <div className="mx-4 mt-4 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
-            {projectStorageWarning}
+          <div className="px-5 pt-4 md:px-8">
+            <Card className="border-amber-500/30 bg-amber-500/5 shadow-none">
+              <CardContent className="p-3 text-sm text-amber-200">
+                {projectStorageWarning}
+              </CardContent>
+            </Card>
           </div>
         )}
         {!allowLocalUpload ? (

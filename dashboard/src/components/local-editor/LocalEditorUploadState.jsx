@@ -1,15 +1,15 @@
 import React, { useRef, useState } from "react";
 import { Upload } from "lucide-react";
-import { Button, Input } from "../ui";
+import { Button, Card, CardContent, Input } from "../ui";
 
 export default function LocalEditorUploadState({ onFile, error }) {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const chooseFile = (file) => file && onFile(file);
   return (
-    <div className="mx-auto flex min-h-[65vh] max-w-2xl items-center justify-center p-6">
-      <div
-        className={`w-full rounded-2xl border-2 border-dashed p-12 text-center transition-colors ${dragging ? "border-fuchsia-400 bg-fuchsia-500/10" : "border-white/15 bg-white/[.03] hover:border-white/30"}`}
+    <div className="mx-auto flex min-h-[65vh] w-full max-w-3xl items-center justify-center p-5 md:p-8">
+      <Card
+        className={`w-full border-2 border-dashed shadow-none transition-colors ${dragging ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/40"}`}
         onDragOver={(event) => {
           event.preventDefault();
           setDragging(true);
@@ -21,37 +21,43 @@ export default function LocalEditorUploadState({ onFile, error }) {
           chooseFile(event.dataTransfer.files?.[0]);
         }}
       >
-        <Input
-          ref={inputRef}
-          type="file"
-          accept="video/*"
-          aria-label="Upload video"
-          className="hidden"
-          onChange={(event) => chooseFile(event.target.files?.[0])}
-        />
-        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-fuchsia-500/15 text-fuchsia-300">
-          <Upload size={26} />
-        </div>
-        <h2 className="text-xl font-semibold text-white">
-          Upload a video to start editing
-        </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-zinc-400">
-          Your video stays in your browser. Nothing is uploaded to OpenShorts
-          while you edit locally.
-        </p>
-        <Button
-          variant="ghost"
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="mt-6 rounded-xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white hover:bg-fuchsia-400"
-        >
-          Choose local video
-        </Button>
-        <p className="mt-4 text-xs text-zinc-600">
-          Drag and drop a playable MP4, WebM, or MOV file
-        </p>
-        {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
-      </div>
+        <CardContent className="flex flex-col items-center p-8 text-center sm:p-12">
+          <Input
+            ref={inputRef}
+            type="file"
+            accept="video/*"
+            aria-label="Upload video"
+            className="hidden"
+            onChange={(event) => chooseFile(event.target.files?.[0])}
+          />
+          <div className="mb-5 flex size-14 items-center justify-center rounded-md border bg-muted text-primary">
+            <Upload className="size-6" />
+          </div>
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">
+            Upload a video to start editing
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+            Your video stays in your browser. Nothing is uploaded to OpenShorts
+            while you edit locally.
+          </p>
+          <Button
+            variant="default"
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="mt-6"
+          >
+            Choose local video
+          </Button>
+          <p className="mt-4 text-xs text-muted-foreground">
+            Drag and drop a playable MP4, WebM, or MOV file
+          </p>
+          {error && (
+            <p role="alert" className="mt-4 text-sm text-destructive">
+              {error}
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
