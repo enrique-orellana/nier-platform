@@ -21,9 +21,9 @@ describe("OpenAI Codex helpers", () => {
   it("labels pending, reconnect, connected, and disconnected states", () => {
     expect(codexStatusLabel({ pending: true })).toBe("Connecting...");
     expect(codexStatusLabel({ requiresReconnect: true })).toBe(
-      "Reconnect ChatGPT",
+      "Reconnect required",
     );
-    expect(codexStatusLabel({ connected: true })).toBe("Connected to ChatGPT");
+    expect(codexStatusLabel({ connected: true })).toBe("Connected");
     expect(codexStatusLabel({})).toBe("Not connected");
   });
 

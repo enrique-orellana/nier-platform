@@ -172,7 +172,9 @@ describe("AISettingsPanel", () => {
       />,
     );
 
-    expect(screen.getByText(/Connected to ChatGPT/i)).toBeInTheDocument();
+    expect(
+      screen.getByText("Your ChatGPT account is linked for Codex requests."),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Disconnect ChatGPT/i }),
     ).toBeInTheDocument();

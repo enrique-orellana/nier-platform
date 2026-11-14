@@ -135,7 +135,7 @@ export const pickCodexEffort = ({ currentEffort, modelId, models = [] }) => {
 
 export const codexStatusLabel = ({ connected, pending, requiresReconnect }) => {
   if (pending) return "Connecting...";
-  if (requiresReconnect) return "Reconnect ChatGPT";
-  if (connected) return "Connected to ChatGPT";
+  if (requiresReconnect) return "Reconnect required";
+  if (connected) return "Connected";
   return "Not connected";
 };
