@@ -734,7 +734,7 @@ export default function ResultCard({
 
   return (
     <Card
-      className={`group flex h-full min-w-0 flex-col overflow-hidden transition-colors hover:border-primary/40 ${isSingleResult ? "col-span-full mx-auto w-full max-w-xs" : ""}`}
+      className={`group flex h-full min-w-0 flex-col overflow-hidden transition-colors hover:border-primary/40 ${isSingleResult ? "col-span-full w-full max-w-xs" : ""}`}
     >
       <div className="min-w-0 shrink-0 bg-muted">
         {hasVideo ? (

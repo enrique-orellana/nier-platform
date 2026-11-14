@@ -34,16 +34,6 @@ export default function ClipWorkflowStatus({
   )
     ? status
     : "not_reviewed";
-  const currentDefinition = CLIP_WORKFLOW_STATUSES.find(
-    (item) => item.value === currentStatus,
-  );
-  const statusVariant =
-    currentStatus === "discarded"
-      ? "destructive"
-      : currentStatus === "not_reviewed"
-        ? "outline"
-        : "secondary";
-
   const fps = clip
     ? Math.max(1, Number(clip.output_fps || clip.fps) || 30)
     : 30;
@@ -114,11 +104,8 @@ export default function ClipWorkflowStatus({
 
       <Separator />
 
-      <div className="flex min-w-0 flex-wrap items-center justify-start gap-3">
-        <Badge variant={statusVariant} className="shrink-0 gap-1.5">
-          <span className="size-1.5 rounded-full bg-current opacity-80" />
-          <span className="truncate">{currentDefinition.label}</span>
-        </Badge>
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <span className="text-sm text-muted-foreground">Status</span>
         <div className="w-40 shrink-0">
           <Select
             value={currentStatus}
