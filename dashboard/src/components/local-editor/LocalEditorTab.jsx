@@ -2358,14 +2358,14 @@ export default function LocalEditorTab({
         {projectStorageWarning && (
           <div className="px-5 pt-4 md:px-8">
             <Card className="border-amber-500/30 bg-amber-500/5 shadow-none">
-              <CardContent className="p-3 text-sm text-amber-200">
+              <CardContent className="p-3 text-sm text-primary">
                 {projectStorageWarning}
               </CardContent>
             </Card>
           </div>
         )}
         {!allowLocalUpload ? (
-          <div className="flex h-64 items-center justify-center gap-2 text-sm text-zinc-400">
+          <div className="flex h-64 items-center justify-center gap-2 text-sm text-muted-foreground">
             {error || "Project video is unavailable."}
           </div>
         ) : (
@@ -2501,23 +2501,23 @@ export default function LocalEditorTab({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0d0d0f] text-white"
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
       onKeyDown={handlePlayerKeyDown}
     >
       <div
         data-testid="local-editor-header"
-        className="flex h-11 flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-1"
+        className="flex min-h-12 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-2"
       >
         <div>
-          <h1 className="text-sm font-bold leading-4">{editorTitle}</h1>
-          <p className="text-[10px] leading-3 text-zinc-500">
+          <h1 className="text-sm font-semibold leading-5">{editorTitle}</h1>
+          <p className="text-xs leading-4 text-muted-foreground">
             {videoFile?.name || initialVideoName || "Project video"} ·{" "}
             {videoFile ? "local-only editing" : "streamed project video"}
           </p>
         </div>
         <div
           data-testid="local-editor-header-actions"
-          className="flex flex-wrap items-center gap-1"
+          className="flex flex-wrap items-center gap-2"
         >
           {!initialProjectId && (
             <div
@@ -2525,10 +2525,10 @@ export default function LocalEditorTab({
               className="flex items-center gap-1"
             >
               <Button
-                variant="ghost"
                 type="button"
                 onClick={openProjects}
-                className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5"
+                size="sm"
+                variant="outline"
               >
                 <FolderOpen size={13} />
                 Projects
@@ -2538,17 +2538,17 @@ export default function LocalEditorTab({
           {!initialProjectId && (
             <div
               data-testid="local-editor-header-edit"
-              className="flex items-center gap-1 border-l border-white/10 pl-2"
+              className="flex items-center gap-1 border-l border-border pl-3"
             >
               {editHistory.past.length > 0 && (
                 <Button
-                  variant="ghost"
                   type="button"
                   onClick={undo}
                   disabled={busy}
                   aria-label="Undo"
                   title="Undo (Ctrl/Cmd+Z)"
-                  className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+                  size="sm"
+                  variant="outline"
                 >
                   <Undo2 size={13} />
                   Undo
@@ -2556,13 +2556,13 @@ export default function LocalEditorTab({
               )}
               {editHistory.future.length > 0 && (
                 <Button
-                  variant="ghost"
                   type="button"
                   onClick={redo}
                   disabled={busy}
                   aria-label="Redo"
                   title="Redo (Ctrl/Cmd+Shift+Z)"
-                  className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+                  size="sm"
+                  variant="outline"
                 >
                   <Redo2 size={13} />
                   Redo
@@ -2574,17 +2574,17 @@ export default function LocalEditorTab({
             data-testid="local-editor-header-output"
             className={
               initialProjectId
-                ? "flex items-center gap-1"
-                : "flex items-center gap-1 border-l border-white/10 pl-2"
+                ? "flex items-center gap-2"
+                : "flex items-center gap-2 border-l border-border pl-3"
             }
           >
             {videoFile && (
               <Button
-                variant="ghost"
                 type="button"
                 onClick={openSaveProjectDialog}
                 disabled={busy}
-                className="flex items-center gap-1 rounded-md bg-emerald-500 px-2 py-1 text-[10px] font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                size="sm"
+                variant="secondary"
               >
                 <Save size={13} />
                 Save Project
@@ -2593,11 +2593,11 @@ export default function LocalEditorTab({
             {!hideExport &&
               (videoFile || initialExportVideoUrl || videoUrl) && (
                 <Button
-                  variant="ghost"
                   type="button"
                   onClick={exportVideo}
                   disabled={busy}
-                  className="flex items-center gap-1 rounded-md bg-fuchsia-500 px-2 py-1 text-[10px] font-semibold hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  size="sm"
+                  variant="default"
                 >
                   <Film size={13} />
                   {busy
@@ -2609,27 +2609,27 @@ export default function LocalEditorTab({
           </div>
           <div
             data-testid="local-editor-header-utility"
-            className="flex items-center gap-1 border-l border-white/10 pl-2"
+            className="flex items-center gap-2 border-l border-border pl-3"
           >
             <Button
-              variant="ghost"
               type="button"
               onClick={reset}
               disabled={busy}
               aria-label="Reset"
-              className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5 disabled:opacity-50"
+              size="sm"
+              variant="outline"
             >
               <RotateCcw size={13} />
               Reset
             </Button>
             {onClose && (
               <Button
-                variant="ghost"
                 type="button"
                 onClick={onClose}
                 aria-label="Close editor"
                 title="Close editor"
-                className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/5"
+                size="sm"
+                variant="outline"
               >
                 <X size={13} />
                 Close
@@ -2639,18 +2639,18 @@ export default function LocalEditorTab({
         </div>
       </div>
       {error && (
-        <div className="mx-6 mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+        <div className="mx-4 mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive-foreground">
           {error}
         </div>
       )}
       {projectStorageWarning && (
-        <div className="mx-6 mt-4 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+        <div className="mx-4 mt-3 rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
           {projectStorageWarning}
         </div>
       )}
       {projectSaveNotice && (
         <div
-          className="mx-6 mt-4 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-100"
+          className="mx-4 mt-3 rounded-md border border-border bg-secondary px-3 py-2 text-xs text-secondary-foreground"
           role="status"
         >
           {projectSaveNotice}
@@ -2666,7 +2666,7 @@ export default function LocalEditorTab({
       <div
         ref={workspaceRef}
         data-testid="local-editor-workspace"
-        className="relative grid min-h-0 flex-1 gap-2 overflow-hidden p-0 xl:grid-cols-[auto_var(--local-editor-inspector-width)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)_minmax(280px,40vh)]"
+        className="relative grid min-h-0 flex-1 gap-2 overflow-hidden p-2 xl:grid-cols-[auto_var(--local-editor-inspector-width)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)_minmax(280px,40vh)]"
         style={{
           "--local-editor-inspector-width": inspectorWidth
             ? `${inspectorWidth}px`
@@ -2692,12 +2692,12 @@ export default function LocalEditorTab({
               className={
                 isFullscreen
                   ? "fixed inset-0 z-50 flex flex-col overflow-hidden bg-black p-4"
-                  : "mx-auto flex h-full max-h-full w-full flex-col overflow-hidden rounded-none border border-white/10 bg-[#242424] shadow-2xl"
+                  : "mx-auto flex h-full max-h-full w-full flex-col overflow-hidden rounded-lg border border-border bg-black shadow-sm"
               }
             >
               <div
                 data-testid="local-editor-player-stage"
-                className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#242424]"
+                className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted"
               >
                 <div
                   ref={previewCanvasRef}
@@ -2897,14 +2897,14 @@ export default function LocalEditorTab({
               </div>
               <div
                 data-testid="local-editor-video-controls"
-                className="relative z-30 grid h-9 min-h-0 flex-none grid-cols-[1fr_auto_1fr] items-center border-t border-white/10 bg-[#202126]/95 px-2 py-0.5 text-zinc-300 shadow-lg backdrop-blur"
+                className="relative z-30 grid h-10 min-h-0 flex-none grid-cols-[1fr_auto_1fr] items-center border-t border-border bg-card px-2 py-1 text-muted-foreground"
               >
                 <div className="flex min-w-0 items-center gap-1">
                   <span
                     data-testid="local-editor-timecode"
-                    className="whitespace-nowrap font-mono text-[10px] text-zinc-400"
+                    className="whitespace-nowrap font-mono text-xs text-muted-foreground"
                   >
-                    <span className="text-cyan-400">
+                    <span className="text-foreground">
                       {formatClock(playheadMs, remotionFps)}
                     </span>{" "}
                     / {formatClock(durationMs, remotionFps)}
@@ -2917,7 +2917,8 @@ export default function LocalEditorTab({
                     aria-label="Go to beginning"
                     title="Go to beginning"
                     onClick={() => handleSeek(0)}
-                    className="rounded p-1 hover:bg-white/10 hover:text-white"
+                    size="icon"
+                    className="size-8"
                   >
                     <SkipBack size={15} />
                   </Button>
@@ -2927,7 +2928,8 @@ export default function LocalEditorTab({
                     aria-label="Rewind 5 seconds"
                     title="Rewind 5 seconds"
                     onClick={() => seekBy(-5000)}
-                    className="rounded p-1 hover:bg-white/10 hover:text-white"
+                    size="icon"
+                    className="size-8"
                   >
                     <Rewind size={15} />
                   </Button>
@@ -2937,7 +2939,8 @@ export default function LocalEditorTab({
                     aria-label={isPlaying ? "Pause video" : "Play video"}
                     title={isPlaying ? "Pause video" : "Play video"}
                     onClick={togglePlayback}
-                    className="rounded p-1 hover:bg-white/10 hover:text-white"
+                    size="icon"
+                    className="size-8"
                   >
                     {isPlaying ? <Pause size={15} /> : <Play size={15} />}
                   </Button>
@@ -2947,7 +2950,8 @@ export default function LocalEditorTab({
                     aria-label="Stop video"
                     title="Stop video"
                     onClick={stopVideo}
-                    className="rounded p-1 hover:bg-white/10 hover:text-white"
+                    size="icon"
+                    className="size-8"
                   >
                     <Square size={14} />
                   </Button>
@@ -2957,7 +2961,8 @@ export default function LocalEditorTab({
                     aria-label="Fast forward 5 seconds"
                     title="Fast forward 5 seconds"
                     onClick={() => seekBy(5000)}
-                    className="rounded p-1 hover:bg-white/10 hover:text-white"
+                    size="icon"
+                    className="size-8"
                   >
                     <FastForward size={15} />
                   </Button>
@@ -2967,7 +2972,8 @@ export default function LocalEditorTab({
                     aria-label="Go to end"
                     title="Go to end"
                     onClick={() => handleSeek(durationMs)}
-                    className="rounded p-1 hover:bg-white/10 hover:text-white"
+                    size="icon"
+                    className="size-8"
                   >
                     <SkipForward size={15} />
                   </Button>
@@ -2977,7 +2983,8 @@ export default function LocalEditorTab({
                     aria-label={isLooping ? "Disable loop" : "Enable loop"}
                     title={isLooping ? "Disable loop" : "Enable loop"}
                     onClick={toggleLoop}
-                    className={`rounded p-1 hover:bg-white/10 hover:text-white ${isLooping ? "text-fuchsia-300" : ""}`}
+                    size="icon"
+                    className={`size-8 ${isLooping ? "bg-secondary text-secondary-foreground" : ""}`}
                   >
                     <Repeat size={15} />
                   </Button>
@@ -2985,7 +2992,6 @@ export default function LocalEditorTab({
                 <div className="ml-auto flex items-center gap-0.5">
                   <div className="relative">
                     <Button
-                      variant="ghost"
                       type="button"
                       aria-label="Playback speed"
                       aria-haspopup="listbox"
@@ -2997,10 +3003,10 @@ export default function LocalEditorTab({
                         if (event.key === "Escape")
                           setPlaybackRateMenuOpen(false);
                       }}
-                      className="flex h-7 min-h-7 shrink-0 items-center gap-1 rounded-md border border-white/10 bg-white/[.02] px-2 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100"
+                      className="h-8 min-h-8 shrink-0 px-2 text-xs"
                     >
                       <span>Speed</span>
-                      <span className="font-medium text-zinc-100">
+                      <span className="font-medium text-foreground">
                         {playbackRate.toFixed(2)}x
                       </span>
                       <ChevronDown
@@ -3012,7 +3018,7 @@ export default function LocalEditorTab({
                       <div
                         role="listbox"
                         aria-label="Playback speed options"
-                        className="absolute bottom-8 right-0 z-40 min-w-full overflow-hidden rounded-md border border-white/10 bg-[#1b1b20] p-1 shadow-xl"
+                        className="absolute bottom-9 right-0 z-40 min-w-full overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
                       >
                         {PLAYBACK_RATES.map((rate) => (
                           <Button
@@ -3025,7 +3031,7 @@ export default function LocalEditorTab({
                               setPlaybackRate(rate);
                               setPlaybackRateMenuOpen(false);
                             }}
-                            className={`block w-full rounded px-2 py-1.5 text-left text-[11px] ${playbackRate === rate ? "bg-violet-500/20 text-violet-200" : "text-zinc-300 hover:bg-white/10 hover:text-white"}`}
+                            className={`h-8 w-full justify-start px-2 text-xs ${playbackRate === rate ? "bg-accent text-accent-foreground" : ""}`}
                           >
                             {rate.toFixed(2)}x
                           </Button>
@@ -3039,7 +3045,8 @@ export default function LocalEditorTab({
                     aria-label={isMuted ? "Unmute video" : "Mute video"}
                     title={isMuted ? "Unmute video" : "Mute video"}
                     onClick={toggleMute}
-                    className="rounded p-1 text-zinc-400 hover:bg-white/10 hover:text-white"
+                    size="icon"
+                    className="size-8"
                   >
                     {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
                   </Button>
@@ -3057,7 +3064,7 @@ export default function LocalEditorTab({
                     }
                     title={"Change preview fit (" + videoViewLabel + ")"}
                     onClick={cycleVideoViewMode}
-                    className="rounded px-1.5 py-1 text-[10px] font-semibold hover:bg-white/10 hover:text-white"
+                    className="h-8 px-2 text-xs"
                   >
                     Full
                   </Button>
@@ -3074,10 +3081,10 @@ export default function LocalEditorTab({
                       onClick={() =>
                         setSafetyGridVisible((visible) => !visible)
                       }
-                      className={`flex h-7 min-h-7 shrink-0 items-center rounded-md border px-2 text-[10px] font-medium transition-colors ${
+                      className={`h-8 min-h-8 shrink-0 px-2 text-xs ${
                         safetyGridVisible
-                          ? "border-violet-300/30 bg-violet-400/10 text-violet-100"
-                          : "border-white/10 bg-white/[.02] text-zinc-400 hover:border-white/20 hover:text-zinc-100"
+                          ? "bg-secondary text-secondary-foreground"
+                          : ""
                       }`}
                     >
                       Grid
@@ -3091,7 +3098,7 @@ export default function LocalEditorTab({
                       onChange={(event) =>
                         changeAspectRatio(event.target.value)
                       }
-                      className="max-w-[118px] rounded-sm border border-zinc-500/70 bg-[#2b2b2b] px-1 py-0.5 text-[10px] font-medium leading-none text-zinc-300 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] hover:border-zinc-300 hover:bg-[#343434] hover:text-white"
+                      className="h-8 max-w-[132px] text-xs"
                     >
                       {LOCAL_EDITOR_ASPECT_RATIOS.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -3113,7 +3120,8 @@ export default function LocalEditorTab({
                     title={
                       isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
                     }
-                    className="rounded p-1 text-zinc-400 hover:bg-white/10 hover:text-white"
+                    size="icon"
+                    className="size-8"
                   >
                     {isFullscreen ? (
                       <Minimize2 size={14} />
@@ -3133,15 +3141,15 @@ export default function LocalEditorTab({
               data-testid="local-editor-subtitle-workspace"
               tabIndex={0}
               onKeyDown={handleTimelineKeyDown}
-              className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-none border border-white/10 bg-[#101014]"
+              className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card"
             >
               <div
                 data-testid="local-editor-subtitle-toolbar"
-                className="flex h-9 flex-none items-center justify-between border-b border-white/10 px-2"
+                className="flex h-10 flex-none items-center justify-between border-b border-border px-2"
               >
                 <div
                   data-testid="local-editor-timeline-actions"
-                  className="flex h-7 items-center gap-0.5 text-zinc-500"
+                  className="flex h-8 items-center gap-0.5 text-muted-foreground"
                 >
                   <Button
                     variant="ghost"
@@ -3149,7 +3157,8 @@ export default function LocalEditorTab({
                     aria-label="Add cue to timeline"
                     title="Add cue to timeline"
                     onClick={addSubtitleCue}
-                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white"
+                    size="icon"
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-accent hover:text-accent-foreground"
                   >
                     <Plus size={15} />
                   </Button>
@@ -3158,7 +3167,8 @@ export default function LocalEditorTab({
                     type="button"
                     aria-label="Select timeline tool"
                     title="Select timeline tool"
-                    className="flex h-7 w-7 items-center justify-center rounded bg-white/10 text-zinc-200"
+                    size="icon"
+                    className="size-7 rounded-md bg-secondary text-secondary-foreground"
                   >
                     <MousePointer2 size={14} />
                   </Button>
@@ -3173,7 +3183,7 @@ export default function LocalEditorTab({
                     }
                     aria-pressed={Boolean(activeMarker)}
                     onClick={toggleMarker}
-                    className={`flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white ${activeMarker ? "bg-amber-300/15 text-amber-200" : ""}`}
+                    className={`flex h-7 w-7 items-center justify-center rounded hover:bg-accent hover:text-accent-foreground ${activeMarker ? "bg-secondary text-primary" : ""}`}
                   >
                     <Bookmark
                       size={14}
@@ -3181,7 +3191,7 @@ export default function LocalEditorTab({
                     />
                   </Button>
                   <span
-                    className="mx-1 h-5 w-px bg-white/10"
+                    className="mx-1 h-5 w-px bg-border"
                     aria-hidden="true"
                   />
                   <Button
@@ -3191,7 +3201,8 @@ export default function LocalEditorTab({
                     disabled={busy || editHistory.past.length === 0}
                     aria-label="Timeline undo"
                     title="Timeline undo (Ctrl/Cmd+Z)"
-                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                    size="icon"
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <Undo2 size={15} />
                   </Button>
@@ -3202,12 +3213,13 @@ export default function LocalEditorTab({
                     disabled={busy || editHistory.future.length === 0}
                     aria-label="Timeline redo"
                     title="Timeline redo (Ctrl/Cmd+Shift+Z)"
-                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                    size="icon"
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <Redo2 size={15} />
                   </Button>
                   <span
-                    className="mx-1 h-5 w-px bg-white/10"
+                    className="mx-1 h-5 w-px bg-border"
                     aria-hidden="true"
                   />
                   <Button
@@ -3219,12 +3231,13 @@ export default function LocalEditorTab({
                     }
                     aria-label="Remove selected cue"
                     title="Remove selected cue"
-                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                    size="icon"
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <Trash2 size={14} />
                   </Button>
                   <span
-                    className="mx-1 h-5 w-px bg-white/10"
+                    className="mx-1 h-5 w-px bg-border"
                     aria-hidden="true"
                   />
                   <Button
@@ -3251,7 +3264,8 @@ export default function LocalEditorTab({
                         ? !canSplitSelectedLayout
                         : !selectedSubtitleCueIsEditable)
                     }
-                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                    size="icon"
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <Split size={14} />
                   </Button>
@@ -3262,7 +3276,8 @@ export default function LocalEditorTab({
                     title="Delete left of playhead (Q)"
                     onClick={() => applyCueAction("delete-left")}
                     disabled={busy || !selectedSubtitleCueIsEditable}
-                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                    size="icon"
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <PanelLeftClose size={14} />
                   </Button>
@@ -3273,12 +3288,13 @@ export default function LocalEditorTab({
                     title="Delete right of playhead (W)"
                     onClick={() => applyCueAction("delete-right")}
                     disabled={busy || !selectedSubtitleCueIsEditable}
-                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                    size="icon"
+                    className="flex h-7 w-7 items-center justify-center rounded hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <PanelRightClose size={14} />
                   </Button>
                   <span
-                    className="mx-1 h-5 w-px bg-white/10"
+                    className="mx-1 h-5 w-px bg-border"
                     aria-hidden="true"
                   />
                   {selectedLayoutSegment && (
@@ -3286,10 +3302,13 @@ export default function LocalEditorTab({
                       role="group"
                       aria-label="Layout type"
                       data-testid="local-editor-layout-type-controls"
-                      className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-cyan-300/20 bg-cyan-400/[.04] px-1 text-[10px] text-zinc-400"
+                      className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-input bg-muted px-1 text-[10px] text-muted-foreground"
                     >
-                      <span className="px-1 text-zinc-500">Layout</span>
-                      <span className="text-zinc-600" aria-hidden="true">
+                      <span className="px-1 text-muted-foreground">Layout</span>
+                      <span
+                        className="text-muted-foreground"
+                        aria-hidden="true"
+                      >
                         |
                       </span>
                       <Button
@@ -3301,7 +3320,7 @@ export default function LocalEditorTab({
                         }
                         onClick={() => handleLayoutFormatChange("standard")}
                         disabled={busy}
-                        className={`inline-flex h-6 items-center rounded px-1.5 transition-colors hover:bg-white/10 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.format === "standard" ? "bg-cyan-300/20 text-cyan-100" : "text-zinc-400"}`}
+                        className={`inline-flex h-6 items-center rounded px-1.5 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.format === "standard" ? "bg-secondary text-primary-foreground" : "text-muted-foreground"}`}
                       >
                         Standard
                       </Button>
@@ -3333,7 +3352,7 @@ export default function LocalEditorTab({
                               true &&
                               faceTrackingReady === false)
                           }
-                          className={`ml-1 inline-flex h-6 items-center gap-1 rounded border border-cyan-300/20 px-1.5 transition-colors hover:bg-cyan-300/15 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.face_tracking_enabled === true ? "text-cyan-100" : "text-zinc-400"}`}
+                          className={`ml-1 inline-flex h-6 items-center gap-1 rounded border border-input px-1.5 transition-colors hover:bg-accent hover:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.face_tracking_enabled === true ? "text-primary-foreground" : "text-muted-foreground"}`}
                         >
                           <span aria-hidden="true">Face</span>
                           {faceTrackingStatus[selectedLayoutSegment.id]
@@ -3345,7 +3364,10 @@ export default function LocalEditorTab({
                               : "Off"}
                         </Button>
                       )}
-                      <span className="text-zinc-600" aria-hidden="true">
+                      <span
+                        className="text-muted-foreground"
+                        aria-hidden="true"
+                      >
                         |
                       </span>
                       <Button
@@ -3359,7 +3381,7 @@ export default function LocalEditorTab({
                           handleLayoutFormatChange("streamer_stack")
                         }
                         disabled={busy}
-                        className={`inline-flex h-6 items-center rounded px-1.5 transition-colors hover:bg-white/10 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.format === "streamer_stack" ? "bg-cyan-300/20 text-cyan-100" : "text-zinc-400"}`}
+                        className={`inline-flex h-6 items-center rounded px-1.5 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment.format === "streamer_stack" ? "bg-secondary text-primary-foreground" : "text-muted-foreground"}`}
                       >
                         Streamer
                       </Button>
@@ -3371,7 +3393,7 @@ export default function LocalEditorTab({
                           title="Edit gameplay framing in preview"
                           onClick={beginGameplayFraming}
                           disabled={busy || !remotionPreviewProps}
-                          className="ml-1 inline-flex h-6 items-center gap-1 rounded border border-cyan-300/30 px-1.5 text-cyan-200 transition-colors hover:bg-cyan-300/15 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="ml-1 inline-flex h-6 items-center gap-1 rounded border border-input px-1.5 text-primary transition-colors hover:bg-accent hover:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           <Crop size={12} aria-hidden="true" />
                           Frame
@@ -3381,7 +3403,7 @@ export default function LocalEditorTab({
                   )}
                   {selectedLayoutSegment && (
                     <span
-                      className="mx-1 h-5 w-px bg-white/10"
+                      className="mx-1 h-5 w-px bg-border"
                       aria-hidden="true"
                     />
                   )}
@@ -3389,7 +3411,7 @@ export default function LocalEditorTab({
                     role="group"
                     aria-label="Transition effects"
                     data-testid="local-editor-transition-controls"
-                    className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-cyan-300/20 bg-cyan-400/[.04] px-1 text-[10px] text-zinc-400"
+                    className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-input bg-muted px-1 text-[10px] text-muted-foreground"
                   >
                     <Button
                       variant="ghost"
@@ -3401,7 +3423,7 @@ export default function LocalEditorTab({
                         updateSelectedLayout({ transition: "cut" })
                       }
                       disabled={busy || !selectedLayoutSegment}
-                      className={`inline-flex h-6 items-center gap-1 rounded px-1.5 transition-colors hover:bg-white/10 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment?.transition === "cut" ? "bg-cyan-300/20 text-cyan-100" : "text-zinc-400"}`}
+                      className={`inline-flex h-6 items-center gap-1 rounded px-1.5 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment?.transition === "cut" ? "bg-secondary text-primary-foreground" : "text-muted-foreground"}`}
                     >
                       <Scissors
                         size={12}
@@ -3422,7 +3444,7 @@ export default function LocalEditorTab({
                         updateSelectedLayout({ transition: "crossfade" })
                       }
                       disabled={busy || !selectedLayoutSegment}
-                      className={`inline-flex h-6 items-center gap-1 rounded px-1.5 transition-colors hover:bg-white/10 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment?.transition === "crossfade" ? "bg-cyan-300/20 text-cyan-100" : "text-zinc-400"}`}
+                      className={`inline-flex h-6 items-center gap-1 rounded px-1.5 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 ${selectedLayoutSegment?.transition === "crossfade" ? "bg-secondary text-primary-foreground" : "text-muted-foreground"}`}
                     >
                       <Blend
                         size={12}
@@ -3449,7 +3471,7 @@ export default function LocalEditorTab({
                           })
                         }
                         disabled={busy}
-                        className="h-6 w-14 rounded border border-white/10 bg-black/20 px-1 text-[10px] text-zinc-200 outline-none focus:border-cyan-300/60"
+                        className="h-6 w-14 rounded border border-border bg-background px-1 text-[10px] text-foreground outline-none focus:border-cyan-300/60"
                       />
                     )}
                   </div>
@@ -3458,7 +3480,7 @@ export default function LocalEditorTab({
                   {subtitleView === "timeline" && (
                     <div
                       data-testid="local-editor-timeline-zoom-controls"
-                      className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-white/10 bg-black/20 px-0.5 text-zinc-400"
+                      className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-border bg-background px-0.5 text-muted-foreground"
                     >
                       <Button
                         variant="ghost"
@@ -3466,7 +3488,8 @@ export default function LocalEditorTab({
                         aria-label="Fit timeline to window"
                         title="Fit timeline to window"
                         onClick={() => timelineApiRef.current?.zoomToFit()}
-                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white"
+                        size="icon"
+                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-accent hover:text-accent-foreground"
                       >
                         <FileScan size={14} />
                       </Button>
@@ -3476,7 +3499,8 @@ export default function LocalEditorTab({
                         aria-label="Reset timeline zoom"
                         title="Reset timeline zoom"
                         onClick={() => setTimelineZoom(1)}
-                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white"
+                        size="icon"
+                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-accent hover:text-accent-foreground"
                       >
                         <FileScan size={14} className="opacity-70" />
                       </Button>
@@ -3497,7 +3521,8 @@ export default function LocalEditorTab({
                           )
                         }
                         disabled={timelineZoom <= MIN_TIMELINE_ZOOM}
-                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                        size="icon"
+                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-35"
                       >
                         <ZoomOut size={14} />
                       </Button>
@@ -3530,7 +3555,8 @@ export default function LocalEditorTab({
                           )
                         }
                         disabled={timelineZoom >= MAX_TIMELINE_ZOOM}
-                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                        size="icon"
+                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-35"
                       >
                         <ZoomIn size={14} />
                       </Button>
@@ -3551,7 +3577,7 @@ export default function LocalEditorTab({
                           }
                           className="peer sr-only"
                         />
-                        <span className="flex h-7 items-center rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors group-hover:border-white/20 group-hover:text-zinc-200 peer-checked:border-violet-400/50 peer-checked:bg-violet-500/15 peer-checked:text-violet-200">
+                        <span className="flex h-7 items-center rounded-md border border-border px-2 text-[10px] text-muted-foreground transition-colors group-hover:border-input group-hover:text-foreground peer-checked:border-primary peer-checked:bg-secondary peer-checked:text-primary">
                           Loop
                         </span>
                       </label>
@@ -3565,7 +3591,7 @@ export default function LocalEditorTab({
                           }
                           className="peer sr-only"
                         />
-                        <span className="flex h-7 items-center rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors group-hover:border-white/20 group-hover:text-zinc-200 peer-checked:border-violet-400/50 peer-checked:bg-violet-500/15 peer-checked:text-violet-200">
+                        <span className="flex h-7 items-center rounded-md border border-border px-2 text-[10px] text-muted-foreground transition-colors group-hover:border-input group-hover:text-foreground peer-checked:border-primary peer-checked:bg-secondary peer-checked:text-primary">
                           Follow
                         </span>
                       </label>
@@ -3576,7 +3602,7 @@ export default function LocalEditorTab({
                         title="Scroll to current subtitle"
                         onClick={scrollToCurrentSubtitle}
                         disabled={!subtitleCues.length}
-                        className="flex h-7 shrink-0 items-center rounded-md border border-white/10 px-2 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="flex h-7 shrink-0 items-center rounded-md border border-border px-2 text-[10px] text-muted-foreground transition-colors hover:border-input hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         Current
                       </Button>
@@ -3585,27 +3611,29 @@ export default function LocalEditorTab({
                   <div
                     role="tablist"
                     aria-label="Subtitle editing view"
-                    className="flex h-7 shrink-0 rounded border border-white/10 bg-black/20 p-0.5"
+                    className="flex h-7 shrink-0 rounded border border-border bg-background p-0.5"
                   >
                     <Button
-                      variant="ghost"
                       type="button"
                       role="tab"
                       aria-label="Timeline view"
                       aria-selected={subtitleView === "timeline"}
                       onClick={() => setSubtitleView("timeline")}
-                      className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === "timeline" ? "bg-white text-black" : "text-zinc-400 hover:bg-white/10 hover:text-white"}`}
+                      variant={
+                        subtitleView === "timeline" ? "secondary" : "ghost"
+                      }
+                      className="h-7 px-2 text-xs"
                     >
                       Timeline
                     </Button>
                     <Button
-                      variant="ghost"
                       type="button"
                       role="tab"
                       aria-label="Subtitle table view"
                       aria-selected={subtitleView === "table"}
                       onClick={() => setSubtitleView("table")}
-                      className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${subtitleView === "table" ? "bg-violet-500 text-white" : "text-zinc-400 hover:bg-white/10 hover:text-white"}`}
+                      variant={subtitleView === "table" ? "secondary" : "ghost"}
+                      className="h-7 px-2 text-xs"
                     >
                       Cue table
                     </Button>
@@ -3736,7 +3764,7 @@ export default function LocalEditorTab({
               />
             </div>
             <section
-              className={`overflow-hidden rounded-xl border border-white/10 bg-white/[.02] ${activeFeature === "subtitles" ? "" : "sr-only"}`}
+              className={`overflow-hidden rounded-xl border border-border bg-card ${activeFeature === "subtitles" ? "" : "sr-only"}`}
             >
               <div className="flex items-center justify-between gap-3 px-4 py-3.5">
                 <Button
@@ -3748,10 +3776,10 @@ export default function LocalEditorTab({
                   onClick={() => setSubtitleView("table")}
                   className="flex min-w-0 items-center gap-2 text-left"
                 >
-                  <span className="truncate text-sm font-semibold text-white">
+                  <span className="truncate text-sm font-semibold text-foreground">
                     Subtitles
                   </span>
-                  <span className="shrink-0 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+                  <span className="shrink-0 rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                     {subtitleCues.length}{" "}
                     {subtitleCues.length === 1 ? "cue" : "cues"}
                   </span>
@@ -3764,7 +3792,7 @@ export default function LocalEditorTab({
                       aria-label="Export Subtitles"
                       onClick={exportSubtitles}
                       disabled={busy}
-                      className="flex h-7 items-center gap-1 rounded-md border border-violet-400/30 px-2 text-[11px] font-semibold text-violet-200 transition-colors hover:border-violet-300/60 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="flex h-7 items-center gap-1 rounded-md border border-input px-2 text-[11px] font-semibold text-primary transition-colors hover:border-input hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <Download size={14} aria-hidden="true" />
                       Export
@@ -3776,7 +3804,8 @@ export default function LocalEditorTab({
                     aria-label="Open subtitle table"
                     title="Open subtitle table"
                     onClick={() => setSubtitleView("table")}
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-violet-300 transition-colors hover:bg-violet-500/10 hover:text-violet-200"
+                    size="icon"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-primary transition-colors hover:bg-accent hover:text-primary"
                   >
                     <FileText size={16} aria-hidden="true" />
                   </Button>
@@ -3784,9 +3813,9 @@ export default function LocalEditorTab({
               </div>
               <div
                 id="subtitle-settings-panel"
-                className="border-t border-white/10 px-4 pb-4"
+                className="border-t border-border px-4 pb-4"
               >
-                <section className="border-b border-white/10 pb-3">
+                <section className="border-b border-border pb-3">
                   <Button
                     variant="ghost"
                     type="button"
@@ -3798,9 +3827,9 @@ export default function LocalEditorTab({
                   >
                     <ChevronDown
                       size={15}
-                      className={`shrink-0 text-violet-300 transition-transform ${subtitleTrackActionsOpen ? "" : "-rotate-90"}`}
+                      className={`shrink-0 text-primary transition-transform ${subtitleTrackActionsOpen ? "" : "-rotate-90"}`}
                     />
-                    <span className="text-xs font-semibold text-zinc-100">
+                    <span className="text-xs font-semibold text-foreground">
                       Track
                     </span>
                   </Button>
@@ -3818,7 +3847,7 @@ export default function LocalEditorTab({
                           importSubtitleFile(file);
                         }}
                       />
-                      <label className="mb-3 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                      <label className="mb-3 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                         Audio language
                         <div className="relative mt-1.5">
                           <NativeSelect
@@ -3827,7 +3856,7 @@ export default function LocalEditorTab({
                             onChange={handleTranscriptionLanguageChange}
                             disabled={generatingSubtitles}
                             style={{ colorScheme: "dark" }}
-                            className="w-full appearance-none rounded-md border border-white/10 bg-transparent px-2.5 py-2 pr-8 text-xs text-zinc-200 outline-none transition-colors hover:border-white/20 focus:border-violet-300/50 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="w-full"
                           >
                             <option
                               value="auto"
@@ -3853,10 +3882,6 @@ export default function LocalEditorTab({
                               ),
                             )}
                           </NativeSelect>
-                          <ChevronDown
-                            size={14}
-                            className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
-                          />
                         </div>
                       </label>
                       <div className="grid grid-cols-2 gap-2">
@@ -3864,7 +3889,7 @@ export default function LocalEditorTab({
                           variant="ghost"
                           type="button"
                           onClick={handleImport}
-                          className="flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-transparent px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-violet-300/30 hover:bg-white/[.04] hover:text-violet-200"
+                          className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-input hover:bg-accent hover:text-primary"
                         >
                           <Upload size={14} />
                           Import subtitles
@@ -3877,7 +3902,7 @@ export default function LocalEditorTab({
                             generatingSubtitles ||
                             (!videoFile && !hasProjectClipSource)
                           }
-                          className="flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-transparent px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-fuchsia-300/30 hover:bg-white/[.04] hover:text-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-fuchsia-300/30 hover:bg-accent hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {generatingSubtitles ? (
                             <Loader2 size={14} className="animate-spin" />
@@ -3899,7 +3924,7 @@ export default function LocalEditorTab({
                           generatingReactions ||
                           !reactionRequestCues(subtitleCues).length
                         }
-                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-violet-300/20 bg-violet-400/10 px-3 py-2 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-violet-300/20 bg-accent px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {generatingReactions ? (
                           <Loader2 size={14} className="animate-spin" />
@@ -3917,13 +3942,16 @@ export default function LocalEditorTab({
                           aria-label="Edit applied reactions"
                           onClick={editAppliedReactions}
                           disabled={busy || generatingReactions}
-                          className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-transparent px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-violet-300/30 hover:bg-white/[.04] hover:text-violet-200 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-input hover:bg-accent hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Edit applied reactions
                         </Button>
                       )}
                       {reactionError && (
-                        <p className="mt-2 text-xs text-red-300" role="alert">
+                        <p
+                          className="mt-2 text-xs text-destructive"
+                          role="alert"
+                        >
                           {reactionError}
                         </p>
                       )}
@@ -3934,24 +3962,24 @@ export default function LocalEditorTab({
                           aria-label="Clean subtitle dots"
                           onClick={cleanSubtitleDots}
                           disabled={busy || !subtitleCues.length}
-                          className="flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-transparent px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-amber-300/30 hover:bg-white/[.04] hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-amber-300/30 hover:bg-accent hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Clean subtitle dots
                         </Button>
                       </div>
                       {pendingSubtitle && (
-                        <p className="mt-2 truncate text-xs text-violet-300">
+                        <p className="mt-2 truncate text-xs text-primary">
                           Ready: {pendingSubtitle.name}
                         </p>
                       )}
-                      <div className="mt-3 border-t border-white/10 pt-3">
-                        <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                          <Languages size={14} className="text-cyan-300" />
+                      <div className="mt-3 border-t border-border pt-3">
+                        <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          <Languages size={14} className="text-primary" />
                           Translate
                         </div>
                         <div className="space-y-3">
                           <div className="grid grid-cols-2 gap-2">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                               Source
                               <div className="relative mt-1.5">
                                 <NativeSelect
@@ -3962,7 +3990,7 @@ export default function LocalEditorTab({
                                   }
                                   disabled={translatingSubtitles}
                                   style={{ colorScheme: "dark" }}
-                                  className="w-full appearance-none rounded-md border border-white/10 bg-transparent px-2.5 py-2 pr-8 text-xs text-zinc-200 outline-none transition-colors hover:border-white/20 focus:border-cyan-300/50"
+                                  className="w-full"
                                 >
                                   {Object.entries(SUBTITLE_LANGUAGES).map(
                                     ([code, name]) => (
@@ -3979,13 +4007,9 @@ export default function LocalEditorTab({
                                     ),
                                   )}
                                 </NativeSelect>
-                                <ChevronDown
-                                  size={14}
-                                  className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
-                                />
                               </div>
                             </label>
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                               Target
                               <div className="relative mt-1.5">
                                 <NativeSelect
@@ -3996,7 +4020,7 @@ export default function LocalEditorTab({
                                   }
                                   disabled={translatingSubtitles}
                                   style={{ colorScheme: "dark" }}
-                                  className="w-full appearance-none rounded-md border border-white/10 bg-transparent px-2.5 py-2 pr-8 text-xs text-zinc-200 outline-none transition-colors hover:border-white/20 focus:border-cyan-300/50"
+                                  className="w-full"
                                 >
                                   {Object.entries(SUBTITLE_LANGUAGES).map(
                                     ([code, name]) => (
@@ -4020,10 +4044,6 @@ export default function LocalEditorTab({
                                     ),
                                   )}
                                 </NativeSelect>
-                                <ChevronDown
-                                  size={14}
-                                  className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
-                                />
                               </div>
                             </label>
                           </div>
@@ -4037,7 +4057,7 @@ export default function LocalEditorTab({
                               !subtitleCues.length ||
                               translationTarget === subtitleLanguage
                             }
-                            className="flex w-full items-center justify-center gap-2 rounded-md border border-cyan-300/20 bg-cyan-400/10 px-3 py-2 text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-45"
+                            className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-accent px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-45"
                           >
                             {translatingSubtitles ? (
                               <Loader2 size={14} className="animate-spin" />
@@ -4054,7 +4074,7 @@ export default function LocalEditorTab({
                   )}
                 </section>
                 {reactionReview && (
-                  <div className="border-b border-white/10 py-3">
+                  <div className="border-b border-border py-3">
                     <SubtitleReactionReviewPanel
                       suggestions={reactionReview}
                       style={reactionReviewStyle}
@@ -4094,9 +4114,9 @@ export default function LocalEditorTab({
                   >
                     <ChevronDown
                       size={15}
-                      className={`shrink-0 text-violet-300 transition-transform ${cueEditingOpen ? "" : "-rotate-90"}`}
+                      className={`shrink-0 text-primary transition-transform ${cueEditingOpen ? "" : "-rotate-90"}`}
                     />
-                    <span className="text-xs font-semibold text-zinc-100">
+                    <span className="text-xs font-semibold text-foreground">
                       Style
                     </span>
                   </Button>
@@ -4116,7 +4136,7 @@ export default function LocalEditorTab({
               </div>
             </section>
             <section
-              className={`overflow-hidden rounded-xl border border-white/10 bg-white/[.02] ${activeFeature === "viral-hook" ? "" : "sr-only"}`}
+              className={`overflow-hidden rounded-xl border border-border bg-card ${activeFeature === "viral-hook" ? "" : "sr-only"}`}
             >
               <div className="flex items-center justify-between gap-3 px-4 py-3.5">
                 <Button
@@ -4130,12 +4150,12 @@ export default function LocalEditorTab({
                 >
                   <ChevronDown
                     size={15}
-                    className={`text-amber-300 transition-transform ${hookOpen ? "" : "-rotate-90"}`}
+                    className={`text-primary transition-transform ${hookOpen ? "" : "-rotate-90"}`}
                   />
-                  <span className="truncate text-sm font-semibold text-white">
+                  <span className="truncate text-sm font-semibold text-foreground">
                     Viral Hook
                   </span>
-                  <span className="shrink-0 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+                  <span className="shrink-0 rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                     {hook ? "Set" : "Not set"}
                   </span>
                 </Button>
@@ -4143,7 +4163,7 @@ export default function LocalEditorTab({
                   variant="ghost"
                   type="button"
                   onClick={addHook}
-                  className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-amber-400/30 px-2 text-[11px] font-semibold text-amber-200 transition-colors hover:border-amber-300/60 hover:bg-amber-500/10"
+                  className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-input px-2 text-[11px] font-semibold text-primary transition-colors hover:border-input hover:bg-amber-500/10"
                 >
                   {hook ? <RotateCcw size={12} /> : <Plus size={12} />}
                   {hook ? "Reset hook" : "Add Viral Hook"}
@@ -4152,7 +4172,7 @@ export default function LocalEditorTab({
               {hookOpen && (
                 <div
                   id="viral-hook-settings-panel"
-                  className="border-t border-white/10 px-4 pb-4 pt-3"
+                  className="border-t border-border px-4 pb-4 pt-3"
                 >
                   <LocalEditorHookInspector
                     hook={selected?.type === "hook" ? selectedCue : hook}
@@ -4170,7 +4190,7 @@ export default function LocalEditorTab({
               className={`space-y-4 ${activeFeature === "project" ? "" : "sr-only"}`}
             >
               {sidePanel || (
-                <p className="border-b border-white/10 pb-3 text-xs leading-5 text-zinc-500">
+                <p className="border-b border-border pb-3 text-xs leading-5 text-muted-foreground">
                   Open the editor from a project to see project actions.
                 </p>
               )}
@@ -4181,7 +4201,7 @@ export default function LocalEditorTab({
               className={`space-y-4 ${activeFeature === "versions" ? "" : "sr-only"}`}
             >
               {renderedVersionHistoryPanel || (
-                <p className="rounded-xl border border-white/10 bg-white/[.02] p-4 text-xs leading-5 text-zinc-500">
+                <p className="rounded-xl border border-border bg-card p-4 text-xs leading-5 text-muted-foreground">
                   Version history is available for saved project versions.
                 </p>
               )}
@@ -4190,7 +4210,7 @@ export default function LocalEditorTab({
         </aside>
       </div>
       {footer && (
-        <div className="border-t border-white/10 px-6 py-3">{footer}</div>
+        <div className="border-t border-border px-6 py-3">{footer}</div>
       )}
       {projectsDialog}
       {editingSubtitle && (

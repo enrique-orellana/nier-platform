@@ -9,7 +9,7 @@ import {
 } from "./localEditorStyles";
 import { getSubtitlePositionCoordinates } from "../../remotion/lib/subtitlePosition";
 import { cleanChoiceClass, cleanLabelClass } from "./localEditorUtils";
-import { Button, Input, NativeSelect } from "../ui";
+import { Button, Input, NativeSelect, Switch } from "../ui";
 
 export default function LocalEditorSubtitleStyleInspector({
   style,
@@ -65,7 +65,7 @@ export default function LocalEditorSubtitleStyleInspector({
   };
   return (
     <div className="space-y-5">
-      <div className="border-b border-white/10 pb-4">
+      <div className="border-b border-border pb-4">
         <span className={cleanLabelClass}>Quick picks</span>
         <div className="grid grid-cols-2 gap-2">
           {SUBTITLE_STYLE_TEMPLATES.map((template) => {
@@ -74,16 +74,16 @@ export default function LocalEditorSubtitleStyleInspector({
             );
             return (
               <Button
-                variant="ghost"
+                variant={isActive ? "secondary" : "outline"}
                 key={template.id}
                 type="button"
                 aria-label={template.ariaLabel}
                 title={template.description}
                 onClick={() => applyTemplate(template)}
-                className={`flex min-h-[58px] items-center gap-2 rounded-lg border p-2 text-left transition-colors ${isActive ? "border-primary bg-primary/15" : "border-white/10 bg-white/[.02] hover:border-white/25 hover:bg-white/[.05]"}`}
+                className="h-auto min-h-[58px] justify-start whitespace-normal px-3 py-2 text-left"
               >
                 <span
-                  className="flex h-8 w-9 shrink-0 items-center justify-center rounded-md border text-sm font-bold"
+                  className="flex h-8 w-9 shrink-0 items-center justify-center rounded-md border border-border text-sm font-bold"
                   style={{
                     backgroundColor: template.preview.backgroundColor,
                     borderColor: template.preview.accent,
@@ -94,10 +94,10 @@ export default function LocalEditorSubtitleStyleInspector({
                   Aa
                 </span>
                 <span className="min-w-0">
-                  <span className="block truncate text-xs font-semibold text-zinc-100">
+                  <span className="block truncate text-xs font-semibold text-foreground">
                     {template.label}
                   </span>
-                  <span className="block truncate text-[10px] text-zinc-500">
+                  <span className="block truncate text-xs text-muted-foreground">
                     {template.description}
                   </span>
                 </span>
@@ -115,7 +115,7 @@ export default function LocalEditorSubtitleStyleInspector({
         >
           {["top", "middle", "bottom"].map((position) => (
             <Button
-              variant="ghost"
+              variant={current.position === position ? "secondary" : "outline"}
               key={position}
               type="button"
               onClick={() => selectPreset(position)}
@@ -126,7 +126,7 @@ export default function LocalEditorSubtitleStyleInspector({
           ))}
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <label className="text-xs text-zinc-400">
+          <label className="text-sm font-medium text-muted-foreground">
             X (px)
             <Input
               aria-label="Subtitle X position"
@@ -146,7 +146,7 @@ export default function LocalEditorSubtitleStyleInspector({
               className="mt-2"
             />
           </label>
-          <label className="text-xs text-zinc-400">
+          <label className="text-sm font-medium text-muted-foreground">
             Y (px)
             <Input
               aria-label="Subtitle Y position"
@@ -167,7 +167,7 @@ export default function LocalEditorSubtitleStyleInspector({
             />
           </label>
         </div>
-        <p className="mt-1 text-[10px] text-zinc-500">
+        <p className="mt-2 text-xs text-muted-foreground">
           Center point in a {renderWidth} × {renderHeight} video.
         </p>
       </div>
@@ -176,7 +176,9 @@ export default function LocalEditorSubtitleStyleInspector({
         <div className="grid grid-cols-2 gap-2">
           {SUBTITLE_ANIMATION_OPTIONS.map((option) => (
             <Button
-              variant="ghost"
+              variant={
+                current.animation === option.value ? "secondary" : "outline"
+              }
               key={option.value}
               type="button"
               onClick={() => update("animation", option.value)}
@@ -187,32 +189,22 @@ export default function LocalEditorSubtitleStyleInspector({
           ))}
         </div>
       </div>
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[.02] px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted px-3 py-3">
         <div>
-          <span className="block text-xs font-semibold text-zinc-200">
+          <span className="block text-sm font-medium text-foreground">
             One word at a time
           </span>
-          <span className="block text-[10px] text-zinc-500">
+          <span className="block text-xs text-muted-foreground">
             Show only the active timed word in the preview and export
           </span>
         </div>
-        <Button
-          variant="ghost"
-          type="button"
+        <Switch
           aria-label="One word at a time"
-          aria-pressed={current.displayMode === "single-word"}
-          onClick={() =>
-            update(
-              "displayMode",
-              current.displayMode === "single-word" ? "phrase" : "single-word",
-            )
+          checked={current.displayMode === "single-word"}
+          onCheckedChange={(checked) =>
+            update("displayMode", checked ? "single-word" : "phrase")
           }
-          className={`relative h-5 w-10 shrink-0 rounded-full transition-colors ${current.displayMode === "single-word" ? "bg-primary" : "bg-zinc-700"}`}
-        >
-          <span
-            className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${current.displayMode === "single-word" ? "translate-x-5" : ""}`}
-          />
-        </Button>
+        />
       </div>
       <div>
         <label className={cleanLabelClass}>
@@ -231,7 +223,7 @@ export default function LocalEditorSubtitleStyleInspector({
           </NativeSelect>
         </label>
       </div>
-      <label className="block text-xs text-zinc-400">
+      <label className="block text-sm font-medium text-muted-foreground">
         Font Size
         <Input
           aria-label="Subtitle font size"
@@ -266,15 +258,15 @@ export default function LocalEditorSubtitleStyleInspector({
               aria-label={`Use subtitle color ${preset.label}`}
               title={preset.label}
               onClick={() => update("fontColor", preset.color)}
-              className={`h-7 w-7 rounded-full border-2 transition-all ${current.fontColor.toUpperCase() === preset.color ? "scale-110 border-white" : "border-white/20 hover:border-white/50"}`}
+              className={`size-7 rounded-full border-2 transition-all ${current.fontColor.toUpperCase() === preset.color ? "scale-110 border-ring ring-2 ring-ring ring-offset-2 ring-offset-background" : "border-input hover:border-ring"}`}
               style={{ backgroundColor: preset.color }}
             />
           ))}
           <label
-            className="relative flex h-7 w-7 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-white/20 transition-all hover:border-white/50"
+            className="relative flex size-7 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-input transition-colors hover:border-ring"
             title="Custom color"
           >
-            <span className="text-[10px] text-zinc-400">+</span>
+            <span className="text-xs text-muted-foreground">+</span>
             <Input
               aria-label="Subtitle text color"
               type="color"
@@ -299,7 +291,7 @@ export default function LocalEditorSubtitleStyleInspector({
               aria-label={`Use subtitle highlight color ${preset.label}`}
               title={preset.label}
               onClick={() => update("highlightColor", preset.color)}
-              className={`h-7 w-7 rounded-full border-2 transition-all ${current.highlightColor.toUpperCase() === preset.color ? "scale-110 border-white" : "border-white/20 hover:border-white/50"}`}
+              className={`size-7 rounded-full border-2 transition-all ${current.highlightColor.toUpperCase() === preset.color ? "scale-110 border-ring ring-2 ring-ring ring-offset-2 ring-offset-background" : "border-input hover:border-ring"}`}
               style={{ backgroundColor: preset.color }}
             />
           ))}
@@ -316,7 +308,7 @@ export default function LocalEditorSubtitleStyleInspector({
         <span className={cleanLabelClass}>Border</span>
         <div className="flex items-center gap-3">
           <label
-            className="relative h-8 w-8 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-white/10"
+            className="relative size-9 shrink-0 cursor-pointer overflow-hidden rounded-md border border-input"
             title="Border color"
           >
             <div
@@ -344,7 +336,7 @@ export default function LocalEditorSubtitleStyleInspector({
               }
               className="w-full accent-primary"
             />
-            <div className="flex justify-between text-[10px] text-zinc-500">
+            <div className="flex justify-between text-xs text-muted-foreground">
               <span>None</span>
               <span>Thick</span>
             </div>
@@ -356,27 +348,22 @@ export default function LocalEditorSubtitleStyleInspector({
           <span className={cleanLabelClass.replace("mb-2 ", "")}>
             Background Box
           </span>
-          <Button
-            variant="ghost"
-            type="button"
+          <Switch
             aria-label={
               current.bgOpacity > 0
                 ? "Hide background box"
                 : "Show background box"
             }
-            aria-pressed={current.bgOpacity > 0}
-            onClick={() => update("bgOpacity", current.bgOpacity > 0 ? 0 : 0.5)}
-            className={`relative h-4 w-8 rounded-full transition-colors ${current.bgOpacity > 0 ? "bg-primary" : "bg-zinc-700"}`}
-          >
-            <span
-              className={`absolute left-0 top-0 h-4 w-4 rounded-full border border-gray-300 bg-white transition-transform ${current.bgOpacity > 0 ? "translate-x-full" : ""}`}
-            />
-          </Button>
+            checked={current.bgOpacity > 0}
+            onCheckedChange={(checked) =>
+              update("bgOpacity", checked ? 0.5 : 0)
+            }
+          />
         </div>
         {current.bgOpacity > 0 && (
           <div className="flex items-center gap-3">
             <label
-              className="relative h-8 w-8 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-white/10"
+              className="relative size-9 shrink-0 cursor-pointer overflow-hidden rounded-md border border-input"
               title="Background color"
             >
               <div
@@ -404,7 +391,7 @@ export default function LocalEditorSubtitleStyleInspector({
                 }
                 className="w-full accent-primary"
               />
-              <div className="flex justify-between text-[10px] text-zinc-500">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Transparent</span>
                 <span>{Math.round(current.bgOpacity * 100)}%</span>
               </div>
@@ -413,16 +400,16 @@ export default function LocalEditorSubtitleStyleInspector({
         )}
       </div>
       {!hasCues && (
-        <p className="text-[11px] text-zinc-500">
+        <p className="text-xs text-muted-foreground">
           Import subtitles to enable this style.
         </p>
       )}
       {hasCues && (
         <Button
-          variant="ghost"
+          variant="destructive"
           type="button"
           onClick={onRemove}
-          className="w-full rounded-lg border border-red-400/30 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-400/10"
+          className="w-full"
         >
           Remove Subtitles
         </Button>

@@ -11,8 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "../ui";
 
-const actionButton =
-  "flex min-w-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60";
+const actionButton = "w-full min-w-0 justify-center";
 
 export default function EditorActionToolbar({
   onAutoEdit,
@@ -31,16 +30,14 @@ export default function EditorActionToolbar({
 }) {
   return (
     <div
-      className="rounded-xl border border-white/10 bg-white/[.02] p-3"
+      className="rounded-lg border border-border bg-card p-4"
       aria-label="Editor actions"
       role="region"
     >
-      <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-primary">
-        Actions
-      </h3>
+      <h3 className="mb-3 text-sm font-semibold text-foreground">Actions</h3>
       {editError && (
         <div
-          className="mb-2 flex items-center gap-2 text-[11px] text-red-400"
+          className="mb-3 flex items-center gap-2 text-sm text-destructive"
           role="alert"
         >
           <AlertCircle size={13} className="shrink-0" />
@@ -49,11 +46,11 @@ export default function EditorActionToolbar({
       )}
       <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">
         <Button
-          variant="ghost"
+          variant="outline"
           type="button"
           onClick={onAutoEdit}
           disabled={isEditing}
-          className={`${actionButton} bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500`}
+          className={actionButton}
         >
           {isEditing ? (
             <Loader2 size={14} className="animate-spin" />
@@ -63,11 +60,11 @@ export default function EditorActionToolbar({
           {isEditing ? "Editing…" : "Auto Edit"}
         </Button>
         <Button
-          variant="ghost"
+          variant="outline"
           type="button"
           onClick={onConvertNativeShort}
           disabled={isConvertingNativeShort}
-          className={`${actionButton} bg-gradient-to-r from-cyan-600 to-sky-700 hover:from-cyan-500 hover:to-sky-600`}
+          className={actionButton}
         >
           {isConvertingNativeShort ? (
             <Loader2 size={14} className="animate-spin" />
@@ -77,11 +74,11 @@ export default function EditorActionToolbar({
           {isConvertingNativeShort ? "Converting…" : "Convert to Native Short"}
         </Button>
         <Button
-          variant="ghost"
+          variant="outline"
           type="button"
           onClick={onSubtitles}
           disabled={isSubtitling}
-          className={`${actionButton} bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500`}
+          className={actionButton}
         >
           {isSubtitling ? (
             <Loader2 size={14} className="animate-spin" />
@@ -91,11 +88,11 @@ export default function EditorActionToolbar({
           {isSubtitling ? "Adding…" : "Subtitles"}
         </Button>
         <Button
-          variant="ghost"
+          variant="outline"
           type="button"
           onClick={onViralHook}
           disabled={isHooking}
-          className={`${actionButton} bg-gradient-to-r from-amber-400 to-yellow-500 text-black hover:from-amber-300 hover:to-yellow-400`}
+          className={actionButton}
         >
           {isHooking ? (
             <Loader2 size={14} className="animate-spin" />
@@ -105,11 +102,11 @@ export default function EditorActionToolbar({
           {isHooking ? "Adding…" : "Viral Hook"}
         </Button>
         <Button
-          variant="ghost"
+          variant="outline"
           type="button"
           onClick={onDubVoice}
           disabled={isTranslating}
-          className={`${actionButton} bg-gradient-to-r from-green-500 to-teal-600 hover:from-green-400 hover:to-teal-500`}
+          className={actionButton}
         >
           {isTranslating ? (
             <Loader2 size={14} className="animate-spin" />
@@ -119,18 +116,18 @@ export default function EditorActionToolbar({
           {isTranslating ? "Translating…" : "Dub Voice"}
         </Button>
         <Button
-          variant="ghost"
+          variant="secondary"
           type="button"
           onClick={onPost}
-          className={`${actionButton} bg-primary hover:bg-blue-600`}
+          className={actionButton}
         >
           <Share2 size={14} /> Post
         </Button>
         <Button
-          variant="ghost"
+          variant="outline"
           type="button"
           onClick={onDownload}
-          className={`${actionButton} border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-white`}
+          className={actionButton}
         >
           <Download size={14} /> Download
         </Button>

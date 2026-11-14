@@ -12,9 +12,8 @@ import {
 } from "../../remotion/lib/hookVisual";
 import { Button, Input, Textarea } from "../ui";
 
-const sectionClass = "space-y-3 border-t border-white/10 pt-4";
-const sectionHeadingClass =
-  "text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500";
+const sectionClass = "space-y-3 border-t border-border pt-4";
+const sectionHeadingClass = "text-xs font-semibold text-foreground";
 
 export default function LocalEditorHookInspector({
   hook,
@@ -25,7 +24,7 @@ export default function LocalEditorHookInspector({
 }) {
   if (!hook)
     return (
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-muted-foreground">
         Add a hook to place a bold opening message over the video.
       </p>
     );
@@ -70,7 +69,7 @@ export default function LocalEditorHookInspector({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-sm font-bold text-white">Viral Hook</h3>
+        <h3 className="text-sm font-semibold text-foreground">Viral Hook</h3>
         <section
           aria-labelledby="hook-content-heading"
           className="mt-4 space-y-3"
@@ -87,7 +86,7 @@ export default function LocalEditorHookInspector({
               onChange={(event) =>
                 onChange({ ...hook, text: event.target.value })
               }
-              className="w-full resize-none rounded-xl border border-white/10 bg-black/40 p-3 font-serif text-sm text-white placeholder-zinc-600 focus:border-amber-500/50 focus:outline-none"
+              className="w-full resize-none"
               placeholder="Enter text that will stop the scroll..."
             />
           </label>
@@ -101,7 +100,7 @@ export default function LocalEditorHookInspector({
         <div>
           <div className="mb-2 flex items-center justify-between">
             <span className={cleanLabelClass}>Position</span>
-            <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <span className="text-xs text-muted-foreground">
               {hook.position === "custom"
                 ? "Custom position"
                 : "Preset position"}
@@ -124,7 +123,7 @@ export default function LocalEditorHookInspector({
             ))}
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <label className="text-xs text-zinc-400">
+            <label className="text-sm font-medium text-muted-foreground">
               X (px)
               <Input
                 aria-label="Hook X position"
@@ -136,10 +135,10 @@ export default function LocalEditorHookInspector({
                 onChange={(event) =>
                   updateCoordinate("positionX", event.target.value)
                 }
-                className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white"
+                className="mt-2"
               />
             </label>
-            <label className="text-xs text-zinc-400">
+            <label className="text-sm font-medium text-muted-foreground">
               Y (px)
               <Input
                 aria-label="Hook Y position"
@@ -151,11 +150,11 @@ export default function LocalEditorHookInspector({
                 onChange={(event) =>
                   updateCoordinate("positionY", event.target.value)
                 }
-                className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white"
+                className="mt-2"
               />
             </label>
           </div>
-          <p className="mt-2 text-[10px] text-zinc-500">
+          <p className="mt-2 text-xs text-muted-foreground">
             Center point in a {renderWidth} × {renderHeight} px video.
           </p>
         </div>
@@ -217,15 +216,15 @@ export default function LocalEditorHookInspector({
             max="15"
             value={displayDuration}
             onChange={(event) => updateDuration(event.target.value)}
-            className="w-full accent-amber-500"
+            className="w-full"
           />
-          <div className="flex justify-between text-[10px] text-zinc-500">
+          <div className="flex justify-between text-xs text-muted-foreground">
             <span>2s</span>
             <span>15s</span>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <label className="text-xs text-zinc-400">
+          <label className="text-sm font-medium text-muted-foreground">
             Start (ms)
             <Input
               aria-label="Hook start"
@@ -234,10 +233,10 @@ export default function LocalEditorHookInspector({
               onChange={(event) =>
                 onChange({ ...hook, startMs: Number(event.target.value) })
               }
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white"
+              className="mt-2"
             />
           </label>
-          <label className="text-xs text-zinc-400">
+          <label className="text-sm font-medium text-muted-foreground">
             End (ms)
             <Input
               aria-label="Hook end"
@@ -246,7 +245,7 @@ export default function LocalEditorHookInspector({
               onChange={(event) =>
                 onChange({ ...hook, endMs: Number(event.target.value) })
               }
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white"
+              className="mt-2"
             />
           </label>
         </div>
@@ -283,7 +282,7 @@ export default function LocalEditorHookInspector({
               </Button>
             ))}
           </div>
-          <p className="mt-2 text-[10px] text-zinc-500">
+          <p className="mt-2 text-xs text-muted-foreground">
             In Headline cards, use line breaks to create separate cards.
           </p>
         </div>
@@ -302,15 +301,15 @@ export default function LocalEditorHookInspector({
                   aria-label={`Use hook text color ${preset.label}`}
                   title={preset.label}
                   onClick={() => onChange({ ...hook, color: preset.color })}
-                  className={`h-7 w-7 rounded-full border-2 transition-all ${String(hook.color || "").toUpperCase() === preset.color ? "scale-110 border-white" : "border-white/20 hover:border-white/50"}`}
+                  className={`size-7 rounded-full border-2 transition-all ${String(hook.color || "").toUpperCase() === preset.color ? "scale-110 border-ring ring-2 ring-ring ring-offset-2 ring-offset-background" : "border-input hover:border-ring"}`}
                   style={{ backgroundColor: preset.color }}
                 />
               ))}
               <label
-                className="relative flex h-7 w-7 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-white/20 transition-all hover:border-white/50"
+                className="relative flex size-7 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-input transition-colors hover:border-ring"
                 title="Custom color"
               >
-                <span className="text-[10px] text-zinc-400">+</span>
+                <span className="text-xs text-muted-foreground">+</span>
                 <Input
                   aria-label="Hook text color"
                   type="color"
@@ -323,7 +322,7 @@ export default function LocalEditorHookInspector({
               </label>
             </div>
           </div>
-          <label className="block text-xs text-zinc-400">
+          <label className="block text-sm font-medium text-muted-foreground">
             Size
             <Input
               aria-label="Hook font size"
@@ -334,7 +333,7 @@ export default function LocalEditorHookInspector({
               onChange={(event) =>
                 onChange({ ...hook, fontSize: Number(event.target.value) })
               }
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-sm text-white"
+              className="mt-2"
             />
           </label>
         </div>
@@ -352,15 +351,15 @@ export default function LocalEditorHookInspector({
                 aria-label={`Use hook background ${preset.label}`}
                 title={preset.label}
                 onClick={() => onChange({ ...hook, background: preset.color })}
-                className={`h-7 w-7 rounded-full border-2 transition-all ${String(hook.background || "").toUpperCase() === preset.color ? "scale-110 border-white" : "border-white/20 hover:border-white/50"}`}
+                className={`size-7 rounded-full border-2 transition-all ${String(hook.background || "").toUpperCase() === preset.color ? "scale-110 border-ring ring-2 ring-ring ring-offset-2 ring-offset-background" : "border-input hover:border-ring"}`}
                 style={{ backgroundColor: preset.color }}
               />
             ))}
             <label
-              className="relative flex h-7 w-7 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-white/20 transition-all hover:border-white/50"
+              className="relative flex size-7 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-input transition-colors hover:border-ring"
               title="Custom background color"
             >
-              <span className="text-[10px] text-zinc-400">+</span>
+              <span className="text-xs text-muted-foreground">+</span>
               <Input
                 aria-label="Hook background"
                 type="color"
@@ -375,12 +374,12 @@ export default function LocalEditorHookInspector({
         </div>
       </section>
 
-      <div className="border-t border-white/10 pt-4">
+      <div className="border-t border-border pt-4">
         <Button
-          variant="ghost"
+          variant="destructive"
           type="button"
           onClick={onRemove}
-          className="w-full rounded-lg border border-red-400/30 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-400/10"
+          className="w-full"
         >
           Remove Hook
         </Button>

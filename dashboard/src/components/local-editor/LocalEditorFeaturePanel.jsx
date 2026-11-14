@@ -8,7 +8,7 @@ export default function LocalEditorFeaturePanel({
     <section
       data-testid="local-editor-feature-panel"
       aria-label={title}
-      className={`relative flex h-full min-h-0 flex-col overflow-hidden border-b border-white/10 bg-[#111114] lg:border-b-0 lg:border-r ${className}`}
+      className={`relative flex h-full min-h-0 flex-col overflow-hidden border-b border-border bg-card text-card-foreground lg:border-b-0 lg:border-r ${className}`}
     >
       <div
         data-testid="local-editor-feature-panel-scroll"

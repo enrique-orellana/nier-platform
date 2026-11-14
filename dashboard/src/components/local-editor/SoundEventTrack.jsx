@@ -23,15 +23,15 @@ export default function SoundEventTrack({
   return (
     <div
       data-testid="local-editor-sound-events-track"
-      className="flex min-h-12 w-full items-stretch border-b border-white/10 last:border-b-0"
+      className="flex min-h-12 w-full items-stretch border-b border-border last:border-b-0"
     >
-      <div className="flex w-36 shrink-0 items-center justify-between gap-1 bg-white/[.03] px-2 text-[11px] font-medium text-zinc-300">
+      <div className="flex w-36 shrink-0 items-center justify-between gap-1 bg-muted px-3 text-xs font-medium text-foreground">
         <span className="flex min-w-0 items-center gap-1 truncate">
-          <Volume2 size={12} className="shrink-0 text-teal-300" />
+          <Volume2 size={14} className="shrink-0" />
           Sounds
         </span>
         <label
-          className="flex shrink-0 cursor-pointer items-center gap-1 text-[9px] text-zinc-400"
+          className="flex shrink-0 cursor-pointer items-center gap-1 text-[10px] text-muted-foreground"
           title="Show detected sound labels over the preview only"
         >
           <Input
@@ -39,17 +39,17 @@ export default function SoundEventTrack({
             aria-label="Show sound labels in preview"
             checked={showInPreview}
             onChange={(event) => onTogglePreview?.(event.target.checked)}
-            className="h-3 w-3 rounded border-zinc-600 bg-zinc-900 text-teal-400 focus:ring-teal-300/30"
+            className="size-4"
           />
           Preview
         </label>
       </div>
       <div
-        className="relative shrink-0 bg-black/20"
+        className="relative shrink-0 bg-background"
         style={{ width: `${timelineWidth}px` }}
       >
         {events.length === 0 ? (
-          <span className="absolute inset-y-0 left-3 flex items-center text-[10px] text-zinc-600">
+          <span className="absolute inset-y-0 left-3 flex items-center text-[10px] text-muted-foreground">
             No sound events detected
           </span>
         ) : (
@@ -77,7 +77,7 @@ export default function SoundEventTrack({
                 aria-pressed={selected}
                 title={eventTitle(event)}
                 onClick={() => onSelect?.(event)}
-                className={`absolute inset-y-1 overflow-hidden rounded-md border px-1.5 text-left text-[10px] text-white shadow-sm transition-colors hover:border-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 ${active ? "border-teal-200" : "border-teal-100/30"} ${selected ? "ring-2 ring-white" : ""}`}
+                className={`absolute inset-y-1 overflow-hidden rounded-md border px-1.5 text-left text-[10px] text-white shadow-sm transition-colors hover:border-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? "border-primary" : "border-white/25"} ${selected ? "ring-2 ring-white" : ""}`}
                 style={{
                   left: `${left}%`,
                   width: `${width}%`,
@@ -91,7 +91,7 @@ export default function SoundEventTrack({
         )}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-0 top-0 z-10 w-px bg-cyan-300"
+          className="pointer-events-none absolute bottom-0 top-0 z-10 w-px bg-primary"
           style={{
             left: `${clampPercent((playheadMs / safeDurationMs) * 100)}%`,
           }}

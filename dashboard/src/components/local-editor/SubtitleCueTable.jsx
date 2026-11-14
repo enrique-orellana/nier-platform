@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { Trash2 } from "lucide-react";
 import { formatClock } from "./localEditorExport";
-import { Button, Input } from "../ui";
+import { Badge, Button, Input } from "../ui";
 
 const formatTimecode = (value, fps) => formatClock(value, fps);
 
@@ -61,7 +61,7 @@ function CueTimeInput({ cue, field, value, fps, onCommit }) {
         onCommit(nextValue);
       }}
       onClick={(event) => event.stopPropagation()}
-      className="w-full rounded border border-transparent bg-transparent px-2 py-1 font-mono text-xs text-zinc-200 outline-none hover:border-white/10 focus:border-violet-400 focus:bg-black/20"
+      className="h-8 w-full px-2 py-1 font-mono text-xs"
     />
   );
 }
@@ -76,7 +76,7 @@ function CueTextInput({ cue, onCommit }) {
       onChange={(event) => setDraft(event.target.value)}
       onBlur={() => onCommit(draft)}
       onClick={(event) => event.stopPropagation()}
-      className="min-w-0 flex-1 bg-transparent px-2 py-4 text-left text-sm text-white outline-none placeholder:text-zinc-600 focus:bg-black/20"
+      className="min-w-0 flex-1 border-0 bg-transparent px-2 py-3 text-left text-sm shadow-none focus-visible:ring-0"
     />
   );
 }
@@ -139,21 +139,21 @@ export default function SubtitleCueTable({
   return (
     <div
       data-testid="local-editor-cue-table"
-      className="overflow-hidden rounded-none border border-white/10 bg-[#171719]"
+      className="overflow-hidden rounded-lg border border-border bg-card"
     >
       <div className="editor-scrollbar max-h-[420px] overflow-auto">
         <table className="w-full min-w-[620px] border-collapse text-left">
-          <thead className="sticky top-0 z-10 bg-[#39393d] text-[11px] text-zinc-300">
+          <thead className="sticky top-0 z-10 bg-muted text-xs text-muted-foreground">
             <tr>
               <th
                 scope="col"
-                className="w-32 border-r border-white/10 px-2 py-2 text-center font-medium"
+                className="w-32 border-r border-border px-3 py-2 text-center font-medium"
               >
                 Start
               </th>
               <th
                 scope="col"
-                className="w-32 border-r border-white/10 px-2 py-2 text-center font-medium"
+                className="w-32 border-r border-border px-3 py-2 text-center font-medium"
               >
                 End
               </th>
@@ -167,7 +167,7 @@ export default function SubtitleCueTable({
               <tr>
                 <td
                   colSpan="3"
-                  className="px-4 py-10 text-center text-sm text-zinc-500"
+                  className="px-4 py-10 text-center text-sm text-muted-foreground"
                 >
                   Import subtitles or add a cue to edit it here.
                 </td>
@@ -200,9 +200,9 @@ export default function SubtitleCueTable({
                   onKeyDown={(event) =>
                     event.key === "Enter" && scrollToCue(cue)
                   }
-                  className={`border-b border-white/10 text-white outline-none transition-colors ${current ? "bg-violet-500/20 outline outline-1 outline-violet-300/60 outline-offset-[-1px] shadow-[inset_3px_0_0_rgba(196,181,253,0.85)]" : selected ? "bg-violet-900/70" : index % 2 ? "bg-[#42105d] hover:bg-violet-900/60" : "bg-[#2b2b2d] hover:bg-[#38383b]"}`}
+                  className={`border-b border-border text-foreground outline-none transition-colors hover:bg-muted ${current ? "bg-accent shadow-[inset_2px_0_0_hsl(var(--primary))]" : selected ? "bg-secondary" : index % 2 ? "bg-muted/40" : "bg-background"}`}
                 >
-                  <td className="border-r border-white/10 p-0">
+                  <td className="border-r border-border p-0">
                     <CueTimeInput
                       cue={cue}
                       field="start"
@@ -211,7 +211,7 @@ export default function SubtitleCueTable({
                       onCommit={(value) => updateCue(cue, "startMs", value)}
                     />
                   </td>
-                  <td className="border-r border-white/10 p-0">
+                  <td className="border-r border-border p-0">
                     <CueTimeInput
                       cue={cue}
                       field="end"
@@ -227,13 +227,17 @@ export default function SubtitleCueTable({
                         onCommit={(value) => updateCue(cue, "text", value)}
                       />
                       {current && (
-                        <span className="mr-2 shrink-0 rounded border border-violet-200/50 bg-violet-200/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-100">
+                        <Badge
+                          variant="secondary"
+                          className="mr-2 shrink-0 text-[10px] font-medium"
+                        >
                           CURRENT
-                        </span>
+                        </Badge>
                       )}
                       {onDelete && (
                         <Button
-                          variant="ghost"
+                          variant="destructive"
+                          size="icon"
                           type="button"
                           aria-label={`Delete subtitle cue ${cue.id}`}
                           title="Delete subtitle cue"
@@ -241,7 +245,7 @@ export default function SubtitleCueTable({
                             event.stopPropagation();
                             onDelete(cue.id);
                           }}
-                          className="mr-2 shrink-0 rounded p-1 text-zinc-400 hover:bg-red-500/15 hover:text-red-200"
+                          className="mr-2 size-8 shrink-0"
                         >
                           <Trash2 size={14} />
                         </Button>

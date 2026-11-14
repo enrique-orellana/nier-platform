@@ -85,13 +85,13 @@ export const outlineTextShadow = (width, color) => {
 };
 
 export const cleanChoiceClass = (selected) =>
-  `rounded-lg border p-2 text-center text-xs font-medium transition-all ${selected ? "border-primary bg-primary/20 text-white" : "border-white/5 bg-white/5 text-zinc-400 hover:bg-white/10"}`;
+  `h-9 rounded-md border px-3 text-center text-sm font-medium transition-colors ${selected ? "border-input bg-secondary text-secondary-foreground" : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`;
 
 export const hookChoiceClass = (selected) =>
   `rounded-lg border px-1 py-2 text-center text-xs font-bold capitalize transition-all ${selected ? "border-white bg-white text-black" : "border-white/5 bg-white/5 text-zinc-400 hover:bg-white/10"}`;
 
 export const cleanLabelClass =
-  "mb-2 block text-xs font-bold uppercase tracking-wider text-zinc-400";
+  "mb-2 block text-xs font-medium text-muted-foreground";
 
 export const downloadBlob = (blob, fileName) => {
   const url = URL.createObjectURL(blob);

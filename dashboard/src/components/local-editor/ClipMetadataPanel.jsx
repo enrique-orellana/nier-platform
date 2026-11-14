@@ -4,7 +4,7 @@ import { getApiUrl } from "../../config";
 import { getLocalAiHeaders, subtitleTextFromCues } from "./localEditorAi";
 import { formatClock } from "./localEditorExport";
 import { formatAspectRatio } from "./localEditorAspectRatio";
-import { Button } from "../ui";
+import { Badge, Button } from "../ui";
 
 const finiteNumber = (value) => {
   const parsed = Number(value);
@@ -224,22 +224,25 @@ export default function ClipMetadataPanel({
 
   return (
     <section
-      className="min-w-0 border-b border-white/10 pb-3"
+      className="min-w-0 border-b border-border pb-4"
       aria-label="Clip metadata"
     >
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-300/80">
+      <p className="mb-2 text-xs font-medium text-muted-foreground">
         Clip details
       </p>
       {title && (
-        <h3 className="break-words text-base font-semibold leading-snug text-zinc-100">
+        <h3 className="break-words text-base font-semibold leading-snug text-foreground">
           {title}
         </h3>
       )}
-      <div className="mt-2 flex min-w-0 flex-wrap gap-2 text-[10px] font-mono text-zinc-500">
+      <div className="mt-3 flex min-w-0 flex-wrap gap-2">
         {duration > 0 && (
-          <span className="rounded-sm border border-white/10 px-1.5 py-0.5">
+          <Badge
+            variant="outline"
+            className="font-mono text-xs text-muted-foreground"
+          >
             {formatDuration(duration)}
-          </span>
+          </Badge>
         )}
         {sourceTiming.length > 0 && (
           <div
@@ -248,32 +251,39 @@ export default function ClipMetadataPanel({
             aria-label="Clip source timing"
           >
             {sourceTiming.map((item) => (
-              <span
+              <Badge
                 key={item}
-                className="max-w-full break-all rounded-sm border border-white/10 px-1.5 py-0.5"
+                variant="outline"
+                className="max-w-full break-all font-mono text-xs text-muted-foreground"
               >
                 {item}
-              </span>
+              </Badge>
             ))}
           </div>
         )}
         <div
-          className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 rounded-sm border border-white/10 px-1.5 py-0.5"
+          className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5"
           role="group"
           aria-label="Hashtags"
         >
           {generatedHashtags.map((hashtag) => (
-            <span key={hashtag}>{hashtag}</span>
+            <Badge
+              key={hashtag}
+              variant="secondary"
+              className="font-mono text-xs"
+            >
+              {hashtag}
+            </Badge>
           ))}
         </div>
       </div>
-      <div className="mt-2.5">
+      <div className="mt-3 flex flex-wrap gap-2">
         <Button
-          variant="ghost"
           type="button"
           onClick={generateHashtags}
           disabled={generatingHashtags}
-          className="flex items-center gap-1.5 rounded-sm border border-cyan-400/30 px-2 py-1 text-[10px] font-semibold text-cyan-300 transition-colors hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+          size="sm"
+          variant="outline"
         >
           {generatingHashtags ? (
             <Loader2 size={12} className="animate-spin" />
@@ -283,11 +293,11 @@ export default function ClipMetadataPanel({
           {generatingHashtags ? "Generating…" : "Generate hashtags"}
         </Button>
         <Button
-          variant="ghost"
           type="button"
           onClick={generateClipInfo}
           disabled={regeneratingClipInfo}
-          className="mt-2 flex items-center gap-1.5 rounded-sm border border-violet-400/30 px-2 py-1 text-[10px] font-semibold text-violet-300 transition-colors hover:bg-violet-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+          size="sm"
+          variant="outline"
         >
           {regeneratingClipInfo ? (
             <Loader2 size={12} className="animate-spin" />
@@ -299,42 +309,44 @@ export default function ClipMetadataPanel({
             : "Regenerate clip information"}
         </Button>
         {hashtagError && (
-          <p role="alert" className="mt-1.5 text-[10px] leading-4 text-red-300">
+          <p role="alert" className="mt-1.5 text-xs leading-4 text-destructive">
             {hashtagError}
           </p>
         )}
         {clipInfoError && (
-          <p role="alert" className="mt-1.5 text-[10px] leading-4 text-red-300">
+          <p role="alert" className="mt-1.5 text-xs leading-4 text-destructive">
             {clipInfoError}
           </p>
         )}
       </div>
 
       {title && (
-        <div className="mt-3 border-t border-white/10 pt-2.5">
-          <div className="mb-1 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-red-300/90">
-            <Youtube size={11} className="shrink-0" />
+        <div className="mt-4 border-t border-border pt-3">
+          <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Youtube size={14} className="shrink-0" />
             <span>YouTube Title</span>
           </div>
-          <p className="break-words text-xs leading-5 text-zinc-300">{title}</p>
+          <p className="break-words text-sm leading-5 text-foreground">
+            {title}
+          </p>
         </div>
       )}
 
       {caption && (
-        <div className="mt-3 border-t border-white/10 pt-2.5">
-          <div className="mb-1 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">
-            <Video size={11} className="shrink-0 text-cyan-400" />
-            <span className="text-zinc-600">/</span>
-            <Instagram size={11} className="shrink-0 text-pink-400" />
+        <div className="mt-4 border-t border-border pt-3">
+          <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Video size={14} className="shrink-0" />
+            <span>/</span>
+            <Instagram size={14} className="shrink-0" />
             <span>Caption</span>
           </div>
-          <p className="break-words text-xs leading-5 text-zinc-300">
+          <p className="break-words text-sm leading-5 text-foreground">
             {caption}
           </p>
         </div>
       )}
 
-      <dl className="mt-3 border-t border-white/10 pt-2.5 text-xs">
+      <dl className="mt-4 border-t border-border pt-3 text-sm">
         {[
           ["Name", projectName],
           ["Timeline", timelineName],
@@ -347,10 +359,10 @@ export default function ClipMetadataPanel({
         ].map(([label, value]) => (
           <div
             key={label}
-            className="grid grid-cols-[minmax(84px,0.8fr)_minmax(0,1.4fr)] gap-3 border-b border-white/5 py-1.5 last:border-b-0"
+            className="grid grid-cols-[minmax(84px,0.8fr)_minmax(0,1.4fr)] gap-3 border-b border-border py-2 last:border-b-0"
           >
-            <dt className="text-zinc-500">{label}</dt>
-            <dd className="min-w-0 break-words text-zinc-300">{value}</dd>
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="min-w-0 break-words text-foreground">{value}</dd>
           </div>
         ))}
       </dl>

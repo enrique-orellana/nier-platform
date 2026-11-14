@@ -85,7 +85,7 @@ function CueBlock({
       onDoubleClick={() => onDoubleClick?.(cue)}
       onPointerDown={(event) => beginDrag(event, "move")}
       onKeyDown={(event) => event.key === "Enter" && onSelect(cue)}
-      className={`absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[10px] text-white opacity-95 shadow-sm transition-[filter,box-shadow,border-color] hover:border-white/80 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200 ${current ? "border-cyan-300 shadow-[inset_0_2px_0_rgba(103,232,249,0.95)]" : "border-white/25"} ${selected ? "ring-2 ring-white" : ""} ${current && selected ? "ring-cyan-300" : ""}`}
+      className={`absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[10px] text-white opacity-95 shadow-sm transition-[filter,box-shadow,border-color] hover:border-white/80 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-primary shadow-[inset_0_2px_0_hsl(var(--primary))]" : "border-white/25"} ${selected ? "ring-2 ring-white" : ""} ${current && selected ? "ring-primary" : ""}`}
       style={{
         left: `${left}%`,
         width: `${width}%`,
@@ -157,7 +157,7 @@ function LayoutSegmentBlock({
       aria-pressed={selected}
       title={`${label} layout · ${segment.startMs}–${segment.endMs} ms`}
       onClick={() => onSelect?.(segment)}
-      className={`absolute inset-y-1 overflow-hidden rounded-md border px-2 py-1 text-left text-[10px] font-semibold text-white opacity-95 shadow-sm transition-[filter,box-shadow,border-color] hover:border-white/80 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200 ${current ? "border-cyan-200 shadow-[inset_0_2px_0_rgba(103,232,249,0.95)]" : "border-white/25"} ${selected ? "ring-2 ring-white" : ""}`}
+      className={`absolute inset-y-1 overflow-hidden rounded-md border px-2 py-1 text-left text-[10px] font-semibold text-white opacity-95 shadow-sm transition-[filter,box-shadow,border-color] hover:border-white/80 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-primary shadow-[inset_0_2px_0_hsl(var(--primary))]" : "border-white/25"} ${selected ? "ring-2 ring-white" : ""}`}
       style={{
         left: `${left}%`,
         width: `${width}%`,
@@ -188,13 +188,13 @@ function Track({
   return (
     <div
       data-testid={testId}
-      className="flex min-h-12 w-full items-stretch border-b border-white/10 last:border-b-0"
+      className="flex min-h-12 w-full items-stretch border-b border-border last:border-b-0"
     >
-      <div className="flex w-36 shrink-0 items-center bg-white/[.03] px-3 text-[11px] font-medium text-zinc-300">
+      <div className="flex w-36 shrink-0 items-center bg-muted px-3 text-xs font-medium text-foreground">
         {label}
       </div>
       <div
-        className="relative shrink-0 bg-black/20"
+        className="relative shrink-0 bg-background"
         style={{ width: `${timelineWidth}px` }}
       >
         {cues.map((cue) => (
@@ -396,7 +396,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
   return (
     <div
       data-testid="local-editor-timeline"
-      className="flex h-full min-h-0 flex-col rounded-none border-0 bg-[#101014]"
+      className="flex h-full min-h-0 flex-col rounded-lg border border-border bg-card"
     >
       <div
         ref={timelineRef}
@@ -409,7 +409,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
           style={{ width: `${canvasWidth}px` }}
         >
           <div
-            className="relative ml-36 h-9 cursor-pointer border-b border-white/10"
+            className="relative ml-36 h-9 cursor-pointer border-b border-border"
             style={{ width: `${timelineWidth}px` }}
             onClick={seek}
             role="slider"
@@ -422,30 +422,30 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
             {rulerMarks.map((mark) => (
               <span
                 key={mark}
-                className="absolute top-2 -translate-x-1/2 text-[9px] text-zinc-600"
+                className="absolute top-2 -translate-x-1/2 text-[10px] text-muted-foreground"
                 style={{ left: `${mark}%` }}
               >
                 {formatClock((safeDuration * mark) / 100, fps)}
               </span>
             ))}
             <div
-              className="absolute bottom-0 top-0 w-px bg-cyan-300"
+              className="absolute bottom-0 top-0 w-px bg-primary"
               style={{ left: `${(playheadMs / safeDuration) * 100}%` }}
             />
           </div>
           <div
             data-testid="local-editor-layout-track"
-            className="flex min-h-12 w-full items-stretch border-b border-white/10 last:border-b-0"
+            className="flex min-h-12 w-full items-stretch border-b border-border last:border-b-0"
           >
             <div
               data-testid="local-editor-layout-track-label"
-              className="flex w-36 shrink-0 items-center bg-white/[.03] px-3 text-[11px] font-medium text-zinc-300"
+              className="flex w-36 shrink-0 items-center bg-muted px-3 text-xs font-medium text-foreground"
               onClick={() => onLayoutDeselect?.()}
             >
               Layout
             </div>
             <div
-              className="relative shrink-0 bg-black/20"
+              className="relative shrink-0 bg-background"
               style={{ width: `${timelineWidth}px` }}
               onClick={(event) => {
                 if (event.target === event.currentTarget) onLayoutDeselect?.();
@@ -505,13 +505,13 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
           />
           <div
             data-testid="local-editor-audio-track"
-            className="flex min-h-12 w-full items-stretch border-b border-white/10 last:border-b-0"
+            className="flex min-h-12 w-full items-stretch border-b border-border last:border-b-0"
           >
-            <div className="flex w-36 shrink-0 items-center bg-white/[.03] px-3 text-[11px] font-medium text-zinc-300">
+            <div className="flex w-36 shrink-0 items-center bg-muted px-3 text-xs font-medium text-foreground">
               Audio
             </div>
             <div
-              className="relative shrink-0 bg-black/20"
+              className="relative shrink-0 bg-background"
               style={{ width: `${timelineWidth}px` }}
             >
               <AudioWaveform

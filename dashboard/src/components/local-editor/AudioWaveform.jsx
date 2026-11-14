@@ -73,13 +73,13 @@ export default function AudioWaveform({
             <span
               key={bar.index}
               data-testid="audio-waveform-bar"
-              className="min-w-0 flex-1 rounded-full bg-emerald-400/80"
+              className="min-w-0 flex-1 rounded-full bg-primary/60"
               style={{ height: `${Math.max(8, amplitude * 84)}%` }}
             />
           );
         })}
       {state.status !== "ready" && (
-        <span className="px-2 text-[10px] text-zinc-600">
+        <span className="px-2 text-[10px] text-muted-foreground">
           {state.status === "loading"
             ? "Loading waveform…"
             : state.status === "empty"
