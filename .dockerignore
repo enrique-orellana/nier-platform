@@ -1,6 +1,7 @@
 # Git
 .git
 .gitnexus/
+graphify-out/
 .gitignore
 
 # Python

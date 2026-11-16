@@ -4,6 +4,12 @@
 *.mov
 *.mkv
 .codex/
+!.codex/
+.codex/*
+!.codex/skills/
+.codex/skills/*
+!.codex/skills/graphify/
+!.codex/skills/graphify/**
 .npm/
 
 # YOLO model
@@ -38,11 +44,16 @@ output/
 # Cache dirs
 .cache/
 .config/
+.gitnexus/
+graphify-out/
 # Multi-agent Skills
 .agents/
 .agent/
 .claude/
 skills/
+!.codex/skills/
+!.codex/skills/graphify/
+!.codex/skills/graphify/**
 skills-lock.json
 .playwright-mcp
 .superpowers/

@@ -1,48 +1,3 @@
-<!-- gitnexus:start -->
-# GitNexus — Code Intelligence
-
-This project is indexed by GitNexus as **nier-platform** (7794 symbols, 18548 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
-
-> Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
-
-## Always Do
-
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **MUST run `detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows. For regression review, compare against the default branch: `detect_changes({scope: "compare", base_ref: "main"})`.
-- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, use `query({search_query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `context({name: "symbolName"})`.
-- For security review, `explain({target: "fileOrSymbol"})` lists taint findings (source→sink flows; needs `analyze --pdg`).
-
-## Never Do
-
-- NEVER edit a function, class, or method without first running `impact` on it.
-- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
-- NEVER rename symbols with find-and-replace — use `rename` which understands the call graph.
-- NEVER commit changes without running `detect_changes()` to check affected scope.
-
-## Resources
-
-| Resource | Use for |
-|----------|---------|
-| `gitnexus://repo/nier-platform/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/nier-platform/clusters` | All functional areas |
-| `gitnexus://repo/nier-platform/processes` | All execution flows |
-| `gitnexus://repo/nier-platform/process/{name}` | Step-by-step execution trace |
-
-## CLI
-
-| Task | Read this skill file |
-|------|---------------------|
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
-
-<!-- gitnexus:end -->
-
 ## Frontend verification
 
 - Whenever files under `dashboard/src/` are modified, run `npm run format`, `npm run format:check`, and `npm run lint` from `dashboard` before committing.
@@ -62,8 +17,10 @@ asks for one.
 2. Review `git status` and the diff. Preserve unrelated user changes and stage
    only the files belonging to the requested change.
 3. Unless the user explicitly says not to commit, create the requested commit
-   after the required tests and checks pass. Run GitNexus `detect_changes()`
-   before committing.
+   after the required checks pass. Update the local graph after code changes
+   with `$env:GRAPHIFY_MAX_WORKERS = "2"; graphify update . --no-cluster`, then
+   inspect the staged file list and diff before committing. For symbol-level
+   changes, use `graphify affected "<symbol>"` when the graph has that symbol.
 4. Rebuild and apply the committed code to the running app from the repository
    root:
 
@@ -91,3 +48,18 @@ asks for one.
 running app. Do not claim that the live app was updated until `Restart` (or an
 equivalent targeted restart) completes successfully. If the user explicitly
 requests no commit, keep the change inline and still use `Restart` to apply it.
+
+## graphify
+
+This project has a local AST code graph at graphify-out/graph.json. It is built without an API call or hosted upload.
+
+When the user types `/graphify`, read the installed graphify skill, then follow the local-code-only project rules below.
+
+Rules:
+- Use Graphify only to query or update this repository's local code graph. Do not target remote URLs or run semantic extraction over docs, images, or video, and do not upload this repository to Graphify Cloud.
+- Keep `graphify-out/` local and ignored by Git and Docker. Never force-add generated graph output.
+- When graphify-out/graph.json exists, run `graphify query "<question>"` before your first grep, search or source-file read for a codebase question, and put this rule in every subagent prompt that explores code. Read raw files only for lines the graph or an earlier read already located. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. When the answer is under a Markdown heading, `graphify section "<heading>"` prints that section's text, so the .md need not be opened. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `$env:GRAPHIFY_MAX_WORKERS = "2"; graphify update . --no-cluster` to keep the graph current using local AST extraction only.
