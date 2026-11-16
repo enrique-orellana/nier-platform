@@ -139,9 +139,9 @@ export default function SubtitleCueTable({
   return (
     <div
       data-testid="local-editor-cue-table"
-      className="overflow-hidden rounded-lg border border-border bg-card"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card"
     >
-      <div className="editor-scrollbar max-h-[420px] overflow-auto">
+      <div className="editor-scrollbar min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[620px] border-collapse text-left">
           <thead className="sticky top-0 z-10 bg-muted text-xs text-muted-foreground">
             <tr>

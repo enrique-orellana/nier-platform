@@ -80,7 +80,6 @@ function CueBlock({
               ? "selected"
               : "normal"
       }
-      title={cue.text || "Untitled cue"}
       onClick={() => onSelect(cue)}
       onDoubleClick={() => onDoubleClick?.(cue)}
       onPointerDown={(event) => beginDrag(event, "move")}
@@ -105,17 +104,21 @@ function CueBlock({
       </span>
       <Button
         variant="ghost"
+        size="icon"
         type="button"
         aria-label="Resize cue start"
-        className="absolute left-0 top-0 h-full w-2 cursor-ew-resize opacity-0 hover:opacity-100 focus-visible:opacity-100"
+        className="absolute inset-y-0 left-0 z-10 h-full min-h-0 min-w-0 cursor-ew-resize rounded-none border-0 bg-transparent p-0 opacity-0 transition-colors hover:bg-primary/60 hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary"
         onPointerDown={(event) => beginDrag(event, "start")}
+        style={{ width: "min(12px, 25%)" }}
       />
       <Button
         variant="ghost"
+        size="icon"
         type="button"
         aria-label="Resize cue end"
-        className="absolute right-0 top-0 h-full w-2 cursor-ew-resize opacity-0 hover:opacity-100 focus-visible:opacity-100"
+        className="absolute inset-y-0 right-0 z-10 h-full min-h-0 min-w-0 cursor-ew-resize rounded-none border-0 bg-transparent p-0 opacity-0 transition-colors hover:bg-primary/60 hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary"
         onPointerDown={(event) => beginDrag(event, "end")}
+        style={{ width: "min(12px, 25%)" }}
       />
     </div>
   );

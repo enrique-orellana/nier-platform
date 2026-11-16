@@ -253,12 +253,13 @@ export default function LocalEditorSubtitleStyleInspector({
           {SUBTITLE_COLOR_PRESETS.map((preset) => (
             <Button
               variant="ghost"
+              size="icon"
               key={preset.color}
               type="button"
               aria-label={`Use subtitle color ${preset.label}`}
               title={preset.label}
               onClick={() => update("fontColor", preset.color)}
-              className={`size-7 rounded-full border-2 transition-all ${current.fontColor.toUpperCase() === preset.color ? "scale-110 border-ring ring-2 ring-ring ring-offset-2 ring-offset-background" : "border-input hover:border-ring"}`}
+              className={`h-7 min-h-0 w-7 min-w-0 rounded-full border-2 p-0 transition-all ${current.fontColor.toUpperCase() === preset.color ? "scale-110 border-ring ring-2 ring-ring ring-offset-2 ring-offset-background" : "border-input hover:border-ring"}`}
               style={{ backgroundColor: preset.color }}
             />
           ))}
@@ -286,12 +287,13 @@ export default function LocalEditorSubtitleStyleInspector({
           {SUBTITLE_HIGHLIGHT_PRESETS.map((preset) => (
             <Button
               variant="ghost"
+              size="icon"
               key={preset.color}
               type="button"
               aria-label={`Use subtitle highlight color ${preset.label}`}
               title={preset.label}
               onClick={() => update("highlightColor", preset.color)}
-              className={`size-7 rounded-full border-2 transition-all ${current.highlightColor.toUpperCase() === preset.color ? "scale-110 border-ring ring-2 ring-ring ring-offset-2 ring-offset-background" : "border-input hover:border-ring"}`}
+              className={`h-7 min-h-0 w-7 min-w-0 rounded-full border-2 p-0 transition-all ${current.highlightColor.toUpperCase() === preset.color ? "scale-110 border-ring ring-2 ring-ring ring-offset-2 ring-offset-background" : "border-input hover:border-ring"}`}
               style={{ backgroundColor: preset.color }}
             />
           ))}
