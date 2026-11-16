@@ -15,6 +15,11 @@ import { Button } from "../ui";
 const TRACK_LABEL_WIDTH = 144;
 const BASE_PIXELS_PER_SECOND = 80;
 const MIN_LANE_WIDTH = 760;
+const TRACK_LABEL_CLASSES =
+  "flex w-36 shrink-0 items-center gap-2 border-r border-border bg-muted/40 px-3 text-[11px] font-medium tracking-wide text-muted-foreground";
+
+const getCueBackground = (color) =>
+  `color-mix(in srgb, ${color} 60%, hsl(var(--background)))`;
 
 const clampPercent = (value) => Math.max(0, Math.min(100, value));
 
@@ -84,11 +89,11 @@ function CueBlock({
       onDoubleClick={() => onDoubleClick?.(cue)}
       onPointerDown={(event) => beginDrag(event, "move")}
       onKeyDown={(event) => event.key === "Enter" && onSelect(cue)}
-      className={`absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[10px] text-white opacity-95 shadow-sm transition-[filter,box-shadow,border-color] hover:border-white/80 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-primary shadow-[inset_0_2px_0_hsl(var(--primary))]" : "border-white/25"} ${selected ? "ring-2 ring-white" : ""} ${current && selected ? "ring-primary" : ""}`}
+      className={`absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:border-primary/80 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-primary shadow-[inset_0_2px_0_hsl(var(--primary))]" : "border-white/20"} ${selected ? "ring-2 ring-primary" : ""}`}
       style={{
         left: `${left}%`,
         width: `${width}%`,
-        background: color,
+        background: getCueBackground(color),
         zIndex: selected ? 10 : 1,
       }}
     >
@@ -96,7 +101,7 @@ function CueBlock({
         <span
           data-testid="cue-current-indicator"
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-cyan-200"
+          className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-primary"
         />
       )}
       <span className="pointer-events-none block truncate">
@@ -160,11 +165,11 @@ function LayoutSegmentBlock({
       aria-pressed={selected}
       title={`${label} layout · ${segment.startMs}–${segment.endMs} ms`}
       onClick={() => onSelect?.(segment)}
-      className={`absolute inset-y-1 overflow-hidden rounded-md border px-2 py-1 text-left text-[10px] font-semibold text-white opacity-95 shadow-sm transition-[filter,box-shadow,border-color] hover:border-white/80 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-primary shadow-[inset_0_2px_0_hsl(var(--primary))]" : "border-white/25"} ${selected ? "ring-2 ring-white" : ""}`}
+      className={`absolute inset-y-1 overflow-hidden rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:border-primary/80 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-primary shadow-[inset_0_2px_0_hsl(var(--primary))]" : "border-white/20"} ${selected ? "ring-2 ring-primary" : ""}`}
       style={{
         left: `${left}%`,
         width: `${width}%`,
-        background: layoutColor(segment.format),
+        background: getCueBackground(layoutColor(segment.format)),
         zIndex: selected ? 10 : 1,
       }}
     >
@@ -178,6 +183,7 @@ function Track({
   cues,
   durationMs,
   timelineWidth,
+  gridStyle,
   color,
   playheadMs,
   selectedId,
@@ -193,12 +199,10 @@ function Track({
       data-testid={testId}
       className="flex min-h-12 w-full items-stretch border-b border-border last:border-b-0"
     >
-      <div className="flex w-36 shrink-0 items-center bg-muted px-3 text-xs font-medium text-foreground">
-        {label}
-      </div>
+      <div className={TRACK_LABEL_CLASSES}>{label}</div>
       <div
-        className="relative shrink-0 bg-background"
-        style={{ width: `${timelineWidth}px` }}
+        className="relative shrink-0 bg-background/60"
+        style={{ width: `${timelineWidth}px`, ...gridStyle }}
       >
         {cues.map((cue) => (
           <CueBlock
@@ -273,6 +277,11 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
     { length: tickCount },
     (_, index) => (index / (tickCount - 1)) * 100,
   );
+  const gridStyle = {
+    backgroundImage:
+      "linear-gradient(to right, hsl(var(--border) / 0.45) 1px, transparent 1px)",
+    backgroundSize: `${timelineWidth / (tickCount - 1)}px 100%`,
+  };
 
   const zoomToFit = useCallback(() => {
     const visibleWidth = timelineRef.current?.clientWidth || 0;
@@ -399,7 +408,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
   return (
     <div
       data-testid="local-editor-timeline"
-      className="flex h-full min-h-0 flex-col rounded-lg border border-border bg-card"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
     >
       <div
         ref={timelineRef}
@@ -411,30 +420,35 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
           className="relative"
           style={{ width: `${canvasWidth}px` }}
         >
-          <div
-            className="relative ml-36 h-9 cursor-pointer border-b border-border"
-            style={{ width: `${timelineWidth}px` }}
-            onClick={seek}
-            role="slider"
-            aria-label="Timeline seek"
-            aria-valuemin={0}
-            aria-valuemax={safeDuration}
-            aria-valuenow={playheadMs}
-            tabIndex={0}
-          >
-            {rulerMarks.map((mark) => (
-              <span
-                key={mark}
-                className="absolute top-2 -translate-x-1/2 text-[10px] text-muted-foreground"
-                style={{ left: `${mark}%` }}
-              >
-                {formatClock((safeDuration * mark) / 100, fps)}
-              </span>
-            ))}
+          <div className="flex h-9 border-b border-border bg-muted/20">
+            <div className="sticky left-0 z-20 flex w-36 shrink-0 items-center border-r border-border bg-muted/60 px-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Time
+            </div>
             <div
-              className="absolute bottom-0 top-0 w-px bg-primary"
-              style={{ left: `${(playheadMs / safeDuration) * 100}%` }}
-            />
+              className="relative h-full shrink-0 cursor-pointer bg-muted/20"
+              style={{ width: `${timelineWidth}px`, ...gridStyle }}
+              onClick={seek}
+              role="slider"
+              aria-label="Timeline seek"
+              aria-valuemin={0}
+              aria-valuemax={safeDuration}
+              aria-valuenow={playheadMs}
+              tabIndex={0}
+            >
+              {rulerMarks.map((mark) => (
+                <span
+                  key={mark}
+                  className="absolute top-2 -translate-x-1/2 text-[10px] tabular-nums text-muted-foreground"
+                  style={{ left: `${mark}%` }}
+                >
+                  {formatClock((safeDuration * mark) / 100, fps)}
+                </span>
+              ))}
+              <div
+                className="absolute bottom-0 top-0 w-px bg-primary"
+                style={{ left: `${(playheadMs / safeDuration) * 100}%` }}
+              />
+            </div>
           </div>
           <div
             data-testid="local-editor-layout-track"
@@ -442,14 +456,14 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
           >
             <div
               data-testid="local-editor-layout-track-label"
-              className="flex w-36 shrink-0 items-center bg-muted px-3 text-xs font-medium text-foreground"
+              className={TRACK_LABEL_CLASSES}
               onClick={() => onLayoutDeselect?.()}
             >
               Layout
             </div>
             <div
-              className="relative shrink-0 bg-background"
-              style={{ width: `${timelineWidth}px` }}
+              className="relative shrink-0 bg-background/60"
+              style={{ width: `${timelineWidth}px`, ...gridStyle }}
               onClick={(event) => {
                 if (event.target === event.currentTarget) onLayoutDeselect?.();
               }}
@@ -472,6 +486,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
             cues={hookCues}
             durationMs={safeDuration}
             timelineWidth={timelineWidth}
+            gridStyle={gridStyle}
             color="#f59e0b"
             playheadMs={playheadMs}
             selectedId={selectedId}
@@ -487,6 +502,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
             cues={subtitleCues}
             durationMs={safeDuration}
             timelineWidth={timelineWidth}
+            gridStyle={gridStyle}
             color="#8b5cf6"
             playheadMs={playheadMs}
             selectedId={selectedId}
@@ -500,6 +516,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
             events={soundEvents}
             durationMs={safeDuration}
             timelineWidth={timelineWidth}
+            gridStyle={gridStyle}
             playheadMs={playheadMs}
             selectedId={selectedSoundEventId}
             showInPreview={showSoundEventsInPreview}
@@ -510,12 +527,10 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
             data-testid="local-editor-audio-track"
             className="flex min-h-12 w-full items-stretch border-b border-border last:border-b-0"
           >
-            <div className="flex w-36 shrink-0 items-center bg-muted px-3 text-xs font-medium text-foreground">
-              Audio
-            </div>
+            <div className={TRACK_LABEL_CLASSES}>Audio</div>
             <div
-              className="relative shrink-0 bg-background"
-              style={{ width: `${timelineWidth}px` }}
+              className="relative shrink-0 bg-background/60"
+              style={{ width: `${timelineWidth}px`, ...gridStyle }}
             >
               <AudioWaveform
                 videoUrl={videoUrl}
@@ -579,7 +594,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
               );
             })}
             <div
-              className="absolute bottom-0 top-0 z-10 w-px bg-cyan-300/80"
+              className="absolute bottom-0 top-0 z-10 w-px bg-primary/80"
               style={{ left: `${(playheadMs / safeDuration) * 100}%` }}
             />
           </div>

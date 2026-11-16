@@ -12,6 +12,7 @@ export default function SoundEventTrack({
   events = [],
   durationMs = 1,
   timelineWidth = 760,
+  gridStyle,
   playheadMs = 0,
   selectedId = null,
   showInPreview = true,
@@ -25,7 +26,7 @@ export default function SoundEventTrack({
       data-testid="local-editor-sound-events-track"
       className="flex min-h-12 w-full items-stretch border-b border-border last:border-b-0"
     >
-      <div className="flex w-36 shrink-0 items-center justify-between gap-1 bg-muted px-3 text-xs font-medium text-foreground">
+      <div className="flex w-36 shrink-0 items-center justify-between gap-1 border-r border-border bg-muted/40 px-3 text-[11px] font-medium tracking-wide text-muted-foreground">
         <span className="flex min-w-0 items-center gap-1 truncate">
           <Volume2 size={14} className="shrink-0" />
           Sounds
@@ -45,8 +46,8 @@ export default function SoundEventTrack({
         </label>
       </div>
       <div
-        className="relative shrink-0 bg-background"
-        style={{ width: `${timelineWidth}px` }}
+        className="relative shrink-0 bg-background/60"
+        style={{ width: `${timelineWidth}px`, ...gridStyle }}
       >
         {events.length === 0 ? (
           <span className="absolute inset-y-0 left-3 flex items-center text-[10px] text-muted-foreground">
@@ -77,11 +78,12 @@ export default function SoundEventTrack({
                 aria-pressed={selected}
                 title={eventTitle(event)}
                 onClick={() => onSelect?.(event)}
-                className={`absolute inset-y-1 overflow-hidden rounded-md border px-1.5 text-left text-[10px] text-white shadow-sm transition-colors hover:border-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? "border-primary" : "border-white/25"} ${selected ? "ring-2 ring-white" : ""}`}
+                className={`absolute inset-y-1 overflow-hidden rounded-md border px-1.5 text-left text-[11px] font-medium text-white shadow-sm transition-colors hover:border-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? "border-primary" : "border-white/20"} ${selected ? "ring-2 ring-primary" : ""}`}
                 style={{
                   left: `${left}%`,
                   width: `${width}%`,
-                  backgroundColor: "#0f766e",
+                  backgroundColor:
+                    "color-mix(in srgb, #0f766e 60%, hsl(var(--background)))",
                 }}
               >
                 <span className="block truncate">{event.label}</span>
@@ -91,7 +93,7 @@ export default function SoundEventTrack({
         )}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-0 top-0 z-10 w-px bg-primary"
+          className="pointer-events-none absolute bottom-0 top-0 z-10 w-px bg-primary/80"
           style={{
             left: `${clampPercent((playheadMs / safeDurationMs) * 100)}%`,
           }}

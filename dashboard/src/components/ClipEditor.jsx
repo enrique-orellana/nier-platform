@@ -372,8 +372,8 @@ export default function ClipEditor({
               onTrackRemoved={deleteSubtitleTrack}
             />
           </main>
-          <aside className="space-y-4">
-            <section className="rounded-xl border border-white/10 p-3">
+          <aside className="min-w-0 space-y-4">
+            <section className="min-w-0 rounded-xl border border-white/10 p-3">
               <div className="mb-2 flex items-center justify-between text-xs font-semibold text-zinc-300">
                 <span>Version history</span>
                 <Button
@@ -399,7 +399,7 @@ export default function ClipEditor({
                 }
               />
             </section>
-            <section className="rounded-xl border border-white/10 p-3">
+            <section className="min-w-0 rounded-xl border border-white/10 p-3">
               <h3 className="mb-2 text-xs font-semibold text-zinc-300">
                 Inspector
               </h3>

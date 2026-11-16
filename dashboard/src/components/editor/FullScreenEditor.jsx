@@ -1706,9 +1706,10 @@ export default function FullScreenEditor({
             <Button
               variant="ghost"
               type="button"
+              size="sm"
               onClick={() => saveVersion()}
               disabled={busy}
-              className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1 text-[10px] font-semibold text-white hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="!h-8 !min-h-8 !max-h-8 box-border gap-1.5 px-2 text-xs leading-none font-semibold bg-sky-500 text-white hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? (
                 <Loader2 size={13} className="animate-spin" />

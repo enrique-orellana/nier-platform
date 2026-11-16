@@ -18,6 +18,12 @@ const buildVersionTree = (versions) => {
   return roots;
 };
 
+const flattenVersionTree = (nodes, depth = 1) =>
+  nodes.flatMap((node) => [
+    { ...node, depth },
+    ...flattenVersionTree(node.children, depth + 1),
+  ]);
+
 const VersionTreeNode = ({
   node,
   depth,
@@ -28,7 +34,7 @@ const VersionTreeNode = ({
   onDelete,
   getVersionPreviewUrl,
 }) => {
-  const { version, children } = node;
+  const { version } = node;
   const isSelected = selectedVersionId === version.version_id;
   const generatedClipUrl = getVersionPreviewUrl
     ? getVersionPreviewUrl(version.version_id)
@@ -40,29 +46,32 @@ const VersionTreeNode = ({
       aria-level={depth}
       data-version-node
       role="treeitem"
-      className="space-y-2"
+      className="min-w-0"
     >
       <div
-        className={`group flex items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-sm transition-colors hover:border-ring hover:bg-accent ${isSelected ? "border-ring bg-accent" : "border-border bg-background"}`}
+        className={`group flex min-w-0 items-center gap-2 rounded-md border px-2 py-2 text-sm transition-colors hover:border-ring hover:bg-accent ${isSelected ? "border-ring bg-accent" : "border-border bg-background"}`}
       >
         <Button
           variant="ghost"
           type="button"
-          className="min-w-0 flex-1 text-left font-semibold drop-shadow-sm"
+          className="min-w-0 flex-1 shrink justify-start gap-1.5 overflow-hidden text-left font-semibold drop-shadow-sm"
           onClick={() => onSelect?.(version)}
         >
           <span
-            className={
-              isSelected ? "text-accent-foreground" : "text-foreground"
-            }
+            aria-hidden="true"
+            className="shrink-0"
+            style={{ width: `${Math.min(depth - 1, 3) * 10}px` }}
+          />
+          <span
+            className={`min-w-0 truncate ${isSelected ? "text-accent-foreground" : "text-foreground"}`}
           >
             v{version.version_id.slice(0, 6)}
-          </span>{" "}
-          <span className="text-xs font-medium text-muted-foreground">
+          </span>
+          <span className="shrink-0 text-xs font-medium text-muted-foreground">
             {version.status}
           </span>
           {currentVersionId === version.version_id && (
-            <span className="ml-2 inline-flex items-center rounded-md border border-border bg-secondary px-2 py-0.5 text-[10px] font-medium text-secondary-foreground">
+            <span className="ml-1 inline-flex shrink-0 items-center rounded-md border border-border bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
               current
             </span>
           )}
@@ -70,7 +79,7 @@ const VersionTreeNode = ({
         <Button
           variant="outline"
           size="sm"
-          className="shrink-0"
+          className="h-8 shrink-0 px-2"
           onClick={() => onBranch?.(version.version_id)}
           type="button"
         >
@@ -105,26 +114,6 @@ const VersionTreeNode = ({
           </Button>
         )}
       </div>
-      {children.length > 0 && (
-        <div
-          role="group"
-          className="ml-3 space-y-2 border-l border-border pl-3"
-        >
-          {children.map((child) => (
-            <VersionTreeNode
-              key={child.version.version_id}
-              node={child}
-              depth={depth + 1}
-              currentVersionId={currentVersionId}
-              selectedVersionId={selectedVersionId}
-              onSelect={onSelect}
-              onBranch={onBranch}
-              onDelete={onDelete}
-              getVersionPreviewUrl={getVersionPreviewUrl}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 };
@@ -154,8 +143,8 @@ export default function VersionHistory({
       aria-label={showToggle ? "Version history" : undefined}
       className={
         showToggle
-          ? "overflow-hidden rounded-lg border border-border bg-card"
-          : "space-y-2"
+          ? "min-w-0 overflow-hidden rounded-lg border border-border bg-card"
+          : "min-w-0 space-y-2"
       }
     >
       {showToggle && (
@@ -192,21 +181,27 @@ export default function VersionHistory({
         <div
           role="tree"
           aria-label="Versions"
-          className={showToggle ? "space-y-2 px-4 pb-4 pt-3" : "space-y-2"}
+          className={
+            showToggle
+              ? "min-w-0 w-full space-y-1 px-4 pb-4 pt-3"
+              : "min-w-0 w-full space-y-1"
+          }
         >
-          {buildVersionTree(versions).map((node) => (
-            <VersionTreeNode
-              key={node.version.version_id}
-              node={node}
-              depth={1}
-              currentVersionId={currentVersionId}
-              selectedVersionId={selectedVersionId}
-              onSelect={onSelect}
-              onBranch={onBranch}
-              onDelete={onDelete}
-              getVersionPreviewUrl={getVersionPreviewUrl}
-            />
-          ))}
+          {flattenVersionTree(buildVersionTree(versions)).map(
+            ({ depth, ...node }) => (
+              <VersionTreeNode
+                key={node.version.version_id}
+                node={node}
+                depth={depth}
+                currentVersionId={currentVersionId}
+                selectedVersionId={selectedVersionId}
+                onSelect={onSelect}
+                onBranch={onBranch}
+                onDelete={onDelete}
+                getVersionPreviewUrl={getVersionPreviewUrl}
+              />
+            ),
+          )}
         </div>
       )}
     </section>

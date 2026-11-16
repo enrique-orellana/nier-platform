@@ -2598,6 +2598,7 @@ export default function LocalEditorTab({
                   disabled={busy}
                   size="sm"
                   variant="default"
+                  className="!h-8 !min-h-8 !max-h-8 box-border gap-1.5 px-2 text-xs leading-none"
                 >
                   <Film size={13} />
                   {busy
@@ -2618,6 +2619,7 @@ export default function LocalEditorTab({
               aria-label="Reset"
               size="sm"
               variant="outline"
+              className="!h-8 !min-h-8 !max-h-8 box-border gap-1.5 px-2 text-xs leading-none"
             >
               <RotateCcw size={13} />
               Reset
@@ -2630,6 +2632,7 @@ export default function LocalEditorTab({
                 title="Close editor"
                 size="sm"
                 variant="outline"
+                className="!h-8 !min-h-8 !max-h-8 box-border gap-1.5 px-2 text-xs leading-none"
               >
                 <X size={13} />
                 Close
@@ -3006,7 +3009,7 @@ export default function LocalEditorTab({
                       className="h-8 min-h-8 shrink-0 px-2 text-xs"
                     >
                       <span>Speed</span>
-                      <span className="font-medium text-foreground">
+                      <span className="font-medium text-primary-foreground">
                         {playbackRate.toFixed(2)}x
                       </span>
                       <ChevronDown
@@ -3145,7 +3148,7 @@ export default function LocalEditorTab({
             >
               <div
                 data-testid="local-editor-subtitle-toolbar"
-                className="flex h-10 flex-none items-center justify-between border-b border-border px-2"
+                className="flex min-h-10 flex-none flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-border px-2 py-1"
               >
                 <div
                   data-testid="local-editor-timeline-actions"
@@ -3476,7 +3479,7 @@ export default function LocalEditorTab({
                     )}
                   </div>
                 </div>
-                <div className="flex min-w-0 items-center gap-2">
+                <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
                   {subtitleView === "timeline" && (
                     <div
                       data-testid="local-editor-timeline-zoom-controls"
@@ -3611,7 +3614,7 @@ export default function LocalEditorTab({
                   <div
                     role="tablist"
                     aria-label="Subtitle editing view"
-                    className="flex h-7 shrink-0 rounded border border-border bg-background p-0.5"
+                    className="flex h-8 shrink-0 items-center rounded border border-border bg-background p-0.5"
                   >
                     <Button
                       type="button"
@@ -3622,7 +3625,7 @@ export default function LocalEditorTab({
                       variant={
                         subtitleView === "timeline" ? "secondary" : "ghost"
                       }
-                      className="h-7 px-2 text-xs"
+                      className="h-6 px-2 text-xs"
                     >
                       Timeline
                     </Button>
@@ -3633,7 +3636,7 @@ export default function LocalEditorTab({
                       aria-selected={subtitleView === "table"}
                       onClick={() => setSubtitleView("table")}
                       variant={subtitleView === "table" ? "secondary" : "ghost"}
-                      className="h-7 px-2 text-xs"
+                      className="h-6 px-2 text-xs"
                     >
                       Cue table
                     </Button>
