@@ -301,12 +301,12 @@ export default function LocalEditorHookInspector({
                   aria-label={`Use hook text color ${preset.label}`}
                   title={preset.label}
                   onClick={() => onChange({ ...hook, color: preset.color })}
-                  className={`size-7 rounded-full border-2 transition-all ${String(hook.color || "").toUpperCase() === preset.color ? "scale-110 border-ring ring-2 ring-ring ring-offset-2 ring-offset-background" : "border-input hover:border-ring"}`}
+                  className={`h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-full border-2 p-0 transition-all ${String(hook.color || "").toUpperCase() === preset.color ? "scale-110 border-ring ring-2 ring-ring ring-offset-2 ring-offset-background" : "border-input hover:border-ring"}`}
                   style={{ backgroundColor: preset.color }}
                 />
               ))}
               <label
-                className="relative flex size-7 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-input transition-colors hover:border-ring"
+                className="relative flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-input p-0 transition-colors hover:border-ring"
                 title="Custom color"
               >
                 <span className="text-xs text-muted-foreground">+</span>
@@ -351,12 +351,12 @@ export default function LocalEditorHookInspector({
                 aria-label={`Use hook background ${preset.label}`}
                 title={preset.label}
                 onClick={() => onChange({ ...hook, background: preset.color })}
-                className={`size-7 rounded-full border-2 transition-all ${String(hook.background || "").toUpperCase() === preset.color ? "scale-110 border-ring ring-2 ring-ring ring-offset-2 ring-offset-background" : "border-input hover:border-ring"}`}
+                className={`h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-full border-2 p-0 transition-all ${String(hook.background || "").toUpperCase() === preset.color ? "scale-110 border-ring ring-2 ring-ring ring-offset-2 ring-offset-background" : "border-input hover:border-ring"}`}
                 style={{ backgroundColor: preset.color }}
               />
             ))}
             <label
-              className="relative flex size-7 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-input transition-colors hover:border-ring"
+              className="relative flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-input p-0 transition-colors hover:border-ring"
               title="Custom background color"
             >
               <span className="text-xs text-muted-foreground">+</span>
