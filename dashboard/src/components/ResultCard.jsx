@@ -133,6 +133,7 @@ export default function ResultCard({
   const [showClipRangeEditor, setShowClipRangeEditor] = useState(false);
   const [showControlsModal, setShowControlsModal] = useState(false);
   const isSingleResult = layout === "single";
+  const isCompact = layout === "compact";
   const [editError, setEditError] = useState(null);
   const editorSessionRef = React.useRef(null);
 
@@ -751,9 +752,11 @@ export default function ResultCard({
 
   return (
     <Card
-      className={`group flex h-full min-w-0 flex-col overflow-hidden transition-colors hover:border-primary/40 ${isSingleResult ? "col-span-full w-full max-w-xs" : ""}`}
+      className={`group flex min-w-0 overflow-hidden transition-colors hover:border-primary/40 ${isCompact ? "h-auto flex-col sm:flex-row" : "h-full flex-col"} ${isSingleResult ? "col-span-full w-full max-w-xs" : ""}`}
     >
-      <div className="min-w-0 shrink-0 bg-muted">
+      <div
+        className={`shrink-0 bg-muted ${isCompact ? "w-full max-w-[180px] self-center sm:w-40 sm:max-w-none sm:self-stretch" : "min-w-0"}`}
+      >
         {hasPreviewVideo ? (
           <VideoPreview
             videoRef={videoRef}
@@ -778,7 +781,9 @@ export default function ResultCard({
         )}
       </div>
 
-      <UICardContent className="flex min-w-0 flex-1 flex-col gap-4 p-4">
+      <UICardContent
+        className={`flex min-w-0 flex-1 flex-col gap-4 p-4 ${isCompact ? "gap-3 p-3 sm:p-4" : ""}`}
+      >
         <ClipWorkflowStatus
           status={workflowStatus}
           saving={workflowStatusSaving}

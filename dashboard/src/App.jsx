@@ -2259,6 +2259,7 @@ function App() {
                           <ResultCard
                             key={i}
                             clip={clip}
+                            layout="compact"
                             index={i}
                             jobId={jobId}
                             uploadPostKey={uploadPostKey}
