@@ -1858,6 +1858,56 @@ def _local_ollama_request_target(base_url: str) -> tuple[str, str]:
     return request_url, host_header
 
 
+OLLAMA_CLIP_ANALYSIS_MIN_NUM_CTX = 16384
+OLLAMA_CLIP_ANALYSIS_MAX_NUM_CTX = 32768
+OLLAMA_CLIP_ANALYSIS_NUM_PREDICT = 4096
+OLLAMA_CLIP_ANALYSIS_CONTEXT_RESERVE = 2048
+
+
+def _ollama_error_detail(response: httpx.Response) -> str:
+    """Return a readable error from Ollama, including nested runner errors."""
+    raw_detail = response.text.strip()
+    try:
+        payload = response.json()
+    except ValueError:
+        return raw_detail[:1000]
+
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(error, str):
+        try:
+            nested_payload = json.loads(error)
+        except json.JSONDecodeError:
+            return error[:1000]
+        error = (
+            nested_payload.get("error", nested_payload)
+            if isinstance(nested_payload, dict)
+            else error
+        )
+
+    if isinstance(error, dict):
+        code = str(error.get("code") or "").strip()
+        message = str(error.get("message") or "").strip()
+        if code and message:
+            return f"{code}: {message}"[:1000]
+        if message:
+            return message[:1000]
+    return str(error or raw_detail)[:1000]
+
+
+def _ollama_clip_analysis_context(prompt: str, image_count: int) -> int:
+    """Choose a bounded context large enough for the transcript and sampled frames."""
+    prompt_tokens = (len(prompt) + 1) // 2
+    estimated_request_tokens = (
+        prompt_tokens
+        + max(0, image_count) * 1024
+        + OLLAMA_CLIP_ANALYSIS_NUM_PREDICT
+        + OLLAMA_CLIP_ANALYSIS_CONTEXT_RESERVE
+    )
+    required_context = max(OLLAMA_CLIP_ANALYSIS_MIN_NUM_CTX, estimated_request_tokens)
+    rounded_context = ((required_context + 8191) // 8192) * 8192
+    return min(OLLAMA_CLIP_ANALYSIS_MAX_NUM_CTX, rounded_context)
+
+
 def ollama_chat_json(
     base_url: str,
     model: str,
@@ -1891,7 +1941,11 @@ def ollama_chat_json(
         "format": "json",
         "stream": False,
         "keep_alive": keep_alive,
-        "options": {"temperature": 0.2},
+        "options": {
+            "temperature": 0.2,
+            "num_ctx": _ollama_clip_analysis_context(prompt, len(encoded_images)),
+            "num_predict": OLLAMA_CLIP_ANALYSIS_NUM_PREDICT,
+        },
     }
 
     with httpx.Client(
@@ -1904,7 +1958,16 @@ def ollama_chat_json(
             json=payload,
             headers={"Host": host_header},
         )
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = _ollama_error_detail(response)
+        if detail:
+            raise RuntimeError(
+                f"Ollama chat request failed with HTTP {exc.response.status_code}: "
+                f"{detail[:1000]}"
+            ) from exc
+        raise
     content = (response.json().get("message") or {}).get("content") or ""
     if not isinstance(content, str) or not content.strip():
         raise ValueError("Ollama returned an empty clip analysis response")
