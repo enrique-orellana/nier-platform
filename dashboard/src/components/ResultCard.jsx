@@ -99,9 +99,9 @@ export default function ResultCard({
   const { url: originalVideoUrl } = useRenewableMediaUrl(originalSourceUrl);
   const { url: masterVideoUrl } = useRenewableMediaUrl(masterSourceUrl);
   const previewVideoUrl = originalVideoUrl || masterVideoUrl;
-  const previewStartSeconds = resolvePreviewStartSeconds(clip);
-  const [currentVideoUrl, setCurrentVideoUrl] = useState(originalVideoUrl);
-  const [persistedVideoUrl, setPersistedVideoUrl] = useState(originalVideoUrl);
+  const [currentVideoUrl, setCurrentVideoUrl] = useState(previewVideoUrl);
+  const [persistedVideoUrl, setPersistedVideoUrl] = useState(previewVideoUrl);
+  const lastPreviewVideoUrlRef = React.useRef(previewVideoUrl);
   const lastObjectUrlRef = React.useRef(null);
 
   const [platforms, setPlatforms] = useState({
@@ -151,6 +151,10 @@ export default function ResultCard({
   });
 
   const hasVideo = Boolean(originalVideoUrl);
+  const hasPreviewVideo = Boolean(previewVideoUrl);
+  const previewClip =
+    !hasVideo && masterVideoUrl ? { ...clip, source_preview: true } : clip;
+  const previewStartSeconds = resolvePreviewStartSeconds(previewClip);
   const effectiveRenderStatus =
     renderStatus || clip.render_status || (hasVideo ? "ready" : "found");
   const webcamSourceCandidate = getApiUrl(resolveMasterVideoUrl(clip));
@@ -195,6 +199,18 @@ export default function ResultCard({
   };
 
   useEffect(() => {
+    const previousPreviewVideoUrl = lastPreviewVideoUrlRef.current;
+    if (
+      previewVideoUrl &&
+      (!currentVideoUrl || currentVideoUrl === previousPreviewVideoUrl)
+    ) {
+      setCurrentVideoUrl(previewVideoUrl);
+      setPersistedVideoUrl(previewVideoUrl);
+    }
+    lastPreviewVideoUrlRef.current = previewVideoUrl;
+  }, [currentVideoUrl, previewVideoUrl]);
+
+  useEffect(() => {
     if (
       originalVideoUrl &&
       currentVideoUrl !== originalVideoUrl &&
@@ -228,7 +244,8 @@ export default function ResultCard({
     };
   }, []);
 
-  const getSourceVideoUrl = () => persistedVideoUrl || originalVideoUrl;
+  const getSourceVideoUrl = () =>
+    persistedVideoUrl || originalVideoUrl || masterVideoUrl;
   const getVideoFilename = () => getUrlFilename(getSourceVideoUrl());
   const getRendererSourceUrl = () => getSourceVideoUrl();
 
@@ -737,17 +754,17 @@ export default function ResultCard({
       className={`group flex h-full min-w-0 flex-col overflow-hidden transition-colors hover:border-primary/40 ${isSingleResult ? "col-span-full w-full max-w-xs" : ""}`}
     >
       <div className="min-w-0 shrink-0 bg-muted">
-        {hasVideo ? (
+        {hasPreviewVideo ? (
           <VideoPreview
             videoRef={videoRef}
-            currentVideoUrl={currentVideoUrl}
+            currentVideoUrl={currentVideoUrl || previewVideoUrl}
             trueOriginalUrl={trueOriginalUrl}
             index={index}
             isEditing={isEditing}
             isConvertingNativeShort={isConvertingNativeShort}
             onPlay={onPlay}
             onPause={onPause}
-            clip={clip}
+            clip={previewClip}
           />
         ) : (
           <div className="relative flex aspect-[9/16] w-full items-center justify-center p-6 text-center">
