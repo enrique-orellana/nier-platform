@@ -2694,10 +2694,36 @@ def _finalize_clip_analysis_result(
     model_name,
     local_min_duration,
     local_target_duration,
+    allow_transcript_fallback=False,
 ):
     all_shorts = dedupe_clip_candidates(all_shorts)
     if not all_shorts:
-        raise ValueError("Clip analysis returned no valid candidates")
+        if allow_transcript_fallback and float(video_duration or 0.0) > 0:
+            fallback_plan = _build_fallback_clip_plan(
+                transcript_result,
+                video_duration,
+                target_clips,
+                min_duration=local_min_duration,
+                target_duration=local_target_duration,
+            )
+            fallback_shorts = [
+                clip
+                for clip in fallback_plan["shorts"]
+                if 0 <= float(clip.get("start", -1))
+                < float(clip.get("end", 0))
+                <= float(video_duration)
+            ]
+            if fallback_shorts:
+                all_shorts = fallback_shorts
+                result_json = dict(result_json or {})
+                result_json["fallback_reason"] = fallback_plan["fallback_reason"]
+                analysis_metadata = dict(analysis_metadata or {})
+                analysis_metadata["fallback"] = "transcript_based"
+                print(
+                    "⚠️  Ollama returned no usable clips; using a transcript-based fallback."
+                )
+        if not all_shorts:
+            raise ValueError("Clip analysis returned no valid candidates")
 
     clip_limit = max(1, min(int(target_clips or 1), 15))
     adjusted_shorts = []
@@ -3006,6 +3032,7 @@ def _discover_clip_plan(
             model_name=model_name,
             local_min_duration=local_min_duration,
             local_target_duration=local_target_duration,
+            allow_transcript_fallback=local_ollama_selected,
         )
 
     except Exception as e:

@@ -786,6 +786,7 @@ class OllamaVisionClipAnalysisProvider:
             max_frames=8,
             max_dimension=768,
         )
+        print(f"🖼️  Local visual analysis: sending {len(frames)} sampled frames to Ollama.")
         frame_times = "\n".join(
             f"Image {index}: source timestamp {timestamp:.3f} seconds"
             for index, (timestamp, _image) in enumerate(frames, start=1)
