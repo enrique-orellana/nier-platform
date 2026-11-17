@@ -3023,7 +3023,7 @@ if __name__ == '__main__':
     parser.add_argument('--skip-analysis', action='store_true', help="Skip AI analysis and convert the whole video.")
     parser.add_argument('--defer-render', action='store_true', help="Find candidate clips without rendering them.")
     parser.add_argument('--render-clip', type=int, help="Render one zero-based candidate clip from persisted metadata.")
-    parser.add_argument('--target-clips', type=int, default=6, help="Preferred number of viral clips to generate (3-15).")
+    parser.add_argument('--target-clips', type=int, default=6, help="Preferred number of viral clips to generate (1-15).")
     parser.add_argument(
         '--layout-format',
         choices=('standard', 'streamer_stack'),
@@ -3044,7 +3044,7 @@ if __name__ == '__main__':
         parser.error("--render-clip cannot be combined with --skip-analysis")
     if args.render_clip is not None and args.render_clip < 0:
         parser.error("--render-clip must be non-negative")
-    target_clips = min(max(3, args.target_clips), 15)
+    target_clips = min(max(1, args.target_clips), 15)
     try:
         source_object = parse_source_object_argument(args.source_object)
     except ValueError as exc:

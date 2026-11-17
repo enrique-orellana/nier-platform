@@ -3,7 +3,7 @@ CREATE TABLE jobs (
     kind TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'completed', 'failed')),
     source_url TEXT,
-    clip_count INTEGER NOT NULL DEFAULT 6 CHECK (clip_count BETWEEN 3 AND 15),
+    clip_count INTEGER NOT NULL DEFAULT 6 CHECK (clip_count BETWEEN 1 AND 15),
     output_dir TEXT NOT NULL,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     result JSONB,

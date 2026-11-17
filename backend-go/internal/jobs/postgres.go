@@ -38,6 +38,9 @@ var renderMetricAccelerationModeSchema string
 //go:embed migrations/008_retire_highlight_jobs.sql
 var retireHighlightJobsSchema string
 
+//go:embed migrations/009_allow_single_clip.sql
+var allowSingleClipSchema string
+
 type PostgresStore struct {
 	db          *sql.DB
 	versionRepo versions.Repository
@@ -86,6 +89,9 @@ func (s *PostgresStore) Close() error { return s.db.Close() }
 func (s *PostgresStore) Migrate(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, jobsSchema); err != nil {
 		return fmt.Errorf("run jobs migration: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, allowSingleClipSchema); err != nil {
+		return fmt.Errorf("allow single-clip jobs: %w", err)
 	}
 	if _, err := s.db.ExecContext(ctx, deferredClipRenderingSchema); err != nil {
 		return fmt.Errorf("run deferred clip rendering migration: %w", err)

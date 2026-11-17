@@ -95,7 +95,7 @@ export default function Landing({ onLaunchApp }) {
       icon: Sparkles,
       title: "AI Viral Moment Detection",
       description:
-        "Google Gemini 3.0 Flash analyzes your video transcript and scene boundaries to detect the 3-15 most engaging moments. Each clip is scored for viral potential based on emotional impact, hook strength, and shareability — similar to how TikTok's algorithm ranks content for the For You page.",
+        "Google Gemini 3.0 Flash analyzes your video transcript and scene boundaries to detect 1-15 engaging moments. Each clip is scored for viral potential based on emotional impact, hook strength, and shareability — similar to how TikTok's algorithm ranks content for the For You page.",
     },
     {
       icon: Scissors,
@@ -156,7 +156,7 @@ export default function Landing({ onLaunchApp }) {
     {
       title: "AI Detects the Best Viral Moments",
       description:
-        "Google Gemini 3.0 Flash transcribes, analyzes scene boundaries, and identifies 3-15 high-potential clips of 15-60 seconds each.",
+        "Google Gemini 3.0 Flash transcribes, analyzes scene boundaries, and identifies 1-15 high-potential clips of 15-60 seconds each.",
     },
     {
       title: "Smart Cropping to Vertical 9:16",

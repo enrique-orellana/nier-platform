@@ -269,11 +269,11 @@ export default function MediaInput({
                       </SelectTrigger>
                       <SelectContent className="rounded-md border-border bg-popover shadow-md">
                         {Array.from(
-                          { length: 13 },
-                          (_, index) => index + 3,
+                          { length: 15 },
+                          (_, index) => index + 1,
                         ).map((count) => (
                           <SelectItem key={count} value={String(count)}>
-                            {count} clips
+                            {count} {count === 1 ? "clip" : "clips"}
                           </SelectItem>
                         ))}
                       </SelectContent>

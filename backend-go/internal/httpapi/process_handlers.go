@@ -92,8 +92,8 @@ func (s *Server) process(w http.ResponseWriter, r *http.Request) {
 			payload.ClipCount = 6
 		}
 	}
-	if payload.ClipCount < 3 || payload.ClipCount > 15 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "clip_count must be between 3 and 15"})
+	if payload.ClipCount < 1 || payload.ClipCount > 15 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "clip_count must be between 1 and 15"})
 		return
 	}
 	layoutFormat, facecamSize, err := normalizeProcessLayoutOptions(payload.LayoutFormat, payload.FacecamSize)

@@ -431,7 +431,7 @@ function App() {
   const activeTab = route.tab; // dashboard, settings, projects
   const [clipCount, setClipCount] = useState(() => {
     const stored = Number(localStorage.getItem("clip_count_v1"));
-    return Number.isFinite(stored) && stored >= 3 && stored <= 15 ? stored : 6;
+    return Number.isFinite(stored) && stored >= 1 && stored <= 15 ? stored : 6;
   });
 
   const [sessionRecovered, setSessionRecovered] = useState(false);

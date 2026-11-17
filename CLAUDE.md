@@ -41,7 +41,7 @@ go run ./cmd/api
 1. **Ingest** - YouTube download (yt-dlp) or local upload
 2. **Transcription** - remote provider with word-level timestamps
 3. **Scene Detection** - PySceneDetect for segment boundaries
-4. **AI Analysis** - Gemini identifies 3-15 viral moments (15-60 sec each)
+4. **AI Analysis** - Gemini identifies 1-15 viral moments (15-60 sec each)
 5. **FFmpeg Extraction** - Precise clip cutting
 6. **AI Cropping** - Vertical reframing with subject tracking
 7. **Effects/Subtitles** - Optional AI-generated FFmpeg filters
