@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import gc
+import math
 import threading
 from contextlib import asynccontextmanager
 from typing import Any, Callable
@@ -12,6 +14,73 @@ from starlette.concurrency import run_in_threadpool
 
 from .audio import AudioDecodeError, decode_audio
 from .detector import AudioEventDetector, create_detector
+
+
+class LazyAudioEventDetector(AudioEventDetector):
+    """Load the configured detector on first use and unload it after idle time."""
+
+    def __init__(
+        self,
+        identifier: str,
+        factory: Callable[[str], AudioEventDetector],
+        *,
+        idle_timeout_seconds: float = 60.0,
+    ) -> None:
+        if not math.isfinite(idle_timeout_seconds) or idle_timeout_seconds < 0:
+            raise ValueError("AUDIO_EVENT_MODEL_IDLE_TTL_SECONDS must be non-negative")
+        self.identifier = identifier
+        self._factory = factory
+        self._idle_timeout_seconds = idle_timeout_seconds
+        self._detector: AudioEventDetector | None = None
+        self._lock = threading.RLock()
+        self._unload_timer: threading.Timer | None = None
+        self._timer_generation = 0
+
+    @property
+    def loaded(self) -> bool:
+        with self._lock:
+            return self._detector is not None
+
+    def detect(self, waveform: Any, *, duration_seconds: float) -> list[dict[str, Any]]:
+        with self._lock:
+            if self._unload_timer is not None:
+                self._unload_timer.cancel()
+                self._unload_timer = None
+            if self._detector is None:
+                self._detector = self._factory(self.identifier)
+            try:
+                return self._detector.detect(
+                    waveform, duration_seconds=duration_seconds
+                )
+            finally:
+                self._schedule_unload()
+
+    def _schedule_unload(self) -> None:
+        self._timer_generation += 1
+        generation = self._timer_generation
+        timer = threading.Timer(
+            self._idle_timeout_seconds, self._unload, args=(generation,)
+        )
+        timer.daemon = True
+        self._unload_timer = timer
+        timer.start()
+
+    def _unload(self, generation: int) -> None:
+        with self._lock:
+            if generation != self._timer_generation:
+                return
+            self._unload_timer = None
+            self._detector = None
+        gc.collect()
+
+    def close(self) -> None:
+        with self._lock:
+            if self._unload_timer is not None:
+                self._unload_timer.cancel()
+                self._unload_timer = None
+            self._timer_generation += 1
+            self._detector = None
+        gc.collect()
 
 
 def _required_setting(name: str) -> str:
@@ -46,9 +115,21 @@ def create_app(
         if app.state.model_id != detector_id:
             raise ValueError("AUDIO_EVENT_MODEL must match AUDIO_EVENT_DETECTOR")
         app.state.max_upload_bytes = _max_upload_bytes()
-        app.state.detector = detector_factory(detector_id)
-        app.state.inference_lock = threading.Lock()
-        yield
+        try:
+            idle_ttl = float(os.environ.get("AUDIO_EVENT_MODEL_IDLE_TTL_SECONDS", "60"))
+        except ValueError as exc:
+            raise ValueError(
+                "AUDIO_EVENT_MODEL_IDLE_TTL_SECONDS must be non-negative"
+            ) from exc
+        app.state.detector = LazyAudioEventDetector(
+            detector_id,
+            detector_factory,
+            idle_timeout_seconds=idle_ttl,
+        )
+        try:
+            yield
+        finally:
+            app.state.detector.close()
 
     app = FastAPI(
         title="OpenShorts Local Audio Events",
@@ -84,9 +165,8 @@ def create_app(
             )
 
         def run_detection() -> list[dict[str, Any]]:
-            with app.state.inference_lock:
-                waveform, duration = decode_audio(payload)
-                return app.state.detector.detect(waveform, duration_seconds=duration)
+            waveform, duration = decode_audio(payload)
+            return app.state.detector.detect(waveform, duration_seconds=duration)
 
         try:
             events = await run_in_threadpool(run_detection)

@@ -1,8 +1,10 @@
 import base64
+import ipaddress
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import tempfile
 import time
@@ -1777,3 +1779,160 @@ def chat_json(
     )
     text = extract_json_text(raw)
     return json.loads(text)
+
+
+def _local_ollama_request_target(base_url: str) -> tuple[str, str]:
+    """Resolve an approved local Ollama host once and pin the HTTP request to it."""
+    raw_url = str(base_url or "").strip()
+    if not raw_url:
+        raise ValueError("Ollama base URL is required for local clip analysis")
+    try:
+        parsed = urlsplit(raw_url)
+        hostname = parsed.hostname
+        configured_port = parsed.port
+        port = configured_port if configured_port is not None else 80
+    except ValueError as exc:
+        raise ValueError("Invalid local Ollama URL") from exc
+
+    if (
+        parsed.scheme.lower() != "http"
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in {"", "/"}
+        or not 1 <= port <= 65535
+    ):
+        raise ValueError("Ollama must use a local HTTP origin without credentials or a path")
+
+    hostname = hostname.rstrip(".").lower()
+    host_is_docker_gateway = hostname == "host.docker.internal"
+    if not host_is_docker_gateway and hostname != "localhost":
+        try:
+            address = ipaddress.ip_address(hostname)
+        except ValueError as exc:
+            raise ValueError(
+                "Ollama host must be localhost, a loopback IP, or host.docker.internal"
+            ) from exc
+        if not address.is_loopback:
+            raise ValueError(
+                "Ollama host must be localhost, a loopback IP, or host.docker.internal"
+            )
+
+    try:
+        resolved = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise ValueError("Unable to resolve the local Ollama host") from exc
+
+    addresses = set()
+    for result in resolved:
+        try:
+            address = ipaddress.ip_address(result[4][0])
+        except ValueError as exc:
+            raise ValueError("Ollama resolved to an invalid address") from exc
+        mapped_address = getattr(address, "ipv4_mapped", None)
+        if mapped_address is not None:
+            address = mapped_address
+        is_allowed = address.is_loopback or (
+            host_is_docker_gateway and address.is_private
+        )
+        if not is_allowed:
+            raise ValueError("Ollama must resolve only to a local address")
+        addresses.add(address)
+
+    if not addresses:
+        raise ValueError("Ollama host did not resolve to a local address")
+
+    pinned_address = sorted(
+        addresses, key=lambda address: (address.version != 4, str(address))
+    )[0]
+    pinned_host = f"[{pinned_address}]" if pinned_address.version == 6 else str(pinned_address)
+    request_url = f"http://{pinned_host}:{port}"
+    original_host = f"[{hostname}]" if ":" in hostname else hostname
+    host_header = (
+        f"{original_host}:{configured_port}"
+        if configured_port is not None
+        else original_host
+    )
+    return request_url, host_header
+
+
+def ollama_chat_json(
+    base_url: str,
+    model: str,
+    prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    images: Optional[Sequence[bytes | str]] = None,
+    keep_alive: str | int = "30s",
+    timeout: float = 300.0,
+) -> dict[str, Any]:
+    """Request structured text and optional image analysis from native Ollama."""
+    model_id = str(model or "").strip()
+    if not model_id:
+        raise ValueError("Ollama vision model is required for local clip analysis")
+    origin, host_header = _local_ollama_request_target(base_url)
+
+    encoded_images = [
+        image if isinstance(image, str) else base64.b64encode(image).decode("ascii")
+        for image in (images or [])
+    ]
+    messages: list[dict[str, Any]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    user_message: dict[str, Any] = {"role": "user", "content": prompt}
+    if encoded_images:
+        user_message["images"] = encoded_images
+    messages.append(user_message)
+    payload = {
+        "model": model_id,
+        "messages": messages,
+        "format": "json",
+        "stream": False,
+        "keep_alive": keep_alive,
+        "options": {"temperature": 0.2},
+    }
+
+    with httpx.Client(
+        timeout=timeout,
+        follow_redirects=False,
+        trust_env=False,
+    ) as client:
+        response = client.post(
+            f"{origin}/api/chat",
+            json=payload,
+            headers={"Host": host_header},
+        )
+    response.raise_for_status()
+    content = (response.json().get("message") or {}).get("content") or ""
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("Ollama returned an empty clip analysis response")
+    try:
+        return json.loads(extract_json_text(content))
+    except json.JSONDecodeError as exc:
+        raise ValueError("Ollama returned invalid JSON for clip analysis") from exc
+
+
+def unload_ollama_model(
+    base_url: str,
+    model: str,
+    *,
+    timeout: float = 10.0,
+) -> None:
+    """Ask Ollama to unload a model without running another inference."""
+    model_id = str(model or "").strip()
+    if not str(base_url or "").strip() or not model_id:
+        return
+    origin, host_header = _local_ollama_request_target(base_url)
+    with httpx.Client(
+        timeout=timeout,
+        follow_redirects=False,
+        trust_env=False,
+    ) as client:
+        response = client.post(
+            f"{origin}/api/generate",
+            json={"model": model_id, "keep_alive": 0, "stream": False},
+            headers={"Host": host_header},
+        )
+    response.raise_for_status()

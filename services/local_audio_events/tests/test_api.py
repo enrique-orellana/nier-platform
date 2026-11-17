@@ -1,4 +1,5 @@
 import warnings
+import time
 
 with warnings.catch_warnings():
     warnings.filterwarnings(
@@ -48,6 +49,7 @@ def test_event_api_reports_health_and_returns_the_configured_detector_output(
             "provider": "yamnet",
             "model": "yamnet",
         }
+        assert not app.state.detector.loaded
         response = client.post(
             "/v1/audio/events",
             data={"model": "yamnet"},
@@ -66,6 +68,45 @@ def test_event_api_reports_health_and_returns_the_configured_detector_output(
         ]
     }
     assert detector.calls == [([0.0], 1.0)]
+
+
+def test_detector_loads_on_demand_and_unloads_after_idle_ttl(monkeypatch):
+    configure_test_service(monkeypatch)
+    monkeypatch.setenv("AUDIO_EVENT_MODEL_IDLE_TTL_SECONDS", "0.02")
+    created = []
+
+    def factory(identifier):
+        detector = FakeDetector()
+        created.append((identifier, detector))
+        return detector
+
+    app = main.create_app(factory)
+    with TestClient(app) as client:
+        assert client.get("/health").json()["ok"] is True
+        assert created == []
+
+        first = client.post(
+            "/v1/audio/events",
+            data={"model": "yamnet"},
+            files={"file": ("chunk.wav", b"audio", "audio/wav")},
+        )
+        assert first.status_code == 200
+        assert len(created) == 1
+        assert app.state.detector.loaded
+
+        time.sleep(0.08)
+        assert not app.state.detector.loaded
+        assert client.get("/health").json()["ok"] is True
+
+        second = client.post(
+            "/v1/audio/events",
+            data={"model": "yamnet"},
+            files={"file": ("chunk.wav", b"audio", "audio/wav")},
+        )
+        assert second.status_code == 200
+        assert len(created) == 2
+
+    assert not app.state.detector.loaded
 
 
 def test_event_api_rejects_unconfigured_models_without_running_inference(monkeypatch):

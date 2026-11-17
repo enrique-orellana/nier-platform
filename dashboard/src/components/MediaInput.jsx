@@ -31,6 +31,13 @@ export default function MediaInput({
   targetClipCount,
   onTargetClipCountChange,
   defaultTranscriptionLanguage = "auto",
+  clipAnalysisBackend = "configured",
+  onClipAnalysisBackendChange = () => {},
+  configuredProviderLabel = "Configured AI provider",
+  ollamaBaseUrl = "",
+  ollamaModel = "",
+  ollamaAvailable = false,
+  onOpenSettings = () => {},
 }) {
   const [mode, setMode] = useState("minio"); // 'minio' | 'file'
   const [selectedObject, setSelectedObject] = useState(null);
@@ -55,6 +62,9 @@ export default function MediaInput({
         layoutFormat,
         facecamSize,
         transcriptionLanguage,
+        clipAnalysisBackend,
+        ollamaBaseUrl,
+        ollamaModel,
       });
     } else if (mode === "file" && file) {
       onProcess({
@@ -65,6 +75,9 @@ export default function MediaInput({
         layoutFormat,
         facecamSize,
         transcriptionLanguage,
+        clipAnalysisBackend,
+        ollamaBaseUrl,
+        ollamaModel,
       });
     }
   };
@@ -278,6 +291,53 @@ export default function MediaInput({
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="clip-analysis-provider">
+                      Clip analysis
+                    </Label>
+                    <Select
+                      value={clipAnalysisBackend}
+                      onValueChange={onClipAnalysisBackendChange}
+                    >
+                      <SelectTrigger
+                        id="clip-analysis-provider"
+                        className="h-9 rounded-md border-input bg-background px-3 py-1 shadow-sm focus:ring-1 focus:ring-offset-0"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-md border-border bg-popover shadow-md">
+                        <SelectItem value="configured">
+                          {configuredProviderLabel}
+                        </SelectItem>
+                        <SelectItem value="ollama" disabled={!ollamaAvailable}>
+                          Local · {ollamaModel || "Ollama vision model"}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {ollamaAvailable ? (
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        The local model reviews sampled frames with the
+                        transcript. It loads for this analysis and then unloads.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-x-1 text-xs leading-relaxed text-muted-foreground">
+                        <span>
+                          To use local visual analysis, install and select a
+                          vision model in
+                        </span>
+                        <Button
+                          variant="link"
+                          size="sm"
+                          type="button"
+                          className="h-auto p-0 text-xs"
+                          onClick={onOpenSettings}
+                        >
+                          Settings.
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2 sm:col-span-2">

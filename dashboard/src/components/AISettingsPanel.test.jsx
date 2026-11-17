@@ -269,4 +269,60 @@ describe("AISettingsPanel", () => {
     fireEvent.click(refreshButton);
     expect(onRefreshCodexModels).toHaveBeenCalled();
   });
+
+  it("configures a local Ollama vision model and displays its installed state", () => {
+    const setOllamaBaseUrl = vi.fn();
+    const setOllamaModel = vi.fn();
+    const onRefreshOllamaModels = vi.fn();
+    render(
+      <AISettingsPanel
+        aiProvider="gemini"
+        aiBaseUrl=""
+        apiKey=""
+        aiQualityPreset="balanced"
+        aiTextModel="gemini-2.5-flash"
+        aiAnalyzeModel="gemini-2.5-flash"
+        aiVisionModel="gemini-3.1-flash-image-preview"
+        aiImageModel=""
+        lmStudioAvailable={false}
+        lmStudioModels={{ textModels: [], visionModels: [] }}
+        ollamaBaseUrl="http://host.docker.internal:11434"
+        setOllamaBaseUrl={setOllamaBaseUrl}
+        ollamaModel="qwen3-vl:8b-instruct-q4_K_M"
+        setOllamaModel={setOllamaModel}
+        ollamaDiscovery={{
+          available: true,
+          models: [],
+          visionModels: [
+            { id: "qwen3-vl:8b-instruct-q4_K_M", label: "Qwen3 VL 8B" },
+          ],
+          loading: false,
+          error: "",
+        }}
+        onRefreshOllamaModels={onRefreshOllamaModels}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Ollama URL" })).toHaveValue(
+      "http://host.docker.internal:11434",
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Ollama vision model" }),
+    ).toHaveValue("qwen3-vl:8b-instruct-q4_K_M");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Ollama is reachable. 1 vision model available.",
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Ollama URL" }), {
+      target: { value: "http://127.0.0.1:11434" },
+    });
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Ollama vision model" }),
+      { target: { value: "qwen3-vl:4b-instruct-q4_K_M" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Refresh/i }));
+
+    expect(setOllamaBaseUrl).toHaveBeenCalledWith("http://127.0.0.1:11434");
+    expect(setOllamaModel).toHaveBeenCalledWith("qwen3-vl:4b-instruct-q4_K_M");
+    expect(onRefreshOllamaModels).toHaveBeenCalled();
+  });
 });

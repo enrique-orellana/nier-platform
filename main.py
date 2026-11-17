@@ -60,7 +60,11 @@ from openshorts.ai.ai_client import (
     openai_file_analysis_json,
 )
 from openshorts.analysis.analysis_job_lock import analysis_job_lock, analysis_locked
-from openshorts.analysis.analysis_providers import ClipAnalysisProvider, create_clip_analysis_provider
+from openshorts.analysis.analysis_providers import (
+    ClipAnalysisProvider,
+    OllamaVisionClipAnalysisProvider,
+    create_clip_analysis_provider,
+)
 from openshorts.subtitles.transcription import transcribe_video_with_config
 from openshorts.rendering.master_policy import master_video_encode_args, choose_master_spec, master_video_filter
 from openshorts.rendering.media_probe import probe_media
@@ -2758,25 +2762,49 @@ def _discover_clip_plan(
     source_context=None,
     *,
     clip_analysis_provider: ClipAnalysisProvider | None = None,
+    video_path=None,
 ):
     ai_config = load_ai_config()
-    print(f"🤖  Analyzing with {ai_config.normalized_provider()}...")
-
-    if ai_config.is_gemini() and not ai_config.api_key:
-        raise RuntimeError("Clip analysis requires GEMINI_API_KEY for the configured provider")
-
-    analysis_provider = clip_analysis_provider or create_clip_analysis_provider(
-        ai_config,
-        chat_json_fn=chat_json,
+    local_ollama_selected = (
+        os.environ.get("CLIP_ANALYSIS_BACKEND", "configured").strip().lower()
+        == "ollama"
     )
+    if local_ollama_selected:
+        selected_model = os.environ.get("CLIP_OLLAMA_MODEL", "").strip()
+        selected_base_url = os.environ.get("CLIP_OLLAMA_BASE_URL", "").strip()
+        analysis_provider = clip_analysis_provider or OllamaVisionClipAnalysisProvider(
+            selected_base_url,
+            selected_model,
+        )
+        analysis_config = AIConfig(provider="ollama")
+        model_name = selected_model
+        selected_provider_name = "Ollama"
+    else:
+        analysis_provider = clip_analysis_provider or create_clip_analysis_provider(
+            ai_config,
+            chat_json_fn=chat_json,
+        )
+        analysis_config = ai_config
+        model_name = ai_config.analyze_model or ai_config.text_model or (
+            "gemini-2.5-flash" if ai_config.is_gemini() else ""
+        )
+        selected_provider_name = ai_config.normalized_provider()
+    print(f"🤖  Analyzing with {selected_provider_name}...")
+
+    if not local_ollama_selected and ai_config.is_gemini() and not ai_config.api_key:
+        raise RuntimeError("Clip analysis requires GEMINI_API_KEY for the configured provider")
 
     is_lmstudio = ai_config.is_lmstudio()
     local_min_duration = 24.0 if is_lmstudio else 15.0
     local_target_duration = 32.0 if is_lmstudio else None
 
     try:
-        model_name = ai_config.analyze_model or ai_config.text_model or ("gemini-2.5-flash" if ai_config.is_gemini() else "")
-        analysis_timeout = 0.0 if ai_config.normalized_provider() == "openai-codex" else 300.0
+        analysis_timeout = (
+            0.0
+            if not local_ollama_selected
+            and ai_config.normalized_provider() == "openai-codex"
+            else 300.0
+        )
         result_json = {}
         all_shorts = []
         source_context_json = (
@@ -2797,7 +2825,11 @@ def _discover_clip_plan(
         clip_adapter_id = os.environ.get(
             "AI_CLIP_ANALYSIS_PROVIDER", "chat-json"
         ).strip().lower()
-        if clip_adapter_id == "chat-json" and should_use_openai_file_analysis(ai_config):
+        if (
+            not local_ollama_selected
+            and clip_adapter_id == "chat-json"
+            and should_use_openai_file_analysis(ai_config)
+        ):
             result_json, all_shorts, analysis_metadata = _analyze_openai_file_timeline(
                 timeline,
                 indexed_units,
@@ -2813,7 +2845,7 @@ def _discover_clip_plan(
                 video_duration=video_duration,
                 target_clips=target_clips,
                 analysis_metadata=analysis_metadata,
-                ai_config=ai_config,
+                ai_config=analysis_config,
                 model_name=analysis_metadata["model"],
                 local_min_duration=local_min_duration,
                 local_target_duration=local_target_duration,
@@ -2835,6 +2867,24 @@ def _discover_clip_plan(
             "failed_windows": 0,
         }
         successful_window_indexes = set()
+
+        def analyze_window(window_prompt, window):
+            options = {
+                "model": model_name,
+                "reasoning_effort": ai_config.analyze_reasoning_effort,
+                "timeout": analysis_timeout,
+            }
+            if local_ollama_selected:
+                if not video_path:
+                    raise ValueError("Local Ollama clip analysis requires the source video path")
+                options.update(
+                    {
+                        "video_path": video_path,
+                        "frame_start": window["context_start"],
+                        "frame_end": window["context_end"],
+                    }
+                )
+            return analysis_provider.analyze_json(window_prompt, **options)
 
         for window_index, window in enumerate(windows):
             analysis_status["started_windows"] += 1
@@ -2865,12 +2915,7 @@ def _discover_clip_plan(
                 if attempt:
                     analysis_status["retried_windows"] += 1
                 try:
-                    response = analysis_provider.analyze_json(
-                        prompt,
-                        model=model_name,
-                        reasoning_effort=ai_config.analyze_reasoning_effort,
-                        timeout=analysis_timeout,
-                    )
+                    response = analyze_window(prompt, window)
                     if not isinstance(response, dict):
                         raise ValueError("AI returned a non-object response")
                     normalized_response = dict(response)
@@ -2911,12 +2956,7 @@ def _discover_clip_plan(
                 )
                 if len(continuation_prompt) <= CLIP_ANALYSIS_MAX_PROMPT_CHARS:
                     try:
-                        continuation = analysis_provider.analyze_json(
-                            continuation_prompt,
-                            model=model_name,
-                            reasoning_effort=ai_config.analyze_reasoning_effort,
-                            timeout=analysis_timeout,
-                        )
+                        continuation = analyze_window(continuation_prompt, window)
                         if isinstance(continuation, dict) and isinstance(continuation.get("shorts"), list):
                             shorts = list(shorts) + list(continuation["shorts"])
                     except Exception as exc:
@@ -2962,7 +3002,7 @@ def _discover_clip_plan(
             video_duration=video_duration,
             target_clips=target_clips,
             analysis_metadata=analysis_metadata,
-            ai_config=ai_config,
+            ai_config=analysis_config,
             model_name=model_name,
             local_min_duration=local_min_duration,
             local_target_duration=local_target_duration,
@@ -2971,8 +3011,16 @@ def _discover_clip_plan(
     except Exception as e:
         print(f"❌ AI Error: {e}")
         raise RuntimeError(
-            f"Clip analysis failed with {ai_config.normalized_provider()}: {e}"
+            f"Clip analysis failed with {selected_provider_name}: {e}"
         ) from e
+    finally:
+        if local_ollama_selected:
+            unload = getattr(analysis_provider, "unload", None)
+            if callable(unload):
+                try:
+                    unload()
+                except Exception as exc:
+                    print(f"⚠️  Could not unload the local Ollama model: {exc}")
 
 
 class ClipDiscoveryPipeline:
@@ -2982,13 +3030,22 @@ class ClipDiscoveryPipeline:
         self.clip_analysis_provider = clip_analysis_provider
 
     @analysis_locked
-    def discover(self, transcript_result, video_duration, target_clips=6, source_context=None):
+    def discover(
+        self,
+        transcript_result,
+        video_duration,
+        target_clips=6,
+        source_context=None,
+        *,
+        video_path=None,
+    ):
         return _discover_clip_plan(
             transcript_result,
             video_duration,
             target_clips=target_clips,
             source_context=source_context,
             clip_analysis_provider=self.clip_analysis_provider,
+            video_path=video_path,
         )
 
 
@@ -2999,6 +3056,7 @@ def get_viral_clips(
     source_context=None,
     *,
     clip_analysis_provider: ClipAnalysisProvider | None = None,
+    video_path=None,
 ):
     """Compatibility function backed by the reusable clip-discovery pipeline."""
     return ClipDiscoveryPipeline(clip_analysis_provider).discover(
@@ -3006,6 +3064,7 @@ def get_viral_clips(
         video_duration,
         target_clips=target_clips,
         source_context=source_context,
+        video_path=video_path,
     )
 
 if __name__ == '__main__':
@@ -3161,6 +3220,7 @@ if __name__ == '__main__':
                         duration,
                         target_clips=target_clips,
                         source_context=source_context_record.get("source_context"),
+                        video_path=processing_video,
                     )
         
         if not clips_data or "shorts" not in clips_data:

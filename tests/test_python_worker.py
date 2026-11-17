@@ -330,6 +330,43 @@ def test_clip_generation_environment_uses_request_ai_headers(monkeypatch):
     assert environment["AI_API_KEY"] == "secret"
     assert environment["AI_BASE_URL"] == "https://openrouter.ai/api/v1"
     assert environment["AI_ANALYZE_MODEL"] == "openai/gpt-4o-mini"
+    assert environment["CLIP_ANALYSIS_BACKEND"] == "configured"
+
+
+def test_clip_generation_environment_keeps_ollama_clip_choice_job_scoped(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "openrouter")
+    monkeypatch.setenv("CLIP_OLLAMA_MODEL", "previous-job-model")
+
+    environment = build_clip_generation_environment(
+        {
+            "headers": {
+                "X-AI-Provider": "openai-codex",
+                "X-AI-Model": "gpt-6-luna",
+                "X-AI-Api-Key": "transcription-key",
+                "X-Clip-Analysis-Provider": "ollama",
+                "X-Clip-Ollama-Base-Url": "http://host.docker.internal:11434",
+                "X-Clip-Ollama-Model": "qwen3-vl:8b-instruct-q4_K_M",
+            }
+        }
+    )
+
+    assert environment["AI_PROVIDER"] == "openai-codex"
+    assert environment["AI_API_KEY"] == "transcription-key"
+    assert environment["CLIP_ANALYSIS_BACKEND"] == "ollama"
+    assert environment["CLIP_OLLAMA_BASE_URL"] == "http://host.docker.internal:11434"
+    assert environment["CLIP_OLLAMA_MODEL"] == "qwen3-vl:8b-instruct-q4_K_M"
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"X-Clip-Analysis-Provider": "unsupported"},
+        {"X-Clip-Analysis-Provider": "ollama", "X-Clip-Ollama-Base-Url": "http://localhost:11434"},
+    ],
+)
+def test_clip_generation_environment_rejects_invalid_local_clip_configuration(headers):
+    with pytest.raises(ValueError, match="Ollama clip analysis|Unsupported clip-analysis"):
+        build_clip_generation_environment({"headers": headers})
 
 
 def test_clip_generation_environment_preserves_local_transcription_model(monkeypatch):

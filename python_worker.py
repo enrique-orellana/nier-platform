@@ -188,6 +188,17 @@ def build_clip_generation_environment(request: Mapping[str, Any]) -> dict[str, s
 
     environment = os.environ.copy()
     headers = request.get("headers") or {}
+    clip_backend = str(headers.get("X-Clip-Analysis-Provider") or "configured").strip().lower()
+    if clip_backend not in {"configured", "ollama"}:
+        raise ValueError("Unsupported clip-analysis provider")
+    environment["CLIP_ANALYSIS_BACKEND"] = clip_backend
+    if clip_backend == "ollama":
+        ollama_base_url = str(headers.get("X-Clip-Ollama-Base-Url") or "").strip()
+        ollama_model = str(headers.get("X-Clip-Ollama-Model") or "").strip()
+        if not ollama_base_url or not ollama_model:
+            raise ValueError("Ollama clip analysis requires a base URL and vision model")
+        environment["CLIP_OLLAMA_BASE_URL"] = ollama_base_url
+        environment["CLIP_OLLAMA_MODEL"] = ollama_model
     if headers:
         request_environment = ai_config_to_env(load_ai_config(headers))
         # UI chat headers can carry a stale model from a different ASR provider.

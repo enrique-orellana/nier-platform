@@ -86,6 +86,7 @@ func NewServerWithDependenciesAndScheduler(cfg config.Config, store jobs.Store, 
 	mux.HandleFunc("/api/media-url", server.mediaURL)
 	mux.HandleFunc("/api/translate/languages", server.translationLanguages)
 	mux.HandleFunc("/api/ai/lmstudio/discover", server.discoverLMStudio)
+	mux.HandleFunc("/api/ai/ollama/discover", server.discoverOllama)
 	mux.HandleFunc("/api/ai/openai-codex/status", server.codexRoute)
 	mux.HandleFunc("/api/ai/openai-codex/connect", server.codexRoute)
 	mux.HandleFunc("/api/ai/openai-codex/poll", server.codexRoute)

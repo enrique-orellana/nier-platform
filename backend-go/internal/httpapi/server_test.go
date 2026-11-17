@@ -1180,6 +1180,57 @@ func TestLMStudioDiscoveryReturnsNormalizedModels(t *testing.T) {
 	}
 }
 
+func TestOllamaDiscoveryReturnsInstalledVisionModelsWithoutInference(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/tags" {
+			t.Fatalf("unexpected Ollama request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"models":[{"name":"qwen3-vl:8b-instruct-q4_K_M","size":6200000000,"details":{"families":["qwen3vl"]}},{"name":"llama3.2:latest","size":2000000000,"details":{"families":["llama"]}}]}`))
+	}))
+	defer provider.Close()
+
+	server := NewServer(config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/ai/ollama/discover", strings.NewReader(`{"baseUrl":"`+provider.URL+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	var discovered struct {
+		Available    bool `json:"available"`
+		VisionModels []struct {
+			ID string `json:"id"`
+		} `json:"visionModels"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &discovered); err != nil {
+		t.Fatalf("decode Ollama response: %v", err)
+	}
+	if res.Code != http.StatusOK || !discovered.Available || len(discovered.VisionModels) != 1 || discovered.VisionModels[0].ID != "qwen3-vl:8b-instruct-q4_K_M" {
+		t.Fatalf("unexpected Ollama response: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestOllamaDiscoveryRejectsNonLocalAndCredentialedURLs(t *testing.T) {
+	for _, baseURL := range []string{
+		"http://8.8.8.8:11434",
+		"http://192.168.1.10:11434",
+		"http://user:password@127.0.0.1:11434",
+		"https://127.0.0.1:11434",
+		"http://127.0.0.1:11434/custom-path",
+		"http://127.0.0.1:0",
+		"http://127.0.0.1:65536",
+	} {
+		t.Run(baseURL, func(t *testing.T) {
+			server := NewServer(config.Config{})
+			req := httptest.NewRequest(http.MethodPost, "/api/ai/ollama/discover", strings.NewReader(`{"baseUrl":"`+baseURL+`"}`))
+			res := httptest.NewRecorder()
+			server.Handler().ServeHTTP(res, req)
+			if res.Code != http.StatusBadRequest {
+				t.Fatalf("expected local URL validation error, got %d %s", res.Code, res.Body.String())
+			}
+		})
+	}
+}
+
 func TestClipManifestRoutesReadAndPatchAtomically(t *testing.T) {
 	outputDir := t.TempDir()
 	manifestPath := filepath.Join(outputDir, "job-1", "clip_0", "manifest.json")
@@ -2097,6 +2148,38 @@ func TestTranslationHeadersIncludesTranscriptionLanguage(t *testing.T) {
 	headers := translationHeaders(req)
 	if headers["X-AI-Transcription-Language"] != "it" {
 		t.Fatalf("expected transcription language header to be forwarded: %#v", headers)
+	}
+}
+
+func TestTranslationHeadersIncludesLocalClipAnalysisConfiguration(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/process", nil)
+	req.Header.Set("X-Clip-Analysis-Provider", "ollama")
+	req.Header.Set("X-Clip-Ollama-Base-Url", "http://host.docker.internal:11434")
+	req.Header.Set("X-Clip-Ollama-Model", "qwen3-vl:8b-instruct-q4_K_M")
+
+	headers := translationHeaders(req)
+	if headers["X-Clip-Analysis-Provider"] != "ollama" || headers["X-Clip-Ollama-Model"] != "qwen3-vl:8b-instruct-q4_K_M" {
+		t.Fatalf("expected local clip analysis headers to be forwarded: %#v", headers)
+	}
+}
+
+func TestValidateClipAnalysisSelectionRequiresLocalModelSettings(t *testing.T) {
+	configured := httptest.NewRequest(http.MethodPost, "/api/process", nil)
+	if err := validateClipAnalysisSelection(configured); err != nil {
+		t.Fatalf("configured provider should remain the default: %v", err)
+	}
+
+	invalid := httptest.NewRequest(http.MethodPost, "/api/process", nil)
+	invalid.Header.Set("X-Clip-Analysis-Provider", "remote-url")
+	if err := validateClipAnalysisSelection(invalid); err == nil {
+		t.Fatal("expected unknown clip-analysis providers to be rejected")
+	}
+
+	missing := httptest.NewRequest(http.MethodPost, "/api/process", nil)
+	missing.Header.Set("X-Clip-Analysis-Provider", "ollama")
+	missing.Header.Set("X-Clip-Ollama-Base-Url", "http://127.0.0.1:11434")
+	if err := validateClipAnalysisSelection(missing); err == nil {
+		t.Fatal("expected missing vision model to be rejected")
 	}
 }
 

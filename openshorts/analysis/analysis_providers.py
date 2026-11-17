@@ -731,6 +731,90 @@ class ConfiguredChatAnalysisProvider(ClipAnalysisProvider):
         return chat_json_fn(self.config, prompt, **options)
 
 
+class OllamaVisionClipAnalysisProvider:
+    """Select clips from a transcript plus a bounded set of local video frames."""
+
+    provider_id = "ollama"
+    keep_alive = "30s"
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        *,
+        frame_sampler: Callable[..., list[tuple[float, bytes]]] | None = None,
+        chat_json_fn: Callable[..., dict[str, Any]] | None = None,
+        unload_fn: Callable[..., None] | None = None,
+    ) -> None:
+        self.base_url = str(base_url or "").strip().rstrip("/")
+        self.model = str(model or "").strip()
+        self._frame_sampler = frame_sampler
+        self._chat_json_fn = chat_json_fn
+        self._unload_fn = unload_fn
+        if not self.base_url:
+            raise ProviderConfigurationError("Ollama base URL is required")
+        if not self.model:
+            raise ProviderConfigurationError("Ollama vision model is required")
+
+    def analyze_json(
+        self,
+        prompt: str,
+        *,
+        video_path: str | Path,
+        frame_start: float,
+        frame_end: float,
+        timeout: float = 300.0,
+        **_options: Any,
+    ) -> dict[str, Any]:
+        if self._frame_sampler is None:
+            from openshorts.analysis.video_frames import sample_video_frames
+
+            frame_sampler = sample_video_frames
+        else:
+            frame_sampler = self._frame_sampler
+        if self._chat_json_fn is None:
+            from openshorts.ai.ai_client import ollama_chat_json
+
+            chat_json_fn = ollama_chat_json
+        else:
+            chat_json_fn = self._chat_json_fn
+
+        frames = frame_sampler(
+            video_path,
+            frame_start,
+            frame_end,
+            max_frames=8,
+            max_dimension=768,
+        )
+        frame_times = "\n".join(
+            f"Image {index}: source timestamp {timestamp:.3f} seconds"
+            for index, (timestamp, _image) in enumerate(frames, start=1)
+        )
+        visual_prompt = (
+            f"{prompt}\n\n"
+            "VISUAL REVIEW: Use the attached frames and their source timestamps "
+            "along with the transcript to choose clips. The images are ordered as listed.\n"
+            f"{frame_times or 'No frames could be sampled for this window.'}"
+        )
+        return chat_json_fn(
+            self.base_url,
+            self.model,
+            visual_prompt,
+            images=[image for _, image in frames],
+            keep_alive=self.keep_alive,
+            timeout=timeout,
+        )
+
+    def unload(self) -> None:
+        if self._unload_fn is None:
+            from openshorts.ai.ai_client import unload_ollama_model
+
+            unload_fn = unload_ollama_model
+        else:
+            unload_fn = self._unload_fn
+        unload_fn(self.base_url, self.model)
+
+
 provider_registry = ProviderRegistry()
 provider_registry.register(
     "transcription",

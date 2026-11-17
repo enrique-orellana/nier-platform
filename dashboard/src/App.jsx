@@ -296,6 +296,8 @@ const CONFIGURED_LMSTUDIO_BASE_URL = (
 const CONFIGURED_AI_QUALITY_PRESET = (
   import.meta.env.VITE_AI_QUALITY_PRESET || "balanced"
 ).trim();
+const DEFAULT_OLLAMA_BASE_URL = "http://host.docker.internal:11434";
+const DEFAULT_OLLAMA_VISION_MODEL = "qwen3-vl:8b-instruct-q4_K_M";
 
 // Mock polling function
 const pollJob = async (jobId) => {
@@ -323,6 +325,25 @@ function App() {
       CONFIGURED_LMSTUDIO_BASE_URL ||
       "",
   );
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState(
+    () =>
+      localStorage.getItem("local_ollama_base_url_v1") ||
+      DEFAULT_OLLAMA_BASE_URL,
+  );
+  const [ollamaModel, setOllamaModel] = useState(
+    () =>
+      localStorage.getItem("local_ollama_vision_model_v1") ||
+      DEFAULT_OLLAMA_VISION_MODEL,
+  );
+  const [ollamaDiscovery, setOllamaDiscovery] = useState({
+    available: false,
+    models: [],
+    visionModels: [],
+    loading: false,
+    error: "",
+  });
+  const [clipAnalysisBackend, setClipAnalysisBackend] = useState("configured");
+  const ollamaDiscoveryRequest = useRef(0);
   const [aiQualityPreset, setAiQualityPreset] = useState(() =>
     normalizeQualityPreset(
       localStorage.getItem("ai_quality_preset_v1") ||
@@ -753,6 +774,46 @@ function App() {
     }
   }, [aiBaseUrl, apiKey]);
 
+  const refreshOllamaModels = useCallback(async () => {
+    const requestId = ++ollamaDiscoveryRequest.current;
+    setOllamaDiscovery((current) => ({ ...current, loading: true, error: "" }));
+    try {
+      const response = await fetch(getApiUrl("/api/ai/ollama/discover"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl: ollamaBaseUrl }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.available) {
+        throw new Error(data.error || data.detail || "Unable to reach Ollama.");
+      }
+      if (requestId === ollamaDiscoveryRequest.current) {
+        setOllamaDiscovery({
+          available: true,
+          models: data.models || [],
+          visionModels: data.visionModels || [],
+          loading: false,
+          error: "",
+        });
+      }
+    } catch (error) {
+      if (requestId === ollamaDiscoveryRequest.current) {
+        setOllamaDiscovery({
+          available: false,
+          models: [],
+          visionModels: [],
+          loading: false,
+          error: error.message,
+        });
+      }
+    }
+  }, [ollamaBaseUrl]);
+
+  useEffect(() => {
+    const timer = setTimeout(refreshOllamaModels, 500);
+    return () => clearTimeout(timer);
+  }, [refreshOllamaModels]);
+
   useEffect(() => {
     if (aiProvider === "lmstudio" && lmStudioAvailable === false) {
       setAiProvider(
@@ -902,6 +963,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem("ai_base_url_v1", aiBaseUrl);
   }, [aiBaseUrl]);
+
+  useEffect(() => {
+    localStorage.setItem("local_ollama_base_url_v1", ollamaBaseUrl);
+  }, [ollamaBaseUrl]);
+
+  useEffect(() => {
+    localStorage.setItem("local_ollama_vision_model_v1", ollamaModel);
+  }, [ollamaModel]);
 
   useEffect(() => {
     localStorage.setItem("ai_quality_preset_v1", aiQualityPreset);
@@ -1245,6 +1314,19 @@ function App() {
       setLogs(["LM Studio mode needs a Base URL. Set it in Settings first."]);
       setStatus("error");
       return;
+    }
+    if (data.clipAnalysisBackend === "ollama") {
+      const modelInstalled = ollamaDiscovery.visionModels.some(
+        (model) => model.id === ollamaModel,
+      );
+      if (!ollamaDiscovery.available || !modelInstalled) {
+        navigateToTab("settings");
+        setLogs([
+          "The selected Ollama vision model is unavailable. Check its setup in Settings.",
+        ]);
+        setStatus("error");
+        return;
+      }
     }
     setStatus("processing");
     setLogs(["Starting process..."]);
@@ -1714,6 +1796,12 @@ function App() {
                       onDisconnectCodex={disconnectCodex}
                       onRefreshCodexModels={refreshCodexModels}
                       onDetectLmStudio={detectLmStudio}
+                      ollamaBaseUrl={ollamaBaseUrl}
+                      setOllamaBaseUrl={setOllamaBaseUrl}
+                      ollamaModel={ollamaModel}
+                      setOllamaModel={setOllamaModel}
+                      ollamaDiscovery={ollamaDiscovery}
+                      onRefreshOllamaModels={refreshOllamaModels}
                     />
                   </TabsContent>
 
@@ -2001,6 +2089,22 @@ function App() {
                   targetClipCount={clipCount}
                   onTargetClipCountChange={setClipCount}
                   defaultTranscriptionLanguage={transcriptionLanguage}
+                  clipAnalysisBackend={clipAnalysisBackend}
+                  onClipAnalysisBackendChange={setClipAnalysisBackend}
+                  configuredProviderLabel={
+                    {
+                      gemini: "Gemini",
+                      openrouter: "OpenRouter",
+                      lmstudio: "LM Studio",
+                      "openai-codex": "OpenAI Codex (ChatGPT)",
+                    }[aiProvider] || aiProvider
+                  }
+                  ollamaBaseUrl={ollamaBaseUrl}
+                  ollamaModel={ollamaModel}
+                  ollamaAvailable={ollamaDiscovery.visionModels.some(
+                    (model) => model.id === ollamaModel,
+                  )}
+                  onOpenSettings={() => navigateToTab("settings")}
                 />
               </div>
             </div>

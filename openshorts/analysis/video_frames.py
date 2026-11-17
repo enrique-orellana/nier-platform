@@ -33,6 +33,66 @@ def _scaled_dimensions(width: int, height: int, max_dimension: int | None) -> tu
     return _even(output_width), _even(output_height)
 
 
+def sample_video_frames(
+    video_path: str | os.PathLike[str],
+    start_seconds: float,
+    end_seconds: float,
+    *,
+    max_frames: int = 8,
+    max_dimension: int = 768,
+    ffmpeg_binary: str = "ffmpeg",
+) -> list[tuple[float, bytes]]:
+    """Return a bounded set of timestamped JPEG frames held only in memory."""
+    start = max(0.0, float(start_seconds))
+    end = max(start, float(end_seconds))
+    count = min(8, max(1, int(max_frames)))
+    if max_dimension < 2:
+        raise ValueError("max_dimension must be at least 2 pixels")
+
+    span = end - start
+    timestamps = (
+        [start]
+        if span <= 0
+        else [start + span * (index + 0.5) / count for index in range(count)]
+    )
+    frames: list[tuple[float, bytes]] = []
+    for timestamp in timestamps:
+        command = [
+            ffmpeg_binary,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-ss",
+            f"{timestamp:.3f}",
+            "-i",
+            os.fspath(video_path),
+            "-an",
+            "-sn",
+            "-dn",
+            "-frames:v",
+            "1",
+            "-vf",
+            f"scale={max_dimension}:{max_dimension}:force_original_aspect_ratio=decrease:force_divisible_by=2",
+            "-q:v",
+            "4",
+            "-f",
+            "image2pipe",
+            "-vcodec",
+            "mjpeg",
+            "pipe:1",
+        ]
+        result = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            timeout=45,
+        )
+        if result.stdout:
+            frames.append((timestamp, result.stdout))
+    return frames
+
+
 class FFmpegVideoStream:
     """A PySceneDetect-compatible stream backed by FFmpeg rawvideo output."""
 

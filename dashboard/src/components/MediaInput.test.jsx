@@ -22,14 +22,14 @@ describe("MediaInput", () => {
     );
 
     expect(
-      screen.getByText(/research the creator or streamer/i),
+      screen.getByText(/adds context for clip titles and descriptions/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/tailor titles, descriptions, and other clip metadata/i),
+      screen.getByText(/selected video remains the source for processing/i),
     ).toBeInTheDocument();
   });
 
-  it("uses the saved source language as the generation default", () => {
+  it("uses the saved source language as the generation default", async () => {
     const onProcess = vi.fn();
     const { container } = render(
       <MediaInput
@@ -41,7 +41,10 @@ describe("MediaInput", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /upload file/i }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /^upload$/i }), {
+      button: 0,
+      ctrlKey: false,
+    });
     fireEvent.change(container.querySelector('input[type="file"]'), {
       target: {
         files: [new File(["video"], "source.mp4", { type: "video/mp4" })],
@@ -77,11 +80,12 @@ describe("MediaInput", () => {
         isProcessing={false}
         targetClipCount={6}
         onTargetClipCountChange={vi.fn()}
+        defaultTranscriptionLanguage="it"
       />,
     );
 
     expect(
-      screen.getByRole("button", { name: /select from minio/i }),
+      screen.getByRole("tab", { name: /video library/i }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/youtube url/i)).not.toBeInTheDocument();
 
@@ -90,9 +94,6 @@ describe("MediaInput", () => {
     );
     fireEvent.change(screen.getByLabelText(/original source url/i), {
       target: { value: "https://www.twitch.tv/videos/2842570758" },
-    });
-    fireEvent.change(screen.getByLabelText(/transcription source language/i), {
-      target: { value: "it" },
     });
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: /generate clips/i }));
@@ -105,10 +106,13 @@ describe("MediaInput", () => {
       layoutFormat: "standard",
       facecamSize: "medium",
       transcriptionLanguage: "it",
+      clipAnalysisBackend: "configured",
+      ollamaBaseUrl: "",
+      ollamaModel: "",
     });
   });
 
-  it("submits the original source URL with an uploaded file", () => {
+  it("submits the original source URL with an uploaded file", async () => {
     const onProcess = vi.fn();
     const { container } = render(
       <MediaInput
@@ -119,7 +123,10 @@ describe("MediaInput", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /upload file/i }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /^upload$/i }), {
+      button: 0,
+      ctrlKey: false,
+    });
     fireEvent.change(container.querySelector('input[type="file"]'), {
       target: {
         files: [new File(["video"], "source.mp4", { type: "video/mp4" })],
@@ -142,7 +149,43 @@ describe("MediaInput", () => {
     );
   });
 
-  it("submits Streamer Stack with the selected facecam size and no pre-generation hook control", () => {
+  it("includes the selected Ollama model in a clip-generation request", async () => {
+    const onProcess = vi.fn();
+    const { container } = render(
+      <MediaInput
+        onProcess={onProcess}
+        isProcessing={false}
+        targetClipCount={6}
+        onTargetClipCountChange={vi.fn()}
+        clipAnalysisBackend="ollama"
+        ollamaBaseUrl="http://host.docker.internal:11434"
+        ollamaModel="qwen3-vl:8b-instruct-q4_K_M"
+        ollamaAvailable
+      />,
+    );
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /^upload$/i }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: {
+        files: [new File(["video"], "source.mp4", { type: "video/mp4" })],
+      },
+    });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /generate clips/i }));
+
+    expect(onProcess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clipAnalysisBackend: "ollama",
+        ollamaBaseUrl: "http://host.docker.internal:11434",
+        ollamaModel: "qwen3-vl:8b-instruct-q4_K_M",
+      }),
+    );
+  });
+
+  it("submits Streamer Stack with the selected facecam size and no pre-generation hook control", async () => {
     const onProcess = vi.fn();
     const { container } = render(
       <MediaInput
@@ -153,18 +196,25 @@ describe("MediaInput", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /upload file/i }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /^upload$/i }), {
+      button: 0,
+      ctrlKey: false,
+    });
     fireEvent.change(container.querySelector('input[type="file"]'), {
       target: {
         files: [new File(["video"], "source.mp4", { type: "video/mp4" })],
       },
     });
-    fireEvent.change(screen.getByLabelText(/video format/i), {
-      target: { value: "streamer_stack" },
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Output layout" }), {
+      key: "Enter",
     });
-    fireEvent.change(screen.getByLabelText(/facecam size/i), {
-      target: { value: "large" },
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Streamer stack" }),
+    );
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Facecam size" }), {
+      key: "Enter",
     });
+    fireEvent.click(await screen.findByRole("option", { name: "Large" }));
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: /generate clips/i }));
 

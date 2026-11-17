@@ -455,3 +455,62 @@ def test_selected_clip_provider_failure_is_reported_without_heuristic_candidates
             target_clips=1,
             clip_analysis_provider=BrokenClipProvider(),
         )
+
+
+def test_local_ollama_receives_source_window_and_unloads_after_success(monkeypatch):
+    monkeypatch.setenv("CLIP_ANALYSIS_BACKEND", "ollama")
+    monkeypatch.setenv("CLIP_OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+    monkeypatch.setenv("CLIP_OLLAMA_MODEL", "qwen3-vl:8b-instruct-q4_K_M")
+    monkeypatch.setenv("OPENAI_CLIP_ANALYSIS_MODE", "file")
+    monkeypatch.setattr(main, "load_ai_config", lambda: _config())
+    calls = []
+
+    class FakeOllamaProvider:
+        def analyze_json(self, prompt, **options):
+            calls.append((prompt, options))
+            return {"shorts": [{"start": 0, "end": 20, "score": 0.9}]}
+
+        def unload(self):
+            calls.append("unload")
+
+    result = main.get_viral_clips(
+        {"segments": [{"start": 0, "end": 30, "text": "A valid segment."}]},
+        30,
+        target_clips=1,
+        clip_analysis_provider=FakeOllamaProvider(),
+        video_path="source.mp4",
+    )
+
+    assert result["shorts"]
+    assert calls[-1] == "unload"
+    analysis_options = calls[0][1]
+    assert analysis_options["model"] == "qwen3-vl:8b-instruct-q4_K_M"
+    assert analysis_options["video_path"] == "source.mp4"
+    assert analysis_options["frame_start"] == 0
+    assert analysis_options["frame_end"] == 30
+
+
+def test_local_ollama_unloads_after_analysis_failure(monkeypatch):
+    monkeypatch.setenv("CLIP_ANALYSIS_BACKEND", "ollama")
+    monkeypatch.setenv("CLIP_OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+    monkeypatch.setenv("CLIP_OLLAMA_MODEL", "qwen3-vl:8b-instruct-q4_K_M")
+    monkeypatch.setattr(main, "load_ai_config", lambda: _config())
+    unloaded = []
+
+    class BrokenOllamaProvider:
+        def analyze_json(self, _prompt, **_options):
+            raise RuntimeError("Ollama is unavailable")
+
+        def unload(self):
+            unloaded.append(True)
+
+    with pytest.raises(RuntimeError, match="Clip analysis failed with Ollama"):
+        main.get_viral_clips(
+            {"segments": [{"start": 0, "end": 30, "text": "A valid segment."}]},
+            30,
+            target_clips=1,
+            clip_analysis_provider=BrokenOllamaProvider(),
+            video_path="source.mp4",
+        )
+
+    assert unloaded == [True]

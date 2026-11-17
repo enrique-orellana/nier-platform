@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -109,6 +110,98 @@ func (s *Server) discoverLMStudio(w http.ResponseWriter, r *http.Request) {
 		"provider":     "lmstudio",
 		"baseUrl":      origin,
 		"textModels":   models,
+		"visionModels": visionModels,
+	})
+}
+
+func ollamaModelSupportsVision(model map[string]any) bool {
+	name := strings.ToLower(firstString(model, "name", "model", "id"))
+	visionNames := []string{"-vl", "vl:", "vision", "llava", "moondream", "minicpm-v", "gemma3"}
+	for _, token := range visionNames {
+		if strings.Contains(name, token) {
+			return true
+		}
+	}
+	details, _ := model["details"].(map[string]any)
+	families, _ := details["families"].([]any)
+	for _, value := range families {
+		family, _ := value.(string)
+		family = strings.ToLower(family)
+		if strings.Contains(family, "vl") || strings.Contains(family, "vision") || strings.Contains(family, "llava") || family == "gemma3" {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) discoverOllama(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+		return
+	}
+	var request struct {
+		BaseURL string `json:"baseUrl"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+	origin, err := localServiceOrigin(request.BaseURL)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"available":    false,
+			"models":       []any{},
+			"visionModels": []any{},
+			"error":        "Ollama must use a local HTTP origin.",
+		})
+		return
+	}
+	client := localOnlyHTTPClient(10 * time.Second)
+	upstream, err := http.NewRequestWithContext(r.Context(), http.MethodGet, origin+"/api/tags", nil)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"available": false, "models": []any{}, "visionModels": []any{}, "error": "Unable to check the local Ollama service."})
+		return
+	}
+	response, err := client.Do(upstream)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"available": false, "models": []any{}, "visionModels": []any{}, "error": "Unable to reach the local Ollama service."})
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		writeJSON(w, http.StatusOK, map[string]any{"available": false, "models": []any{}, "visionModels": []any{}, "error": "Ollama model discovery failed."})
+		return
+	}
+	var payload struct {
+		Models []map[string]any `json:"models"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 4<<20)).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"available": false, "models": []any{}, "visionModels": []any{}, "error": "Ollama returned an invalid model list."})
+		return
+	}
+	models := make([]map[string]any, 0, len(payload.Models))
+	visionModels := make([]map[string]any, 0, len(payload.Models))
+	for _, raw := range payload.Models {
+		name := firstString(raw, "name", "model", "id")
+		if name == "" {
+			continue
+		}
+		size, _ := raw["size"].(float64)
+		model := map[string]any{
+			"id":             name,
+			"label":          name,
+			"size":           int64(size),
+			"supportsVision": ollamaModelSupportsVision(raw),
+		}
+		models = append(models, model)
+		if model["supportsVision"] == true {
+			visionModels = append(visionModels, model)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"available":    true,
+		"baseUrl":      origin,
+		"models":       models,
 		"visionModels": visionModels,
 	})
 }

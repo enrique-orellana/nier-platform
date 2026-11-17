@@ -38,6 +38,25 @@ type processRequest struct {
 	DeferRender  bool           `json:"defer_render"`
 }
 
+func validateClipAnalysisSelection(r *http.Request) error {
+	provider := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Clip-Analysis-Provider")))
+	if provider == "" || provider == "configured" {
+		return nil
+	}
+	if provider != "ollama" {
+		return fmt.Errorf("unsupported clip-analysis provider")
+	}
+	origin, err := localServiceOrigin(r.Header.Get("X-Clip-Ollama-Base-Url"))
+	if err != nil {
+		return fmt.Errorf("Ollama clip analysis requires a local HTTP origin")
+	}
+	if strings.TrimSpace(r.Header.Get("X-Clip-Ollama-Model")) == "" {
+		return fmt.Errorf("Ollama clip analysis requires a vision model")
+	}
+	r.Header.Set("X-Clip-Ollama-Base-Url", origin)
+	return nil
+}
+
 func (s *Server) process(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
@@ -46,6 +65,10 @@ func (s *Server) process(w http.ResponseWriter, r *http.Request) {
 
 	payload, err := s.decodeProcessRequest(r)
 	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	if err := validateClipAnalysisSelection(r); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
 		return
 	}

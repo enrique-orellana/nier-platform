@@ -2,7 +2,12 @@ export function buildProcessRequest({ data, headers }) {
   const requestHeaders = {
     ...headers,
     "X-AI-Transcription-Language": data.transcriptionLanguage || "auto",
+    "X-Clip-Analysis-Provider": data.clipAnalysisBackend || "configured",
   };
+  if (data.clipAnalysisBackend === "ollama") {
+    requestHeaders["X-Clip-Ollama-Base-Url"] = data.ollamaBaseUrl || "";
+    requestHeaders["X-Clip-Ollama-Model"] = data.ollamaModel || "";
+  }
   let body;
 
   if (data.type === "minio-object" || data.type === "url") {

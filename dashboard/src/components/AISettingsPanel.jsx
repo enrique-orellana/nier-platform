@@ -1,5 +1,5 @@
 import React from "react";
-import { ExternalLink, Eye, EyeOff } from "lucide-react";
+import { ExternalLink, Eye, EyeOff, Loader2, RefreshCw } from "lucide-react";
 
 import { buildVisibleProviders } from "../lib/lmStudio";
 import { codexStatusLabel } from "../lib/openaiCodex";
@@ -51,6 +51,18 @@ export default function AISettingsPanel({
   onConnectCodex = () => {},
   onDisconnectCodex = () => {},
   onRefreshCodexModels = () => {},
+  ollamaBaseUrl = "http://host.docker.internal:11434",
+  setOllamaBaseUrl = () => {},
+  ollamaModel = "qwen3-vl:8b-instruct-q4_K_M",
+  setOllamaModel = () => {},
+  ollamaDiscovery = {
+    available: false,
+    models: [],
+    visionModels: [],
+    loading: false,
+    error: "",
+  },
+  onRefreshOllamaModels = () => {},
 }) {
   const providerOptions = buildVisibleProviders({ lmStudioAvailable });
   const [apiKeyVisible, setApiKeyVisible] = React.useState(false);
@@ -61,6 +73,10 @@ export default function AISettingsPanel({
   const visionOptions =
     aiProvider === "lmstudio" ? lmStudioModels.visionModels : null;
   const codexTextOptions = codexModels.models || [];
+  const ollamaVisionModels = ollamaDiscovery.visionModels || [];
+  const ollamaModelInstalled = ollamaVisionModels.some(
+    (model) => model.id === ollamaModel,
+  );
   const codexVisionOptions = codexTextOptions.some(
     (model) => model.supportsVision,
   )
@@ -595,6 +611,116 @@ export default function AISettingsPanel({
               </>
             )}
           </div>
+        </section>
+
+        <Separator />
+
+        <section className="space-y-4" aria-label="Local models">
+          <div className="space-y-1.5">
+            <h3 className="text-base font-semibold text-foreground">
+              Local models
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Configure Ollama for optional visual clip analysis. The model is
+              loaded for a generation job and unloaded afterward.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Label className="block min-w-0">
+              <span className="mb-2 block text-sm font-medium text-foreground">
+                Ollama URL
+              </span>
+              <Input
+                value={ollamaBaseUrl}
+                onChange={(event) => setOllamaBaseUrl(event.target.value)}
+                placeholder="http://host.docker.internal:11434"
+                aria-label="Ollama URL"
+                autoComplete="url"
+              />
+              <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">
+                This address must be reachable from the OpenShorts backend.
+              </span>
+            </Label>
+
+            <Label className="block min-w-0">
+              <span className="mb-2 block text-sm font-medium text-foreground">
+                Vision model
+              </span>
+              <div className="flex gap-2">
+                <Input
+                  list="ollama-vision-model-list"
+                  value={ollamaModel}
+                  onChange={(event) => setOllamaModel(event.target.value)}
+                  placeholder="qwen3-vl:8b-instruct-q4_K_M"
+                  aria-label="Ollama vision model"
+                  className="min-w-0"
+                />
+                <datalist id="ollama-vision-model-list">
+                  {ollamaVisionModels.map((model) => (
+                    <option key={model.id} value={model.id} />
+                  ))}
+                </datalist>
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={onRefreshOllamaModels}
+                  disabled={ollamaDiscovery.loading || !ollamaBaseUrl.trim()}
+                  className="shrink-0 gap-2"
+                >
+                  {ollamaDiscovery.loading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-4" />
+                  )}
+                  Refresh
+                </Button>
+              </div>
+              <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">
+                Choose an installed vision model or enter another model ID.
+              </span>
+            </Label>
+          </div>
+
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-md border border-border bg-muted/20 px-3 py-2 text-sm"
+          >
+            {ollamaDiscovery.loading ? (
+              <span className="text-muted-foreground">Checking Ollama…</span>
+            ) : ollamaDiscovery.error ? (
+              <span className="text-destructive">{ollamaDiscovery.error}</span>
+            ) : !ollamaDiscovery.available ? (
+              <span className="text-muted-foreground">
+                Ollama has not been checked yet.
+              </span>
+            ) : ollamaVisionModels.length === 0 ? (
+              <span className="text-muted-foreground">
+                Ollama is reachable, but no installed vision models were found.
+              </span>
+            ) : ollamaModelInstalled ? (
+              <span className="text-emerald-500">
+                Ollama is reachable. {ollamaVisionModels.length} vision model
+                {ollamaVisionModels.length === 1 ? "" : "s"} available.
+              </span>
+            ) : (
+              <span className="text-muted-foreground">
+                Ollama is reachable, but “{ollamaModel}” is not installed.
+              </span>
+            )}
+          </div>
+
+          {ollamaDiscovery.available &&
+            !ollamaModelInstalled &&
+            ollamaModel && (
+              <p className="text-sm text-muted-foreground">
+                Install this model on your machine, then refresh the list:{" "}
+                <code className="rounded bg-muted px-1.5 py-1 font-mono text-xs text-foreground">
+                  ollama pull {ollamaModel}
+                </code>
+              </p>
+            )}
         </section>
       </CardContent>
     </Card>

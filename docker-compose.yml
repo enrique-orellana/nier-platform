@@ -76,8 +76,6 @@ services:
         condition: service_healthy
       speaches:
         condition: service_healthy
-      speaches-model-init:
-        condition: service_completed_successfully
       local-audio-events:
         condition: service_healthy
 
@@ -88,7 +86,7 @@ services:
     environment:
       ENABLE_UI: "false"
       LOG_LEVEL: warning
-      STT_MODEL_TTL: ${SPEACHES_STT_MODEL_TTL:-300}
+      STT_MODEL_TTL: ${SPEACHES_STT_MODEL_TTL:-60}
       WHISPER__INFERENCE_DEVICE: cpu
       WHISPER__COMPUTE_TYPE: int8
       WHISPER__CPU_THREADS: ${SPEACHES_CPU_THREADS:-2}
@@ -105,41 +103,6 @@ services:
       start_period: 300s
     restart: unless-stopped
 
-  speaches-model-init:
-    image: ghcr.io/speaches-ai/speaches:latest-cpu
-    container_name: openshorts-speaches-model-init
-    init: true
-    depends_on:
-      speaches:
-        condition: service_healthy
-    environment:
-      SPEACHES_MODEL_ID: ${AI_TRANSCRIPTION_MODEL:-Systran/faster-whisper-small}
-    entrypoint: ["python", "-c"]
-    command:
-      - |
-        import os, time, urllib.error, urllib.parse, urllib.request
-        model = os.environ["SPEACHES_MODEL_ID"]
-        url = "http://speaches:8000/v1/models/" + urllib.parse.quote(model, safe="")
-        request = urllib.request.Request(url, method="POST")
-        with urllib.request.urlopen(request, timeout=1800) as response:
-            response.read()
-        deadline = time.monotonic() + 1800
-        while time.monotonic() < deadline:
-            try:
-                with urllib.request.urlopen(url, timeout=10) as response:
-                    if response.status == 200:
-                        print("Configured Speaches model is available.")
-                        break
-            except urllib.error.HTTPError as error:
-                if error.code != 404:
-                    raise
-            time.sleep(2)
-        else:
-            raise TimeoutError("Configured Speaches model did not become available.")
-    cpus: 0.5
-    mem_limit: 512m
-    restart: "no"
-
   local-audio-events:
     build:
       context: ./services/local_audio_events
@@ -149,6 +112,7 @@ services:
       AUDIO_EVENT_DETECTOR: ${AUDIO_EVENT_DETECTOR:-yamnet}
       AUDIO_EVENT_MODEL: ${AUDIO_EVENT_MODEL:-yamnet}
       AUDIO_EVENT_MAX_UPLOAD_BYTES: ${AUDIO_EVENT_MAX_UPLOAD_BYTES:-26214400}
+      AUDIO_EVENT_MODEL_IDLE_TTL_SECONDS: ${AUDIO_EVENT_MODEL_IDLE_TTL_SECONDS:-60}
       YAMNET_MODEL_URL: ${YAMNET_MODEL_URL:-https://tfhub.dev/google/yamnet/1}
       YAMNET_EVENT_MIN_CONFIDENCE: ${YAMNET_EVENT_MIN_CONFIDENCE:-0.4}
       TF_NUM_INTRAOP_THREADS: ${YAMNET_CPU_THREADS:-1}

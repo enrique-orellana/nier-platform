@@ -585,6 +585,7 @@ func translationHeaders(r *http.Request) map[string]string {
 		"X-AI-Model", "X-AI-Analyze-Model", "X-AI-Vision-Model", "X-AI-Image-Model",
 		"X-AI-Reasoning-Effort", "X-AI-Analyze-Reasoning-Effort", "X-AI-Vision-Reasoning-Effort",
 		"X-AI-Transcription-Model", "X-AI-Transcription-Language", "X-AI-Transcription-OpenRouter-Provider",
+		"X-Clip-Analysis-Provider", "X-Clip-Ollama-Base-Url", "X-Clip-Ollama-Model",
 	}
 	result := make(map[string]string)
 	for _, key := range allowed {
