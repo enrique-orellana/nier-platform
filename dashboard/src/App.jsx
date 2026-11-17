@@ -344,6 +344,17 @@ function App() {
   });
   const [clipAnalysisBackend, setClipAnalysisBackend] = useState("configured");
   const ollamaDiscoveryRequest = useRef(0);
+  const updateOllamaBaseUrl = useCallback((baseUrl) => {
+    ollamaDiscoveryRequest.current += 1;
+    setOllamaBaseUrl(baseUrl);
+    setOllamaDiscovery({
+      available: false,
+      models: [],
+      visionModels: [],
+      loading: false,
+      error: "",
+    });
+  }, []);
   const [aiQualityPreset, setAiQualityPreset] = useState(() =>
     normalizeQualityPreset(
       localStorage.getItem("ai_quality_preset_v1") ||
@@ -776,7 +787,13 @@ function App() {
 
   const refreshOllamaModels = useCallback(async () => {
     const requestId = ++ollamaDiscoveryRequest.current;
-    setOllamaDiscovery((current) => ({ ...current, loading: true, error: "" }));
+    setOllamaDiscovery({
+      available: false,
+      models: [],
+      visionModels: [],
+      loading: true,
+      error: "",
+    });
     try {
       const response = await fetch(getApiUrl("/api/ai/ollama/discover"), {
         method: "POST",
@@ -1797,7 +1814,7 @@ function App() {
                       onRefreshCodexModels={refreshCodexModels}
                       onDetectLmStudio={detectLmStudio}
                       ollamaBaseUrl={ollamaBaseUrl}
-                      setOllamaBaseUrl={setOllamaBaseUrl}
+                      setOllamaBaseUrl={updateOllamaBaseUrl}
                       ollamaModel={ollamaModel}
                       setOllamaModel={setOllamaModel}
                       ollamaDiscovery={ollamaDiscovery}

@@ -185,6 +185,60 @@ describe("MediaInput", () => {
     );
   });
 
+  it("allows selecting the configured local model before it is installed", async () => {
+    const onClipAnalysisBackendChange = vi.fn();
+    render(
+      <MediaInput
+        onProcess={vi.fn()}
+        isProcessing={false}
+        targetClipCount={6}
+        onTargetClipCountChange={vi.fn()}
+        ollamaModel="qwen3-vl:8b-instruct-q4_K_M"
+        ollamaAvailable={false}
+        onClipAnalysisBackendChange={onClipAnalysisBackendChange}
+      />,
+    );
+
+    const provider = screen.getByRole("combobox", { name: "Clip analysis" });
+    fireEvent.keyDown(provider, { key: "ArrowDown" });
+    const localOption = await screen.findByRole("option", {
+      name: "Local · qwen3-vl:8b-instruct-q4_K_M",
+    });
+
+    expect(localOption).not.toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(localOption);
+    expect(onClipAnalysisBackendChange).toHaveBeenCalledWith("ollama");
+  });
+
+  it("keeps generation disabled when the selected local model is unavailable", () => {
+    const { container } = render(
+      <MediaInput
+        onProcess={vi.fn()}
+        isProcessing={false}
+        targetClipCount={6}
+        onTargetClipCountChange={vi.fn()}
+        clipAnalysisBackend="ollama"
+        ollamaModel="qwen3-vl:8b-instruct-q4_K_M"
+        ollamaAvailable={false}
+      />,
+    );
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /^upload$/i }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: {
+        files: [new File(["video"], "source.mp4", { type: "video/mp4" })],
+      },
+    });
+    fireEvent.click(screen.getByRole("checkbox"));
+
+    expect(
+      screen.getByRole("button", { name: /generate clips/i }),
+    ).toBeDisabled();
+  });
+
   it("submits Streamer Stack with the selected facecam size and no pre-generation hook control", async () => {
     const onProcess = vi.fn();
     const { container } = render(

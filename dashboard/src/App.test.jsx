@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { setLocalTranscriptionLanguage } from "./components/local-editor/localEditorAi";
@@ -171,6 +171,39 @@ describe("App settings layout", () => {
     await screen.findAllByRole("option", { name: "GPT-5.4" });
     expect(screen.getByRole("combobox", { name: "Text Model" })).toHaveValue(
       "gpt-5.4",
+    );
+  });
+
+  it("clears Ollama discovery when its configured URL changes", async () => {
+    const ollamaBaseUrl = "http://host.docker.internal:11434";
+    const visionModel = "qwen3-vl:8b-instruct-q4_K_M";
+    localStorage.setItem("local_ollama_base_url_v1", ollamaBaseUrl);
+    localStorage.setItem("local_ollama_vision_model_v1", visionModel);
+    vi.mocked(fetch).mockImplementation((url) => {
+      if (String(url).includes("/api/ai/ollama/discover")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            available: true,
+            models: [{ id: visionModel, label: visionModel }],
+            visionModels: [{ id: visionModel, label: visionModel }],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+
+    render(<App />);
+
+    expect(
+      await screen.findByText("Ollama is reachable. 1 vision model available."),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Ollama URL" }), {
+      target: { value: "http://127.0.0.1:11434" },
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Ollama has not been checked yet.",
     );
   });
 

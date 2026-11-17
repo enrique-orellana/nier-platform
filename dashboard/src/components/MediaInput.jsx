@@ -311,7 +311,7 @@ export default function MediaInput({
                         <SelectItem value="configured">
                           {configuredProviderLabel}
                         </SelectItem>
-                        <SelectItem value="ollama" disabled={!ollamaAvailable}>
+                        <SelectItem value="ollama">
                           Local · {ollamaModel || "Ollama vision model"}
                         </SelectItem>
                       </SelectContent>
@@ -324,8 +324,8 @@ export default function MediaInput({
                     ) : (
                       <div className="flex flex-wrap items-center gap-x-1 text-xs leading-relaxed text-muted-foreground">
                         <span>
-                          To use local visual analysis, install and select a
-                          vision model in
+                          Install the local model and confirm Ollama is
+                          reachable in
                         </span>
                         <Button
                           variant="link"
@@ -427,6 +427,7 @@ export default function MediaInput({
                 disabled={
                   isProcessing ||
                   !acknowledged ||
+                  (clipAnalysisBackend === "ollama" && !ollamaAvailable) ||
                   (mode === "minio" && !selectedObject) ||
                   (mode === "file" && !file)
                 }
