@@ -184,10 +184,14 @@ func isGeneratedSubtitleTrack(track map[string]any) bool {
 }
 
 func refreshGeneratedClipSubtitles(clip map[string]any, transcript map[string]any, start, end float64) bool {
+	return refreshGeneratedClipSubtitlesWithWordTimings(clip, transcript, start, end, true)
+}
+
+func refreshGeneratedClipSubtitlesWithWordTimings(clip map[string]any, transcript map[string]any, start, end float64, useWordTimings bool) bool {
 	if len(transcript) == 0 {
 		return false
 	}
-	captions := media.BuildSubtitleCues(transcript, start, end)
+	captions := media.BuildSubtitleCuesWithWordTimings(transcript, start, end, useWordTimings)
 	updated := false
 	if tracks, ok := clip["subtitle_tracks"].([]any); ok {
 		for _, rawTrack := range tracks {
@@ -521,7 +525,11 @@ func (s *Server) updateClipSourceRange(w http.ResponseWriter, r *http.Request, p
 	metadataClip["start"] = start
 	metadataClip["end"] = end
 	transcript, _ := metadata["transcript"].(map[string]any)
-	refreshGeneratedClipSubtitles(metadataClip, transcript, start, end)
+	useWordTimings, configured := metadata["source_transcript_use_word_timings"].(bool)
+	if !configured {
+		useWordTimings = false
+	}
+	refreshGeneratedClipSubtitlesWithWordTimings(metadataClip, transcript, start, end, useWordTimings)
 	updatedMetadata, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not encode deferred job metadata"})
@@ -543,7 +551,7 @@ func (s *Server) updateClipSourceRange(w http.ResponseWriter, r *http.Request, p
 	}
 	result.Clips[clipIndex]["start"] = start
 	result.Clips[clipIndex]["end"] = end
-	refreshGeneratedClipSubtitles(result.Clips[clipIndex], transcript, start, end)
+	refreshGeneratedClipSubtitlesWithWordTimings(result.Clips[clipIndex], transcript, start, end, useWordTimings)
 	updatedResult, err := json.Marshal(result)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not encode clip result"})

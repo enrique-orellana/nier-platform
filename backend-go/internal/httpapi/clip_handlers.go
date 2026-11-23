@@ -471,7 +471,7 @@ func (s *Server) getManifest(w http.ResponseWriter, jobID string, clipIndex int)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
 		return
 	}
-	if transcript, clipStart, clipEnd, ok := s.sourceTranscriptForClip(context.Background(), jobID, clipIndex); ok {
+	if transcript, clipStart, clipEnd, useWordTimings, ok := s.sourceTranscriptForClip(context.Background(), jobID, clipIndex); ok {
 		timeline, _ := manifest["timeline"].(map[string]any)
 		if timeline == nil {
 			timeline = make(map[string]any)
@@ -486,7 +486,7 @@ func (s *Server) getManifest(w http.ResponseWriter, jobID string, clipIndex int)
 		}
 		timeline["transcript"] = transcript
 		manifest["timeline"] = timeline
-		refreshProjectTranscriptForRange(manifest, transcript, clipStart, clipEnd)
+		refreshProjectTranscriptForRangeWithWordTimings(manifest, transcript, clipStart, clipEnd, useWordTimings)
 	}
 	revision, err := manifests.CalculateRevision(manifest)
 	if err != nil {
@@ -665,8 +665,9 @@ func (s *Server) clipTranscript(w http.ResponseWriter, ctx context.Context, jobI
 		return
 	}
 	var data struct {
-		Transcript map[string]any `json:"transcript"`
-		Shorts     []struct {
+		Transcript     map[string]any `json:"transcript"`
+		UseWordTimings *bool          `json:"source_transcript_use_word_timings"`
+		Shorts         []struct {
 			Start float64 `json:"start"`
 			End   float64 `json:"end"`
 		} `json:"shorts"`
@@ -685,7 +686,8 @@ func (s *Server) clipTranscript(w http.ResponseWriter, ctx context.Context, jobI
 		return
 	}
 	clipStart, clipEnd := data.Shorts[clipIndex].Start, data.Shorts[clipIndex].End
-	captions := media.BuildSubtitleCues(data.Transcript, clipStart, clipEnd)
+	useWordTimings := data.UseWordTimings != nil && *data.UseWordTimings
+	captions := media.BuildSubtitleCuesWithWordTimings(data.Transcript, clipStart, clipEnd, useWordTimings)
 	soundEvents := make([]map[string]any, 0)
 	rawEvents, _ := data.Transcript["events"].([]any)
 	if len(rawEvents) == 0 {

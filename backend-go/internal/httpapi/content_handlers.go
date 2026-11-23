@@ -69,8 +69,9 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var metadata struct {
-		Transcript map[string]any `json:"transcript"`
-		Shorts     []struct {
+		Transcript     map[string]any `json:"transcript"`
+		UseWordTimings *bool          `json:"source_transcript_use_word_timings"`
+		Shorts         []struct {
 			Start float64 `json:"start"`
 			End   float64 `json:"end"`
 		} `json:"shorts"`
@@ -82,7 +83,8 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 	}
 	clipStart := metadata.Shorts[request.ClipIndex].Start
 	clipEnd := metadata.Shorts[request.ClipIndex].End
-	srt, err := media.BuildWordSRT(metadata.Transcript, clipStart, clipEnd)
+	useWordTimings := metadata.UseWordTimings != nil && *metadata.UseWordTimings
+	srt, err := media.BuildSubtitleSRT(metadata.Transcript, clipStart, clipEnd, useWordTimings)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
 		return
@@ -105,7 +107,7 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 	}
 	videoURL := "/videos/" + request.JobID + "/" + outputFilename
 	subtitleURL := "/videos/" + request.JobID + "/" + subtitleFilename
-	captions := media.BuildSubtitleCues(metadata.Transcript, clipStart, clipEnd)
+	captions := media.BuildSubtitleCuesWithWordTimings(metadata.Transcript, clipStart, clipEnd, useWordTimings)
 	language, _ := metadata.Transcript["language"].(string)
 	if language == "" {
 		language = "und"

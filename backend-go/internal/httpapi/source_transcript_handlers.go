@@ -16,9 +16,10 @@ import (
 )
 
 type sourceTranscriptPayload struct {
-	Transcript map[string]any `json:"transcript"`
-	VideoURL   string         `json:"source_video_url"`
-	Duration   float64        `json:"source_duration_seconds"`
+	Transcript     map[string]any `json:"transcript"`
+	VideoURL       string         `json:"source_video_url"`
+	Duration       float64        `json:"source_duration_seconds"`
+	UseWordTimings *bool          `json:"use_word_timings"`
 }
 
 func (s *Server) projectSourceTranscript(w http.ResponseWriter, r *http.Request, jobID string) {
@@ -194,10 +195,15 @@ func (s *Server) getProjectSourceTranscript(w http.ResponseWriter, ctx context.C
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Source video is unavailable"})
 		return
 	}
+	configured, ok := metadata["source_transcript_use_word_timings"].(bool)
+	if !ok {
+		configured = false
+	}
 	writeJSON(w, http.StatusOK, sourceTranscriptPayload{
-		Transcript: transcript,
-		VideoURL:   videoURL,
-		Duration:   duration,
+		Transcript:     transcript,
+		VideoURL:       videoURL,
+		Duration:       duration,
+		UseWordTimings: &configured,
 	})
 }
 
@@ -238,26 +244,34 @@ func numericTime(value any) (float64, bool) {
 }
 
 func refreshProjectClipTranscript(clip map[string]any, transcript map[string]any) bool {
+	return refreshProjectClipTranscriptWithWordTimings(clip, transcript, true)
+}
+
+func refreshProjectClipTranscriptWithWordTimings(clip map[string]any, transcript map[string]any, useWordTimings bool) bool {
 	start, startOK := numericTime(clip["start"])
 	end, endOK := numericTime(clip["end"])
 	if !startOK || !endOK || end <= start {
 		return false
 	}
-	return refreshProjectTranscriptForRange(clip, transcript, start, end)
+	return refreshProjectTranscriptForRangeWithWordTimings(clip, transcript, start, end, useWordTimings)
 }
 
 func refreshProjectTranscriptForRange(clip, transcript map[string]any, start, end float64) bool {
+	return refreshProjectTranscriptForRangeWithWordTimings(clip, transcript, start, end, true)
+}
+
+func refreshProjectTranscriptForRangeWithWordTimings(clip, transcript map[string]any, start, end float64, useWordTimings bool) bool {
 	if end <= start {
 		return false
 	}
-	if refreshGeneratedClipSubtitles(clip, transcript, start, end) {
+	if refreshGeneratedClipSubtitlesWithWordTimings(clip, transcript, start, end, useWordTimings) {
 		if activeTrack, ok := clip["active_subtitle_track_id"].(string); !ok || strings.TrimSpace(activeTrack) == "" {
 			clip["active_subtitle_track_id"] = "original"
 		}
 		return true
 	}
 
-	captions := media.BuildSubtitleCues(transcript, start, end)
+	captions := media.BuildSubtitleCuesWithWordTimings(transcript, start, end, useWordTimings)
 	if len(captions) == 0 {
 		return false
 	}
@@ -292,13 +306,17 @@ func refreshProjectTranscriptForRange(clip, transcript map[string]any, start, en
 
 func (s *Server) updateProjectSourceTranscript(w http.ResponseWriter, r *http.Request, jobID string) {
 	var request struct {
-		Transcript map[string]any `json:"transcript"`
+		Transcript             map[string]any `json:"transcript"`
+		SynchronizeWordTimings *bool          `json:"synchronize_word_timings"`
+		UseWordTimings         *bool          `json:"use_word_timings"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
 		return
 	}
-	synchronizeSourceTranscriptWords(request.Transcript)
+	synchronizeWordTimings := request.SynchronizeWordTimings == nil || *request.SynchronizeWordTimings
+	useWordTimings := request.UseWordTimings == nil || *request.UseWordTimings
+	updateSourceTranscriptWordTimings(request.Transcript, synchronizeWordTimings)
 	metadata, metadataPath, err := s.loadProjectSourceMetadata(r.Context(), jobID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project source metadata is unavailable"})
@@ -310,10 +328,11 @@ func (s *Server) updateProjectSourceTranscript(w http.ResponseWriter, r *http.Re
 		return
 	}
 	metadata["transcript"] = request.Transcript
+	metadata["source_transcript_use_word_timings"] = useWordTimings
 	shorts, _ := metadata["shorts"].([]any)
 	for _, rawClip := range shorts {
 		if clip, ok := rawClip.(map[string]any); ok {
-			refreshProjectClipTranscript(clip, request.Transcript)
+			refreshProjectClipTranscriptWithWordTimings(clip, request.Transcript, useWordTimings)
 		}
 	}
 	updatedMetadata, err := json.MarshalIndent(metadata, "", "  ")
@@ -334,15 +353,19 @@ func (s *Server) updateProjectSourceTranscript(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if job, ok := s.store.Get(r.Context(), jobID); ok && len(job.Result) > 0 {
-		if err := s.updateStoredProjectTranscript(r.Context(), job, request.Transcript); err != nil {
+		if err := s.updateStoredProjectTranscript(r.Context(), job, request.Transcript, useWordTimings); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Source transcript was saved, but the project result could not be refreshed; retry the save"})
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "transcript": request.Transcript})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success":          true,
+		"transcript":       request.Transcript,
+		"use_word_timings": useWordTimings,
+	})
 }
 
-func synchronizeSourceTranscriptWords(transcript map[string]any) {
+func updateSourceTranscriptWordTimings(transcript map[string]any, synchronize bool) {
 	segments, _ := transcript["segments"].([]any)
 	for _, rawSegment := range segments {
 		segment, ok := rawSegment.(map[string]any)
@@ -381,6 +404,10 @@ func synchronizeSourceTranscriptWords(transcript map[string]any) {
 			oldText = append(oldText, strings.TrimSpace(value))
 		}
 		if strings.Join(strings.Fields(strings.Join(oldText, " ")), " ") == strings.Join(tokens, " ") {
+			continue
+		}
+		if !synchronize {
+			delete(segment, "words")
 			continue
 		}
 
@@ -433,7 +460,7 @@ func synchronizeSourceTranscriptWords(transcript map[string]any) {
 	}
 }
 
-func (s *Server) updateStoredProjectTranscript(ctx context.Context, job domain.Job, transcript map[string]any) error {
+func (s *Server) updateStoredProjectTranscript(ctx context.Context, job domain.Job, transcript map[string]any, useWordTimings bool) error {
 	payload := map[string]any{}
 	if err := json.Unmarshal(job.Result, &payload); err != nil {
 		return err
@@ -442,7 +469,7 @@ func (s *Server) updateStoredProjectTranscript(ctx context.Context, job domain.J
 	clips, _ := payload["clips"].([]any)
 	for _, rawClip := range clips {
 		if clip, ok := rawClip.(map[string]any); ok {
-			refreshProjectClipTranscript(clip, transcript)
+			refreshProjectClipTranscriptWithWordTimings(clip, transcript, useWordTimings)
 		}
 	}
 	updated, err := json.Marshal(payload)
@@ -452,24 +479,28 @@ func (s *Server) updateStoredProjectTranscript(ctx context.Context, job domain.J
 	return s.store.SetResult(ctx, job.ID, updated)
 }
 
-func (s *Server) sourceTranscriptForClip(ctx context.Context, jobID string, clipIndex int) (map[string]any, float64, float64, bool) {
+func (s *Server) sourceTranscriptForClip(ctx context.Context, jobID string, clipIndex int) (map[string]any, float64, float64, bool, bool) {
 	metadata, _, err := s.loadProjectSourceMetadata(ctx, jobID)
 	if err != nil {
-		return nil, 0, 0, false
+		return nil, 0, 0, true, false
 	}
 	transcript := sourceTranscriptFromMetadata(metadata)
 	if len(transcript) == 0 {
 		transcript = s.sourceTranscriptFromResult(ctx, jobID)
 	}
 	if len(transcript) == 0 {
-		return nil, 0, 0, false
+		return nil, 0, 0, true, false
+	}
+	useWordTimings, configured := metadata["source_transcript_use_word_timings"].(bool)
+	if !configured {
+		useWordTimings = false
 	}
 	if shorts, ok := metadata["shorts"].([]any); ok && clipIndex >= 0 && clipIndex < len(shorts) {
 		if clip, ok := shorts[clipIndex].(map[string]any); ok {
 			start, startOK := numericTime(clip["start"])
 			end, endOK := numericTime(clip["end"])
 			if startOK && endOK && end > start {
-				return transcript, start, end, true
+				return transcript, start, end, useWordTimings, true
 			}
 		}
 	}
@@ -482,11 +513,11 @@ func (s *Server) sourceTranscriptForClip(ctx context.Context, jobID string, clip
 			start, startOK := numericTime(clip["start"])
 			end, endOK := numericTime(clip["end"])
 			if startOK && endOK && end > start {
-				return transcript, start, end, true
+				return transcript, start, end, useWordTimings, true
 			}
 		}
 	}
-	return transcript, 0, 0, false
+	return transcript, 0, 0, useWordTimings, false
 }
 
 func (s *Server) sourceTranscriptFromResult(ctx context.Context, jobID string) map[string]any {

@@ -34,7 +34,53 @@ export const transcriptToSourceEditorState = (transcript) => {
   };
 };
 
-export const applySourceEditorCues = (transcript, cues) => {
+const rescaleWordTimings = (words, oldStart, oldEnd, newStart, newEnd) => {
+  const oldDuration = oldEnd - oldStart;
+  const newDuration = newEnd - newStart;
+  if (oldDuration <= 0 || newDuration <= 0) return words;
+
+  return words.flatMap((word) => {
+    const wordStart = Number(word?.start);
+    const wordEnd = Number(word?.end);
+    if (!Number.isFinite(wordStart) || !Number.isFinite(wordEnd)) return [];
+
+    const startRatio = Math.max(
+      0,
+      Math.min(1, (wordStart - oldStart) / oldDuration),
+    );
+    const endRatio = Math.max(
+      0,
+      Math.min(1, (wordEnd - oldStart) / oldDuration),
+    );
+    let start = Math.max(
+      newStart,
+      Math.min(newEnd, newStart + startRatio * newDuration),
+    );
+    let end = Math.max(
+      newStart,
+      Math.min(newEnd, newStart + endRatio * newDuration),
+    );
+
+    if (end <= start) {
+      start = Math.max(newStart, Math.min(start, newEnd - 0.001));
+      end = Math.min(newEnd, start + 0.001);
+    }
+
+    return [
+      {
+        ...word,
+        start: Math.round(start * 1000) / 1000,
+        end: Math.round(end * 1000) / 1000,
+      },
+    ];
+  });
+};
+
+export const applySourceEditorCues = (
+  transcript,
+  cues,
+  { useWordLevelTiming = false } = {},
+) => {
   const sourceSegments = Array.isArray(transcript?.segments)
     ? transcript.segments
     : [];
@@ -57,7 +103,37 @@ export const applySourceEditorCues = (transcript, cues) => {
   const segments = sourceSegments.flatMap((segment, index) => {
     const cue = cuesBySourceSegment.get(index);
     if (!cue) return [];
-    return [{ ...segment, text: String(cue.text || "").trim() }];
+    const originalStart = Number(segment.start);
+    const originalEnd = Number(segment.end);
+    const requestedStart = Number(cue.startMs);
+    const requestedEnd = Number(cue.endMs);
+    const start = Number.isFinite(requestedStart)
+      ? requestedStart / 1000
+      : originalStart;
+    const end = Number.isFinite(requestedEnd)
+      ? requestedEnd / 1000
+      : originalEnd;
+    const text = String(cue.text || "").trim();
+    const textChanged = text !== String(segment.text || "").trim();
+    const timingChanged =
+      Math.round(originalStart * 1000) !== Math.round(start * 1000) ||
+      Math.round(originalEnd * 1000) !== Math.round(end * 1000);
+    const updatedSegment = { ...segment, start, end, text };
+
+    if (!useWordLevelTiming && (textChanged || timingChanged)) {
+      delete updatedSegment.words;
+    } else if (useWordLevelTiming && timingChanged) {
+      const words = Array.isArray(segment.words) ? segment.words : [];
+      updatedSegment.words = rescaleWordTimings(
+        words,
+        originalStart,
+        originalEnd,
+        start,
+        end,
+      );
+    }
+
+    return [updatedSegment];
   });
 
   for (const cue of addedCues) {

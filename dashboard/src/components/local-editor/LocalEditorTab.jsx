@@ -175,7 +175,7 @@ import {
   normalizeSubtitleReactions,
   reactionRequestCues,
 } from "./subtitleReactions";
-import { Button, Card, CardContent, Input, NativeSelect } from "../ui";
+import { Button, Card, CardContent, Input, NativeSelect, Switch } from "../ui";
 
 const MIN_TIMELINE_HEIGHT = 220;
 const MIN_PREVIEW_HEIGHT = 260;
@@ -208,6 +208,8 @@ export default function LocalEditorTab({
   persistHistory = true,
   allowLocalUpload = true,
   allowFullSourceTranscription = false,
+  useWordLevelSubtitleTiming = false,
+  onWordLevelSubtitleTimingChange = null,
   clipMetadata = null,
   masterDuration = null,
   onHashtagsChange = null,
@@ -3953,6 +3955,34 @@ export default function LocalEditorTab({
                           </NativeSelect>
                         </div>
                       </label>
+                      {allowFullSourceTranscription && (
+                        <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2.5">
+                          <div className="min-w-0">
+                            <label
+                              htmlFor="source-word-timing-setting"
+                              className="block text-xs font-medium text-foreground"
+                            >
+                              Use word-level timings in clips
+                            </label>
+                            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                              Off keeps one cue over its full range. On uses
+                              timings saved for individual words.
+                            </p>
+                          </div>
+                          <Switch
+                            id="source-word-timing-setting"
+                            checked={useWordLevelSubtitleTiming}
+                            onCheckedChange={(enabled) => {
+                              rememberToolbarPreference(
+                                "useWordLevelSubtitleTiming",
+                                enabled,
+                              );
+                              onWordLevelSubtitleTimingChange?.(enabled);
+                            }}
+                            aria-label="Use word-level timings in clips"
+                          />
+                        </div>
+                      )}
                       <div className="grid grid-cols-2 gap-2">
                         <Button
                           variant="ghost"
