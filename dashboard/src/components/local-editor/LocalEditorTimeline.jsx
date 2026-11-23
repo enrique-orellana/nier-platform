@@ -29,31 +29,57 @@ function CueBlock({
   color,
   current,
   selected,
+  selectedCueGroup = [],
   onSelect,
   onDoubleClick,
   onChange,
+  onGroupChange,
   onChangeStart,
   onChangeEnd,
 }) {
   const blockRef = useRef(null);
+  const suppressClickRef = useRef(false);
 
   const beginDrag = (event, mode) => {
     event.preventDefault();
     event.stopPropagation();
     onChangeStart?.();
     const originX = event.clientX;
-    const original = { ...cue };
+    const group =
+      mode === "move" && selected && selectedCueGroup.length > 1
+        ? selectedCueGroup.map((item) => ({ ...item }))
+        : [{ ...cue }];
+    const preserveSelectionOnDrag = selected && selectedCueGroup.length > 1;
+    const groupStart = Math.min(...group.map((item) => item.startMs));
+    const groupEnd = Math.max(...group.map((item) => item.endMs));
     const width =
       blockRef.current?.parentElement?.getBoundingClientRect().width || 1;
+    let moved = false;
     const update = (moveEvent) => {
       const delta = ((moveEvent.clientX - originX) / width) * durationMs;
-      onChange(
-        mode === "move"
-          ? moveCue(original, delta, durationMs)
-          : resizeCue(original, mode, delta, durationMs),
+      if (Math.abs(moveEvent.clientX - originX) > 1) moved = true;
+      if (mode !== "move") {
+        onChange(resizeCue(group[0], mode, delta, durationMs));
+        return;
+      }
+
+      const boundedDelta = Math.max(
+        -groupStart,
+        Math.min(durationMs - groupEnd, delta),
       );
+      const updates = group.map((item) =>
+        moveCue(item, boundedDelta, durationMs),
+      );
+      if (updates.length > 1) onGroupChange?.(updates);
+      else onChange(updates[0]);
     };
     const stop = () => {
+      if (moved && preserveSelectionOnDrag) {
+        suppressClickRef.current = true;
+        window.setTimeout(() => {
+          suppressClickRef.current = false;
+        }, 0);
+      }
       window.removeEventListener("pointermove", update);
       onChangeEnd?.();
       window.removeEventListener("pointerup", stop);
@@ -85,10 +111,16 @@ function CueBlock({
               ? "selected"
               : "normal"
       }
-      onClick={() => onSelect(cue)}
+      onClick={(event) => {
+        if (suppressClickRef.current) {
+          suppressClickRef.current = false;
+          return;
+        }
+        onSelect(cue, event);
+      }}
       onDoubleClick={() => onDoubleClick?.(cue)}
       onPointerDown={(event) => beginDrag(event, "move")}
-      onKeyDown={(event) => event.key === "Enter" && onSelect(cue)}
+      onKeyDown={(event) => event.key === "Enter" && onSelect(cue, event)}
       className={`absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:border-primary/80 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-primary shadow-[inset_0_2px_0_hsl(var(--primary))]" : "border-white/20"} ${selected ? "ring-2 ring-primary" : ""}`}
       style={{
         left: `${left}%`,
@@ -187,9 +219,11 @@ function Track({
   color,
   playheadMs,
   selectedId,
+  selectedCueIds = [],
   onSelect,
   onDoubleClick,
   onChange,
+  onGroupChange,
   onChangeStart,
   onChangeEnd,
   testId,
@@ -199,7 +233,27 @@ function Track({
       data-testid={testId}
       className="flex min-h-12 w-full items-stretch border-b border-border last:border-b-0"
     >
-      <div className={TRACK_LABEL_CLASSES}>{label}</div>
+      <div
+        className={TRACK_LABEL_CLASSES}
+        title={
+          testId === "local-editor-subtitles-track"
+            ? "Shift-click to select a cue range. Ctrl/Cmd-click to add or remove cues. Drag a selected cue to move the group."
+            : undefined
+        }
+      >
+        {testId === "local-editor-subtitles-track" ? (
+          <div className="min-w-0">
+            <div>{label}</div>
+            <div className="mt-0.5 text-[9px] leading-tight text-muted-foreground">
+              {selectedCueIds.length > 1
+                ? `${selectedCueIds.length} selected · drag to move`
+                : "Shift range · Ctrl/Cmd add"}
+            </div>
+          </div>
+        ) : (
+          label
+        )}
+      </div>
       <div
         className="relative shrink-0 bg-background/60"
         style={{ width: `${timelineWidth}px`, ...gridStyle }}
@@ -211,10 +265,15 @@ function Track({
             durationMs={durationMs}
             color={color}
             current={playheadMs >= cue.startMs && playheadMs < cue.endMs}
-            selected={selectedId === cue.id}
+            selected={selectedId === cue.id || selectedCueIds.includes(cue.id)}
+            selectedCueIds={selectedCueIds}
+            selectedCueGroup={cues.filter((item) =>
+              selectedCueIds.includes(item.id),
+            )}
             onSelect={onSelect}
             onDoubleClick={onDoubleClick}
             onChange={onChange}
+            onGroupChange={onGroupChange}
             onChangeStart={onChangeStart}
             onChangeEnd={onChangeEnd}
           />
@@ -241,9 +300,11 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
     onLayoutSelect,
     onLayoutDeselect,
     selectedId,
+    selectedCueIds = [],
     onSelect,
     onDoubleClick,
     onChange,
+    onGroupChange,
     onChangeStart,
     onChangeEnd,
     playheadMs = 0,
@@ -506,9 +567,11 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
             color="#8b5cf6"
             playheadMs={playheadMs}
             selectedId={selectedId}
-            onSelect={(cue) => onSelect?.(cue, "subtitle")}
+            selectedCueIds={selectedCueIds}
+            onSelect={(cue, event) => onSelect?.(cue, "subtitle", event)}
             onDoubleClick={(cue) => onDoubleClick?.(cue, "subtitle")}
             onChange={(cue) => onChange?.(cue, "subtitle")}
+            onGroupChange={(cues) => onGroupChange?.(cues, "subtitle")}
             onChangeStart={onChangeStart}
             onChangeEnd={onChangeEnd}
           />

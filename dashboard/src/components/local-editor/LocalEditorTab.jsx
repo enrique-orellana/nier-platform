@@ -313,6 +313,8 @@ export default function LocalEditorTab({
     }
   });
   const [selected, setSelected] = useState(null);
+  const [selectedCueIds, setSelectedCueIds] = useState([]);
+  const subtitleSelectionAnchorRef = useRef(null);
   const [selectedLayoutSegmentId, setSelectedLayoutSegmentId] = useState(null);
   const [faceTrackingStatus, setFaceTrackingStatus] = useState({});
   const [gameplayFramingSegmentId, setGameplayFramingSegmentId] =
@@ -1039,6 +1041,25 @@ export default function LocalEditorTab({
       }),
       options,
     );
+  const updateSubtitleGroup = (cues, options) =>
+    commitEdit((current) => {
+      const updatesById = new Map(
+        cues.map((cue) => [cue.id, clampCue(cue, durationMs)]),
+      );
+      return {
+        ...current,
+        subtitleCues: current.subtitleCues.map((item) => {
+          const update = updatesById.get(item.id);
+          return update
+            ? syncSubtitleCue(item, update, {
+                useWordLevelTiming:
+                  activeSubtitleTrackId === "original" &&
+                  current.useWordLevelSubtitleTiming === true,
+              })
+            : item;
+        }),
+      };
+    }, options);
   const updateHook = (nextHook, options) => {
     const normalizedHook = clampCue(nextHook, durationMs);
     rememberEditorSettings({
@@ -1065,9 +1086,52 @@ export default function LocalEditorTab({
     commitEdit((current) => ({ ...current, subtitleLanguage: nextLanguage }));
   };
 
-  const handleTimelineSelect = (cue, type, { openEditor = true } = {}) => {
+  const handleTimelineSelect = (
+    cue,
+    type,
+    { openEditor = true, event = null } = {},
+  ) => {
     finishGameplayFraming();
-    setSelected({ id: cue.id, type });
+    if (type === "subtitle") {
+      const orderedCues = [...subtitleCues].sort(
+        (left, right) =>
+          left.startMs - right.startMs || left.endMs - right.endMs,
+      );
+      const anchorIndex = orderedCues.findIndex(
+        (item) => item.id === subtitleSelectionAnchorRef.current,
+      );
+      const cueIndex = orderedCues.findIndex((item) => item.id === cue.id);
+      if (event?.shiftKey && anchorIndex >= 0 && cueIndex >= 0) {
+        const first = Math.min(anchorIndex, cueIndex);
+        const last = Math.max(anchorIndex, cueIndex);
+        setSelectedCueIds(
+          orderedCues.slice(first, last + 1).map((item) => item.id),
+        );
+      } else if (event?.ctrlKey || event?.metaKey) {
+        const next = selectedCueIds.includes(cue.id)
+          ? selectedCueIds.filter((id) => id !== cue.id)
+          : [...selectedCueIds, cue.id];
+        setSelectedCueIds(next);
+        setSelected(
+          next.includes(cue.id)
+            ? { id: cue.id, type }
+            : next.length
+              ? { id: next[next.length - 1], type }
+              : null,
+        );
+        subtitleSelectionAnchorRef.current = cue.id;
+      } else {
+        setSelectedCueIds([cue.id]);
+        setSelected({ id: cue.id, type });
+        subtitleSelectionAnchorRef.current = cue.id;
+      }
+      if (event?.shiftKey && anchorIndex >= 0 && cueIndex >= 0)
+        setSelected({ id: cue.id, type });
+    } else {
+      setSelectedCueIds([]);
+      subtitleSelectionAnchorRef.current = null;
+      setSelected({ id: cue.id, type });
+    }
     setSelectedLayoutSegmentId(null);
     if (type === "subtitle" && openEditor) setEditingSubtitle(cue);
   };
@@ -1076,6 +1140,8 @@ export default function LocalEditorTab({
       finishGameplayFraming();
     setSelectedLayoutSegmentId(segment?.id || null);
     setSelectedMarkerId(null);
+    setSelectedCueIds([]);
+    subtitleSelectionAnchorRef.current = null;
     setActiveFeature("details");
   };
   const beginGameplayFraming = () => {
@@ -1291,6 +1357,16 @@ export default function LocalEditorTab({
       ? updateHook(cue, options)
       : updateSubtitle(cue, options);
   };
+  const handleTimelineGroupChange = (cues, type) => {
+    if (type !== "subtitle") return;
+    const transaction = timelineDragRef.current;
+    const recordAction = Boolean(transaction && !transaction.recorded);
+    if (transaction) transaction.recorded = true;
+    const options = transaction
+      ? { coalesce: true, transaction, recordAction }
+      : {};
+    return updateSubtitleGroup(cues, options);
+  };
 
   const handleLayoutResizeStart = (event) => {
     const workspace = workspaceRef.current;
@@ -1430,6 +1506,8 @@ export default function LocalEditorTab({
       setPendingSubtitle(null);
       if (subtitleInputRef.current) subtitleInputRef.current.value = "";
       setSelected(null);
+      setSelectedCueIds([]);
+      subtitleSelectionAnchorRef.current = null;
       setError("");
     } catch (importError) {
       setError(importError.message || "Could not import subtitles.");
@@ -1505,6 +1583,8 @@ export default function LocalEditorTab({
         subtitleReactions: [],
       }));
       setSelected(null);
+      setSelectedCueIds([]);
+      subtitleSelectionAnchorRef.current = null;
     } catch (generationError) {
       setError(generationError.message || "Could not generate subtitles.");
     } finally {
@@ -1712,6 +1792,8 @@ export default function LocalEditorTab({
       subtitleReactionStyle: DEFAULT_SUBTITLE_REACTION_STYLE,
     }));
     setSelected((current) => (current?.type === "subtitle" ? null : current));
+    setSelectedCueIds([]);
+    subtitleSelectionAnchorRef.current = null;
     setEditingSubtitle(null);
   };
 
@@ -1737,6 +1819,8 @@ export default function LocalEditorTab({
       subtitleCues: [...current.subtitleCues, nextCue],
     }));
     setSelected({ id: nextCue.id, type: "subtitle" });
+    setSelectedCueIds([nextCue.id]);
+    subtitleSelectionAnchorRef.current = nextCue.id;
     setEditingSubtitle(nextCue);
   };
 
@@ -1845,6 +1929,9 @@ export default function LocalEditorTab({
     setSelected((current) =>
       current?.id === id && current.type === "subtitle" ? null : current,
     );
+    setSelectedCueIds((current) => current.filter((cueId) => cueId !== id));
+    if (subtitleSelectionAnchorRef.current === id)
+      subtitleSelectionAnchorRef.current = null;
     setEditingSubtitle((current) => (current?.id === id ? null : current));
   };
 
@@ -1876,6 +1963,8 @@ export default function LocalEditorTab({
         ),
       }));
       setSelected({ id: replacement[1].id, type: "subtitle" });
+      setSelectedCueIds([replacement[1].id]);
+      subtitleSelectionAnchorRef.current = replacement[1].id;
       return;
     }
 
@@ -3737,6 +3826,8 @@ export default function LocalEditorTab({
                     showSoundEventsInPreview={showSoundEventsInPreview}
                     onSoundEventSelect={(event) => {
                       setSelectedSoundEventId(event.id);
+                      setSelectedCueIds([]);
+                      subtitleSelectionAnchorRef.current = null;
                       handleSeek(event.startMs);
                     }}
                     onSoundEventsPreviewChange={setShowSoundEventsInPreview}
@@ -3749,11 +3840,18 @@ export default function LocalEditorTab({
                       setSelectedLayoutSegmentId(null);
                     }}
                     selectedId={selected?.id}
-                    onSelect={(cue, type) =>
-                      handleTimelineSelect(cue, type, { openEditor: false })
+                    selectedCueIds={selectedCueIds.filter((id) =>
+                      subtitleCues.some((cue) => cue.id === id),
+                    )}
+                    onSelect={(cue, type, event) =>
+                      handleTimelineSelect(cue, type, {
+                        openEditor: false,
+                        event,
+                      })
                     }
                     onDoubleClick={handleTimelineSelect}
                     onChange={handleTimelineChange}
+                    onGroupChange={handleTimelineGroupChange}
                     onChangeStart={beginTimelineEdit}
                     onChangeEnd={endTimelineEdit}
                     playheadMs={playheadMs}

@@ -111,6 +111,11 @@ describe("LocalEditorTimeline", () => {
     expect(onSelect).toHaveBeenCalledWith(
       expect.objectContaining({ id: "cue-1" }),
       "subtitle",
+      expect.objectContaining({
+        shiftKey: false,
+        ctrlKey: false,
+        metaKey: false,
+      }),
     );
     expect(onDoubleClick).not.toHaveBeenCalled();
 
