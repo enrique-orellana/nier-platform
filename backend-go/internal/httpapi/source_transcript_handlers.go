@@ -17,6 +17,7 @@ import (
 
 type sourceTranscriptPayload struct {
 	Transcript     map[string]any `json:"transcript"`
+	SubtitleTracks any            `json:"subtitle_tracks"`
 	VideoURL       string         `json:"source_video_url"`
 	Duration       float64        `json:"source_duration_seconds"`
 	UseWordTimings *bool          `json:"use_word_timings"`
@@ -201,6 +202,7 @@ func (s *Server) getProjectSourceTranscript(w http.ResponseWriter, ctx context.C
 	}
 	writeJSON(w, http.StatusOK, sourceTranscriptPayload{
 		Transcript:     transcript,
+		SubtitleTracks: metadata["source_subtitle_tracks"],
 		VideoURL:       videoURL,
 		Duration:       duration,
 		UseWordTimings: &configured,
@@ -232,6 +234,42 @@ func validateSourceTranscript(transcript map[string]any, duration float64) error
 			wordEnd, wordEndOK := numericTime(word["end"])
 			if !wordStartOK || !wordEndOK || wordStart < 0 || wordEnd <= wordStart || wordStart < start || wordEnd > end || (duration > 0 && wordEnd > duration) {
 				return fmt.Errorf("transcript word %d in segment %d has an invalid time range", wordIndex+1, index+1)
+			}
+		}
+	}
+	return nil
+}
+
+func validateSourceSubtitleTracks(tracks []map[string]any, duration float64) error {
+	seenIDs := make(map[string]struct{}, len(tracks))
+	seenLanguages := make(map[string]struct{}, len(tracks))
+	for trackIndex, track := range tracks {
+		id, _ := track["id"].(string)
+		id = strings.TrimSpace(id)
+		language, _ := track["language"].(string)
+		language = strings.ToLower(strings.TrimSpace(language))
+		if id == "" || language == "" {
+			return fmt.Errorf("subtitle track %d must have an id and language", trackIndex+1)
+		}
+		if _, exists := seenIDs[id]; exists {
+			return fmt.Errorf("subtitle track id %q is duplicated", id)
+		}
+		if _, exists := seenLanguages[language]; exists {
+			return fmt.Errorf("subtitle language %q has more than one track", language)
+		}
+		seenIDs[id] = struct{}{}
+		seenLanguages[language] = struct{}{}
+
+		cues, _ := track["cues"].([]any)
+		for cueIndex, rawCue := range cues {
+			cue, ok := rawCue.(map[string]any)
+			if !ok {
+				return fmt.Errorf("subtitle cue %d in track %q is invalid", cueIndex+1, id)
+			}
+			start, startOK := numericTime(cue["startMs"])
+			end, endOK := numericTime(cue["endMs"])
+			if !startOK || !endOK || start < 0 || end <= start || (duration > 0 && end > duration*1000) {
+				return fmt.Errorf("subtitle cue %d in track %q has an invalid time range", cueIndex+1, id)
 			}
 		}
 	}
@@ -306,35 +344,49 @@ func refreshProjectTranscriptForRangeWithWordTimings(clip, transcript map[string
 
 func (s *Server) updateProjectSourceTranscript(w http.ResponseWriter, r *http.Request, jobID string) {
 	var request struct {
-		Transcript             map[string]any `json:"transcript"`
-		SynchronizeWordTimings *bool          `json:"synchronize_word_timings"`
-		UseWordTimings         *bool          `json:"use_word_timings"`
+		Transcript             map[string]any    `json:"transcript"`
+		SubtitleTracks         *[]map[string]any `json:"subtitle_tracks"`
+		SynchronizeWordTimings *bool             `json:"synchronize_word_timings"`
+		UseWordTimings         *bool             `json:"use_word_timings"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
 		return
 	}
-	synchronizeWordTimings := request.SynchronizeWordTimings == nil || *request.SynchronizeWordTimings
-	useWordTimings := request.UseWordTimings == nil || *request.UseWordTimings
-	updateSourceTranscriptWordTimings(request.Transcript, synchronizeWordTimings)
+	if request.Transcript == nil && request.SubtitleTracks == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "A transcript or subtitle tracks are required"})
+		return
+	}
 	metadata, metadataPath, err := s.loadProjectSourceMetadata(r.Context(), jobID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project source metadata is unavailable"})
 		return
 	}
 	duration := sourceTranscriptDuration(metadata)
-	if err := validateSourceTranscript(request.Transcript, duration); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
-		return
-	}
-	metadata["transcript"] = request.Transcript
-	metadata["source_transcript_use_word_timings"] = useWordTimings
-	shorts, _ := metadata["shorts"].([]any)
-	for clipIndex, rawClip := range shorts {
-		if clip, ok := rawClip.(map[string]any); ok {
-			clipUseWordTimings := s.clipUsesWordLevelTimings(r.Context(), jobID, clipIndex)
-			refreshProjectClipTranscriptWithWordTimings(clip, request.Transcript, clipUseWordTimings)
+	useWordTimings := request.UseWordTimings == nil || *request.UseWordTimings
+	if request.Transcript != nil {
+		synchronizeWordTimings := request.SynchronizeWordTimings == nil || *request.SynchronizeWordTimings
+		updateSourceTranscriptWordTimings(request.Transcript, synchronizeWordTimings)
+		if err := validateSourceTranscript(request.Transcript, duration); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+			return
 		}
+		metadata["transcript"] = request.Transcript
+		metadata["source_transcript_use_word_timings"] = useWordTimings
+		shorts, _ := metadata["shorts"].([]any)
+		for clipIndex, rawClip := range shorts {
+			if clip, ok := rawClip.(map[string]any); ok {
+				clipUseWordTimings := s.clipUsesWordLevelTimings(r.Context(), jobID, clipIndex)
+				refreshProjectClipTranscriptWithWordTimings(clip, request.Transcript, clipUseWordTimings)
+			}
+		}
+	}
+	if request.SubtitleTracks != nil {
+		if err := validateSourceSubtitleTracks(*request.SubtitleTracks, duration); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+			return
+		}
+		metadata["source_subtitle_tracks"] = *request.SubtitleTracks
 	}
 	updatedMetadata, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
@@ -354,16 +406,20 @@ func (s *Server) updateProjectSourceTranscript(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if job, ok := s.store.Get(r.Context(), jobID); ok && len(job.Result) > 0 {
-		if err := s.updateStoredProjectTranscript(r.Context(), job, request.Transcript); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Source transcript was saved, but the project result could not be refreshed; retry the save"})
+		if err := s.updateStoredProjectTranscript(r.Context(), job, request.Transcript, request.SubtitleTracks); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Source subtitle changes were saved, but the project result could not be refreshed; retry the save"})
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"success":          true,
-		"transcript":       request.Transcript,
-		"use_word_timings": useWordTimings,
-	})
+	response := map[string]any{"success": true}
+	if request.Transcript != nil {
+		response["transcript"] = request.Transcript
+		response["use_word_timings"] = useWordTimings
+	}
+	if request.SubtitleTracks != nil {
+		response["subtitle_tracks"] = *request.SubtitleTracks
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func updateSourceTranscriptWordTimings(transcript map[string]any, synchronize bool) {
@@ -461,18 +517,23 @@ func updateSourceTranscriptWordTimings(transcript map[string]any, synchronize bo
 	}
 }
 
-func (s *Server) updateStoredProjectTranscript(ctx context.Context, job domain.Job, transcript map[string]any) error {
+func (s *Server) updateStoredProjectTranscript(ctx context.Context, job domain.Job, transcript map[string]any, subtitleTracks *[]map[string]any) error {
 	payload := map[string]any{}
 	if err := json.Unmarshal(job.Result, &payload); err != nil {
 		return err
 	}
-	payload["transcript"] = transcript
-	clips, _ := payload["clips"].([]any)
-	for clipIndex, rawClip := range clips {
-		if clip, ok := rawClip.(map[string]any); ok {
-			useWordTimings := s.clipUsesWordLevelTimings(ctx, job.ID, clipIndex)
-			refreshProjectClipTranscriptWithWordTimings(clip, transcript, useWordTimings)
+	if transcript != nil {
+		payload["transcript"] = transcript
+		clips, _ := payload["clips"].([]any)
+		for clipIndex, rawClip := range clips {
+			if clip, ok := rawClip.(map[string]any); ok {
+				useWordTimings := s.clipUsesWordLevelTimings(ctx, job.ID, clipIndex)
+				refreshProjectClipTranscriptWithWordTimings(clip, transcript, useWordTimings)
+			}
 		}
+	}
+	if subtitleTracks != nil {
+		payload["source_subtitle_tracks"] = *subtitleTracks
 	}
 	updated, err := json.Marshal(payload)
 	if err != nil {

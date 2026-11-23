@@ -434,6 +434,7 @@ export const manifestToLocalEditorState = (
     source.subtitle_tracks_edited !== true &&
     !hasPersistedSubtitleLayer(source);
   const useWordLevelSubtitleTiming =
+    activeTrack?.use_word_level_subtitle_timing ??
     source.use_word_level_subtitle_timing === true;
   const loadedSubtitleCues = localCuesFromTrack(
     !useWordLevelSubtitleTiming &&
@@ -540,17 +541,10 @@ export const localEditorStateToManifest = (
         ? source.layers?.subtitles?.reactionStyle
         : null),
   );
-  const reactionCueIds = new Set(
-    subtitleReactions
-      .map((reaction) => (reaction?.cueId ? String(reaction.cueId) : ""))
-      .filter(Boolean),
-  );
   const cues = (state.subtitleCues || []).map((cue) => {
     const normalizedCue = normalizeCueCaptions(cue);
     return {
-      ...(reactionCueIds.has(String(normalizedCue.id))
-        ? { id: String(normalizedCue.id) }
-        : {}),
+      ...(normalizedCue.id != null ? { id: String(normalizedCue.id) } : {}),
       text: normalizedCue.text || normalizedCue.label || "",
       startMs: Math.round(Number(normalizedCue.startMs || 0)),
       endMs: Math.round(
@@ -577,6 +571,7 @@ export const localEditorStateToManifest = (
     style: state.subtitleStyle || existingTrack.style || DEFAULT_SUBTITLE_STYLE,
     reactions: subtitleReactions,
     reactionStyle: subtitleReactionStyle,
+    use_word_level_subtitle_timing: state.useWordLevelSubtitleTiming === true,
   };
   source.subtitle_tracks = cues.length
     ? [...existingTracks.filter((track) => track.id !== nextTrackId), nextTrack]
@@ -1357,6 +1352,55 @@ export default function FullScreenEditor({
     [clip, editorPreferences],
   );
 
+  const handleSubtitleTrackChange = useCallback(
+    (trackId) => {
+      if (!trackId || trackId === activeTrackIdRef.current) return;
+      const currentTrackId = activeTrackIdRef.current || "original";
+      const nextManifest = localEditorStateToManifest(
+        currentManifestRef.current || {},
+        localDraftRef.current,
+        currentTrackId,
+      );
+      if (!nextManifest.subtitle_tracks?.some((track) => track.id === trackId))
+        return;
+      replaceManifest(
+        { ...nextManifest, active_subtitle_track_id: trackId },
+        trackId,
+        { dirty: true },
+      );
+    },
+    [replaceManifest],
+  );
+
+  const handleSubtitleTrackCreate = useCallback(
+    (track) => {
+      if (!track?.id) return;
+      const currentTrackId = activeTrackIdRef.current || "original";
+      const currentManifestWithDraft = localEditorStateToManifest(
+        currentManifestRef.current || {},
+        localDraftRef.current,
+        currentTrackId,
+      );
+      const tracks = Array.isArray(currentManifestWithDraft.subtitle_tracks)
+        ? currentManifestWithDraft.subtitle_tracks
+        : [];
+      replaceManifest(
+        {
+          ...currentManifestWithDraft,
+          subtitle_tracks: [
+            ...tracks.filter((item) => item.id !== track.id),
+            track,
+          ],
+          subtitle_tracks_disabled: false,
+          active_subtitle_track_id: track.id,
+        },
+        track.id,
+        { dirty: true },
+      );
+    },
+    [replaceManifest],
+  );
+
   const handleWordLevelSubtitleTimingChange = useCallback((enabled) => {
     const baseManifest = currentManifestRef.current || {};
     const currentDraft = localDraftRef.current || {};
@@ -1816,6 +1860,9 @@ export default function FullScreenEditor({
         initialEditorState={localDraft}
         initialStateKey={`${version?.version_id || "draft"}:${projectInputProps.videoUrl || "pending"}:${localDraftRevision}`}
         activeSubtitleTrackId={activeTrackId}
+        subtitleTracks={projectManifest.subtitle_tracks || []}
+        onSubtitleTrackChange={handleSubtitleTrackChange}
+        onSubtitleTrackCreate={handleSubtitleTrackCreate}
         masterDuration={masterDuration}
         clipMetadata={{ ...clip, hashtags: publishingMetadata.hashtags }}
         onHashtagsChange={saveGeneratedHashtags}

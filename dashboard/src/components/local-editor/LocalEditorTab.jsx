@@ -199,6 +199,9 @@ export default function LocalEditorTab({
   initialEditorState = null,
   initialStateKey = null,
   activeSubtitleTrackId = "original",
+  subtitleTracks = null,
+  onSubtitleTrackChange = null,
+  onSubtitleTrackCreate = null,
   onStateChange,
   onClose = null,
   headerActions = null,
@@ -646,6 +649,8 @@ export default function LocalEditorTab({
       };
     });
     setSelected(null);
+    setSelectedCueIds([]);
+    subtitleSelectionAnchorRef.current = null;
     setSelectedLayoutSegmentId(null);
   }, [initialEditorState, initialStateKey]);
 
@@ -1682,10 +1687,27 @@ export default function LocalEditorTab({
     if (!subtitleCues.length || translatingSubtitles) return;
     const sourceLanguage = String(subtitleLanguage || "en").toLowerCase();
     const targetLanguage = String(translationTarget || "").toLowerCase();
+    const managedTracks =
+      Array.isArray(subtitleTracks) &&
+      typeof onSubtitleTrackCreate === "function";
+    const existingTargetTrack = managedTracks
+      ? subtitleTracks.find(
+          (track) =>
+            String(track?.language || "").toLowerCase() === targetLanguage &&
+            track.id !== activeSubtitleTrackId,
+        )
+      : null;
     if (!targetLanguage || targetLanguage === sourceLanguage) {
       setError("Choose a target language different from the source language.");
       return;
     }
+    if (
+      existingTargetTrack &&
+      !window.confirm(
+        `Replace the existing ${SUBTITLE_LANGUAGES[targetLanguage] || targetLanguage} subtitle track?`,
+      )
+    )
+      return;
     setTranslatingSubtitles(true);
     setError("");
     try {
@@ -1700,9 +1722,13 @@ export default function LocalEditorTab({
         headers: { "Content-Type": "application/json", ...getLocalAiHeaders() },
         body: JSON.stringify({
           target_language: targetLanguage,
-          source_track_id: "original",
+          source_track_id: activeSubtitleTrackId || "original",
           tracks: [
-            { id: "original", language: sourceLanguage, cues: sourceCues },
+            {
+              id: activeSubtitleTrackId || "original",
+              language: sourceLanguage,
+              cues: sourceCues,
+            },
           ],
         }),
       });
@@ -1731,22 +1757,52 @@ export default function LocalEditorTab({
         translatedCues.length !== sourceCues.length
       )
         throw new Error("Translation returned an invalid subtitle track.");
-      commitEdit((current) => ({
-        ...current,
-        subtitleLanguage: targetLanguage,
-        subtitleCues: sourceCues.map((cue, index) => ({
-          ...(current.subtitleCues.find((item) => item.id === cue.id) || cue),
-          text: String(translatedCues[index]?.text || "").trim(),
-          label: String(translatedCues[index]?.text || "").trim(),
-          captions: Array.isArray(translatedCues[index]?.captions)
-            ? translatedCues[index].captions.map((caption) => ({
-                text: String(caption?.text || "").trim(),
-                startMs: Number(caption?.startMs),
-                endMs: Number(caption?.endMs),
-              }))
-            : undefined,
-        })),
-      }));
+      const translatedTrack = {
+        id: existingTargetTrack?.id || `translation-${targetLanguage}`,
+        language: targetLanguage,
+        label: `${SUBTITLE_LANGUAGES[targetLanguage] || targetLanguage} translation`,
+        origin: "translation",
+        cues: sourceCues.map((cue, index) => {
+          const translatedCue = translatedCues[index];
+          const translated = {
+            ...cue,
+            text: String(translatedCue?.text || "").trim(),
+            label: String(translatedCue?.text || "").trim(),
+          };
+          if (Array.isArray(translatedCue?.captions)) {
+            const captions = translatedCue.captions.flatMap((caption) => {
+              const text = String(caption?.text || "").trim();
+              const startMs = Number(caption?.startMs);
+              const endMs = Number(caption?.endMs);
+              return text &&
+                Number.isFinite(startMs) &&
+                Number.isFinite(endMs) &&
+                endMs > startMs
+                ? [{ text, startMs, endMs }]
+                : [];
+            });
+            if (captions.length) translated.captions = captions;
+            else delete translated.captions;
+          } else {
+            delete translated.captions;
+          }
+          return translated;
+        }),
+        style: subtitleStyle,
+        reactions: [],
+        reactionStyle: DEFAULT_SUBTITLE_REACTION_STYLE,
+        use_word_level_subtitle_timing:
+          editHistory.present.useWordLevelSubtitleTiming === true,
+      };
+      if (managedTracks) {
+        onSubtitleTrackCreate(translatedTrack);
+      } else {
+        commitEdit((current) => ({
+          ...current,
+          subtitleLanguage: targetLanguage,
+          subtitleCues: translatedTrack.cues,
+        }));
+      }
       setSelected(null);
     } catch (translationError) {
       setError(translationError.message || "Subtitle translation failed.");
@@ -4188,37 +4244,78 @@ export default function LocalEditorTab({
                         <div className="space-y-3">
                           <div className="grid grid-cols-2 gap-2">
                             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                              Source
+                              {subtitleTracks?.length && onSubtitleTrackChange
+                                ? "Track"
+                                : "Source"}
                               <div className="relative mt-1.5">
-                                <NativeSelect
-                                  aria-label="Subtitle source language"
-                                  value={subtitleLanguage}
-                                  onChange={(event) =>
-                                    updateSubtitleLanguage(event.target.value)
-                                  }
-                                  disabled={translatingSubtitles}
-                                  style={{ colorScheme: "dark" }}
-                                  className="w-full"
-                                >
-                                  {Object.entries(SUBTITLE_LANGUAGES).map(
-                                    ([code, name]) => (
-                                      <option
-                                        key={code}
-                                        value={code}
-                                        style={{
-                                          backgroundColor: "#171e21",
-                                          color: "#f4f4f5",
-                                        }}
-                                      >
-                                        {name}
-                                      </option>
-                                    ),
-                                  )}
-                                </NativeSelect>
+                                {subtitleTracks?.length &&
+                                onSubtitleTrackChange ? (
+                                  <NativeSelect
+                                    aria-label="Active subtitle track"
+                                    value={activeSubtitleTrackId}
+                                    onChange={(event) =>
+                                      onSubtitleTrackChange(event.target.value)
+                                    }
+                                    disabled={translatingSubtitles}
+                                    style={{ colorScheme: "dark" }}
+                                    className="w-full"
+                                  >
+                                    {subtitleTracks.map((track) => {
+                                      const language = String(
+                                        track?.language || "und",
+                                      ).toLowerCase();
+                                      const languageName =
+                                        SUBTITLE_LANGUAGES[language] ||
+                                        language;
+                                      const trackName =
+                                        track?.id === "original"
+                                          ? "Original"
+                                          : track?.label || "Subtitles";
+                                      return (
+                                        <option
+                                          key={track.id}
+                                          value={track.id}
+                                          style={{
+                                            backgroundColor: "#171e21",
+                                            color: "#f4f4f5",
+                                          }}
+                                        >
+                                          {languageName} · {trackName}
+                                        </option>
+                                      );
+                                    })}
+                                  </NativeSelect>
+                                ) : (
+                                  <NativeSelect
+                                    aria-label="Subtitle source language"
+                                    value={subtitleLanguage}
+                                    onChange={(event) =>
+                                      updateSubtitleLanguage(event.target.value)
+                                    }
+                                    disabled={translatingSubtitles}
+                                    style={{ colorScheme: "dark" }}
+                                    className="w-full"
+                                  >
+                                    {Object.entries(SUBTITLE_LANGUAGES).map(
+                                      ([code, name]) => (
+                                        <option
+                                          key={code}
+                                          value={code}
+                                          style={{
+                                            backgroundColor: "#171e21",
+                                            color: "#f4f4f5",
+                                          }}
+                                        >
+                                          {name}
+                                        </option>
+                                      ),
+                                    )}
+                                  </NativeSelect>
+                                )}
                               </div>
                             </label>
                             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                              Target
+                              Translate to
                               <div className="relative mt-1.5">
                                 <NativeSelect
                                   aria-label="Translation target language"
