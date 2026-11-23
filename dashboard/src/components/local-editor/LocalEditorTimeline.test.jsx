@@ -324,10 +324,10 @@ describe("LocalEditorTimeline", () => {
     const canvas = screen.getByTestId("local-editor-timeline-canvas");
     const lanes = [...canvas.querySelectorAll('[data-testid$="-track"]')];
     expect(lanes.map((lane) => lane.dataset.testid)).toEqual([
-      "local-editor-layout-track",
       "local-editor-hook-track",
       "local-editor-subtitles-track",
       "local-editor-audio-track",
+      "local-editor-layout-track",
     ]);
     expect(screen.getByText("Audio")).toBeInTheDocument();
   });

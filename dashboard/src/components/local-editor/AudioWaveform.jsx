@@ -1,9 +1,8 @@
-import React from "react";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { getAudioData, getWaveformPortion } from "@remotion/media-utils";
 
 const audioDataCache = new Map();
-const DEFAULT_SAMPLE_COUNT = 192;
+const DEFAULT_SAMPLE_COUNT = 512;
 
 export default function AudioWaveform({
   videoUrl = "",
@@ -42,6 +41,7 @@ export default function AudioWaveform({
           startTimeInSeconds: 0,
           durationInSeconds: durationSeconds,
           numberOfSamples: Math.max(1, sampleCount),
+          normalize: true,
         }),
       )
       .then((bars) => {
@@ -61,20 +61,24 @@ export default function AudioWaveform({
     <div
       data-testid="audio-waveform"
       aria-label="Audio waveform"
-      className="pointer-events-none flex h-full items-center gap-px overflow-hidden px-1"
+      className="pointer-events-none relative flex h-full items-center gap-px overflow-hidden px-1"
     >
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-1 top-1/2 h-px bg-muted-foreground/20"
+      />
       {state.status === "ready" &&
         state.bars.map((bar) => {
           const amplitude = Math.max(
-            0.06,
+            0,
             Math.min(1, Number(bar.amplitude) || 0),
           );
           return (
             <span
               key={bar.index}
               data-testid="audio-waveform-bar"
-              className="min-w-0 flex-1 rounded-full bg-primary/60"
-              style={{ height: `${Math.max(8, amplitude * 84)}%` }}
+              className="relative z-10 min-w-0 flex-1 rounded-[1px] bg-primary/60"
+              style={{ height: `${amplitude * 84}%` }}
             />
           );
         })}

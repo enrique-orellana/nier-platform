@@ -607,36 +607,6 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
               />
             </div>
           </div>
-          <div
-            data-testid="local-editor-layout-track"
-            className="flex min-h-12 w-full items-stretch border-b border-border last:border-b-0"
-          >
-            <div
-              data-testid="local-editor-layout-track-label"
-              className={TRACK_LABEL_CLASSES}
-              onClick={() => onLayoutDeselect?.()}
-            >
-              Layout
-            </div>
-            <div
-              className="relative shrink-0 bg-background/60"
-              style={{ width: `${timelineWidth}px`, ...gridStyle }}
-              onClick={(event) => {
-                if (event.target === event.currentTarget) onLayoutDeselect?.();
-              }}
-            >
-              {layoutSegments.map((segment) => (
-                <LayoutSegmentBlock
-                  key={segment.id}
-                  segment={segment}
-                  durationMs={safeDuration}
-                  playheadMs={playheadMs}
-                  selected={selectedLayoutSegmentId === segment.id}
-                  onSelect={onLayoutSelect}
-                />
-              ))}
-            </div>
-          </div>
           <Track
             testId="local-editor-hook-track"
             label="Viral Hook"
@@ -697,10 +667,40 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
                 videoUrl={videoUrl}
                 durationMs={safeDuration}
                 sampleCount={Math.max(
-                  96,
-                  Math.min(240, Math.ceil(timelineWidth / 4)),
+                  512,
+                  Math.min(4_096, Math.ceil((safeDuration / 1000) * 12)),
                 )}
               />
+            </div>
+          </div>
+          <div
+            data-testid="local-editor-layout-track"
+            className="flex min-h-12 w-full items-stretch border-b border-border last:border-b-0"
+          >
+            <div
+              data-testid="local-editor-layout-track-label"
+              className={TRACK_LABEL_CLASSES}
+              onClick={() => onLayoutDeselect?.()}
+            >
+              Layout
+            </div>
+            <div
+              className="relative shrink-0 bg-background/60"
+              style={{ width: `${timelineWidth}px`, ...gridStyle }}
+              onClick={(event) => {
+                if (event.target === event.currentTarget) onLayoutDeselect?.();
+              }}
+            >
+              {layoutSegments.map((segment) => (
+                <LayoutSegmentBlock
+                  key={segment.id}
+                  segment={segment}
+                  durationMs={safeDuration}
+                  playheadMs={playheadMs}
+                  selected={selectedLayoutSegmentId === segment.id}
+                  onSelect={onLayoutSelect}
+                />
+              ))}
             </div>
           </div>
           <div
