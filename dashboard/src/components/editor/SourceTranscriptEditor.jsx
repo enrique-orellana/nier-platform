@@ -12,6 +12,10 @@ import {
   applySourceEditorCues,
   transcriptToSourceEditorState,
 } from "./sourceTranscriptEditorState";
+import {
+  readActiveSourceSubtitleTrackId,
+  saveActiveSourceSubtitleTrackId,
+} from "./sourceTranscriptTrackPreference";
 import { Button } from "../ui";
 
 const readClipSubtitleStyle = async (projectId, signal) => {
@@ -292,11 +296,22 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
             originalTrack,
           ),
         );
+        const nextActiveTrackId = readActiveSourceSubtitleTrackId(
+          projectId,
+          nextSubtitleTracks,
+        );
+        const nextActiveTrack = nextSubtitleTracks.find(
+          (track) => track.id === nextActiveTrackId,
+        );
         setSource(payload);
-        setEditorState(nextEditorState);
+        setEditorState(
+          nextActiveTrackId === "original"
+            ? nextEditorState
+            : sourceEditorStateForTrack(nextActiveTrack, nextEditorState),
+        );
         setSubtitleTracks(nextSubtitleTracks);
         setBaselineSubtitleTracks(nextSubtitleTracks);
-        setActiveTrackId("original");
+        setActiveTrackId(nextActiveTrackId);
         setEditorStateRevision((current) => current + 1);
       })
       .catch((fetchError) => {
@@ -457,6 +472,7 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
     if (!currentTrack) return;
     const baseState = originalEditorState();
     const nextState = sourceEditorStateForTrack(currentTrack, baseState);
+    saveActiveSourceSubtitleTrackId(projectId, trackId);
     setSubtitleTracks(currentSubtitleTracks);
     setActiveTrackId(trackId);
     setEditorState(nextState);
@@ -467,6 +483,7 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
     if (!track?.id || !editorState) return;
     const nextTracks = upsertSourceTrack(currentSubtitleTracks, track);
     const nextState = sourceEditorStateForTrack(track, originalEditorState());
+    saveActiveSourceSubtitleTrackId(projectId, track.id);
     setSubtitleTracks(nextTracks);
     setActiveTrackId(track.id);
     setEditorState(nextState);
