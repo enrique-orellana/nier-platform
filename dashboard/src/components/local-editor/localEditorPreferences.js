@@ -3,11 +3,14 @@ import {
   DEFAULT_SUBTITLE_STYLE,
   normalizeSubtitleStyle,
 } from "./localEditorStyles";
+import { normalizeAspectRatio } from "./localEditorAspectRatio";
 
 export const EDITOR_PREFERENCES_STORAGE_KEY =
   "openshorts_local_editor_preferences_v1";
 export const EDITOR_LAYOUT_STORAGE_KEY = "openshorts_local_editor_layout_v1";
 export const EDITOR_PREFERENCES_VERSION = 1;
+export const EDITOR_PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const VIDEO_VIEW_MODES = ["auto", "fill", "fit"];
 
 export const DEFAULT_HOOK_DEFAULTS = {
   position: "top",
@@ -26,6 +29,11 @@ export const DEFAULT_EDITOR_PREFERENCES = {
   subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE },
   subtitleLanguage: "en",
   hookDefaults: { ...DEFAULT_HOOK_DEFAULTS },
+  playbackRate: 1,
+  isMuted: false,
+  videoViewMode: "auto",
+  safetyGridVisible: false,
+  aspectRatio: null,
 };
 
 const HOOK_SETTING_KEYS = Object.keys(DEFAULT_HOOK_DEFAULTS);
@@ -38,6 +46,11 @@ const cloneDefaultPreferences = () => ({
   subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE },
   subtitleLanguage: "en",
   hookDefaults: { ...DEFAULT_HOOK_DEFAULTS },
+  playbackRate: 1,
+  isMuted: false,
+  videoViewMode: "auto",
+  safetyGridVisible: false,
+  aspectRatio: null,
 });
 
 const normalizeHookDefaults = (defaults = {}) => {
@@ -67,6 +80,20 @@ export const normalizeEditorPreferences = (preferences) => {
       preferences.subtitleLanguage || "en",
     ).toLowerCase(),
     hookDefaults: normalizeHookDefaults(preferences.hookDefaults),
+    playbackRate: EDITOR_PLAYBACK_RATES.includes(
+      Number(preferences.playbackRate),
+    )
+      ? Number(preferences.playbackRate)
+      : DEFAULT_EDITOR_PREFERENCES.playbackRate,
+    isMuted: preferences.isMuted === true,
+    videoViewMode: VIDEO_VIEW_MODES.includes(preferences.videoViewMode)
+      ? preferences.videoViewMode
+      : DEFAULT_EDITOR_PREFERENCES.videoViewMode,
+    safetyGridVisible: preferences.safetyGridVisible === true,
+    aspectRatio:
+      typeof preferences.aspectRatio === "string"
+        ? normalizeAspectRatio(preferences.aspectRatio)
+        : null,
   };
 };
 
@@ -153,5 +180,10 @@ export const updateEditorPreferencesFromState = (preferences, state = {}) => {
     hookDefaults: state.hook
       ? normalizeHookDefaults(state.hook)
       : { ...current.hookDefaults },
+    playbackRate: current.playbackRate,
+    isMuted: current.isMuted,
+    videoViewMode: current.videoViewMode,
+    safetyGridVisible: current.safetyGridVisible,
+    aspectRatio: current.aspectRatio,
   };
 };

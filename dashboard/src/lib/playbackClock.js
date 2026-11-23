@@ -127,7 +127,6 @@ export const reducePlaybackClock = (state, action) => {
         playheadMs: 0,
         isPlaying: false,
         isLooping: false,
-        playbackRate: DEFAULT_PLAYBACK_RATE,
         seekRevision: state.seekRevision + 1,
       };
     default:
@@ -148,11 +147,15 @@ export const usePlaybackClock = () => useContext(PlaybackClockContext);
 
 export const usePlaybackClockState = ({
   initialDurationMs = DEFAULT_PLAYBACK_CLOCK_DURATION_MS,
+  initialPlaybackRate = DEFAULT_PLAYBACK_RATE,
   fps = 30,
 } = {}) => {
   const [state, dispatch] = useReducer(
     reducePlaybackClock,
-    createPlaybackClockState({ durationMs: initialDurationMs }),
+    createPlaybackClockState({
+      durationMs: initialDurationMs,
+      playbackRate: initialPlaybackRate,
+    }),
   );
   const playheadRef = useRef(state.playheadMs);
   useEffect(() => {

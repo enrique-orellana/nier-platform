@@ -26,7 +26,7 @@ export const EDITOR_PROJECT_MIGRATION_KEY =
 export const createEmptyEditorHistory = (preferences = {}) => ({
   past: [],
   present: {
-    aspectRatio: "9:16",
+    aspectRatio: normalizeAspectRatio(preferences?.aspectRatio || "9:16"),
     subtitleCues: [],
     subtitleStyle: normalizeSubtitleStyle(
       preferences?.subtitleStyle || DEFAULT_SUBTITLE_STYLE,

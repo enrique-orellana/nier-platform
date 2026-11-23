@@ -130,6 +130,8 @@ import {
   setActiveProjectId,
 } from "./localEditorPersistence";
 import {
+  EDITOR_PLAYBACK_RATES,
+  normalizeEditorPreferences,
   readEditorLayout,
   readEditorPreferences,
   saveEditorLayout,
@@ -180,7 +182,6 @@ const MIN_PREVIEW_HEIGHT = 260;
 const MIN_INSPECTOR_WIDTH = 220;
 const MAX_INSPECTOR_WIDTH = 520;
 const DEFAULT_INSPECTOR_WIDTH = 300;
-const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
 const MIN_TIMELINE_ZOOM = 0.1;
 const MAX_TIMELINE_ZOOM = 4;
 const TIMELINE_ZOOM_STEP = 0.1;
@@ -286,11 +287,15 @@ export default function LocalEditorTab({
   const editorPreferencesRef = useRef(readEditorPreferences());
   const [editHistory, setEditHistory] = useState(() => {
     const history = createEmptyEditorHistory(editorPreferencesRef.current);
-    if (initialEditorState)
+    if (initialEditorState) {
+      const initialPresent = { ...history.present, ...initialEditorState };
+      if (editorPreferencesRef.current.aspectRatio)
+        initialPresent.aspectRatio = editorPreferencesRef.current.aspectRatio;
       return {
         ...history,
-        present: { ...history.present, ...initialEditorState },
+        present: initialPresent,
       };
+    }
     try {
       return localStorage.getItem(EDITOR_HISTORY_STORAGE_KEY)
         ? readEditorHistory()
@@ -328,12 +333,18 @@ export default function LocalEditorTab({
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [safetyGridVisible, setSafetyGridVisible] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [safetyGridVisible, setSafetyGridVisible] = useState(
+    () => editorPreferencesRef.current.safetyGridVisible,
+  );
+  const [isMuted, setIsMuted] = useState(
+    () => editorPreferencesRef.current.isMuted,
+  );
   const [playbackRateMenuOpen, setPlaybackRateMenuOpen] = useState(false);
   const [loopSegment, setLoopSegment] = useState(false);
   const [followAudio, setFollowAudio] = useState(true);
-  const [videoViewMode, setVideoViewMode] = useState("auto");
+  const [videoViewMode, setVideoViewMode] = useState(
+    () => editorPreferencesRef.current.videoViewMode,
+  );
   const [autoCrop, setAutoCrop] = useState(false);
   const [subtitleTrackActionsOpen, setSubtitleTrackActionsOpen] =
     useState(true);
@@ -374,6 +385,7 @@ export default function LocalEditorTab({
     DEFAULT_DURATION_MS;
   const playbackClock = usePlaybackClockState({
     initialDurationMs: initialClockDurationMs,
+    initialPlaybackRate: editorPreferencesRef.current.playbackRate,
     fps: remotionFps,
   });
   const {
@@ -440,8 +452,21 @@ export default function LocalEditorTab({
   }, []);
 
   useEffect(() => {
-    if (videoRef.current) videoRef.current.playbackRate = playbackRate;
-  }, [playbackRate, previewVideoUrl, videoUrl]);
+    if (videoRef.current) {
+      videoRef.current.playbackRate = playbackRate;
+      videoRef.current.muted = isMuted;
+    }
+    if (remotionPlayerRef.current) {
+      if (isMuted) remotionPlayerRef.current.mute?.();
+      else remotionPlayerRef.current.unmute?.();
+    }
+  }, [
+    isMuted,
+    playbackRate,
+    previewVideoUrl,
+    remotionPreviewProps?.videoUrl,
+    videoUrl,
+  ]);
 
   const scrollToCurrentSubtitle = useCallback(() => {
     setSubtitleView("table");
@@ -601,10 +626,15 @@ export default function LocalEditorTab({
     )
       return;
     appliedInitialStateKeyRef.current = initialStateKey;
-    setEditHistory((current) => ({
-      ...createEmptyEditorHistory(editorPreferencesRef.current),
-      present: { ...current.present, ...initialEditorState },
-    }));
+    setEditHistory((current) => {
+      const initialPresent = { ...current.present, ...initialEditorState };
+      if (editorPreferencesRef.current.aspectRatio)
+        initialPresent.aspectRatio = editorPreferencesRef.current.aspectRatio;
+      return {
+        ...createEmptyEditorHistory(editorPreferencesRef.current),
+        present: initialPresent,
+      };
+    });
     setSelected(null);
     setSelectedLayoutSegmentId(null);
   }, [initialEditorState, initialStateKey]);
@@ -682,6 +712,14 @@ export default function LocalEditorTab({
       editorPreferencesRef.current,
       state,
     );
+    editorPreferencesRef.current = next;
+    saveEditorPreferences(next);
+  };
+  const rememberToolbarPreference = (key, value) => {
+    const next = normalizeEditorPreferences({
+      ...editorPreferencesRef.current,
+      [key]: value,
+    });
     editorPreferencesRef.current = next;
     saveEditorPreferences(next);
   };
@@ -815,11 +853,8 @@ export default function LocalEditorTab({
       resetPlayback();
       setLoopSegment(false);
       setFollowAudio(true);
-      setIsMuted(false);
-      setVideoViewMode("auto");
       setAutoCrop(false);
       if (videoRef.current) videoRef.current.loop = false;
-      if (videoRef.current) videoRef.current.muted = false;
     },
     [
       initialClockDurationMs,
@@ -973,9 +1008,12 @@ export default function LocalEditorTab({
   };
 
   const cycleVideoViewMode = () =>
-    setVideoViewMode((current) =>
-      current === "auto" ? "fill" : current === "fill" ? "fit" : "auto",
-    );
+    setVideoViewMode((current) => {
+      const next =
+        current === "auto" ? "fill" : current === "fill" ? "fit" : "auto";
+      rememberToolbarPreference("videoViewMode", next);
+      return next;
+    });
 
   const updateSubtitle = (cue, options) =>
     commitEdit(
@@ -1953,6 +1991,7 @@ export default function LocalEditorTab({
   const toggleMute = () => {
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
+    rememberToolbarPreference("isMuted", nextMuted);
     if (remotionPlayerRef.current) {
       if (nextMuted) remotionPlayerRef.current.mute?.();
       else remotionPlayerRef.current.unmute?.();
@@ -2006,6 +2045,7 @@ export default function LocalEditorTab({
 
   const changeAspectRatio = (value) => {
     const nextAspectRatio = normalizeAspectRatio(value);
+    rememberToolbarPreference("aspectRatio", nextAspectRatio);
     commitEdit((current) => {
       const currentAspectRatio = normalizeAspectRatio(current.aspectRatio);
       if (nextAspectRatio === currentAspectRatio) return current;
@@ -3023,7 +3063,7 @@ export default function LocalEditorTab({
                         aria-label="Playback speed options"
                         className="absolute bottom-9 right-0 z-40 min-w-full overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
                       >
-                        {PLAYBACK_RATES.map((rate) => (
+                        {EDITOR_PLAYBACK_RATES.map((rate) => (
                           <Button
                             variant="ghost"
                             key={rate}
@@ -3032,6 +3072,7 @@ export default function LocalEditorTab({
                             aria-selected={playbackRate === rate}
                             onClick={() => {
                               setPlaybackRate(rate);
+                              rememberToolbarPreference("playbackRate", rate);
                               setPlaybackRateMenuOpen(false);
                             }}
                             className={`h-8 w-full justify-start px-2 text-xs ${playbackRate === rate ? "bg-accent text-accent-foreground" : ""}`}
@@ -3082,7 +3123,11 @@ export default function LocalEditorTab({
                           : "Show Instagram Reels safe zones"
                       }
                       onClick={() =>
-                        setSafetyGridVisible((visible) => !visible)
+                        setSafetyGridVisible((visible) => {
+                          const next = !visible;
+                          rememberToolbarPreference("safetyGridVisible", next);
+                          return next;
+                        })
                       }
                       className={`h-8 min-h-8 shrink-0 px-2 text-xs ${
                         safetyGridVisible
