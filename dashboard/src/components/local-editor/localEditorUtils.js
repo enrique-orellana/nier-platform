@@ -67,8 +67,32 @@ export const normalizeGeneratedCues = (captions, durationMs) => {
         durationMs,
       );
       if (normalized.endMs <= normalized.startMs) return null;
+      const normalizedCaptions = normalized.captions
+        .map((caption) => {
+          const startMs = Math.max(
+            normalized.startMs,
+            Math.min(normalized.endMs, caption.startMs),
+          );
+          const endMs = Math.max(
+            startMs,
+            Math.min(normalized.endMs, caption.endMs),
+          );
+          return { ...caption, startMs, endMs };
+        })
+        .filter((caption) => caption.endMs > caption.startMs);
+      if (!normalizedCaptions.length) return null;
+
+      const text = normalizedCaptions
+        .map((caption) => caption.text)
+        .join(" ")
+        .trim();
       previousEndMs = normalized.endMs;
-      return normalized;
+      return {
+        ...normalized,
+        label: text,
+        text,
+        captions: normalizedCaptions,
+      };
     })
     .filter(Boolean);
 };

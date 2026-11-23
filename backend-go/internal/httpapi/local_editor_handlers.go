@@ -151,6 +151,93 @@ func (s *Server) transcribeProjectClip(w http.ResponseWriter, r *http.Request, j
 	writeJSON(w, http.StatusOK, payload)
 }
 
+func (s *Server) transcribeProjectSource(w http.ResponseWriter, r *http.Request, job domain.Job) {
+	if s.translationRunner == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"detail": "Python worker is not configured"})
+		return
+	}
+
+	metadata, _, err := s.loadProjectSourceMetadata(r.Context(), job.ID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project source metadata is unavailable"})
+		return
+	}
+	sourceFilename := sourceVideoFilename(metadata)
+	if strings.TrimSpace(sourceFilename) == "" {
+		sourceFilename = s.sourceVideoFilenameFromResult(r.Context(), job.ID)
+	}
+	if strings.TrimSpace(sourceFilename) == "" {
+		sourceFilename = "source.mp4"
+	}
+	cleanFilename := filepath.Clean(filepath.FromSlash(strings.ReplaceAll(sourceFilename, "\\", "/")))
+	if filepath.IsAbs(cleanFilename) || cleanFilename == "." || cleanFilename == ".." || strings.HasPrefix(cleanFilename, ".."+string(filepath.Separator)) || !hasVideoExtension(filepath.Base(cleanFilename)) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Project source filename is invalid"})
+		return
+	}
+
+	root := strings.TrimSpace(job.OutputDir)
+	if root == "" {
+		root = s.sourceTranscriptOutputDir(r.Context(), job.ID)
+	}
+	jobRoot, err := filepath.Abs(root)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not resolve project source directory"})
+		return
+	}
+	sourcePath, err := filepath.Abs(filepath.Join(jobRoot, cleanFilename))
+	if err != nil || !safePath(jobRoot, sourcePath) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid project source path"})
+		return
+	}
+
+	if info, statErr := os.Stat(sourcePath); statErr == nil {
+		if info.IsDir() {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Project source path is not a video file"})
+			return
+		}
+	} else if errors.Is(statErr, os.ErrNotExist) {
+		if s.s3Store == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project source video is not cached and object storage is unavailable"})
+			return
+		}
+		uploadDirectory := strings.TrimSpace(s.config.OutputDir)
+		if uploadDirectory == "" {
+			uploadDirectory = "output"
+		}
+		uploadDirectory = filepath.Join(uploadDirectory, ".uploads")
+		if err := os.MkdirAll(uploadDirectory, 0o755); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not prepare the source video for transcription"})
+			return
+		}
+		temporaryDirectory, err := os.MkdirTemp(uploadDirectory, "source-transcription-")
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not prepare the source video for transcription"})
+			return
+		}
+		defer os.RemoveAll(temporaryDirectory)
+		sourcePath = filepath.Join(temporaryDirectory, filepath.Base(cleanFilename))
+		if err := s.s3Store.DownloadJobMasterArtifact(r.Context(), job.ID, filepath.ToSlash(cleanFilename), sourcePath, 16<<30); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Could not retrieve the project source video from storage"})
+			return
+		}
+	} else if statErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Could not access the project source video"})
+		return
+	}
+
+	workerResult, err := s.translationRunner.Run(r.Context(), "project-"+job.ID+"-source-transcription", "transcribe", map[string]any{"source_path": sourcePath}, translationHeaders(r))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": fmt.Sprintf("Subtitle generation failed: %s", err)})
+		return
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(workerResult, &payload); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"detail": "Invalid subtitle worker result"})
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
 func (s *Server) generateHashtags(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})

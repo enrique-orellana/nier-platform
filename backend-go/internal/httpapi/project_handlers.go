@@ -27,6 +27,23 @@ func (s *Server) projectRoutes(w http.ResponseWriter, r *http.Request) {
 		s.projectSourceTranscript(w, r, jobID)
 		return
 	}
+	if len(parts) == 3 && parts[1] == "source-transcript" && parts[2] == "transcribe" {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"detail": "Method not allowed"})
+			return
+		}
+		if !validProjectJobID(jobID) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project not found"})
+			return
+		}
+		job, exists := s.store.Get(r.Context(), jobID)
+		if !exists {
+			writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project not found"})
+			return
+		}
+		s.transcribeProjectSource(w, r, job)
+		return
+	}
 	job, exists := s.store.Get(r.Context(), jobID)
 	if !exists {
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project not found"})

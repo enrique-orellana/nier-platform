@@ -282,6 +282,7 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
             initialEditorState={editorState}
             scaleSubtitlePreviewToOutput
             activeSubtitleTrackId="original"
+            allowFullSourceTranscription
             onStateChange={setEditorState}
             onClose={onClose}
             headerActions={saveAction}

@@ -322,10 +322,18 @@ func (s *S3Store) DownloadSourceObject(ctx context.Context, bucket, key, destina
 }
 
 func (s *S3Store) DownloadJobSourceArtifact(ctx context.Context, jobID, destination string, maxBytes int64) error {
+	return s.DownloadJobMasterArtifact(ctx, jobID, "source.mp4", destination, maxBytes)
+}
+
+func (s *S3Store) DownloadJobMasterArtifact(ctx context.Context, jobID, filename, destination string, maxBytes int64) error {
 	if s.Client == nil || s.Bucket == "" || jobID == "" || strings.Contains(jobID, "/") || strings.Contains(jobID, "\\") || strings.Contains(jobID, "..") {
 		return fmt.Errorf("invalid job source artifact")
 	}
-	return s.downloadObject(ctx, s.Bucket, jobID+"/master/source.mp4", destination, maxBytes)
+	cleanFilename := path.Clean(filename)
+	if cleanFilename == "." || cleanFilename != filename || strings.HasPrefix(cleanFilename, "/") || cleanFilename == ".." || strings.HasPrefix(cleanFilename, "../") || strings.Contains(cleanFilename, "\\") {
+		return fmt.Errorf("invalid master artifact filename")
+	}
+	return s.downloadObject(ctx, s.Bucket, path.Join(jobID, "master", cleanFilename), destination, maxBytes)
 }
 
 func (s *S3Store) downloadObject(ctx context.Context, bucket, key, destination string, maxBytes int64) error {

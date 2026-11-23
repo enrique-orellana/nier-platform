@@ -207,6 +207,7 @@ export default function LocalEditorTab({
   footer = null,
   persistHistory = true,
   allowLocalUpload = true,
+  allowFullSourceTranscription = false,
   clipMetadata = null,
   masterDuration = null,
   onHashtagsChange = null,
@@ -227,6 +228,12 @@ export default function LocalEditorTab({
     initialClipIndex !== null &&
     Number.isInteger(projectClipIndex) &&
     projectClipIndex >= 0,
+  );
+  const hasFullProjectSource = Boolean(
+    allowFullSourceTranscription &&
+    initialProjectId &&
+    initialVideoUrl &&
+    initialClipIndex === null,
   );
   const videoRef = useRef(null);
   const playerRef = useRef(null);
@@ -1446,6 +1453,20 @@ export default function LocalEditorTab({
           headers: getLocalAiHeaders(),
           body: formData,
         });
+      } else if (hasFullProjectSource) {
+        response = await fetch(
+          getApiUrl(
+            `/api/projects/${encodeURIComponent(initialProjectId)}/source-transcript/transcribe`,
+          ),
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...getLocalAiHeaders(),
+            },
+            body: JSON.stringify({}),
+          },
+        );
       } else if (hasProjectClipSource) {
         response = await fetch(
           getApiUrl(
@@ -3948,7 +3969,9 @@ export default function LocalEditorTab({
                           onClick={generateSubtitles}
                           disabled={
                             generatingSubtitles ||
-                            (!videoFile && !hasProjectClipSource)
+                            (!videoFile &&
+                              !hasProjectClipSource &&
+                              !hasFullProjectSource)
                           }
                           className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-fuchsia-300/30 hover:bg-accent hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
                         >

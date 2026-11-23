@@ -66,7 +66,25 @@ export const applySourceEditorCues = (transcript, cues) => {
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
       continue;
     }
-    segments.push({ start, end, text: String(cue.text || "").trim() });
+    const words = (Array.isArray(cue?.captions) ? cue.captions : [])
+      .map((caption) => ({
+        word: String(caption?.text || "").trim(),
+        start: Number(caption?.startMs) / 1000,
+        end: Number(caption?.endMs) / 1000,
+      }))
+      .filter(
+        (word) =>
+          word.word &&
+          Number.isFinite(word.start) &&
+          Number.isFinite(word.end) &&
+          word.end > word.start,
+      );
+    segments.push({
+      start,
+      end,
+      text: String(cue.text || "").trim(),
+      ...(words.length ? { words } : {}),
+    });
   }
 
   segments.sort((left, right) => Number(left.start) - Number(right.start));
