@@ -435,6 +435,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
   apiRef,
 ) {
   const timelineRef = useRef(null);
+  const seekRulerRef = useRef(null);
   const playheadDragRef = useRef(null);
   const suppressSeekClickRef = useRef(false);
   const markerDragRef = useRef(null);
@@ -520,7 +521,10 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
       return;
     }
     onLayoutDeselect?.();
-    seekAtClientX(event.clientX, event.currentTarget.getBoundingClientRect());
+    seekAtClientX(
+      event.clientX,
+      (seekRulerRef.current || event.currentTarget).getBoundingClientRect(),
+    );
   };
 
   const beginPlayheadDrag = (event) => {
@@ -530,12 +534,18 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
     suppressSeekClickRef.current = true;
     ruler.setPointerCapture?.(event.pointerId);
     onLayoutDeselect?.();
-    seekAtClientX(event.clientX, ruler.getBoundingClientRect());
+    seekAtClientX(
+      event.clientX,
+      (seekRulerRef.current || ruler).getBoundingClientRect(),
+    );
   };
 
   const updatePlayheadDrag = (event) => {
     if (playheadDragRef.current !== event.pointerId) return;
-    seekAtClientX(event.clientX, event.currentTarget.getBoundingClientRect());
+    seekAtClientX(
+      event.clientX,
+      (seekRulerRef.current || event.currentTarget).getBoundingClientRect(),
+    );
   };
 
   const endPlayheadDrag = (event) => {
@@ -637,6 +647,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
               Time
             </div>
             <div
+              ref={seekRulerRef}
               className="relative h-full shrink-0 cursor-ew-resize select-none touch-none bg-muted/20"
               style={{ width: `${timelineWidth}px`, ...gridStyle }}
               onClick={seek}
@@ -644,6 +655,11 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
               onPointerMove={updatePlayheadDrag}
               onPointerUp={endPlayheadDrag}
               onPointerCancel={endPlayheadDrag}
+              title={
+                snapCues
+                  ? "Drag playhead · snaps to subtitle cues"
+                  : "Drag playhead"
+              }
               role="slider"
               aria-label="Timeline seek"
               aria-valuemin={0}
@@ -662,6 +678,11 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
               ))}
               <div
                 className="absolute bottom-0 top-0 w-px bg-primary"
+                style={{ left: `${(playheadMs / safeDuration) * 100}%` }}
+              />
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute top-0 z-20 h-2.5 w-3 -translate-x-1/2 rounded-b-sm bg-primary"
                 style={{ left: `${(playheadMs / safeDuration) * 100}%` }}
               />
             </div>
@@ -815,6 +836,21 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
             })}
             <div
               className="absolute bottom-0 top-0 z-10 w-px bg-primary/80"
+              style={{ left: `${(playheadMs / safeDuration) * 100}%` }}
+            />
+            <div
+              aria-hidden="true"
+              data-testid="local-editor-playhead-drag-handle"
+              title={
+                snapCues
+                  ? "Drag playhead · snaps to subtitle cues"
+                  : "Drag playhead"
+              }
+              onPointerDown={beginPlayheadDrag}
+              onPointerMove={updatePlayheadDrag}
+              onPointerUp={endPlayheadDrag}
+              onPointerCancel={endPlayheadDrag}
+              className="pointer-events-auto absolute bottom-0 top-0 z-0 w-3 -translate-x-1/2 cursor-ew-resize touch-none bg-transparent"
               style={{ left: `${(playheadMs / safeDuration) * 100}%` }}
             />
           </div>
