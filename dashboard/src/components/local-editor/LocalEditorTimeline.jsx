@@ -213,7 +213,7 @@ function CueBlock({
       onDoubleClick={() => onDoubleClick?.(cue)}
       onPointerDown={(event) => beginDrag(event, "move")}
       onKeyDown={(event) => event.key === "Enter" && onSelect(cue, event)}
-      className={`group absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:border-white/40 hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-primary" : "border-white/20"} ${selected ? "ring-1 ring-white/70" : ""}`}
+      className={`group absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current && !selected ? "border-primary border-dashed" : current ? "border-primary" : "border-white/20 hover:border-white/40"} ${selected ? "ring-1 ring-white/70" : ""}`}
       style={{
         left: `${left}%`,
         width: `${width}%`,
@@ -221,21 +221,18 @@ function CueBlock({
         zIndex: selected ? 10 : 1,
       }}
     >
-      {current && (
-        <span
-          data-testid="cue-current-indicator"
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-px inset-x-1.5 z-10 h-px rounded-full bg-primary"
-        />
+      {!current && !selected && (
+        <>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-1.5 z-0 w-0 border-l border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
+          />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 right-1.5 z-0 w-0 border-r border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
+          />
+        </>
       )}
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 left-1.5 z-0 w-0 border-l border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
-      />
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 right-1.5 z-0 w-0 border-r border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
-      />
       <span className="pointer-events-none relative z-10 block truncate">
         {cue.text || "Untitled cue"}
       </span>
@@ -345,11 +342,11 @@ function Track({
         {testId === "local-editor-subtitles-track" ? (
           <div className="min-w-0">
             <div>{label}</div>
-            <div className="mt-0.5 text-[9px] leading-tight text-muted-foreground">
-              {selectedCueIds.length > 1
-                ? `${selectedCueIds.length} selected · drag to move`
-                : "Shift range · Ctrl/Cmd add"}
-            </div>
+            {selectedCueIds.length > 1 && (
+              <div className="mt-0.5 text-[9px] leading-tight text-muted-foreground">
+                {selectedCueIds.length} selected · drag to move
+              </div>
+            )}
           </div>
         ) : (
           label
