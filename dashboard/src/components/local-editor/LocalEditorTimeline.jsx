@@ -18,6 +18,10 @@ const MIN_LANE_WIDTH = 760;
 const MIN_TIMELINE_ZOOM = 0.0001;
 const MAX_TIMELINE_ZOOM = 4;
 const CUE_SNAP_THRESHOLD_PX = 10;
+const CUE_TRACK_MIN_HEIGHT = 48;
+const CUE_BLOCK_HEIGHT = 40;
+const CUE_LANE_PITCH = 44;
+const CUE_TRACK_INSET = 4;
 const TRACK_LABEL_CLASSES =
   "flex w-36 shrink-0 items-center gap-2 border-r border-border bg-muted/40 px-3 text-[11px] font-medium tracking-wide text-muted-foreground";
 
@@ -25,6 +29,36 @@ const getCueBackground = (color) =>
   `color-mix(in srgb, ${color} 60%, hsl(var(--background)))`;
 
 const clampPercent = (value) => Math.max(0, Math.min(100, value));
+
+const getCueLaneLayout = (cues) => {
+  const laneEndTimes = [];
+  const laneByCueId = new Map();
+  const orderedCues = cues
+    .map((cue, index) => ({
+      cue,
+      index,
+      startMs: Number(cue?.startMs) || 0,
+      endMs: Number(cue?.endMs) || 0,
+    }))
+    .sort(
+      (left, right) =>
+        left.startMs - right.startMs ||
+        left.endMs - right.endMs ||
+        left.index - right.index,
+    );
+
+  for (const { cue, startMs, endMs } of orderedCues) {
+    let laneIndex = laneEndTimes.findIndex((laneEndMs) => laneEndMs <= startMs);
+    if (laneIndex === -1) laneIndex = laneEndTimes.length;
+    laneEndTimes[laneIndex] = endMs;
+    laneByCueId.set(cue.id, laneIndex);
+  }
+
+  return {
+    laneByCueId,
+    laneCount: Math.max(1, laneEndTimes.length),
+  };
+};
 
 const findNearestCueEdge = (
   timeMs,
@@ -98,6 +132,7 @@ const snapCueRangeDelta = (
 
 function CueBlock({
   cue,
+  laneIndex = 0,
   allCues = [],
   snapEnabled = false,
   durationMs,
@@ -208,6 +243,7 @@ function CueBlock({
       tabIndex={0}
       aria-label={cue.text || "Timeline cue"}
       aria-pressed={selected}
+      data-cue-lane={laneIndex}
       data-current-cue={current ? "true" : "false"}
       data-cue-state={
         current && selected
@@ -228,10 +264,12 @@ function CueBlock({
       onDoubleClick={() => onDoubleClick?.(cue)}
       onPointerDown={(event) => beginDrag(event, "move")}
       onKeyDown={(event) => event.key === "Enter" && onSelect(cue, event)}
-      className={`group absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? (current ? "border-primary border-dashed" : "border-white/70 border-dashed") : current ? "border-primary border-solid" : "border-white/20 border-solid hover:border-white/40"}`}
+      className={`group absolute rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? (current ? "border-primary border-dashed" : "border-white/70 border-dashed") : current ? "border-primary border-solid" : "border-white/20 border-solid hover:border-white/40"}`}
       style={{
         left: `${left}%`,
         width: `${width}%`,
+        top: `${CUE_TRACK_INSET + laneIndex * CUE_LANE_PITCH}px`,
+        height: `${CUE_BLOCK_HEIGHT}px`,
         background: getCueBackground(color),
         zIndex: selected ? 10 : 1,
       }}
@@ -341,10 +379,19 @@ function Track({
   snapEnabled,
   testId,
 }) {
+  const { laneByCueId, laneCount } = getCueLaneLayout(cues);
+  const trackHeight = Math.max(
+    CUE_TRACK_MIN_HEIGHT,
+    CUE_TRACK_INSET * 2 +
+      laneCount * CUE_BLOCK_HEIGHT +
+      (laneCount - 1) * (CUE_LANE_PITCH - CUE_BLOCK_HEIGHT),
+  );
+
   return (
     <div
       data-testid={testId}
       className="flex min-h-12 w-full items-stretch border-b border-border last:border-b-0"
+      style={{ minHeight: `${trackHeight}px` }}
     >
       <div
         className={TRACK_LABEL_CLASSES}
@@ -375,6 +422,7 @@ function Track({
           <CueBlock
             key={cue.id}
             cue={cue}
+            laneIndex={laneByCueId.get(cue.id) || 0}
             allCues={cues}
             snapEnabled={snapEnabled}
             durationMs={durationMs}
