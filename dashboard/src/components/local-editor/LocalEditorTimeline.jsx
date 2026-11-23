@@ -66,9 +66,18 @@ const findNearestCueEdge = (
   excludedCueIds,
   thresholdMs,
   targetEdgeKey,
+  playheadMs,
 ) => {
+  const playheadPosition = Number(playheadMs);
+  if (Number.isFinite(playheadPosition)) {
+    const snappedPlayheadPosition = Math.round(playheadPosition);
+    if (Math.abs(snappedPlayheadPosition - timeMs) <= thresholdMs)
+      return snappedPlayheadPosition;
+  }
+
   let nearestEdge = null;
   let nearestDistance = thresholdMs + 1;
+
   for (const item of cues) {
     if (excludedCueIds.has(item.id)) continue;
     const edge = item[targetEdgeKey];
@@ -79,21 +88,6 @@ const findNearestCueEdge = (
     }
   }
   return nearestEdge;
-};
-
-const findNearestCueBoundary = (timeMs, cues, thresholdMs) => {
-  let nearestBoundary = null;
-  let nearestDistance = thresholdMs + 1;
-  for (const cue of cues) {
-    for (const boundary of [cue.startMs, cue.endMs]) {
-      const distance = Math.abs(boundary - timeMs);
-      if (distance <= thresholdMs && distance < nearestDistance) {
-        nearestBoundary = boundary;
-        nearestDistance = distance;
-      }
-    }
-  }
-  return nearestBoundary;
 };
 
 const snapCueRangeDelta = (
@@ -136,6 +130,7 @@ function CueBlock({
   allCues = [],
   snapEnabled = false,
   durationMs,
+  playheadMs,
   color,
   current,
   selected,
@@ -183,6 +178,7 @@ function CueBlock({
           groupIds,
           snapThresholdMs,
           mode === "start" ? "endMs" : "startMs",
+          playheadMs,
         );
         if (snapEdge === null) {
           onChange(resizedCue);
@@ -426,6 +422,7 @@ function Track({
             allCues={cues}
             snapEnabled={snapEnabled}
             durationMs={durationMs}
+            playheadMs={playheadMs}
             color={color}
             current={playheadMs >= cue.startMs && playheadMs < cue.endMs}
             selected={selectedId === cue.id || selectedCueIds.includes(cue.id)}
@@ -556,11 +553,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
         ((clientX - rect.left) / rect.width) * safeDuration,
       ),
     );
-    const snapThresholdMs = (CUE_SNAP_THRESHOLD_PX / rect.width) * safeDuration;
-    const snappedTimeMs = snapCues
-      ? findNearestCueBoundary(timeMs, subtitleCues, snapThresholdMs)
-      : null;
-    onSeek?.(snappedTimeMs ?? timeMs);
+    onSeek?.(timeMs);
   };
 
   const seek = (event) => {
@@ -703,11 +696,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
               onPointerMove={updatePlayheadDrag}
               onPointerUp={endPlayheadDrag}
               onPointerCancel={endPlayheadDrag}
-              title={
-                snapCues
-                  ? "Drag playhead · snaps to subtitle cues"
-                  : "Drag playhead"
-              }
+              title="Drag playhead to seek"
               role="slider"
               aria-label="Timeline seek"
               aria-valuemin={0}
@@ -889,11 +878,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
             <div
               aria-hidden="true"
               data-testid="local-editor-playhead-drag-handle"
-              title={
-                snapCues
-                  ? "Drag playhead · snaps to subtitle cues"
-                  : "Drag playhead"
-              }
+              title="Drag playhead to seek"
               onPointerDown={beginPlayheadDrag}
               onPointerMove={updatePlayheadDrag}
               onPointerUp={endPlayheadDrag}
