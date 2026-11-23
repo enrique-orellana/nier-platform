@@ -182,9 +182,31 @@ const MIN_PREVIEW_HEIGHT = 260;
 const MIN_INSPECTOR_WIDTH = 220;
 const MAX_INSPECTOR_WIDTH = 520;
 const DEFAULT_INSPECTOR_WIDTH = 300;
-const MIN_TIMELINE_ZOOM = 0.1;
+const MIN_TIMELINE_ZOOM = 0.0001;
 const MAX_TIMELINE_ZOOM = 4;
-const TIMELINE_ZOOM_STEP = 0.1;
+const TIMELINE_ZOOM_SLIDER_STEPS = 1000;
+const timelineZoomToSliderValue = (zoom) =>
+  Math.round(
+    (Math.log(
+      clamp(
+        Number(zoom) || MIN_TIMELINE_ZOOM,
+        MIN_TIMELINE_ZOOM,
+        MAX_TIMELINE_ZOOM,
+      ) / MIN_TIMELINE_ZOOM,
+    ) /
+      Math.log(MAX_TIMELINE_ZOOM / MIN_TIMELINE_ZOOM)) *
+      TIMELINE_ZOOM_SLIDER_STEPS,
+  );
+const timelineZoomFromSliderValue = (value) =>
+  Number(
+    (
+      MIN_TIMELINE_ZOOM *
+      Math.pow(
+        MAX_TIMELINE_ZOOM / MIN_TIMELINE_ZOOM,
+        clamp(Number(value) / TIMELINE_ZOOM_SLIDER_STEPS, 0, 1),
+      )
+    ).toPrecision(6),
+  );
 
 export default function LocalEditorTab({
   initialVideoUrl = "",
@@ -3735,11 +3757,10 @@ export default function LocalEditorTab({
                         onClick={() =>
                           setTimelineZoom((current) =>
                             Number(
-                              clamp(
-                                current - TIMELINE_ZOOM_STEP,
+                              Math.max(
                                 MIN_TIMELINE_ZOOM,
-                                MAX_TIMELINE_ZOOM,
-                              ).toFixed(2),
+                                current / 2,
+                              ).toPrecision(6),
                             ),
                           )
                         }
@@ -3752,14 +3773,17 @@ export default function LocalEditorTab({
                       <Input
                         type="range"
                         aria-label="Timeline zoom"
-                        min={MIN_TIMELINE_ZOOM}
-                        max={MAX_TIMELINE_ZOOM}
-                        step={TIMELINE_ZOOM_STEP}
-                        value={timelineZoom}
+                        aria-valuetext={`${(timelineZoom * 100).toPrecision(3)}%`}
+                        min={0}
+                        max={TIMELINE_ZOOM_SLIDER_STEPS}
+                        step={1}
+                        value={timelineZoomToSliderValue(timelineZoom)}
                         onChange={(event) =>
-                          setTimelineZoom(Number(event.target.value))
+                          setTimelineZoom(
+                            timelineZoomFromSliderValue(event.target.value),
+                          )
                         }
-                        className="h-4 w-16 accent-zinc-200"
+                        className="h-4 w-20 accent-zinc-200"
                       />
                       <Button
                         variant="ghost"
@@ -3769,11 +3793,10 @@ export default function LocalEditorTab({
                         onClick={() =>
                           setTimelineZoom((current) =>
                             Number(
-                              clamp(
-                                current + TIMELINE_ZOOM_STEP,
-                                MIN_TIMELINE_ZOOM,
+                              Math.min(
                                 MAX_TIMELINE_ZOOM,
-                              ).toFixed(2),
+                                current * 2,
+                              ).toPrecision(6),
                             ),
                           )
                         }

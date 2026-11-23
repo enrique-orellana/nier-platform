@@ -15,6 +15,8 @@ import { Button } from "../ui";
 const TRACK_LABEL_WIDTH = 144;
 const BASE_PIXELS_PER_SECOND = 80;
 const MIN_LANE_WIDTH = 760;
+const MIN_TIMELINE_ZOOM = 0.0001;
+const MAX_TIMELINE_ZOOM = 4;
 const TRACK_LABEL_CLASSES =
   "flex w-36 shrink-0 items-center gap-2 border-r border-border bg-muted/40 px-3 text-[11px] font-medium tracking-wide text-muted-foreground";
 
@@ -356,10 +358,10 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
       Math.ceil(durationSeconds * BASE_PIXELS_PER_SECOND),
     );
     const nextZoom = Math.max(
-      0.1,
-      Math.min(4, availableTimelineWidth / baseTimelineWidth),
+      MIN_TIMELINE_ZOOM,
+      Math.min(MAX_TIMELINE_ZOOM, availableTimelineWidth / baseTimelineWidth),
     );
-    onTimelineZoomChange?.(Number(nextZoom.toFixed(2)));
+    onTimelineZoomChange?.(Number(nextZoom.toPrecision(6)));
   }, [durationSeconds, onTimelineZoomChange]);
 
   useImperativeHandle(apiRef, () => ({ zoomToFit }), [zoomToFit]);
