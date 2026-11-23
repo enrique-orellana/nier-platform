@@ -476,10 +476,11 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
   const saveAction = (
     <Button
       variant="ghost"
+      size="sm"
       type="button"
       onClick={saveTranscript}
       disabled={!isDirty || saving}
-      className="flex items-center gap-1 rounded-md bg-emerald-500 px-2 py-1 text-[10px] font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+      className="!h-8 !min-h-8 !max-h-8 box-border flex items-center gap-1.5 rounded-md bg-emerald-500 px-2 text-xs font-semibold leading-none text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {saving ? (
         <Loader2 size={13} className="animate-spin" />
