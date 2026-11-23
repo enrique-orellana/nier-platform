@@ -213,7 +213,7 @@ function CueBlock({
       onDoubleClick={() => onDoubleClick?.(cue)}
       onPointerDown={(event) => beginDrag(event, "move")}
       onKeyDown={(event) => event.key === "Enter" && onSelect(cue, event)}
-      className={`group absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current && !selected ? "border-primary border-dashed" : current ? "border-primary" : "border-white/20 hover:border-white/40"} ${selected ? "ring-1 ring-white/70" : ""}`}
+      className={`group absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? (current ? "border-primary border-dashed" : "border-white/70 border-dashed") : current ? "border-primary border-solid" : "border-white/20 border-solid hover:border-white/40"}`}
       style={{
         left: `${left}%`,
         width: `${width}%`,
