@@ -277,11 +277,14 @@ export default function ProjectLibrary({
   projectId = null,
   editorClipIndex = null,
   editorOpen = false,
+  fullVideoEditorOpen = false,
   versionId = null,
   onOpenProject,
   onBackToProjects,
   onOpenEditor,
   onCloseEditor,
+  onOpenFullVideoEditor,
+  onCloseFullVideoEditor,
   onVersionChange,
 }) {
   const [projects, setProjects] = useState([]);
@@ -290,7 +293,7 @@ export default function ProjectLibrary({
   const [search, setSearch] = useState("");
   const [selectedProject, setSelectedProject] = useState(null);
   const [projectClips, setProjectClips] = useState([]);
-  const [sourceEditorOpen, setSourceEditorOpen] = useState(false);
+  const [localSourceEditorOpen, setLocalSourceEditorOpen] = useState(false);
   const [isLoadingClips, setIsLoadingClips] = useState(false);
   const [clipStatuses, setClipStatuses] = useState({});
   const [clipRenderJobs, setClipRenderJobs] = useState({});
@@ -315,6 +318,17 @@ export default function ProjectLibrary({
     readPersistedStatusFilters(projectId),
   );
   const projectsRequestRef = useRef(null);
+  const sourceEditorOpen = fullVideoEditorOpen || localSourceEditorOpen;
+
+  const openFullVideoEditor = () => {
+    if (onOpenFullVideoEditor) onOpenFullVideoEditor(selectedProjectId);
+    else setLocalSourceEditorOpen(true);
+  };
+
+  const closeFullVideoEditor = () => {
+    setLocalSourceEditorOpen(false);
+    onCloseFullVideoEditor?.();
+  };
 
   const loadProjects = useCallback(() => {
     if (projectsRequestRef.current) return projectsRequestRef.current;
@@ -471,7 +485,7 @@ export default function ProjectLibrary({
     if (!projectId) {
       setSelectedProject(null);
       setProjectClips([]);
-      setSourceEditorOpen(false);
+      setLocalSourceEditorOpen(false);
       setClipStatuses({});
       setStatusFilters([]);
       setClipRenderJobs({});
@@ -499,7 +513,7 @@ export default function ProjectLibrary({
     if (!matchingProject) return;
 
     setSelectedProject(matchingProject);
-    setSourceEditorOpen(false);
+    setLocalSourceEditorOpen(false);
     setProjectClips(
       Array.isArray(matchingProject.clips) ? matchingProject.clips : [],
     );
@@ -563,7 +577,7 @@ export default function ProjectLibrary({
     const id = project?.job_id || project?.session_id || project?.id;
     onOpenProject?.(id);
     setSelectedProject(project);
-    setSourceEditorOpen(false);
+    setLocalSourceEditorOpen(false);
     setProjectClips(Array.isArray(project?.clips) ? project.clips : []);
     setClipStatuses({});
     setStatusFilters(readPersistedStatusFilters(id));
@@ -1190,7 +1204,7 @@ export default function ProjectLibrary({
         {sourceEditorOpen && selectedProjectId && (
           <SourceTranscriptEditor
             projectId={selectedProjectId}
-            onClose={() => setSourceEditorOpen(false)}
+            onClose={closeFullVideoEditor}
           />
         )}
         <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-8 md:px-8 md:py-10 xl:px-10">
@@ -1374,7 +1388,7 @@ export default function ProjectLibrary({
                   variant="outline"
                   size="sm"
                   type="button"
-                  onClick={() => setSourceEditorOpen(true)}
+                  onClick={openFullVideoEditor}
                   disabled={!canEditFullVideo}
                   title={
                     canEditFullVideo

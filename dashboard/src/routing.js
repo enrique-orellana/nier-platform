@@ -42,5 +42,9 @@ export const parseRoute = (input = window.location.href) => {
       isEditorRoute && /^\d+$/.test(segments[3]) ? Number(segments[3]) : null,
     editor: isEditorRoute,
     versionId: isEditorRoute ? url.searchParams.get("version") : null,
+    fullVideoEditor:
+      hasProjectId &&
+      !isEditorRoute &&
+      url.searchParams.get("fullVideoEditor") === "1",
   };
 };

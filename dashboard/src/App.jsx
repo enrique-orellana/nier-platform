@@ -878,6 +878,36 @@ function App() {
     setRoute(parseRoute());
   }, []);
 
+  const navigateToFullVideoEditor = useCallback((projectId) => {
+    const url = new URL(window.location.href);
+    const previousUrl = `${url.pathname}${url.search}${url.hash}`;
+    url.pathname = buildProjectPath(projectId);
+    url.searchParams.set("fullVideoEditor", "1");
+    window.history.pushState(
+      { ...window.history.state, fullVideoEditorPreviousUrl: previousUrl },
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+    setRoute(parseRoute());
+  }, []);
+
+  const closeFullVideoEditor = useCallback((projectId) => {
+    if (window.history.state?.fullVideoEditorPreviousUrl) {
+      window.history.back();
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    url.pathname = buildProjectPath(projectId);
+    url.searchParams.delete("fullVideoEditor");
+    window.history.replaceState(
+      {},
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+    setRoute(parseRoute());
+  }, []);
+
   const navigateToEditor = useCallback(
     (projectId, clipIndex, versionId = null) => {
       window.history.pushState(
@@ -2035,10 +2065,15 @@ function App() {
               projectId={route.projectId}
               editorClipIndex={route.clipIndex}
               editorOpen={route.editor}
+              fullVideoEditorOpen={route.fullVideoEditor}
               versionId={route.versionId}
               onOpenProject={navigateToProject}
               onBackToProjects={() => navigateToTab("projects")}
               onOpenEditor={navigateToEditor}
+              onOpenFullVideoEditor={navigateToFullVideoEditor}
+              onCloseFullVideoEditor={() =>
+                closeFullVideoEditor(route.projectId)
+              }
               onCloseEditor={() => navigateToProject(route.projectId)}
               onVersionChange={(versionId) =>
                 navigateToEditor(route.projectId, route.clipIndex, versionId)
