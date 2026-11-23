@@ -8,14 +8,27 @@ const trackItems = (track) => {
 
 const trackCaptions = (track) =>
   trackItems(track).flatMap((cue) => {
-    const captions =
-      Array.isArray(cue?.captions) && cue.captions.length
+    const wordCaptions =
+      track?.use_word_level_subtitle_timing === true &&
+      Array.isArray(cue?.captions) &&
+      cue.captions.length
         ? cue.captions
-        : [cue];
+        : null;
+    const captions = wordCaptions || [cue];
     return captions.map((caption) => ({
-      text: caption.text || caption.word || "",
-      startMs: Number(caption.startMs || 0),
-      endMs: Number(caption.endMs ?? caption.startMs ?? 0),
+      text:
+        caption.text ||
+        caption.word ||
+        cue.text ||
+        cue.label ||
+        cue.captions?.map((word) => word.text || word.word || "").join(" ") ||
+        "",
+      startMs: Number(wordCaptions ? caption.startMs || 0 : cue.startMs || 0),
+      endMs: Number(
+        wordCaptions
+          ? (caption.endMs ?? caption.startMs ?? 0)
+          : (cue.endMs ?? cue.startMs ?? 0),
+      ),
     }));
   });
 

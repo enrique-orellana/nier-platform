@@ -176,6 +176,54 @@ const sourceEditorStateForTrack = (track, baseState) => ({
   useWordLevelSubtitleTiming: track?.use_word_level_subtitle_timing === true,
 });
 
+const restoreTrackWordCaptions = (cues, track, transcript) => {
+  const savedCuesBySegment = new Map();
+  const savedCuesByRange = new Map();
+  for (const cue of Array.isArray(track?.cues) ? track.cues : []) {
+    if (!Array.isArray(cue?.captions) || !cue.captions.length) continue;
+    if (cue.sourceSegmentIndex != null)
+      savedCuesBySegment.set(Number(cue.sourceSegmentIndex), cue);
+    savedCuesByRange.set(`${cue.startMs}:${cue.endMs}`, cue);
+  }
+  const sourceSegments = Array.isArray(transcript?.segments)
+    ? transcript.segments
+    : [];
+
+  return cues.map((cue) => {
+    const savedCue =
+      savedCuesBySegment.get(cue.sourceSegmentIndex) ||
+      savedCuesByRange.get(`${cue.startMs}:${cue.endMs}`);
+    const transcriptCaptions = (
+      sourceSegments[cue.sourceSegmentIndex]?.words || []
+    ).flatMap((word) => {
+      const text = String(word?.word || word?.text || "").trim();
+      const startMs = Math.max(
+        cue.startMs,
+        Math.round(Number(word?.start) * 1000),
+      );
+      const endMs = Math.min(cue.endMs, Math.round(Number(word?.end) * 1000));
+      return text && Number.isFinite(startMs) && endMs > startMs
+        ? [{ text, startMs, endMs }]
+        : [];
+    });
+    const candidates = savedCue?.captions?.length
+      ? savedCue.captions
+      : transcriptCaptions;
+    const candidateText = candidates
+      .map((caption) => caption?.text || caption?.word || "")
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return candidates.length &&
+      candidateText ===
+        String(cue.text || "")
+          .replace(/\s+/g, " ")
+          .trim()
+      ? { ...cue, captions: candidates }
+      : cue;
+  });
+};
+
 export default function SourceTranscriptEditor({ projectId, onClose }) {
   const [source, setSource] = useState(null);
   const [editorState, setEditorState] = useState(null);
@@ -222,9 +270,16 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
           : [];
         const originalTrack =
           savedTracks.find((track) => track?.id === "original") || {};
-        nextEditorState.useWordLevelSubtitleTiming =
+        const useWordLevelSubtitleTiming =
           originalTrack.use_word_level_subtitle_timing ??
           payload.use_word_timings === true;
+        if (useWordLevelSubtitleTiming)
+          nextEditorState.subtitleCues = restoreTrackWordCaptions(
+            nextEditorState.subtitleCues,
+            originalTrack,
+            payload.transcript,
+          );
+        nextEditorState.useWordLevelSubtitleTiming = useWordLevelSubtitleTiming;
         nextEditorState.subtitleStyle = originalTrack.style || subtitleStyle;
         nextEditorState.subtitleReactions = originalTrack.reactions || [];
         nextEditorState.subtitleReactionStyle =
@@ -323,10 +378,21 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
       const savedTranscript = payload?.transcript || transcript;
       let nextEditorState = editorState;
       if (savedTranscript) {
+        const savedTranscriptCues =
+          transcriptToSourceEditorState(savedTranscript).subtitleCues;
+        const useWordLevelSubtitleTiming =
+          originalTrack?.use_word_level_subtitle_timing === true;
+        const restoredCues = useWordLevelSubtitleTiming
+          ? restoreTrackWordCaptions(
+              savedTranscriptCues,
+              originalTrack,
+              savedTranscript,
+            )
+          : savedTranscriptCues;
         const savedState = sourceEditorStateForTrack(
           {
             ...originalTrack,
-            cues: transcriptToSourceEditorState(savedTranscript).subtitleCues,
+            cues: restoredCues,
           },
           editorState,
         );

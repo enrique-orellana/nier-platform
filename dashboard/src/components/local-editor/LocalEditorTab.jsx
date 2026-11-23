@@ -1037,9 +1037,7 @@ export default function LocalEditorTab({
         subtitleCues: current.subtitleCues.map((item) =>
           item.id === cue.id
             ? syncSubtitleCue(item, clampCue(cue, durationMs), {
-                useWordLevelTiming:
-                  activeSubtitleTrackId === "original" &&
-                  current.useWordLevelSubtitleTiming === true,
+                useWordLevelTiming: current.useWordLevelSubtitleTiming === true,
               })
             : item,
         ),
@@ -1057,9 +1055,7 @@ export default function LocalEditorTab({
           const update = updatesById.get(item.id);
           return update
             ? syncSubtitleCue(item, update, {
-                useWordLevelTiming:
-                  activeSubtitleTrackId === "original" &&
-                  current.useWordLevelSubtitleTiming === true,
+                useWordLevelTiming: current.useWordLevelSubtitleTiming === true,
               })
             : item;
         }),
@@ -1791,8 +1787,7 @@ export default function LocalEditorTab({
         style: subtitleStyle,
         reactions: [],
         reactionStyle: DEFAULT_SUBTITLE_REACTION_STYLE,
-        use_word_level_subtitle_timing:
-          editHistory.present.useWordLevelSubtitleTiming === true,
+        use_word_level_subtitle_timing: false,
       };
       if (managedTracks) {
         onSubtitleTrackCreate(translatedTrack);
@@ -2328,6 +2323,8 @@ export default function LocalEditorTab({
         ...exportDimensions,
         videoFit: cropForExport ? "cover" : "contain",
         subtitleCues,
+        useWordLevelSubtitleTiming:
+          editHistory.present.useWordLevelSubtitleTiming === true,
         subtitleStyle,
         subtitleReactions,
         subtitleReactionStyle,
@@ -2587,9 +2584,16 @@ export default function LocalEditorTab({
     );
   }
 
-  const previewSubtitleCaptions = subtitleCues.flatMap((cue) =>
-    cueCaptionsForRender(cue),
-  );
+  const previewSubtitleCaptions = subtitleCues.flatMap((cue) => {
+    if (editHistory.present.useWordLevelSubtitleTiming === true)
+      return cueCaptionsForRender(cue);
+    const text = String(cue?.text || cue?.label || "").trim();
+    const startMs = Number(cue?.startMs);
+    const endMs = Number(cue?.endMs);
+    return text && Number.isFinite(startMs) && endMs > startMs
+      ? [{ text, startMs, endMs }]
+      : [];
+  });
   const previewSubtitleBlocks = groupCaptionsIntoBlocks(
     previewSubtitleCaptions,
   );
@@ -4112,22 +4116,26 @@ export default function LocalEditorTab({
                           </NativeSelect>
                         </div>
                       </label>
-                      {hasProjectClipSource && (
+                      {(hasProjectClipSource ||
+                        subtitleTracks?.some(
+                          (track) => track?.id === activeSubtitleTrackId,
+                        )) && (
                         <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2.5">
                           <div className="min-w-0">
                             <label
-                              htmlFor="clip-word-timing-setting"
+                              htmlFor={`track-word-timing-${activeSubtitleTrackId || "active"}`}
                               className="block text-xs font-medium text-foreground"
                             >
-                              Use word-level timings for this clip
+                              Use word-level timings for this track
                             </label>
                             <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                              Off uses each cue’s range. On uses individual word
-                              timings. Save a new version to keep it.
+                              Off uses the full cue duration. On shows each word
+                              using its own timing. This setting is saved with
+                              the selected language track.
                             </p>
                           </div>
                           <Switch
-                            id="clip-word-timing-setting"
+                            id={`track-word-timing-${activeSubtitleTrackId || "active"}`}
                             checked={
                               editHistory.present.useWordLevelSubtitleTiming ===
                               true
@@ -4139,10 +4147,16 @@ export default function LocalEditorTab({
                                 commitEdit((current) => ({
                                   ...current,
                                   useWordLevelSubtitleTiming: enabled,
+                                  subtitleCues: current.subtitleCues.map(
+                                    (cue) =>
+                                      syncSubtitleCue(cue, cue, {
+                                        useWordLevelTiming: enabled,
+                                      }),
+                                  ),
                                 }));
                               }
                             }}
-                            aria-label="Use word-level timings for this clip"
+                            aria-label="Use word-level timings for this track"
                           />
                         </div>
                       )}
@@ -4527,8 +4541,10 @@ export default function LocalEditorTab({
           }
           onClose={() => setEditingSubtitle(null)}
           showWordTimings={
-            hasProjectClipSource &&
-            activeSubtitleTrackId === "original" &&
+            (hasProjectClipSource ||
+              subtitleTracks?.some(
+                (track) => track?.id === activeSubtitleTrackId,
+              )) &&
             editHistory.present.useWordLevelSubtitleTiming === true
           }
           onDelete={removeSubtitleCue}

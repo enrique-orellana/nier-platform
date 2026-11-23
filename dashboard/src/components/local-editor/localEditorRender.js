@@ -272,6 +272,7 @@ export const buildRemotionRenderProps = ({
   height,
   videoFit = "cover",
   subtitleCues = [],
+  useWordLevelSubtitleTiming = false,
   subtitleStyle = null,
   subtitleReactions = [],
   subtitleReactionStyle = null,
@@ -326,7 +327,15 @@ export const buildRemotionRenderProps = ({
     videoFit,
     subtitles: subtitleCues.length
       ? {
-          captions: subtitleCues.flatMap((cue) => cueCaptionsForRender(cue)),
+          captions: subtitleCues.flatMap((cue) => {
+            if (useWordLevelSubtitleTiming) return cueCaptionsForRender(cue);
+            const text = cueText(cue);
+            const startMs = Number(cue?.startMs);
+            const endMs = Number(cue?.endMs);
+            return text && Number.isFinite(startMs) && endMs > startMs
+              ? [{ text, startMs, endMs }]
+              : [];
+          }),
           position: subtitleStyle?.position || "bottom",
           style: normalizeSubtitleStyle(subtitleStyle || undefined),
           reactions: normalizeSubtitleReactions(
@@ -351,6 +360,7 @@ export async function renderLocalVideoOnBrowser({
   height,
   videoFit = "cover",
   subtitleCues = [],
+  useWordLevelSubtitleTiming = false,
   subtitleStyle = null,
   subtitleReactions = [],
   subtitleReactionStyle = null,
@@ -367,6 +377,7 @@ export async function renderLocalVideoOnBrowser({
     height,
     videoFit,
     subtitleCues,
+    useWordLevelSubtitleTiming,
     subtitleStyle,
     subtitleReactions,
     subtitleReactionStyle,
@@ -410,6 +421,7 @@ export async function renderLocalVideoOnBackend({
   height,
   videoFit = "cover",
   subtitleCues = [],
+  useWordLevelSubtitleTiming = false,
   subtitleStyle = null,
   subtitleReactions = [],
   subtitleReactionStyle = null,
@@ -429,6 +441,7 @@ export async function renderLocalVideoOnBackend({
     height,
     videoFit,
     subtitleCues,
+    useWordLevelSubtitleTiming,
     subtitleStyle,
     subtitleReactions,
     subtitleReactionStyle,
@@ -510,6 +523,7 @@ export async function burnLocalEditorSubtitles({
   height,
   videoFit = "cover",
   subtitleCues = [],
+  useWordLevelSubtitleTiming = false,
   subtitleStyle = null,
   subtitleReactions = [],
   subtitleReactionStyle = null,
@@ -531,6 +545,7 @@ export async function burnLocalEditorSubtitles({
     height,
     videoFit,
     subtitleCues,
+    useWordLevelSubtitleTiming,
     subtitleStyle,
     subtitleReactions,
     subtitleReactionStyle,

@@ -433,9 +433,13 @@ export const manifestToLocalEditorState = (
     source.subtitle_tracks_disabled !== true &&
     source.subtitle_tracks_edited !== true &&
     !hasPersistedSubtitleLayer(source);
+  const isOriginalTrack =
+    !activeTrack ||
+    activeTrack.id === "original" ||
+    activeTrack.origin === "original";
   const useWordLevelSubtitleTiming =
     activeTrack?.use_word_level_subtitle_timing ??
-    source.use_word_level_subtitle_timing === true;
+    (isOriginalTrack && source.use_word_level_subtitle_timing === true);
   const loadedSubtitleCues = localCuesFromTrack(
     !useWordLevelSubtitleTiming &&
       isWordSplitGeneratedTrack(activeTrack, source)
@@ -520,9 +524,10 @@ export const localEditorStateToManifest = (
 ) => {
   const source = JSON.parse(JSON.stringify(sourceManifest || {}));
   const state = localState || manifestToLocalEditorState(source, trackId);
-  source.use_word_level_subtitle_timing =
-    state.useWordLevelSubtitleTiming === true;
   const nextTrackId = trackId || "original";
+  if (nextTrackId === "original")
+    source.use_word_level_subtitle_timing =
+      state.useWordLevelSubtitleTiming === true;
   const existingTracks = Array.isArray(source.subtitle_tracks)
     ? source.subtitle_tracks
     : [];
@@ -1411,7 +1416,9 @@ export default function FullScreenEditor({
         })
       : [];
     const subtitleCues = !isOriginalTrack
-      ? currentDraft.subtitleCues || []
+      ? (currentDraft.subtitleCues || []).map((cue) =>
+          syncSubtitleCue(cue, cue, { useWordLevelTiming: enabled }),
+        )
       : transcriptCues.length
         ? transcriptCues
         : (currentDraft.subtitleCues || []).map((cue) => {
@@ -1428,7 +1435,7 @@ export default function FullScreenEditor({
     };
     const nextManifest = {
       ...baseManifest,
-      use_word_level_subtitle_timing: enabled,
+      ...(isOriginalTrack ? { use_word_level_subtitle_timing: enabled } : {}),
     };
     localDraftRef.current = nextDraft;
     currentManifestRef.current = nextManifest;
