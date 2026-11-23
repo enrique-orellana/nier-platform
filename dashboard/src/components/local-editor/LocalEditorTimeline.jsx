@@ -213,7 +213,7 @@ function CueBlock({
       onDoubleClick={() => onDoubleClick?.(cue)}
       onPointerDown={(event) => beginDrag(event, "move")}
       onKeyDown={(event) => event.key === "Enter" && onSelect(cue, event)}
-      className={`absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:border-primary/80 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-primary shadow-[inset_0_2px_0_hsl(var(--primary))]" : "border-white/20"} ${selected ? "ring-2 ring-primary" : ""}`}
+      className={`group absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:border-white/40 hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-primary shadow-[inset_0_2px_0_hsl(var(--primary))]" : "border-white/20"} ${selected ? "ring-1 ring-white/70" : ""}`}
       style={{
         left: `${left}%`,
         width: `${width}%`,
@@ -225,10 +225,14 @@ function CueBlock({
         <span
           data-testid="cue-current-indicator"
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-primary"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-0.5 bg-primary"
         />
       )}
-      <span className="pointer-events-none block truncate">
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none absolute inset-1.5 z-0 rounded-[3px] border border-dashed border-white/40 bg-white/5 opacity-0 transition-opacity group-hover:opacity-100 ${selected ? "opacity-100" : ""}`}
+      />
+      <span className="pointer-events-none relative z-10 block truncate">
         {cue.text || "Untitled cue"}
       </span>
       <Button
@@ -236,19 +240,29 @@ function CueBlock({
         size="icon"
         type="button"
         aria-label="Resize cue start"
-        className="absolute inset-y-0 left-0 z-10 h-full min-h-0 min-w-0 cursor-ew-resize rounded-none border-0 bg-transparent p-0 opacity-0 transition-colors hover:bg-primary/60 hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary"
+        className="absolute inset-y-0 left-0 z-20 h-full min-h-0 min-w-0 cursor-ew-resize rounded-none border-0 bg-transparent p-0 opacity-0 transition-colors group-hover:opacity-100 hover:bg-transparent focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/70"
         onPointerDown={(event) => beginDrag(event, "start")}
         style={{ width: "min(12px, 25%)" }}
-      />
+      >
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-2 left-1/2 w-0 -translate-x-1/2 border-l border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
+        />
+      </Button>
       <Button
         variant="ghost"
         size="icon"
         type="button"
         aria-label="Resize cue end"
-        className="absolute inset-y-0 right-0 z-10 h-full min-h-0 min-w-0 cursor-ew-resize rounded-none border-0 bg-transparent p-0 opacity-0 transition-colors hover:bg-primary/60 hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary"
+        className="absolute inset-y-0 right-0 z-20 h-full min-h-0 min-w-0 cursor-ew-resize rounded-none border-0 bg-transparent p-0 opacity-0 transition-colors group-hover:opacity-100 hover:bg-transparent focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/70"
         onPointerDown={(event) => beginDrag(event, "end")}
         style={{ width: "min(12px, 25%)" }}
-      />
+      >
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-2 left-1/2 w-0 -translate-x-1/2 border-l border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
+        />
+      </Button>
     </div>
   );
 }
