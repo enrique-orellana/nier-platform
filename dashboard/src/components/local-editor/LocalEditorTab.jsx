@@ -3236,6 +3236,7 @@ export default function LocalEditorTab({
                 <div className="ml-auto flex items-center gap-0.5">
                   <div className="relative">
                     <Button
+                      variant="outline"
                       type="button"
                       aria-label="Playback speed"
                       aria-haspopup="listbox"
@@ -3247,10 +3248,10 @@ export default function LocalEditorTab({
                         if (event.key === "Escape")
                           setPlaybackRateMenuOpen(false);
                       }}
-                      className="h-8 min-h-8 shrink-0 px-2 text-xs"
+                      className="h-8 min-h-8 shrink-0 bg-transparent px-2 text-xs text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground"
                     >
                       <span>Speed</span>
-                      <span className="font-medium text-primary-foreground">
+                      <span className="font-medium text-foreground">
                         {playbackRate.toFixed(2)}x
                       </span>
                       <ChevronDown
