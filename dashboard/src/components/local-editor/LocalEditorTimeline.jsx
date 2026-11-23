@@ -213,7 +213,7 @@ function CueBlock({
       onDoubleClick={() => onDoubleClick?.(cue)}
       onPointerDown={(event) => beginDrag(event, "move")}
       onKeyDown={(event) => event.key === "Enter" && onSelect(cue, event)}
-      className={`group absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:border-white/40 hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-primary shadow-[inset_0_2px_0_hsl(var(--primary))]" : "border-white/20"} ${selected ? "ring-1 ring-white/70" : ""}`}
+      className={`group absolute inset-y-1 rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:border-white/40 hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-primary" : "border-white/20"} ${selected ? "ring-1 ring-white/70" : ""}`}
       style={{
         left: `${left}%`,
         width: `${width}%`,
@@ -225,7 +225,7 @@ function CueBlock({
         <span
           data-testid="cue-current-indicator"
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-0.5 bg-primary"
+          className="pointer-events-none absolute -top-px inset-x-1.5 z-10 h-px rounded-full bg-primary"
         />
       )}
       <span
