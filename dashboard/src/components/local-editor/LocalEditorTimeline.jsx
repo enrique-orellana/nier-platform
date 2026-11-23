@@ -230,7 +230,11 @@ function CueBlock({
       )}
       <span
         aria-hidden="true"
-        className={`pointer-events-none absolute inset-1.5 z-0 rounded-[3px] border border-dashed border-white/40 bg-white/5 opacity-0 transition-opacity group-hover:opacity-100 ${selected ? "opacity-100" : ""}`}
+        className="pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-0 border-l border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
+      />
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-1.5 right-1.5 z-0 w-0 border-r border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
       />
       <span className="pointer-events-none relative z-10 block truncate">
         {cue.text || "Untitled cue"}
@@ -243,12 +247,7 @@ function CueBlock({
         className="absolute inset-y-0 left-0 z-20 h-full min-h-0 min-w-0 cursor-ew-resize rounded-none border-0 bg-transparent p-0 opacity-0 transition-colors group-hover:opacity-100 hover:bg-transparent focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/70"
         onPointerDown={(event) => beginDrag(event, "start")}
         style={{ width: "min(12px, 25%)" }}
-      >
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-2 left-1/2 w-0 -translate-x-1/2 border-l border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
-        />
-      </Button>
+      />
       <Button
         variant="ghost"
         size="icon"
@@ -257,12 +256,7 @@ function CueBlock({
         className="absolute inset-y-0 right-0 z-20 h-full min-h-0 min-w-0 cursor-ew-resize rounded-none border-0 bg-transparent p-0 opacity-0 transition-colors group-hover:opacity-100 hover:bg-transparent focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/70"
         onPointerDown={(event) => beginDrag(event, "end")}
         style={{ width: "min(12px, 25%)" }}
-      >
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-2 left-1/2 w-0 -translate-x-1/2 border-l border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
-        />
-      </Button>
+      />
     </div>
   );
 }
