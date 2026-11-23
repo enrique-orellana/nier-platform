@@ -3444,9 +3444,11 @@ export default function LocalEditorTab({
                     variant="ghost"
                     type="button"
                     aria-label={
-                      snapCues ? "Disable cue snapping" : "Enable cue snapping"
+                      snapCues
+                        ? "Disable cue and playhead snapping"
+                        : "Enable cue and playhead snapping"
                     }
-                    title="Snap subtitle cue edges together"
+                    title="Snap the playhead and subtitle cue edges"
                     aria-pressed={snapCues}
                     onClick={() => {
                       const next = !snapCues;

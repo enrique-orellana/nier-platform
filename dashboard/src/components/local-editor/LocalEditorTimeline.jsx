@@ -47,6 +47,21 @@ const findNearestCueEdge = (
   return nearestEdge;
 };
 
+const findNearestCueBoundary = (timeMs, cues, thresholdMs) => {
+  let nearestBoundary = null;
+  let nearestDistance = thresholdMs + 1;
+  for (const cue of cues) {
+    for (const boundary of [cue.startMs, cue.endMs]) {
+      const distance = Math.abs(boundary - timeMs);
+      if (distance <= thresholdMs && distance < nearestDistance) {
+        nearestBoundary = boundary;
+        nearestDistance = distance;
+      }
+    }
+  }
+  return nearestBoundary;
+};
+
 const snapCueRangeDelta = (
   startMs,
   endMs,
@@ -420,6 +435,8 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
   apiRef,
 ) {
   const timelineRef = useRef(null);
+  const playheadDragRef = useRef(null);
+  const suppressSeekClickRef = useRef(false);
   const markerDragRef = useRef(null);
   const suppressMarkerClickRef = useRef(null);
   const [draggedMarker, setDraggedMarker] = useState(null);
@@ -482,18 +499,51 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
     }
   }, [playheadMs, safeDuration, timelineWidth]);
 
-  const seek = (event) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    onLayoutDeselect?.();
-    onSeek?.(
-      Math.max(
-        0,
-        Math.min(
-          safeDuration,
-          ((event.clientX - rect.left) / rect.width) * safeDuration,
-        ),
+  const seekAtClientX = (clientX, rect) => {
+    const timeMs = Math.max(
+      0,
+      Math.min(
+        safeDuration,
+        ((clientX - rect.left) / rect.width) * safeDuration,
       ),
     );
+    const snapThresholdMs = (CUE_SNAP_THRESHOLD_PX / rect.width) * safeDuration;
+    const snappedTimeMs = snapCues
+      ? findNearestCueBoundary(timeMs, subtitleCues, snapThresholdMs)
+      : null;
+    onSeek?.(snappedTimeMs ?? timeMs);
+  };
+
+  const seek = (event) => {
+    if (suppressSeekClickRef.current && event.detail > 0) {
+      suppressSeekClickRef.current = false;
+      return;
+    }
+    onLayoutDeselect?.();
+    seekAtClientX(event.clientX, event.currentTarget.getBoundingClientRect());
+  };
+
+  const beginPlayheadDrag = (event) => {
+    if (event.button !== 0) return;
+    const ruler = event.currentTarget;
+    playheadDragRef.current = event.pointerId;
+    suppressSeekClickRef.current = true;
+    ruler.setPointerCapture?.(event.pointerId);
+    onLayoutDeselect?.();
+    seekAtClientX(event.clientX, ruler.getBoundingClientRect());
+  };
+
+  const updatePlayheadDrag = (event) => {
+    if (playheadDragRef.current !== event.pointerId) return;
+    seekAtClientX(event.clientX, event.currentTarget.getBoundingClientRect());
+  };
+
+  const endPlayheadDrag = (event) => {
+    if (playheadDragRef.current !== event.pointerId) return;
+    playheadDragRef.current = null;
+    window.setTimeout(() => {
+      suppressSeekClickRef.current = false;
+    }, 0);
   };
 
   const markerTimeFromClientX = (clientX) => {
@@ -583,13 +633,17 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
           style={{ width: `${canvasWidth}px` }}
         >
           <div className="flex h-9 border-b border-border bg-muted/20">
-            <div className="sticky left-0 z-20 flex w-36 shrink-0 items-center border-r border-border bg-muted/60 px-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="flex w-36 shrink-0 items-center border-r border-border bg-muted/60 px-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               Time
             </div>
             <div
-              className="relative h-full shrink-0 cursor-pointer bg-muted/20"
+              className="relative h-full shrink-0 cursor-ew-resize select-none touch-none bg-muted/20"
               style={{ width: `${timelineWidth}px`, ...gridStyle }}
               onClick={seek}
+              onPointerDown={beginPlayheadDrag}
+              onPointerMove={updatePlayheadDrag}
+              onPointerUp={endPlayheadDrag}
+              onPointerCancel={endPlayheadDrag}
               role="slider"
               aria-label="Timeline seek"
               aria-valuemin={0}
