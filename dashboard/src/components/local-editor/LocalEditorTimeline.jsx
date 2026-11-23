@@ -230,11 +230,11 @@ function CueBlock({
       )}
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-0 border-l border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
+        className="pointer-events-none absolute inset-y-0 left-1.5 z-0 w-0 border-l border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
       />
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-1.5 right-1.5 z-0 w-0 border-r border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
+        className="pointer-events-none absolute inset-y-0 right-1.5 z-0 w-0 border-r border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
       />
       <span className="pointer-events-none relative z-10 block truncate">
         {cue.text || "Untitled cue"}
