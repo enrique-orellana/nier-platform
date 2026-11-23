@@ -446,6 +446,37 @@ func (s *Server) manifestPath(jobID string, clipIndex int) (string, error) {
 	return "", os.ErrNotExist
 }
 
+func (s *Server) clipUsesWordLevelTimings(ctx context.Context, jobID string, clipIndex int) bool {
+	if s.versionRepository != nil {
+		if currentVersionID, versionList, err := s.versionRepository.List(ctx, jobID, clipIndex); err == nil {
+			// Prefer the active version head. Only projects without a head yet
+			// fall back to the newest saved draft.
+			versionID := currentVersionID
+			if versionID == "" && len(versionList) > 0 {
+				versionID = versionList[len(versionList)-1].VersionID
+			}
+			if versionID != "" {
+				_, manifest, loadErr := s.versionRepository.Load(ctx, jobID, clipIndex, versionID)
+				if loadErr != nil {
+					return false
+				}
+				enabled, _ := manifest["use_word_level_subtitle_timing"].(bool)
+				return enabled
+			}
+		}
+	}
+
+	path, err := s.manifestPath(jobID, clipIndex)
+	if err == nil {
+		if manifest, loadErr := manifests.Load(path); loadErr == nil {
+			if enabled, configured := manifest["use_word_level_subtitle_timing"].(bool); configured {
+				return enabled
+			}
+		}
+	}
+	return false
+}
+
 func safePath(root, candidate string) bool {
 	rootAbs, rootErr := filepath.Abs(root)
 	candidateAbs, candidateErr := filepath.Abs(candidate)
@@ -472,6 +503,7 @@ func (s *Server) getManifest(w http.ResponseWriter, jobID string, clipIndex int)
 		return
 	}
 	if transcript, clipStart, clipEnd, useWordTimings, ok := s.sourceTranscriptForClip(context.Background(), jobID, clipIndex); ok {
+		manifest["use_word_level_subtitle_timing"] = useWordTimings
 		timeline, _ := manifest["timeline"].(map[string]any)
 		if timeline == nil {
 			timeline = make(map[string]any)
@@ -665,9 +697,8 @@ func (s *Server) clipTranscript(w http.ResponseWriter, ctx context.Context, jobI
 		return
 	}
 	var data struct {
-		Transcript     map[string]any `json:"transcript"`
-		UseWordTimings *bool          `json:"source_transcript_use_word_timings"`
-		Shorts         []struct {
+		Transcript map[string]any `json:"transcript"`
+		Shorts     []struct {
 			Start float64 `json:"start"`
 			End   float64 `json:"end"`
 		} `json:"shorts"`
@@ -686,7 +717,7 @@ func (s *Server) clipTranscript(w http.ResponseWriter, ctx context.Context, jobI
 		return
 	}
 	clipStart, clipEnd := data.Shorts[clipIndex].Start, data.Shorts[clipIndex].End
-	useWordTimings := data.UseWordTimings != nil && *data.UseWordTimings
+	useWordTimings := s.clipUsesWordLevelTimings(ctx, jobID, clipIndex)
 	captions := media.BuildSubtitleCuesWithWordTimings(data.Transcript, clipStart, clipEnd, useWordTimings)
 	soundEvents := make([]map[string]any, 0)
 	rawEvents, _ := data.Transcript["events"].([]any)

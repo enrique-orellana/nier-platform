@@ -373,6 +373,7 @@ describe("FullScreenEditor", () => {
   it("normalizes stale nested caption timings when loading an edited cue range", () => {
     const source = {
       ...manifest,
+      use_word_level_subtitle_timing: true,
       subtitle_tracks: [
         {
           id: "original",

@@ -208,7 +208,6 @@ export default function LocalEditorTab({
   persistHistory = true,
   allowLocalUpload = true,
   allowFullSourceTranscription = false,
-  useWordLevelSubtitleTiming = false,
   onWordLevelSubtitleTimingChange = null,
   clipMetadata = null,
   masterDuration = null,
@@ -1030,7 +1029,11 @@ export default function LocalEditorTab({
         ...current,
         subtitleCues: current.subtitleCues.map((item) =>
           item.id === cue.id
-            ? syncSubtitleCue(item, clampCue(cue, durationMs))
+            ? syncSubtitleCue(item, clampCue(cue, durationMs), {
+                useWordLevelTiming:
+                  activeSubtitleTrackId === "original" &&
+                  current.useWordLevelSubtitleTiming === true,
+              })
             : item,
         ),
       }),
@@ -3955,31 +3958,37 @@ export default function LocalEditorTab({
                           </NativeSelect>
                         </div>
                       </label>
-                      {allowFullSourceTranscription && (
+                      {hasProjectClipSource && (
                         <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2.5">
                           <div className="min-w-0">
                             <label
-                              htmlFor="source-word-timing-setting"
+                              htmlFor="clip-word-timing-setting"
                               className="block text-xs font-medium text-foreground"
                             >
-                              Use word-level timings in clips
+                              Use word-level timings for this clip
                             </label>
                             <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                              Off keeps one cue over its full range. On uses
-                              timings saved for individual words.
+                              Off uses each cue’s range. On uses individual word
+                              timings. Save a new version to keep it.
                             </p>
                           </div>
                           <Switch
-                            id="source-word-timing-setting"
-                            checked={useWordLevelSubtitleTiming}
+                            id="clip-word-timing-setting"
+                            checked={
+                              editHistory.present.useWordLevelSubtitleTiming ===
+                              true
+                            }
                             onCheckedChange={(enabled) => {
-                              rememberToolbarPreference(
-                                "useWordLevelSubtitleTiming",
-                                enabled,
-                              );
-                              onWordLevelSubtitleTimingChange?.(enabled);
+                              if (onWordLevelSubtitleTimingChange) {
+                                onWordLevelSubtitleTimingChange(enabled);
+                              } else {
+                                commitEdit((current) => ({
+                                  ...current,
+                                  useWordLevelSubtitleTiming: enabled,
+                                }));
+                              }
                             }}
-                            aria-label="Use word-level timings in clips"
+                            aria-label="Use word-level timings for this clip"
                           />
                         </div>
                       )}
@@ -4322,6 +4331,11 @@ export default function LocalEditorTab({
               : editingSubtitle
           }
           onClose={() => setEditingSubtitle(null)}
+          showWordTimings={
+            hasProjectClipSource &&
+            activeSubtitleTrackId === "original" &&
+            editHistory.present.useWordLevelSubtitleTiming === true
+          }
           onDelete={removeSubtitleCue}
           onSave={(cue) => {
             updateSubtitle(cue);

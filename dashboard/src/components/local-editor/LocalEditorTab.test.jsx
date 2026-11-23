@@ -2211,7 +2211,7 @@ describe("LocalEditorTab", () => {
     );
   });
 
-  it("shows word timings for a cue after its text is entered", async () => {
+  it("does not create word timings by default when a cue is edited", async () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:demo");
     render(<LocalEditorTab />);
     fireEvent.change(screen.getByLabelText(/upload video/i), {
@@ -2233,12 +2233,8 @@ describe("LocalEditorTab", () => {
       screen.getAllByRole("button", { name: "One two" })[0],
     );
 
-    await waitFor(() =>
-      expect(screen.getByLabelText("Word 1 text")).toHaveValue("One"),
-    );
-    expect(screen.getByLabelText("Word 2 text")).toHaveValue("two");
-    expect(screen.getByLabelText("Word 1 start")).toHaveValue(0);
-    expect(screen.getByLabelText("Word 2 end")).toHaveValue(2000);
+    expect(screen.queryByLabelText("Word 1 text")).not.toBeInTheDocument();
+    expect(screen.queryByText("Word timings")).not.toBeInTheDocument();
   });
 
   it("offers a viewport-sized player and fullscreen control", async () => {

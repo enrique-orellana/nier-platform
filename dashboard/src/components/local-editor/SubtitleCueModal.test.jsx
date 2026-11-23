@@ -14,7 +14,14 @@ describe("SubtitleCueModal", () => {
 
   it("saves subtitle text, cue timing, and word timing edits together", () => {
     const onSave = vi.fn();
-    render(<SubtitleCueModal cue={cue} onSave={onSave} onClose={vi.fn()} />);
+    render(
+      <SubtitleCueModal
+        cue={cue}
+        onSave={onSave}
+        onClose={vi.fn()}
+        showWordTimings
+      />,
+    );
 
     fireEvent.change(screen.getByLabelText("Subtitle text"), {
       target: { value: "Yes!" },

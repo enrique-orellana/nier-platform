@@ -31,7 +31,10 @@ import {
   useRenewableMediaUrl,
 } from "../../lib/videoUrls";
 import { resolveLocalEditorSourceUrl } from "./fullScreenEditorSource";
-import { normalizeCueCaptions } from "../local-editor/localEditorRender";
+import {
+  normalizeCueCaptions,
+  syncSubtitleCue,
+} from "../local-editor/localEditorRender";
 import {
   createLayoutSegments,
   normalizeLayoutSegments,
@@ -183,34 +186,46 @@ const publishingMetadataFrom = (sourceManifest, clip) => {
   };
 };
 
-const transcriptCuesRelativeToClip = (manifest) => {
+const transcriptCuesRelativeToClip = (
+  manifest,
+  { useWordLevelTiming = false } = {},
+) => {
   const transcript = manifest?.timeline?.transcript;
   if (!transcript?.segments?.length) return [];
   const trimStart = Number(manifest.timeline?.trim?.start_sec || 0);
   const trimEnd = Number(
     manifest.timeline?.trim?.end_sec ?? Number.POSITIVE_INFINITY,
   );
-  return transcript.segments.flatMap((segment) => {
+  return transcript.segments.flatMap((segment, index) => {
     const segmentStart = Number(segment.start || 0);
     const segmentEnd = Number(segment.end ?? segment.start ?? 0);
     const start = Math.max(segmentStart, trimStart);
     const end = Math.min(segmentEnd, trimEnd);
     if (end <= start) return [];
-    const captions = (segment.words || []).flatMap((word) => {
-      const wordStart = Math.max(Number(word.start || 0), trimStart);
-      const wordEnd = Math.min(Number(word.end ?? word.start ?? 0), trimEnd);
-      if (wordEnd <= wordStart) return [];
-      return [
-        {
-          text: word.word || word.text || "",
-          startMs: Math.round((wordStart - trimStart) * 1000),
-          endMs: Math.round((wordEnd - trimStart) * 1000),
-        },
-      ];
-    });
+    const captions = useWordLevelTiming
+      ? (segment.words || []).flatMap((word) => {
+          const wordStart = Math.max(Number(word.start || 0), trimStart);
+          const wordEnd = Math.min(
+            Number(word.end ?? word.start ?? 0),
+            trimEnd,
+          );
+          if (wordEnd <= wordStart) return [];
+          return [
+            {
+              text: word.word || word.text || "",
+              startMs: Math.round((wordStart - trimStart) * 1000),
+              endMs: Math.round((wordEnd - trimStart) * 1000),
+            },
+          ];
+        })
+      : [];
     return [
       {
+        id: `transcript-segment-${index}`,
+        type: "subtitle",
         text: segment.text || captions.map((caption) => caption.text).join(" "),
+        label:
+          segment.text || captions.map((caption) => caption.text).join(" "),
         startMs: Math.round((start - trimStart) * 1000),
         endMs: Math.round((end - trimStart) * 1000),
         ...(captions.length ? { captions } : {}),
@@ -219,7 +234,10 @@ const transcriptCuesRelativeToClip = (manifest) => {
   });
 };
 
-const transcriptCuesForEditor = (manifest) => {
+const transcriptCuesForEditor = (
+  manifest,
+  { useWordLevelTiming = false } = {},
+) => {
   const transcript = manifest?.timeline?.transcript;
   const segments = Array.isArray(transcript?.segments)
     ? transcript.segments
@@ -235,33 +253,42 @@ const transcriptCuesForEditor = (manifest) => {
     ...segments.map((segment) => Number(segment?.end ?? segment?.start ?? 0)),
   );
   if (trimStart <= 0 || latestEnd > duration + 0.001)
-    return transcriptCuesRelativeToClip(manifest);
+    return transcriptCuesRelativeToClip(manifest, { useWordLevelTiming });
 
-  return segments.flatMap((segment) => {
+  return segments.flatMap((segment, index) => {
     const start = Math.max(0, Number(segment?.start || 0));
     const end = Math.min(duration, Number(segment?.end ?? segment?.start ?? 0));
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start)
       return [];
-    const captions = (segment.words || []).flatMap((word) => {
-      const wordStart = Math.max(0, Number(word?.start || 0));
-      const wordEnd = Math.min(duration, Number(word?.end ?? word?.start ?? 0));
-      if (
-        !Number.isFinite(wordStart) ||
-        !Number.isFinite(wordEnd) ||
-        wordEnd <= wordStart
-      )
-        return [];
-      return [
-        {
-          text: word.word || word.text || "",
-          startMs: Math.round(wordStart * 1000),
-          endMs: Math.round(wordEnd * 1000),
-        },
-      ];
-    });
+    const captions = useWordLevelTiming
+      ? (segment.words || []).flatMap((word) => {
+          const wordStart = Math.max(0, Number(word?.start || 0));
+          const wordEnd = Math.min(
+            duration,
+            Number(word?.end ?? word?.start ?? 0),
+          );
+          if (
+            !Number.isFinite(wordStart) ||
+            !Number.isFinite(wordEnd) ||
+            wordEnd <= wordStart
+          )
+            return [];
+          return [
+            {
+              text: word.word || word.text || "",
+              startMs: Math.round(wordStart * 1000),
+              endMs: Math.round(wordEnd * 1000),
+            },
+          ];
+        })
+      : [];
     return [
       {
+        id: `transcript-segment-${index}`,
+        type: "subtitle",
         text: segment.text || captions.map((caption) => caption.text).join(" "),
+        label:
+          segment.text || captions.map((caption) => caption.text).join(" "),
         startMs: Math.round(start * 1000),
         endMs: Math.round(end * 1000),
         ...(captions.length ? { captions } : {}),
@@ -298,6 +325,46 @@ const localCuesFromTrack = (track, fallbackCues = []) => {
   );
   return [...primary, ...missing].sort(
     (left, right) => left.startMs - right.startMs || left.endMs - right.endMs,
+  );
+};
+
+const isWordSplitGeneratedTrack = (track, manifest) => {
+  if (
+    !track ||
+    (track.id !== "original" &&
+      track.origin !== "original" &&
+      track.origin !== "generated")
+  )
+    return false;
+  const segments = manifest?.timeline?.transcript?.segments;
+  if (!Array.isArray(segments) || !segments.length) return false;
+  const trackCues = Array.isArray(track.cues)
+    ? track.cues
+    : Array.isArray(track.captions)
+      ? track.captions
+      : [];
+  if (trackCues.length <= segments.length) return false;
+  const transcriptWords = new Set(
+    segments
+      .flatMap((segment) =>
+        Array.isArray(segment?.words) ? segment.words : [],
+      )
+      .map((word) =>
+        String(word?.word || word?.text || "")
+          .toLocaleLowerCase()
+          .replace(/[^\p{L}\p{N}]+/gu, " ")
+          .trim(),
+      )
+      .filter(Boolean),
+  );
+  if (!transcriptWords.size) return false;
+  return trackCues.every((cue) =>
+    transcriptWords.has(
+      String(cue?.text || cue?.label || "")
+        .toLocaleLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, " ")
+        .trim(),
+    ),
   );
 };
 
@@ -366,10 +433,28 @@ export const manifestToLocalEditorState = (
     source.subtitle_tracks_disabled !== true &&
     source.subtitle_tracks_edited !== true &&
     !hasPersistedSubtitleLayer(source);
-  const subtitleCues = localCuesFromTrack(
-    activeTrack,
-    shouldUseTranscriptFallback ? transcriptCuesForEditor(source) : [],
+  const useWordLevelSubtitleTiming =
+    source.use_word_level_subtitle_timing === true;
+  const loadedSubtitleCues = localCuesFromTrack(
+    !useWordLevelSubtitleTiming &&
+      isWordSplitGeneratedTrack(activeTrack, source)
+      ? null
+      : activeTrack,
+    shouldUseTranscriptFallback ||
+      (!useWordLevelSubtitleTiming &&
+        isWordSplitGeneratedTrack(activeTrack, source))
+      ? transcriptCuesForEditor(source, {
+          useWordLevelTiming: useWordLevelSubtitleTiming,
+        })
+      : [],
   );
+  const subtitleCues = useWordLevelSubtitleTiming
+    ? loadedSubtitleCues
+    : loadedSubtitleCues.map((cue) => {
+        const cueWithoutWordTimings = { ...cue };
+        delete cueWithoutWordTimings.captions;
+        return cueWithoutWordTimings;
+      });
   const subtitleReactions = normalizeSubtitleReactions(
     activeTrack?.reactions ||
       ((activeTrack?.id || trackId) === "original"
@@ -385,6 +470,7 @@ export const manifestToLocalEditorState = (
   );
   return {
     subtitleCues,
+    useWordLevelSubtitleTiming,
     subtitleStyle:
       activeTrack?.style ||
       source.layers?.subtitles?.style ||
@@ -433,6 +519,8 @@ export const localEditorStateToManifest = (
 ) => {
   const source = JSON.parse(JSON.stringify(sourceManifest || {}));
   const state = localState || manifestToLocalEditorState(source, trackId);
+  source.use_word_level_subtitle_timing =
+    state.useWordLevelSubtitleTiming === true;
   const nextTrackId = trackId || "original";
   const existingTracks = Array.isArray(source.subtitle_tracks)
     ? source.subtitle_tracks
@@ -1269,6 +1357,43 @@ export default function FullScreenEditor({
     [clip, editorPreferences],
   );
 
+  const handleWordLevelSubtitleTimingChange = useCallback((enabled) => {
+    const baseManifest = currentManifestRef.current || {};
+    const currentDraft = localDraftRef.current || {};
+    const isOriginalTrack = activeTrackIdRef.current === "original";
+    const transcriptCues = isOriginalTrack
+      ? transcriptCuesForEditor(baseManifest, {
+          useWordLevelTiming: enabled,
+        })
+      : [];
+    const subtitleCues = !isOriginalTrack
+      ? currentDraft.subtitleCues || []
+      : transcriptCues.length
+        ? transcriptCues
+        : (currentDraft.subtitleCues || []).map((cue) => {
+            if (enabled)
+              return syncSubtitleCue(cue, cue, { useWordLevelTiming: true });
+            const cueWithoutWordTimings = { ...cue };
+            delete cueWithoutWordTimings.captions;
+            return cueWithoutWordTimings;
+          });
+    const nextDraft = {
+      ...currentDraft,
+      useWordLevelSubtitleTiming: enabled,
+      subtitleCues,
+    };
+    const nextManifest = {
+      ...baseManifest,
+      use_word_level_subtitle_timing: enabled,
+    };
+    localDraftRef.current = nextDraft;
+    currentManifestRef.current = nextManifest;
+    setLocalDraft(nextDraft);
+    setManifest(nextManifest);
+    setLocalDraftRevision((current) => current + 1);
+    setRenderSpecDirty(true);
+  }, []);
+
   const applyLayer = useCallback(
     (type, value) => {
       const base = currentManifestRef.current;
@@ -1696,6 +1821,7 @@ export default function FullScreenEditor({
         onHashtagsChange={saveGeneratedHashtags}
         onClipInfoChange={saveGeneratedClipInfo}
         onStateChange={handleLocalDraftChange}
+        onWordLevelSubtitleTimingChange={handleWordLevelSubtitleTimingChange}
         onFaceTracking={requestProjectFaceTracking}
         faceTrackingReady={Boolean(projectSourceDimensions)}
         persistHistory={false}

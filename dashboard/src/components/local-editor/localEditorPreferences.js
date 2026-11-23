@@ -31,7 +31,6 @@ export const DEFAULT_EDITOR_PREFERENCES = {
   hookDefaults: { ...DEFAULT_HOOK_DEFAULTS },
   playbackRate: 1,
   isMuted: false,
-  useWordLevelSubtitleTiming: false,
   videoViewMode: "auto",
   safetyGridVisible: false,
   aspectRatio: null,
@@ -49,7 +48,6 @@ const cloneDefaultPreferences = () => ({
   hookDefaults: { ...DEFAULT_HOOK_DEFAULTS },
   playbackRate: 1,
   isMuted: false,
-  useWordLevelSubtitleTiming: false,
   videoViewMode: "auto",
   safetyGridVisible: false,
   aspectRatio: null,
@@ -88,7 +86,6 @@ export const normalizeEditorPreferences = (preferences) => {
       ? Number(preferences.playbackRate)
       : DEFAULT_EDITOR_PREFERENCES.playbackRate,
     isMuted: preferences.isMuted === true,
-    useWordLevelSubtitleTiming: preferences.useWordLevelSubtitleTiming === true,
     videoViewMode: VIDEO_VIEW_MODES.includes(preferences.videoViewMode)
       ? preferences.videoViewMode
       : DEFAULT_EDITOR_PREFERENCES.videoViewMode,
@@ -185,7 +182,6 @@ export const updateEditorPreferencesFromState = (preferences, state = {}) => {
       : { ...current.hookDefaults },
     playbackRate: current.playbackRate,
     isMuted: current.isMuted,
-    useWordLevelSubtitleTiming: current.useWordLevelSubtitleTiming,
     videoViewMode: current.videoViewMode,
     safetyGridVisible: current.safetyGridVisible,
     aspectRatio: current.aspectRatio,

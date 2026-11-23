@@ -330,9 +330,10 @@ func (s *Server) updateProjectSourceTranscript(w http.ResponseWriter, r *http.Re
 	metadata["transcript"] = request.Transcript
 	metadata["source_transcript_use_word_timings"] = useWordTimings
 	shorts, _ := metadata["shorts"].([]any)
-	for _, rawClip := range shorts {
+	for clipIndex, rawClip := range shorts {
 		if clip, ok := rawClip.(map[string]any); ok {
-			refreshProjectClipTranscriptWithWordTimings(clip, request.Transcript, useWordTimings)
+			clipUseWordTimings := s.clipUsesWordLevelTimings(r.Context(), jobID, clipIndex)
+			refreshProjectClipTranscriptWithWordTimings(clip, request.Transcript, clipUseWordTimings)
 		}
 	}
 	updatedMetadata, err := json.MarshalIndent(metadata, "", "  ")
@@ -353,7 +354,7 @@ func (s *Server) updateProjectSourceTranscript(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if job, ok := s.store.Get(r.Context(), jobID); ok && len(job.Result) > 0 {
-		if err := s.updateStoredProjectTranscript(r.Context(), job, request.Transcript, useWordTimings); err != nil {
+		if err := s.updateStoredProjectTranscript(r.Context(), job, request.Transcript); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Source transcript was saved, but the project result could not be refreshed; retry the save"})
 			return
 		}
@@ -460,15 +461,16 @@ func updateSourceTranscriptWordTimings(transcript map[string]any, synchronize bo
 	}
 }
 
-func (s *Server) updateStoredProjectTranscript(ctx context.Context, job domain.Job, transcript map[string]any, useWordTimings bool) error {
+func (s *Server) updateStoredProjectTranscript(ctx context.Context, job domain.Job, transcript map[string]any) error {
 	payload := map[string]any{}
 	if err := json.Unmarshal(job.Result, &payload); err != nil {
 		return err
 	}
 	payload["transcript"] = transcript
 	clips, _ := payload["clips"].([]any)
-	for _, rawClip := range clips {
+	for clipIndex, rawClip := range clips {
 		if clip, ok := rawClip.(map[string]any); ok {
+			useWordTimings := s.clipUsesWordLevelTimings(ctx, job.ID, clipIndex)
 			refreshProjectClipTranscriptWithWordTimings(clip, transcript, useWordTimings)
 		}
 	}
@@ -491,10 +493,7 @@ func (s *Server) sourceTranscriptForClip(ctx context.Context, jobID string, clip
 	if len(transcript) == 0 {
 		return nil, 0, 0, true, false
 	}
-	useWordTimings, configured := metadata["source_transcript_use_word_timings"].(bool)
-	if !configured {
-		useWordTimings = false
-	}
+	useWordTimings := s.clipUsesWordLevelTimings(ctx, jobID, clipIndex)
 	if shorts, ok := metadata["shorts"].([]any); ok && clipIndex >= 0 && clipIndex < len(shorts) {
 		if clip, ok := shorts[clipIndex].(map[string]any); ok {
 			start, startOK := numericTime(clip["start"])

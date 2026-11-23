@@ -28,6 +28,7 @@ export const createEmptyEditorHistory = (preferences = {}) => ({
   present: {
     aspectRatio: normalizeAspectRatio(preferences?.aspectRatio || "9:16"),
     subtitleCues: [],
+    useWordLevelSubtitleTiming: false,
     subtitleStyle: normalizeSubtitleStyle(
       preferences?.subtitleStyle || DEFAULT_SUBTITLE_STYLE,
     ),
@@ -62,6 +63,7 @@ const normalizeSnapshot = (snapshot) => {
     subtitleCues: Array.isArray(snapshot?.subtitleCues)
       ? snapshot.subtitleCues
       : [],
+    useWordLevelSubtitleTiming: snapshot?.useWordLevelSubtitleTiming === true,
     subtitleStyle: normalizeSubtitleStyle(snapshot?.subtitleStyle),
     subtitleLanguage: String(snapshot?.subtitleLanguage || "en").toLowerCase(),
     subtitleReactions: normalizeSubtitleReactions(

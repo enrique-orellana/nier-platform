@@ -8,10 +8,6 @@ import {
   normalizeSubtitleStyle,
 } from "../local-editor/localEditorStyles";
 import {
-  readEditorPreferences,
-  saveEditorPreferences,
-} from "../local-editor/localEditorPreferences";
-import {
   applySourceEditorCues,
   transcriptToSourceEditorState,
 } from "./sourceTranscriptEditorState";
@@ -113,9 +109,6 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [useWordLevelSubtitleTiming, setUseWordLevelSubtitleTiming] = useState(
-    () => readEditorPreferences().useWordLevelSubtitleTiming,
-  );
   const { url: videoUrl } = useRenewableMediaUrl(
     source?.source_video_url ? getApiUrl(source.source_video_url) : "",
   );
@@ -147,13 +140,6 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
           readClipSubtitleStyle(projectId, controller.signal),
         ]);
         nextEditorState.subtitleStyle = subtitleStyle;
-        if (typeof payload.use_word_timings === "boolean") {
-          setUseWordLevelSubtitleTiming(payload.use_word_timings);
-          saveEditorPreferences({
-            ...readEditorPreferences(),
-            useWordLevelSubtitleTiming: payload.use_word_timings,
-          });
-        }
         setSource(payload);
         setEditorState(nextEditorState);
         setBaselineCues(nextEditorState.subtitleCues);
@@ -175,15 +161,9 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
   const isDirty = useMemo(
     () =>
       JSON.stringify(editorState?.subtitleCues || []) !==
-        JSON.stringify(baselineCues) ||
-      (source !== null &&
-        source.use_word_timings !== useWordLevelSubtitleTiming),
-    [baselineCues, editorState, source, useWordLevelSubtitleTiming],
+      JSON.stringify(baselineCues),
+    [baselineCues, editorState],
   );
-
-  const handleWordLevelSubtitleTimingChange = useCallback((enabled) => {
-    setUseWordLevelSubtitleTiming(enabled);
-  }, []);
 
   const saveTranscript = useCallback(async () => {
     if (!source?.transcript || !editorState || saving) return;
@@ -193,7 +173,6 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
     const transcript = applySourceEditorCues(
       source.transcript,
       editorState.subtitleCues,
-      { useWordLevelTiming: useWordLevelSubtitleTiming },
     );
 
     try {
@@ -206,8 +185,8 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             transcript,
-            synchronize_word_timings: useWordLevelSubtitleTiming,
-            use_word_timings: useWordLevelSubtitleTiming,
+            synchronize_word_timings: false,
+            use_word_timings: false,
           }),
         },
       );
@@ -218,8 +197,7 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
       setSource((current) => ({
         ...current,
         transcript: savedTranscript,
-        use_word_timings:
-          payload?.use_word_timings ?? useWordLevelSubtitleTiming,
+        use_word_timings: false,
       }));
       setEditorState((current) => ({
         ...current,
@@ -234,7 +212,7 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
     } finally {
       setSaving(false);
     }
-  }, [editorState, projectId, saving, source, useWordLevelSubtitleTiming]);
+  }, [editorState, projectId, saving, source]);
 
   const saveAction = (
     <Button
@@ -313,10 +291,6 @@ export default function SourceTranscriptEditor({ projectId, onClose }) {
             scaleSubtitlePreviewToOutput
             activeSubtitleTrackId="original"
             allowFullSourceTranscription
-            useWordLevelSubtitleTiming={useWordLevelSubtitleTiming}
-            onWordLevelSubtitleTimingChange={
-              handleWordLevelSubtitleTimingChange
-            }
             onStateChange={setEditorState}
             onClose={onClose}
             headerActions={saveAction}

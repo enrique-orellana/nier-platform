@@ -525,10 +525,7 @@ func (s *Server) updateClipSourceRange(w http.ResponseWriter, r *http.Request, p
 	metadataClip["start"] = start
 	metadataClip["end"] = end
 	transcript, _ := metadata["transcript"].(map[string]any)
-	useWordTimings, configured := metadata["source_transcript_use_word_timings"].(bool)
-	if !configured {
-		useWordTimings = false
-	}
+	useWordTimings := s.clipUsesWordLevelTimings(r.Context(), parentID, clipIndex)
 	refreshGeneratedClipSubtitlesWithWordTimings(metadataClip, transcript, start, end, useWordTimings)
 	updatedMetadata, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {

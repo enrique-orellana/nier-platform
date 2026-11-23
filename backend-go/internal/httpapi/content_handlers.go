@@ -69,9 +69,8 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var metadata struct {
-		Transcript     map[string]any `json:"transcript"`
-		UseWordTimings *bool          `json:"source_transcript_use_word_timings"`
-		Shorts         []struct {
+		Transcript map[string]any `json:"transcript"`
+		Shorts     []struct {
 			Start float64 `json:"start"`
 			End   float64 `json:"end"`
 		} `json:"shorts"`
@@ -83,7 +82,7 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 	}
 	clipStart := metadata.Shorts[request.ClipIndex].Start
 	clipEnd := metadata.Shorts[request.ClipIndex].End
-	useWordTimings := metadata.UseWordTimings != nil && *metadata.UseWordTimings
+	useWordTimings := s.clipUsesWordLevelTimings(r.Context(), request.JobID, request.ClipIndex)
 	srt, err := media.BuildSubtitleSRT(metadata.Transcript, clipStart, clipEnd, useWordTimings)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})

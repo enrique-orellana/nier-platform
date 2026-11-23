@@ -280,6 +280,7 @@ describe("local editor Remotion rendering", () => {
     const nextCue = syncSubtitleCue(
       { text: "Original text", startMs: 100, endMs: 900 },
       { text: "Edited cue text", startMs: 100, endMs: 900 },
+      { useWordLevelTiming: true },
     );
 
     expect(nextCue.captions).toEqual([
@@ -301,6 +302,7 @@ describe("local editor Remotion rendering", () => {
         ],
       },
       { text: "Move this", startMs: 600, endMs: 1000 },
+      { useWordLevelTiming: true },
     );
 
     expect(nextCue.captions).toEqual([
@@ -331,6 +333,7 @@ describe("local editor Remotion rendering", () => {
           { text: "timing", startMs: 300, endMs: 1000 },
         ],
       },
+      { useWordLevelTiming: true },
       {
         text: "Keep timing",
         startMs: 0,

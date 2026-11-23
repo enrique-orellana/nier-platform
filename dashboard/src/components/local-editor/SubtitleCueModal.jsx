@@ -5,11 +5,17 @@ import { Button, Input, Textarea } from "../ui";
 const inputClass =
   "w-full rounded-md border border-white/10 bg-[#111114] px-3 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-400/70 focus:ring-1 focus:ring-violet-400/20";
 
-export default function SubtitleCueModal({ cue, onSave, onClose }) {
+export default function SubtitleCueModal({
+  cue,
+  onSave,
+  onClose,
+  showWordTimings = false,
+}) {
   const [draft, setDraft] = useState(cue);
-  const words = Array.isArray(draft?.captions)
-    ? draft.captions.filter((word) => String(word?.text || "").trim())
-    : [];
+  const words =
+    showWordTimings && Array.isArray(draft?.captions)
+      ? draft.captions.filter((word) => String(word?.text || "").trim())
+      : [];
 
   useEffect(() => setDraft(cue), [cue]);
 
@@ -98,55 +104,57 @@ export default function SubtitleCueModal({ cue, onSave, onClose }) {
           </label>
         </div>
 
-        <div className="mt-4 border-t border-white/10 pt-4">
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-cyan-200">
-            Word timings
-          </h3>
-          {words.length ? (
-            <div className="space-y-2 rounded-lg border border-cyan-300/20 bg-black/20 p-2">
-              {words.map((word, index) => (
-                <div
-                  key={`${word.startMs}-${index}`}
-                  className="grid grid-cols-[minmax(0,1fr)_100px_100px] gap-2"
-                >
-                  <Input
-                    aria-label={`Word ${index + 1} text`}
-                    value={word.text || ""}
-                    onChange={(event) =>
-                      updateWord(index, "text", event.target.value)
-                    }
-                    className={inputClass}
-                  />
-                  <Input
-                    aria-label={`Word ${index + 1} start`}
-                    type="number"
-                    value={word.startMs}
-                    onChange={(event) =>
-                      updateWord(index, "startMs", event.target.value)
-                    }
-                    className={inputClass}
-                  />
-                  <Input
-                    aria-label={`Word ${index + 1} end`}
-                    type="number"
-                    value={word.endMs}
-                    onChange={(event) =>
-                      updateWord(index, "endMs", event.target.value)
-                    }
-                    className={inputClass}
-                  />
+        {showWordTimings && (
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-cyan-200">
+              Word timings
+            </h3>
+            {words.length ? (
+              <div className="space-y-2 rounded-lg border border-cyan-300/20 bg-black/20 p-2">
+                {words.map((word, index) => (
+                  <div
+                    key={`${word.startMs}-${index}`}
+                    className="grid grid-cols-[minmax(0,1fr)_100px_100px] gap-2"
+                  >
+                    <Input
+                      aria-label={`Word ${index + 1} text`}
+                      value={word.text || ""}
+                      onChange={(event) =>
+                        updateWord(index, "text", event.target.value)
+                      }
+                      className={inputClass}
+                    />
+                    <Input
+                      aria-label={`Word ${index + 1} start`}
+                      type="number"
+                      value={word.startMs}
+                      onChange={(event) =>
+                        updateWord(index, "startMs", event.target.value)
+                      }
+                      className={inputClass}
+                    />
+                    <Input
+                      aria-label={`Word ${index + 1} end`}
+                      type="number"
+                      value={word.endMs}
+                      onChange={(event) =>
+                        updateWord(index, "endMs", event.target.value)
+                      }
+                      className={inputClass}
+                    />
+                  </div>
+                ))}
+                <div className="grid grid-cols-[minmax(0,1fr)_100px_100px] gap-2 px-3 text-[10px] uppercase tracking-wider text-zinc-500">
+                  <span>Word</span>
+                  <span>Start</span>
+                  <span>End</span>
                 </div>
-              ))}
-              <div className="grid grid-cols-[minmax(0,1fr)_100px_100px] gap-2 px-3 text-[10px] uppercase tracking-wider text-zinc-500">
-                <span>Word</span>
-                <span>Start</span>
-                <span>End</span>
               </div>
-            </div>
-          ) : (
-            <p className="text-xs text-zinc-500">No word timings attached.</p>
-          )}
-        </div>
+            ) : (
+              <p className="text-xs text-zinc-500">No word timings attached.</p>
+            )}
+          </div>
+        )}
 
         <div className="mt-4 flex justify-end gap-2 border-t border-white/10 pt-4">
           <Button

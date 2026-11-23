@@ -148,9 +148,18 @@ const distributeCueWords = (text, startMs, endMs) => {
   }));
 };
 
-export const syncSubtitleCue = (previousCue, nextCue) => {
+export const syncSubtitleCue = (
+  previousCue,
+  nextCue,
+  { useWordLevelTiming = false } = {},
+) => {
   const normalizedPreviousCue = normalizeCueCaptions(previousCue);
   const nextText = cueText(nextCue);
+  if (!useWordLevelTiming) {
+    const cueWithoutWordTimings = { ...nextCue };
+    delete cueWithoutWordTimings.captions;
+    return cueWithoutWordTimings;
+  }
   if (
     !Array.isArray(normalizedPreviousCue?.captions) ||
     !normalizedPreviousCue.captions.length
