@@ -21,6 +21,7 @@ import {
   Languages,
   Loader2,
   Maximize2,
+  Magnet,
   Minimize2,
   MousePointer2,
   Pause,
@@ -379,6 +380,9 @@ export default function LocalEditorTab({
   const [followAudio, setFollowAudio] = useState(true);
   const [videoViewMode, setVideoViewMode] = useState(
     () => editorPreferencesRef.current.videoViewMode,
+  );
+  const [snapCues, setSnapCues] = useState(
+    () => editorPreferencesRef.current.snapCues,
   );
   const [autoCrop, setAutoCrop] = useState(false);
   const [subtitleTrackActionsOpen, setSubtitleTrackActionsOpen] =
@@ -3435,6 +3439,24 @@ export default function LocalEditorTab({
                       fill={activeMarker ? "currentColor" : "none"}
                     />
                   </Button>
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    aria-label={
+                      snapCues ? "Disable cue snapping" : "Enable cue snapping"
+                    }
+                    title="Snap subtitle cue edges together"
+                    aria-pressed={snapCues}
+                    onClick={() => {
+                      const next = !snapCues;
+                      setSnapCues(next);
+                      rememberToolbarPreference("snapCues", next);
+                    }}
+                    size="icon"
+                    className={`flex h-7 w-7 items-center justify-center rounded hover:bg-accent hover:text-accent-foreground ${snapCues ? "bg-secondary text-primary" : ""}`}
+                  >
+                    <Magnet size={14} aria-hidden="true" />
+                  </Button>
                   <span
                     className="mx-1 h-5 w-px bg-border"
                     aria-hidden="true"
@@ -3942,6 +3964,7 @@ export default function LocalEditorTab({
                     ref={timelineApiRef}
                     timelineZoom={timelineZoom}
                     onTimelineZoomChange={setTimelineZoom}
+                    snapCues={snapCues}
                     markers={markers}
                     selectedMarkerId={selectedMarkerId}
                     onMarkerSelect={selectMarker}

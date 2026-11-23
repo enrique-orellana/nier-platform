@@ -17,6 +17,7 @@ const BASE_PIXELS_PER_SECOND = 80;
 const MIN_LANE_WIDTH = 760;
 const MIN_TIMELINE_ZOOM = 0.0001;
 const MAX_TIMELINE_ZOOM = 4;
+const CUE_SNAP_THRESHOLD_PX = 10;
 const TRACK_LABEL_CLASSES =
   "flex w-36 shrink-0 items-center gap-2 border-r border-border bg-muted/40 px-3 text-[11px] font-medium tracking-wide text-muted-foreground";
 
@@ -25,8 +26,65 @@ const getCueBackground = (color) =>
 
 const clampPercent = (value) => Math.max(0, Math.min(100, value));
 
+const findNearestCueEdge = (
+  timeMs,
+  cues,
+  excludedCueIds,
+  thresholdMs,
+  targetEdgeKey,
+) => {
+  let nearestEdge = null;
+  let nearestDistance = thresholdMs + 1;
+  for (const item of cues) {
+    if (excludedCueIds.has(item.id)) continue;
+    const edge = item[targetEdgeKey];
+    const distance = Math.abs(edge - timeMs);
+    if (distance <= thresholdMs && distance < nearestDistance) {
+      nearestEdge = edge;
+      nearestDistance = distance;
+    }
+  }
+  return nearestEdge;
+};
+
+const snapCueRangeDelta = (
+  startMs,
+  endMs,
+  deltaMs,
+  cues,
+  excludedCueIds,
+  thresholdMs,
+  minDeltaMs,
+  maxDeltaMs,
+) => {
+  let snappedDelta = deltaMs;
+  let nearestDistance = thresholdMs + 1;
+  for (const item of cues) {
+    if (excludedCueIds.has(item.id)) continue;
+    for (const [movingEdge, targetEdge] of [
+      [startMs, item.endMs],
+      [endMs, item.startMs],
+    ]) {
+      const candidateDelta = targetEdge - movingEdge;
+      const distance = Math.abs(candidateDelta - deltaMs);
+      if (
+        distance <= thresholdMs &&
+        distance < nearestDistance &&
+        candidateDelta >= minDeltaMs &&
+        candidateDelta <= maxDeltaMs
+      ) {
+        snappedDelta = candidateDelta;
+        nearestDistance = distance;
+      }
+    }
+  }
+  return snappedDelta;
+};
+
 function CueBlock({
   cue,
+  allCues = [],
+  snapEnabled = false,
   durationMs,
   color,
   current,
@@ -54,24 +112,56 @@ function CueBlock({
     const preserveSelectionOnDrag = selected && selectedCueGroup.length > 1;
     const groupStart = Math.min(...group.map((item) => item.startMs));
     const groupEnd = Math.max(...group.map((item) => item.endMs));
+    const groupIds = new Set(group.map((item) => item.id));
     const width =
       blockRef.current?.parentElement?.getBoundingClientRect().width || 1;
+    const snapThresholdMs = (CUE_SNAP_THRESHOLD_PX / width) * durationMs;
     let moved = false;
     const update = (moveEvent) => {
       const delta = ((moveEvent.clientX - originX) / width) * durationMs;
       if (Math.abs(moveEvent.clientX - originX) > 1) moved = true;
       if (mode !== "move") {
-        onChange(resizeCue(group[0], mode, delta, durationMs));
+        const resizedCue = resizeCue(group[0], mode, delta, durationMs);
+        if (!snapEnabled) {
+          onChange(resizedCue);
+          return;
+        }
+        const edgeMs = mode === "start" ? resizedCue.startMs : resizedCue.endMs;
+        const snapEdge = findNearestCueEdge(
+          edgeMs,
+          allCues,
+          groupIds,
+          snapThresholdMs,
+          mode === "start" ? "endMs" : "startMs",
+        );
+        if (snapEdge === null) {
+          onChange(resizedCue);
+          return;
+        }
+        const snapDelta = delta + snapEdge - edgeMs;
+        const snappedCue = resizeCue(group[0], mode, snapDelta, durationMs);
+        const snappedEdge =
+          mode === "start" ? snappedCue.startMs : snappedCue.endMs;
+        onChange(snappedEdge === snapEdge ? snappedCue : resizedCue);
         return;
       }
 
-      const boundedDelta = Math.max(
-        -groupStart,
-        Math.min(durationMs - groupEnd, delta),
-      );
-      const updates = group.map((item) =>
-        moveCue(item, boundedDelta, durationMs),
-      );
+      const minDelta = -groupStart;
+      const maxDelta = durationMs - groupEnd;
+      const boundedDelta = Math.max(minDelta, Math.min(maxDelta, delta));
+      const nextDelta = snapEnabled
+        ? snapCueRangeDelta(
+            groupStart,
+            groupEnd,
+            boundedDelta,
+            allCues,
+            groupIds,
+            snapThresholdMs,
+            minDelta,
+            maxDelta,
+          )
+        : boundedDelta;
+      const updates = group.map((item) => moveCue(item, nextDelta, durationMs));
       if (updates.length > 1) onGroupChange?.(updates);
       else onChange(updates[0]);
     };
@@ -228,6 +318,7 @@ function Track({
   onGroupChange,
   onChangeStart,
   onChangeEnd,
+  snapEnabled,
   testId,
 }) {
   return (
@@ -264,6 +355,8 @@ function Track({
           <CueBlock
             key={cue.id}
             cue={cue}
+            allCues={cues}
+            snapEnabled={snapEnabled}
             durationMs={durationMs}
             color={color}
             current={playheadMs >= cue.startMs && playheadMs < cue.endMs}
@@ -313,6 +406,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
     onSeek,
     timelineZoom = 1,
     onTimelineZoomChange,
+    snapCues = true,
     markers = [],
     selectedMarkerId = null,
     onMarkerSelect,
@@ -553,6 +647,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
             color="#f59e0b"
             playheadMs={playheadMs}
             selectedId={selectedId}
+            snapEnabled={false}
             onSelect={(cue) => onSelect?.(cue, "hook")}
             onDoubleClick={(cue) => onDoubleClick?.(cue, "hook")}
             onChange={(cue) => onChange?.(cue, "hook")}
@@ -570,6 +665,7 @@ const LocalEditorTimeline = forwardRef(function LocalEditorTimeline(
             playheadMs={playheadMs}
             selectedId={selectedId}
             selectedCueIds={selectedCueIds}
+            snapEnabled={snapCues}
             onSelect={(cue, event) => onSelect?.(cue, "subtitle", event)}
             onDoubleClick={(cue) => onDoubleClick?.(cue, "subtitle")}
             onChange={(cue) => onChange?.(cue, "subtitle")}

@@ -34,6 +34,7 @@ export const DEFAULT_EDITOR_PREFERENCES = {
   videoViewMode: "auto",
   safetyGridVisible: false,
   aspectRatio: null,
+  snapCues: true,
 };
 
 const HOOK_SETTING_KEYS = Object.keys(DEFAULT_HOOK_DEFAULTS);
@@ -51,6 +52,7 @@ const cloneDefaultPreferences = () => ({
   videoViewMode: "auto",
   safetyGridVisible: false,
   aspectRatio: null,
+  snapCues: true,
 });
 
 const normalizeHookDefaults = (defaults = {}) => {
@@ -94,6 +96,7 @@ export const normalizeEditorPreferences = (preferences) => {
       typeof preferences.aspectRatio === "string"
         ? normalizeAspectRatio(preferences.aspectRatio)
         : null,
+    snapCues: preferences.snapCues !== false,
   };
 };
 
@@ -185,5 +188,6 @@ export const updateEditorPreferencesFromState = (preferences, state = {}) => {
     videoViewMode: current.videoViewMode,
     safetyGridVisible: current.safetyGridVisible,
     aspectRatio: current.aspectRatio,
+    snapCues: current.snapCues,
   };
 };
