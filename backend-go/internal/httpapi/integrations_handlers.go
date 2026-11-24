@@ -116,18 +116,29 @@ func (s *Server) discoverLMStudio(w http.ResponseWriter, r *http.Request) {
 
 func ollamaModelSupportsVision(model map[string]any) bool {
 	name := strings.ToLower(firstString(model, "name", "model", "id"))
-	visionNames := []string{"-vl", "vl:", "vision", "llava", "moondream", "minicpm-v", "gemma3"}
+	visionNames := []string{
+		"-vl", "vl:", "vision", "llava", "moondream", "minicpm-v",
+		"gemma3", "gemma3n", "gemma4", "qwen3.5", "qwen35",
+	}
 	for _, token := range visionNames {
 		if strings.Contains(name, token) {
 			return true
 		}
 	}
 	details, _ := model["details"].(map[string]any)
+	family := strings.ToLower(firstString(details, "family"))
+	if strings.Contains(family, "vl") || strings.Contains(family, "vision") ||
+		strings.Contains(family, "llava") || strings.Contains(family, "gemma3") ||
+		strings.Contains(family, "gemma4") || strings.Contains(family, "qwen35") {
+		return true
+	}
 	families, _ := details["families"].([]any)
 	for _, value := range families {
 		family, _ := value.(string)
 		family = strings.ToLower(family)
-		if strings.Contains(family, "vl") || strings.Contains(family, "vision") || strings.Contains(family, "llava") || family == "gemma3" {
+		if strings.Contains(family, "vl") || strings.Contains(family, "vision") ||
+			strings.Contains(family, "llava") || strings.Contains(family, "gemma3") ||
+			strings.Contains(family, "gemma4") || strings.Contains(family, "qwen35") {
 			return true
 		}
 	}

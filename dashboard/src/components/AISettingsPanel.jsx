@@ -53,7 +53,7 @@ export default function AISettingsPanel({
   onRefreshCodexModels = () => {},
   ollamaBaseUrl = "http://host.docker.internal:11434",
   setOllamaBaseUrl = () => {},
-  ollamaModel = "qwen3-vl:8b-instruct-q4_K_M",
+  ollamaModel = "",
   setOllamaModel = () => {},
   ollamaDiscovery = {
     available: false,
@@ -648,19 +648,28 @@ export default function AISettingsPanel({
                 Vision model
               </span>
               <div className="flex gap-2">
-                <Input
-                  list="ollama-vision-model-list"
+                <NativeSelect
                   value={ollamaModel}
                   onChange={(event) => setOllamaModel(event.target.value)}
-                  placeholder="qwen3-vl:8b-instruct-q4_K_M"
                   aria-label="Ollama vision model"
                   className="min-w-0"
-                />
-                <datalist id="ollama-vision-model-list">
+                  disabled={
+                    ollamaDiscovery.loading || ollamaVisionModels.length === 0
+                  }
+                >
+                  {ollamaVisionModels.length === 0 && (
+                    <option value="">
+                      {ollamaDiscovery.loading
+                        ? "Loading model catalog…"
+                        : "No installed vision models"}
+                    </option>
+                  )}
                   {ollamaVisionModels.map((model) => (
-                    <option key={model.id} value={model.id} />
+                    <option key={model.id} value={model.id}>
+                      {model.label || model.id}
+                    </option>
                   ))}
-                </datalist>
+                </NativeSelect>
                 <Button
                   variant="outline"
                   type="button"
@@ -677,7 +686,8 @@ export default function AISettingsPanel({
                 </Button>
               </div>
               <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">
-                Choose an installed vision model or enter another model ID.
+                Choose an installed vision model. Refresh after pulling a new
+                model.
               </span>
             </Label>
           </div>

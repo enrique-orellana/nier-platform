@@ -297,7 +297,6 @@ const CONFIGURED_AI_QUALITY_PRESET = (
   import.meta.env.VITE_AI_QUALITY_PRESET || "balanced"
 ).trim();
 const DEFAULT_OLLAMA_BASE_URL = "http://host.docker.internal:11434";
-const DEFAULT_OLLAMA_VISION_MODEL = "qwen3-vl:8b-instruct-q4_K_M";
 
 // Mock polling function
 const pollJob = async (jobId) => {
@@ -331,9 +330,7 @@ function App() {
       DEFAULT_OLLAMA_BASE_URL,
   );
   const [ollamaModel, setOllamaModel] = useState(
-    () =>
-      localStorage.getItem("local_ollama_vision_model_v1") ||
-      DEFAULT_OLLAMA_VISION_MODEL,
+    () => localStorage.getItem("local_ollama_vision_model_v1") || "",
   );
   const [ollamaDiscovery, setOllamaDiscovery] = useState({
     available: false,
@@ -830,6 +827,18 @@ function App() {
     const timer = setTimeout(refreshOllamaModels, 500);
     return () => clearTimeout(timer);
   }, [refreshOllamaModels]);
+
+  useEffect(() => {
+    if (!ollamaDiscovery.available || ollamaDiscovery.loading) return;
+    const availableModels = ollamaDiscovery.visionModels || [];
+    if (availableModels.some((model) => model.id === ollamaModel)) return;
+    setOllamaModel(availableModels[0]?.id || "");
+  }, [
+    ollamaDiscovery.available,
+    ollamaDiscovery.loading,
+    ollamaDiscovery.visionModels,
+    ollamaModel,
+  ]);
 
   useEffect(() => {
     if (aiProvider === "lmstudio" && lmStudioAvailable === false) {
