@@ -24,6 +24,7 @@ import { getApiUrl } from "../config";
 import { activeClipRenderJobs } from "../lib/clipRenderJobs";
 import { useRenewableMediaUrl } from "../lib/videoUrls";
 import { CLIP_WORKFLOW_STATUSES } from "./clipWorkflowStatuses";
+import { SUBTITLE_LANGUAGES } from "./subtitleLanguages";
 import ResultCard from "./ResultCard";
 import SourceTranscriptEditor from "./editor/SourceTranscriptEditor";
 import {
@@ -48,12 +49,26 @@ import {
   Input,
   Label,
   NativeSelect,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Separator,
 } from "./ui";
 
 const CLIP_RENDER_POLL_INTERVAL_MS = 2000;
 const CLIP_RENDER_STATUS_TIMEOUT_MS = 15000;
 const CLIP_RENDER_MAX_POLL_DURATION_MS = 30 * 60 * 1000;
+
+function normalizeSubtitleLanguageOption(value) {
+  const language = String(value || "")
+    .toLowerCase()
+    .split(/[-_]/)[0];
+  return Object.prototype.hasOwnProperty.call(SUBTITLE_LANGUAGES, language)
+    ? language
+    : "auto";
+}
 
 function mergeAuthoritativeRenderStatuses(clips, statusClips) {
   if (!Array.isArray(statusClips)) return clips;
@@ -275,8 +290,13 @@ export default function ProjectLibrary({
   aiApiKey,
   getAiHeaders,
   clipAnalysisBackend = "configured",
+  onClipAnalysisBackendChange = () => {},
+  configuredProviderLabel = "Configured AI provider",
+  defaultTranscriptionLanguage = "auto",
   ollamaBaseUrl = "",
   ollamaModel = "",
+  ollamaAvailable = false,
+  onOpenSettings = () => {},
   projectId = null,
   editorClipIndex = null,
   editorOpen = false,
@@ -299,9 +319,18 @@ export default function ProjectLibrary({
   const [localSourceEditorOpen, setLocalSourceEditorOpen] = useState(false);
   const [isRediscoveryDialogOpen, setIsRediscoveryDialogOpen] = useState(false);
   const [rediscoveryClipCount, setRediscoveryClipCount] = useState(6);
+  const [rediscoverySpokenLanguage, setRediscoverySpokenLanguage] = useState(
+    defaultTranscriptionLanguage || "auto",
+  );
+  const [rediscoveryLayoutFormat, setRediscoveryLayoutFormat] =
+    useState("standard");
+  const [rediscoveryFacecamSize, setRediscoveryFacecamSize] =
+    useState("medium");
   const [rediscoveryJob, setRediscoveryJob] = useState(null);
   const [isSubmittingRediscovery, setIsSubmittingRediscovery] = useState(false);
   const [rediscoveryRequestError, setRediscoveryRequestError] = useState("");
+  const rediscoverySettingsRequestRef = useRef(0);
+  const rediscoveryLanguageEditedRef = useRef(false);
   const [isLoadingClips, setIsLoadingClips] = useState(false);
   const [clipStatuses, setClipStatuses] = useState({});
   const [clipRenderJobs, setClipRenderJobs] = useState({});
@@ -582,6 +611,7 @@ export default function ProjectLibrary({
   }, [loadProjectStatuses, selectedProject]);
 
   const handleViewProject = (project) => {
+    rediscoverySettingsRequestRef.current += 1;
     const id = project?.job_id || project?.session_id || project?.id;
     if (
       id &&
@@ -617,12 +647,55 @@ export default function ProjectLibrary({
     setRediscoveryClipCount(
       Math.max(1, Math.min(15, projectClips.length || 6)),
     );
+    setRediscoverySpokenLanguage(
+      normalizeSubtitleLanguageOption(defaultTranscriptionLanguage),
+    );
+    rediscoveryLanguageEditedRef.current = false;
+    const firstClipWithLayout = projectClips.find((clip) => clip.layout_format);
+    setRediscoveryLayoutFormat(
+      firstClipWithLayout?.layout_format || "standard",
+    );
+    setRediscoveryFacecamSize(firstClipWithLayout?.facecam_size || "medium");
     setRediscoveryRequestError("");
     setIsRediscoveryDialogOpen(true);
+    const projectId = selectedProjectId;
+    if (!projectId) return;
+    const requestId = ++rediscoverySettingsRequestRef.current;
+    fetch(
+      getApiUrl(
+        `/api/projects/${encodeURIComponent(projectId)}/source-transcript`,
+      ),
+    )
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((payload) => {
+        if (rediscoverySettingsRequestRef.current !== requestId) return;
+        if (
+          !rediscoveryLanguageEditedRef.current &&
+          payload?.transcript?.language
+        ) {
+          setRediscoverySpokenLanguage(
+            normalizeSubtitleLanguageOption(payload.transcript.language),
+          );
+        }
+      })
+      .catch(() => {});
   };
 
   const handleStartRediscovery = async () => {
     if (!selectedProjectId) return;
+    if (
+      clipAnalysisBackend === "ollama" &&
+      (!ollamaAvailable || !ollamaBaseUrl.trim() || !ollamaModel.trim())
+    ) {
+      setRediscoveryRequestError(
+        "The selected Ollama vision model is unavailable. Check its setup in Settings.",
+      );
+      onOpenSettings();
+      return;
+    }
     setIsSubmittingRediscovery(true);
     setRediscoveryRequestError("");
     try {
@@ -642,7 +715,12 @@ export default function ProjectLibrary({
         {
           method: "POST",
           headers,
-          body: JSON.stringify({ clip_count: Number(rediscoveryClipCount) }),
+          body: JSON.stringify({
+            clip_count: Number(rediscoveryClipCount),
+            spoken_language: rediscoverySpokenLanguage,
+            layout_format: rediscoveryLayoutFormat,
+            facecam_size: rediscoveryFacecamSize,
+          }),
         },
       );
       const payload = await response.json().catch(() => ({}));
@@ -1384,39 +1462,181 @@ export default function ProjectLibrary({
         )}
         <Dialog
           open={isRediscoveryDialogOpen}
-          onOpenChange={setIsRediscoveryDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) rediscoverySettingsRequestRef.current += 1;
+            setIsRediscoveryDialogOpen(open);
+          }}
         >
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Re-find clips</DialogTitle>
               <DialogDescription>
-                Choose how many clips to find from this project’s source. The
-                saved transcript and subtitle tracks will be reused, so speech
+                Choose how to find clips from this project’s source. The saved
+                transcript and subtitle tracks will be reused, so speech
                 transcription and subtitle generation are skipped. Your current
                 project stays unchanged.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-2">
-              <Label htmlFor="rediscovery-clip-count">Number of clips</Label>
-              <Input
-                id="rediscovery-clip-count"
-                type="number"
-                min={1}
-                max={15}
-                step={1}
-                value={rediscoveryClipCount}
-                disabled={
-                  isSubmittingRediscovery ||
-                  ["queued", "processing"].includes(rediscoveryJob?.status)
-                }
-                onChange={(event) =>
-                  setRediscoveryClipCount(
-                    event.target.value === "" ? "" : Number(event.target.value),
-                  )
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                Choose between 1 and 15 clips.
+            <div className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="rediscovery-spoken-language">
+                    Spoken language
+                  </Label>
+                  <Select
+                    value={rediscoverySpokenLanguage}
+                    onValueChange={(value) => {
+                      rediscoveryLanguageEditedRef.current = true;
+                      setRediscoverySpokenLanguage(value);
+                    }}
+                    disabled={
+                      isSubmittingRediscovery ||
+                      ["queued", "processing"].includes(rediscoveryJob?.status)
+                    }
+                  >
+                    <SelectTrigger
+                      id="rediscovery-spoken-language"
+                      aria-label="Spoken language"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto-detect</SelectItem>
+                      {Object.entries(SUBTITLE_LANGUAGES).map(
+                        ([code, label]) => (
+                          <SelectItem key={code} value={code}>
+                            {label}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="rediscovery-clip-count">
+                    Number of clips
+                  </Label>
+                  <Select
+                    value={String(rediscoveryClipCount)}
+                    onValueChange={(value) =>
+                      setRediscoveryClipCount(Number(value))
+                    }
+                    disabled={
+                      isSubmittingRediscovery ||
+                      ["queued", "processing"].includes(rediscoveryJob?.status)
+                    }
+                  >
+                    <SelectTrigger id="rediscovery-clip-count">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 15 }, (_, index) => index + 1).map(
+                        (count) => (
+                          <SelectItem key={count} value={String(count)}>
+                            {count} {count === 1 ? "clip" : "clips"}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rediscovery-clip-analysis">Clip analysis</Label>
+                <Select
+                  value={clipAnalysisBackend}
+                  onValueChange={onClipAnalysisBackendChange}
+                  disabled={
+                    isSubmittingRediscovery ||
+                    ["queued", "processing"].includes(rediscoveryJob?.status)
+                  }
+                >
+                  <SelectTrigger id="rediscovery-clip-analysis">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="configured">
+                      {configuredProviderLabel}
+                    </SelectItem>
+                    <SelectItem value="ollama">
+                      Local · {ollamaModel || "Ollama vision model"}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {ollamaAvailable ? (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    The local model reviews sampled frames with the transcript.
+                    It loads for this analysis and then unloads.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-x-1 text-xs leading-relaxed text-muted-foreground">
+                    <span>
+                      Install the local model and confirm Ollama is reachable in
+                    </span>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      type="button"
+                      className="h-auto p-0 text-xs"
+                      onClick={onOpenSettings}
+                    >
+                      Settings.
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rediscovery-output-layout">Output layout</Label>
+                <Select
+                  value={rediscoveryLayoutFormat}
+                  onValueChange={setRediscoveryLayoutFormat}
+                  disabled={
+                    isSubmittingRediscovery ||
+                    ["queued", "processing"].includes(rediscoveryJob?.status)
+                  }
+                >
+                  <SelectTrigger id="rediscovery-output-layout">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">Vertical · 9:16</SelectItem>
+                    <SelectItem value="streamer_stack">
+                      Streamer stack
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {rediscoveryLayoutFormat === "streamer_stack" && (
+                  <div className="space-y-2 pt-2">
+                    <Label htmlFor="rediscovery-facecam-size">
+                      Facecam size
+                    </Label>
+                    <Select
+                      value={rediscoveryFacecamSize}
+                      onValueChange={setRediscoveryFacecamSize}
+                      disabled={
+                        isSubmittingRediscovery ||
+                        ["queued", "processing"].includes(
+                          rediscoveryJob?.status,
+                        )
+                      }
+                    >
+                      <SelectTrigger id="rediscovery-facecam-size">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="small">Small</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="large">Large</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                This language guides generated clip titles, descriptions, and
+                hooks. The saved transcript and subtitle tracks remain
+                unchanged. Clip count is a target; fewer may be returned when
+                the source has too few strong moments.
               </p>
             </div>
             {rediscoveryRequestError && (

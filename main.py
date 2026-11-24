@@ -181,6 +181,7 @@ def build_full_timeline_clip_prompt(
     target_clips: int,
     source_context: str,
     timestamp_mode: str,
+    spoken_language: str = "und",
 ) -> str:
     """Build the prompt for one complete attached timestamped transcript."""
 
@@ -195,6 +196,7 @@ Each clip must be between 15 and 60 seconds long.
 FULL_SOURCE_RANGE_SECONDS: 0.000-{duration:.3f}
 VIDEO_DURATION_SECONDS: {duration:.3f}
 TIMESTAMP_MODE: {timestamp_mode}
+SPOKEN_LANGUAGE: {spoken_language}
 TARGET_CLIP_COUNT: {int(target_clips or 1)}
 DISCOVERY_CANDIDATE_LIMIT: {CLIP_ANALYSIS_DISCOVERY_LIMIT}
 
@@ -248,8 +250,9 @@ Return only valid JSON with this shape:
 Set coverage.complete to true only after reviewing the complete attached file.
 Set coverage.start to the earliest source timestamp reviewed and coverage.end to
 the latest source timestamp reviewed. For a complete review they must cover the
-full range above. Order shorts by predicted performance, best first, and keep
-all descriptions and hooks in the transcript's language.
+full range above. Order shorts by predicted performance, best first. Write new
+titles, descriptions, and hooks in the stated spoken language; keep the source
+transcript and subtitle text unchanged.
 """.strip()
 
 
@@ -301,6 +304,7 @@ GEMINI_PROMPT_TEMPLATE = """
 You are a senior short-form video editor. Read the supplied timestamped transcript segments and choose the strongest viral moments for TikTok/IG Reels/YouTube Shorts. Each clip must be between 15 and 60 seconds long.
 
 TARGET_CLIP_COUNT: {target_clips}
+SPOKEN_LANGUAGE: {spoken_language}
 
 Return at most DISCOVERY_CANDIDATE_LIMIT candidates from this transcript window. Do not stop early unless the window genuinely has fewer strong moments.
 
@@ -332,7 +336,8 @@ STRICT EXCLUSIONS:
 - No generic intros/outros or purely sponsorship segments unless they contain the hook.
 - No clips < 15 s or > 60 s.
 
-OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by predicted performance (best to worst). In the descriptions, ALWAYS include a compelling, context-aware Call-To-Action (CTA) tailored specifically to the video type/content and in the same language as the transcript (e.g. for tutorials/tools: comment for the template/guide; for music/creative: use this audio, tag friends or drop a reaction; for podcast/discussions: share opinions in comments; for entertainment/gaming: follow for part 2, save or share):
+OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by predicted performance (best to worst). In the descriptions, ALWAYS include a compelling, context-aware Call-To-Action (CTA) tailored specifically to the video type/content and in the stated spoken language (e.g. for tutorials/tools: comment for the template/guide; for music/creative: use this audio, tag friends or drop a reaction; for podcast/discussions: share opinions in comments; for entertainment/gaming: follow for part 2, save or share):
+Use the stated spoken language as authoritative for newly generated titles, descriptions, and hook text. Preserve the source transcript and subtitle text.
 {{
   "shorts": [
     {{
@@ -2613,6 +2618,7 @@ def _analyze_openai_file_timeline(
     video_duration,
     target_clips,
     source_context,
+    spoken_language,
     ai_config,
 ):
     settings = openai_file_analysis_settings(ai_config)
@@ -2633,6 +2639,7 @@ def _analyze_openai_file_timeline(
             target_clips=target_clips,
             source_context=source_context,
             timestamp_mode=timeline["timestamp_mode"],
+            spoken_language=spoken_language,
         )
         uses_codex_cli = (
             ai_config.normalized_provider() == "openai-codex"
@@ -2847,6 +2854,9 @@ def _discover_clip_plan(
                 "text": analysis_source.get("text"),
             }]
         timeline = build_analysis_timeline(analysis_source, video_duration)
+        spoken_language = str(analysis_source.get("language") or "").strip().lower()
+        if spoken_language in {"", "auto", "und", "unknown"}:
+            spoken_language = "the language of the source transcript"
         indexed_units = timeline_units_by_id(timeline)
         clip_adapter_id = os.environ.get(
             "AI_CLIP_ANALYSIS_PROVIDER", "chat-json"
@@ -2862,6 +2872,7 @@ def _discover_clip_plan(
                 video_duration,
                 target_clips,
                 source_context_json,
+                spoken_language,
                 ai_config,
             )
             return _finalize_clip_analysis_result(
@@ -2928,6 +2939,7 @@ def _discover_clip_plan(
                 video_duration=video_duration,
                 target_clips=target_clips,
                 discovery_limit=CLIP_ANALYSIS_DISCOVERY_LIMIT,
+                spoken_language=spoken_language,
                 window_metadata=window_metadata,
                 source_context=source_context_json,
                 timestamped_transcript=timestamped_transcript,
@@ -3273,10 +3285,19 @@ if __name__ == '__main__':
                 source_context_record = prepare_source_context(args.source_url, transcript)
 
             # 4. Clip analysis
+            analysis_transcript = transcript
+            analysis_language = "auto"
+            if reused_transcript_bundle:
+                analysis_language = str(
+                    reused_transcript_bundle.get("analysis_language") or "auto"
+                ).strip().lower()
+                if analysis_language not in ("", "auto"):
+                    analysis_transcript = dict(transcript)
+                    analysis_transcript["language"] = analysis_language
             with job_metrics.timed("ai_planning"):
                 with get_audit_emitter().stage("ai.analysis"):
                     clips_data = get_viral_clips(
-                        transcript,
+                        analysis_transcript,
                         duration,
                         target_clips=target_clips,
                         source_context=source_context_record.get("source_context"),
@@ -3292,6 +3313,7 @@ if __name__ == '__main__':
                 for key in ("source_subtitle_tracks", "source_transcript_use_word_timings", "rediscovered_from_project_id"):
                     if key in reused_transcript_bundle:
                         clips_data[key] = reused_transcript_bundle[key]
+                clips_data["rediscovery_analysis_language"] = analysis_language
             if args.defer_render:
                 _, metadata_file = persist_discovered_clip_plan(
                     clips_data,

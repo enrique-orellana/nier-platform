@@ -87,7 +87,10 @@ func (s *Server) rediscoverProjectClips(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	var request struct {
-		ClipCount int `json:"clip_count"`
+		ClipCount      int    `json:"clip_count"`
+		SpokenLanguage string `json:"spoken_language"`
+		LayoutFormat   string `json:"layout_format"`
+		FacecamSize    string `json:"facecam_size"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
@@ -95,6 +98,19 @@ func (s *Server) rediscoverProjectClips(w http.ResponseWriter, r *http.Request, 
 	}
 	if request.ClipCount < 1 || request.ClipCount > 15 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "clip_count must be between 1 and 15"})
+		return
+	}
+	spokenLanguage := strings.ToLower(strings.TrimSpace(request.SpokenLanguage))
+	if spokenLanguage == "" {
+		spokenLanguage = "auto"
+	}
+	if !validRediscoveryLanguage(spokenLanguage) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "spoken_language must be auto or a two-letter language code"})
+		return
+	}
+	layoutFormat, facecamSize, err := normalizeProcessLayoutOptions(request.LayoutFormat, request.FacecamSize)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
 		return
 	}
 
@@ -148,10 +164,8 @@ func (s *Server) rediscoverProjectClips(w http.ResponseWriter, r *http.Request, 
 	}
 	videoTitle := strings.TrimSpace(firstString(projectMetadata, "video_title"))
 	if videoTitle == "" {
-		if clips, ok := projectMetadata["shorts"].([]any); ok && len(clips) > 0 {
-			if clip, ok := clips[0].(map[string]any); ok {
-				videoTitle = firstString(clip, "title", "video_title_for_youtube_short")
-			}
+		if clip := firstProjectClip(projectMetadata); clip != nil {
+			videoTitle = firstString(clip, "title", "video_title_for_youtube_short")
 		}
 	}
 
@@ -160,25 +174,14 @@ func (s *Server) rediscoverProjectClips(w http.ResponseWriter, r *http.Request, 
 		"reuse_source_transcript": true,
 		"source_parent_job_id":    sourceJob.ID,
 		"source_url":              contextURL,
+		"layout_format":           layoutFormat,
+		"facecam_size":            facecamSize,
 	}
 	if sourcePath != "" {
 		clipMetadata["source_path"] = sourcePath
 	}
 	if len(sourceObject) > 0 {
 		clipMetadata["source_object"] = sourceObject
-	}
-	if clip := firstProjectClip(projectMetadata); clip != nil {
-		for _, key := range []string{"layout_format", "facecam_size"} {
-			if value, ok := clip[key].(string); ok && strings.TrimSpace(value) != "" {
-				clipMetadata[key] = value
-			}
-		}
-	}
-	if value, ok := sourceJob.Metadata["layout_format"].(string); ok && clipMetadata["layout_format"] == nil {
-		clipMetadata["layout_format"] = value
-	}
-	if value, ok := sourceJob.Metadata["facecam_size"].(string); ok && clipMetadata["facecam_size"] == nil {
-		clipMetadata["facecam_size"] = value
 	}
 
 	job, err := s.store.Create(r.Context(), domain.CreateJobInput{
@@ -209,6 +212,7 @@ func (s *Server) rediscoverProjectClips(w http.ResponseWriter, r *http.Request, 
 		"source_subtitle_tracks":             projectMetadata["source_subtitle_tracks"],
 		"source_transcript_use_word_timings": projectMetadata["source_transcript_use_word_timings"],
 		"video_title":                        videoTitle,
+		"analysis_language":                  spokenLanguage,
 		"source_object":                      sourceObject,
 		"rediscovered_from_project_id":       sourceJob.ID,
 	}
@@ -287,6 +291,21 @@ func firstProjectClip(metadata map[string]any) map[string]any {
 	}
 	clip, _ := clips[0].(map[string]any)
 	return clip
+}
+
+func validRediscoveryLanguage(language string) bool {
+	if language == "auto" {
+		return true
+	}
+	if len(language) != 2 {
+		return false
+	}
+	for _, character := range language {
+		if character < 'a' || character > 'z' {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) getProjectAudit(w http.ResponseWriter, r *http.Request, jobID string) {

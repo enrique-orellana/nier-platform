@@ -2063,8 +2063,22 @@ function App() {
               aiApiKey={apiKey}
               getAiHeaders={getAiHeaders}
               clipAnalysisBackend={clipAnalysisBackend}
+              onClipAnalysisBackendChange={setClipAnalysisBackend}
+              configuredProviderLabel={
+                {
+                  gemini: "Gemini",
+                  openrouter: "OpenRouter",
+                  lmstudio: "LM Studio",
+                  "openai-codex": "OpenAI Codex (ChatGPT)",
+                }[aiProvider] || aiProvider
+              }
+              defaultTranscriptionLanguage={transcriptionLanguage}
               ollamaBaseUrl={ollamaBaseUrl}
               ollamaModel={ollamaModel}
+              ollamaAvailable={ollamaDiscovery.visionModels.some(
+                (model) => model.id === ollamaModel,
+              )}
+              onOpenSettings={() => navigateToTab("settings")}
               projectId={route.projectId}
               editorClipIndex={route.clipIndex}
               editorOpen={route.editor}
