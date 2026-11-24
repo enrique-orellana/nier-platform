@@ -274,6 +274,9 @@ export default function ProjectLibrary({
   aiProvider = "gemini",
   aiApiKey,
   getAiHeaders,
+  clipAnalysisBackend = "configured",
+  ollamaBaseUrl = "",
+  ollamaModel = "",
   projectId = null,
   editorClipIndex = null,
   editorOpen = false,
@@ -294,6 +297,11 @@ export default function ProjectLibrary({
   const [selectedProject, setSelectedProject] = useState(null);
   const [projectClips, setProjectClips] = useState([]);
   const [localSourceEditorOpen, setLocalSourceEditorOpen] = useState(false);
+  const [isRediscoveryDialogOpen, setIsRediscoveryDialogOpen] = useState(false);
+  const [rediscoveryClipCount, setRediscoveryClipCount] = useState(6);
+  const [rediscoveryJob, setRediscoveryJob] = useState(null);
+  const [isSubmittingRediscovery, setIsSubmittingRediscovery] = useState(false);
+  const [rediscoveryRequestError, setRediscoveryRequestError] = useState("");
   const [isLoadingClips, setIsLoadingClips] = useState(false);
   const [clipStatuses, setClipStatuses] = useState({});
   const [clipRenderJobs, setClipRenderJobs] = useState({});
@@ -575,6 +583,13 @@ export default function ProjectLibrary({
 
   const handleViewProject = (project) => {
     const id = project?.job_id || project?.session_id || project?.id;
+    if (
+      id &&
+      id !== rediscoveryJob?.jobId &&
+      !["queued", "processing"].includes(rediscoveryJob?.status)
+    ) {
+      setRediscoveryJob(null);
+    }
     onOpenProject?.(id);
     setSelectedProject(project);
     setLocalSourceEditorOpen(false);
@@ -597,6 +612,166 @@ export default function ProjectLibrary({
     setTrackingErrors({});
     loadProjectClips(project);
   };
+
+  const openRediscoveryDialog = () => {
+    setRediscoveryClipCount(
+      Math.max(1, Math.min(15, projectClips.length || 6)),
+    );
+    setRediscoveryRequestError("");
+    setIsRediscoveryDialogOpen(true);
+  };
+
+  const handleStartRediscovery = async () => {
+    if (!selectedProjectId) return;
+    setIsSubmittingRediscovery(true);
+    setRediscoveryRequestError("");
+    try {
+      const headers = getAiHeaders
+        ? getAiHeaders("json")
+        : { "Content-Type": "application/json" };
+      headers["Content-Type"] = "application/json";
+      headers["X-Clip-Analysis-Provider"] = clipAnalysisBackend;
+      if (clipAnalysisBackend === "ollama") {
+        headers["X-Clip-Ollama-Base-Url"] = ollamaBaseUrl;
+        headers["X-Clip-Ollama-Model"] = ollamaModel;
+      }
+      const response = await fetch(
+        getApiUrl(
+          `/api/projects/${encodeURIComponent(selectedProjectId)}/rediscover`,
+        ),
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ clip_count: Number(rediscoveryClipCount) }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.detail || "Could not start clip rediscovery.");
+      }
+      setRediscoveryJob({
+        jobId: payload.job_id,
+        status: payload.status || "queued",
+        logs: [],
+        project: null,
+        error: "",
+      });
+    } catch (error) {
+      setRediscoveryRequestError(
+        error.message || "Could not start clip rediscovery.",
+      );
+    } finally {
+      setIsSubmittingRediscovery(false);
+    }
+  };
+
+  const rediscoveryJobId = rediscoveryJob?.jobId;
+  useEffect(() => {
+    if (!rediscoveryJobId) return undefined;
+    let cancelled = false;
+    let timer;
+    const startedAt = Date.now();
+
+    const pollRediscovery = async () => {
+      if (cancelled) return;
+      if (Date.now() - startedAt >= 30 * 60 * 1000) {
+        setRediscoveryJob((current) =>
+          current?.jobId === rediscoveryJobId
+            ? {
+                ...current,
+                status: "failed",
+                error: "Clip rediscovery timed out.",
+              }
+            : current,
+        );
+        return;
+      }
+      try {
+        const response = await fetch(
+          getApiUrl(`/api/status/${encodeURIComponent(rediscoveryJobId)}`),
+        );
+        if (!response.ok) throw new Error("Could not load rediscovery status.");
+        const payload = await response.json();
+        const status = payload.status;
+        const logs = Array.isArray(payload.logs) ? payload.logs : [];
+        if (status === "clips_ready" || status === "completed") {
+          let project = null;
+          try {
+            const historyResponse = await fetch(
+              getApiUrl("/api/projects/history?limit=48&refresh=true"),
+            );
+            if (historyResponse.ok) {
+              const history = await historyResponse.json();
+              const nextProjects = Array.isArray(history.projects)
+                ? history.projects
+                : [];
+              setProjects(nextProjects);
+              project = nextProjects.find(
+                (candidate) => candidate.job_id === rediscoveryJobId,
+              );
+            }
+          } catch (error) {
+            console.error(
+              "Could not refresh projects after rediscovery:",
+              error,
+            );
+          }
+          if (!project) {
+            const result = payload.result || {};
+            const clips = Array.isArray(result.clips) ? result.clips : [];
+            project = {
+              job_id: rediscoveryJobId,
+              title:
+                result.video_title || clips[0]?.title || "Rediscovered clips",
+              created_at: new Date().toISOString(),
+              clip_count: clips.length,
+              clips,
+              source_metadata: result.source_metadata,
+              source_duration_seconds:
+                result.source_asset?.probe?.duration_seconds || 0,
+            };
+          }
+          if (cancelled) return;
+          setRediscoveryJob((current) =>
+            current?.jobId === rediscoveryJobId
+              ? { ...current, status, logs, project, error: "" }
+              : current,
+          );
+          return;
+        }
+        if (status === "failed" || status === "cancelled") {
+          setRediscoveryJob((current) =>
+            current?.jobId === rediscoveryJobId
+              ? {
+                  ...current,
+                  status,
+                  logs,
+                  error:
+                    payload.error ||
+                    logs.at(-1) ||
+                    "Clip rediscovery did not finish.",
+                }
+              : current,
+          );
+          return;
+        }
+        setRediscoveryJob((current) =>
+          current?.jobId === rediscoveryJobId
+            ? { ...current, status, logs }
+            : current,
+        );
+        timer = setTimeout(pollRediscovery, 1800);
+      } catch (error) {
+        if (!cancelled) timer = setTimeout(pollRediscovery, 2500);
+      }
+    };
+
+    pollRediscovery();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [rediscoveryJobId]);
 
   const handleOpenAudit = () => {
     setIsAuditOpen(true);
@@ -1207,6 +1382,129 @@ export default function ProjectLibrary({
             onClose={closeFullVideoEditor}
           />
         )}
+        <Dialog
+          open={isRediscoveryDialogOpen}
+          onOpenChange={setIsRediscoveryDialogOpen}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Re-find clips</DialogTitle>
+              <DialogDescription>
+                Choose how many clips to find from this project’s source. The
+                saved transcript and subtitle tracks will be reused, so speech
+                transcription and subtitle generation are skipped. Your current
+                project stays unchanged.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="rediscovery-clip-count">Number of clips</Label>
+              <Input
+                id="rediscovery-clip-count"
+                type="number"
+                min={1}
+                max={15}
+                step={1}
+                value={rediscoveryClipCount}
+                disabled={
+                  isSubmittingRediscovery ||
+                  ["queued", "processing"].includes(rediscoveryJob?.status)
+                }
+                onChange={(event) =>
+                  setRediscoveryClipCount(
+                    event.target.value === "" ? "" : Number(event.target.value),
+                  )
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Choose between 1 and 15 clips.
+              </p>
+            </div>
+            {rediscoveryRequestError && (
+              <div
+                className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+                role="alert"
+              >
+                {rediscoveryRequestError}
+              </div>
+            )}
+            {rediscoveryJob &&
+              ["queued", "processing"].includes(rediscoveryJob.status) && (
+                <div
+                  className="flex items-center gap-3 rounded-md border bg-muted/30 p-3 text-sm"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+                  <div>
+                    <p className="font-medium">
+                      {rediscoveryJob.status === "queued"
+                        ? "Waiting to find clips…"
+                        : "Finding clips using the saved transcript…"}
+                    </p>
+                    <p className="text-muted-foreground">
+                      Your existing project and subtitle tracks are safe.
+                    </p>
+                  </div>
+                </div>
+              )}
+            {["clips_ready", "completed"].includes(rediscoveryJob?.status) && (
+              <div className="space-y-3 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+                <p className="text-sm font-medium">
+                  New project ready with{" "}
+                  {rediscoveryJob.project?.clips?.length || 0} clips.
+                </p>
+                <Button
+                  type="button"
+                  className="w-full"
+                  onClick={() => {
+                    if (rediscoveryJob.project) {
+                      handleViewProject(rediscoveryJob.project);
+                      setIsRediscoveryDialogOpen(false);
+                    }
+                  }}
+                  disabled={!rediscoveryJob.project}
+                >
+                  Open new project
+                </Button>
+              </div>
+            )}
+            {["failed", "cancelled"].includes(rediscoveryJob?.status) && (
+              <div
+                className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+                role="alert"
+              >
+                {rediscoveryJob.error || "Clip rediscovery failed."}
+              </div>
+            )}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsRediscoveryDialogOpen(false)}
+              >
+                Close
+              </Button>
+              <Button
+                type="button"
+                onClick={handleStartRediscovery}
+                disabled={
+                  isSubmittingRediscovery ||
+                  !Number.isInteger(Number(rediscoveryClipCount)) ||
+                  Number(rediscoveryClipCount) < 1 ||
+                  Number(rediscoveryClipCount) > 15 ||
+                  ["queued", "processing"].includes(rediscoveryJob?.status)
+                }
+              >
+                {isSubmittingRediscovery ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Sparkles className="size-4" />
+                )}
+                Find clips again
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
         <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-8 md:px-8 md:py-10 xl:px-10">
           {/* Header Navigation */}
           <header className="flex flex-wrap items-center justify-between gap-3">
@@ -1384,6 +1682,15 @@ export default function ProjectLibrary({
                 </CardDescription>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={openRediscoveryDialog}
+                >
+                  <Sparkles className="size-4" />
+                  Re-find clips
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"

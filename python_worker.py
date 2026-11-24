@@ -57,6 +57,10 @@ def build_clip_generation_command(request: Mapping[str, Any]) -> list[str]:
     if source_context_url:
         command.extend(["--source-url", source_context_url])
 
+    reuse_transcript_path = str(request.get("reuse_transcript_path") or "").strip()
+    if reuse_transcript_path:
+        command.extend(["--transcript-file", reuse_transcript_path])
+
     clip_count = int(request.get("clip_count") or 6)
     command.extend(["--target-clips", str(clip_count)])
     layout_format = str(request.get("layout_format") or "").strip()
@@ -116,6 +120,9 @@ def load_generation_result(output_dir: str) -> dict[str, Any]:
         "source_asset",
         "source_object",
         "source_metadata",
+        "source_subtitle_tracks",
+        "source_transcript_use_word_timings",
+        "rediscovered_from_project_id",
         "video_title",
         "transcript",
     ):
@@ -273,6 +280,11 @@ def _run_clip_generation(request: Mapping[str, Any]) -> tuple[int, dict[str, Any
     if exit_code != 0:
         return exit_code, None
     result = load_generation_result(output_dir)
+    reuse_transcript_path = str(request.get("reuse_transcript_path") or "").strip()
+    if reuse_transcript_path:
+        transcript_path = Path(reuse_transcript_path).resolve()
+        if transcript_path.parent == output_root and transcript_path.name == "rediscovery-input.json":
+            transcript_path.unlink(missing_ok=True)
     include_paths = None
     clip_id = None
     if operation == "clip_render":

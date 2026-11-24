@@ -50,6 +50,8 @@ func (s *Server) projectRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "rediscover":
+		s.rediscoverProjectClips(w, r, job)
 	case r.Method == http.MethodGet && len(parts) == 2 && parts[1] == "statuses":
 		s.getProjectStatuses(w, r, jobID)
 	case len(parts) == 2 && parts[1] == "audit":
@@ -69,6 +71,222 @@ func (s *Server) projectRoutes(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Not found"})
 	}
+}
+
+func (s *Server) rediscoverProjectClips(w http.ResponseWriter, r *http.Request, sourceJob domain.Job) {
+	if sourceJob.Kind != "clip-generation" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project not found"})
+		return
+	}
+	if sourceJob.Status != domain.JobStatusClipsReady && sourceJob.Status != domain.JobStatusCompleted {
+		writeJSON(w, http.StatusConflict, map[string]string{"detail": "Wait for this project to finish before finding clips again."})
+		return
+	}
+	if err := validateClipAnalysisSelection(r); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": err.Error()})
+		return
+	}
+	var request struct {
+		ClipCount int `json:"clip_count"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "Invalid JSON request body"})
+		return
+	}
+	if request.ClipCount < 1 || request.ClipCount > 15 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"detail": "clip_count must be between 1 and 15"})
+		return
+	}
+
+	projectMetadata, _, err := s.loadProjectSourceMetadata(r.Context(), sourceJob.ID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"detail": "Project source metadata is unavailable"})
+		return
+	}
+	transcript := sourceTranscriptFromMetadata(projectMetadata)
+	if len(transcript) == 0 {
+		transcript = s.sourceTranscriptFromResult(r.Context(), sourceJob.ID)
+	}
+	if len(transcript) == 0 {
+		writeJSON(w, http.StatusConflict, map[string]string{"detail": "This project has no saved source transcript to reuse."})
+		return
+	}
+	duration := sourceTranscriptDuration(projectMetadata)
+	if err := validateSourceTranscript(transcript, duration); err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"detail": "The saved source transcript is invalid and cannot be reused."})
+		return
+	}
+
+	outputRoot := s.config.OutputDir
+	if outputRoot == "" {
+		outputRoot = "output"
+	}
+	projectOutputDir := s.sourceTranscriptOutputDir(r.Context(), sourceJob.ID)
+	sourcePath := projectSourcePathForRediscovery(projectOutputDir, sourceVideoFilename(projectMetadata))
+	sourceObject, _ := projectMetadata["source_object"].(map[string]any)
+	if len(sourceObject) == 0 {
+		sourceObject, _ = sourceJob.Metadata["source_object"].(map[string]any)
+	}
+	if sourcePath == "" && len(sourceObject) == 0 && s.s3Store == nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"detail": "The saved source video is unavailable for clip rediscovery."})
+		return
+	}
+
+	contextURL := firstString(projectMetadata, "source_url")
+	if contextURL == "" {
+		contextURL = sourceJob.SourceURL
+	}
+	sourceContextRecord := map[string]any{
+		"source_url":            contextURL,
+		"source_metadata":       projectMetadata["source_metadata"],
+		"source_context":        projectMetadata["source_context"],
+		"source_context_status": projectMetadata["source_context_status"],
+		"source_context_error":  projectMetadata["source_context_error"],
+	}
+	if sourceContextRecord["source_context_status"] == nil {
+		sourceContextRecord["source_context_status"] = "unavailable"
+	}
+	videoTitle := strings.TrimSpace(firstString(projectMetadata, "video_title"))
+	if videoTitle == "" {
+		if clips, ok := projectMetadata["shorts"].([]any); ok && len(clips) > 0 {
+			if clip, ok := clips[0].(map[string]any); ok {
+				videoTitle = firstString(clip, "title", "video_title_for_youtube_short")
+			}
+		}
+	}
+
+	clipMetadata := map[string]any{
+		"defer_render":            true,
+		"reuse_source_transcript": true,
+		"source_parent_job_id":    sourceJob.ID,
+		"source_url":              contextURL,
+	}
+	if sourcePath != "" {
+		clipMetadata["source_path"] = sourcePath
+	}
+	if len(sourceObject) > 0 {
+		clipMetadata["source_object"] = sourceObject
+	}
+	if clip := firstProjectClip(projectMetadata); clip != nil {
+		for _, key := range []string{"layout_format", "facecam_size"} {
+			if value, ok := clip[key].(string); ok && strings.TrimSpace(value) != "" {
+				clipMetadata[key] = value
+			}
+		}
+	}
+	if value, ok := sourceJob.Metadata["layout_format"].(string); ok && clipMetadata["layout_format"] == nil {
+		clipMetadata["layout_format"] = value
+	}
+	if value, ok := sourceJob.Metadata["facecam_size"].(string); ok && clipMetadata["facecam_size"] == nil {
+		clipMetadata["facecam_size"] = value
+	}
+
+	job, err := s.store.Create(r.Context(), domain.CreateJobInput{
+		Kind:      "clip-generation",
+		ClipCount: request.ClipCount,
+		OutputDir: filepath.Join(outputRoot, "pending"),
+		Metadata:  clipMetadata,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Failed to create clip rediscovery job"})
+		return
+	}
+	jobOutputDir := filepath.Join(outputRoot, job.ID)
+	if err := s.store.SetOutputDir(r.Context(), job.ID, jobOutputDir); err != nil {
+		_, _ = s.store.Transition(r.Context(), job.ID, domain.JobStatusFailed, err.Error())
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Failed to initialize clip rediscovery job"})
+		return
+	}
+	if err := os.MkdirAll(jobOutputDir, 0o755); err != nil {
+		_, _ = s.store.Transition(r.Context(), job.ID, domain.JobStatusFailed, err.Error())
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Failed to prepare clip rediscovery job"})
+		return
+	}
+	inputPath := filepath.Join(jobOutputDir, "rediscovery-input.json")
+	inputPayload := map[string]any{
+		"transcript":                         transcript,
+		"source_context_record":              sourceContextRecord,
+		"source_subtitle_tracks":             projectMetadata["source_subtitle_tracks"],
+		"source_transcript_use_word_timings": projectMetadata["source_transcript_use_word_timings"],
+		"video_title":                        videoTitle,
+		"source_object":                      sourceObject,
+		"rediscovered_from_project_id":       sourceJob.ID,
+	}
+	encodedInput, err := json.Marshal(inputPayload)
+	if err != nil {
+		_, _ = s.store.Transition(r.Context(), job.ID, domain.JobStatusFailed, err.Error())
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Failed to encode the saved transcript for clip rediscovery"})
+		return
+	}
+	if err := writeJSONFileAtomic(inputPath, encodedInput); err != nil {
+		_, _ = s.store.Transition(r.Context(), job.ID, domain.JobStatusFailed, err.Error())
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Failed to prepare the saved transcript for clip rediscovery"})
+		return
+	}
+	if err := s.store.AppendLog(r.Context(), job.ID, "Clip rediscovery queued with the project's saved transcript; transcription and subtitle generation will be skipped."); err != nil {
+		_, _ = s.store.Transition(r.Context(), job.ID, domain.JobStatusFailed, err.Error())
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"detail": "Failed to initialize clip rediscovery job"})
+		return
+	}
+	s.setRuntimeMetadata(job.ID, map[string]any{"headers": translationHeaders(r)})
+	if s.scheduler != nil {
+		if err := s.scheduler.Submit(r.Context(), job.ID); err != nil {
+			s.releaseRuntimeMetadata(job.ID)
+			_, _ = s.store.Transition(r.Context(), job.ID, domain.JobStatusFailed, err.Error())
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"detail": "Job scheduler unavailable"})
+			return
+		}
+	} else if s.runner != nil {
+		go func() { _ = s.runner.RunOnce(context.Background(), job.ID) }()
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"job_id": job.ID, "status": string(job.Status)})
+}
+
+func projectSourcePathForRediscovery(outputDir, filename string) string {
+	if strings.TrimSpace(filename) == "" {
+		filename = "source.mp4"
+	}
+	relative := filepath.Clean(filepath.FromSlash(filename))
+	if filepath.IsAbs(relative) || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	root, err := filepath.Abs(outputDir)
+	if err != nil {
+		return ""
+	}
+	path, err := filepath.Abs(filepath.Join(root, relative))
+	if err != nil {
+		return ""
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return ""
+	}
+	resolvedPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return ""
+	}
+	contained, err := filepath.Rel(resolvedRoot, resolvedPath)
+	if err != nil || contained == ".." || strings.HasPrefix(contained, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	info, err := os.Stat(resolvedPath)
+	if err != nil || !info.Mode().IsRegular() {
+		return ""
+	}
+	return resolvedPath
+}
+
+func firstProjectClip(metadata map[string]any) map[string]any {
+	clips, _ := metadata["shorts"].([]any)
+	if len(clips) == 0 {
+		clips, _ = metadata["clips"].([]any)
+	}
+	if len(clips) == 0 {
+		return nil
+	}
+	clip, _ := clips[0].(map[string]any)
+	return clip
 }
 
 func (s *Server) getProjectAudit(w http.ResponseWriter, r *http.Request, jobID string) {

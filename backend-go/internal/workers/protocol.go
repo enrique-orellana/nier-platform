@@ -195,6 +195,12 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 	if deferred, ok := job.Metadata["defer_render"].(bool); ok && deferred {
 		request["defer_render"] = true
 	}
+	if reuseTranscript, ok := job.Metadata["reuse_source_transcript"].(bool); ok && reuseTranscript {
+		request["reuse_transcript_path"] = filepath.Join(outputDir, "rediscovery-input.json")
+	}
+	if sourceParentJobID, ok := job.Metadata["source_parent_job_id"].(string); ok && strings.TrimSpace(sourceParentJobID) != "" {
+		request["source_parent_job_id"] = strings.TrimSpace(sourceParentJobID)
+	}
 	if operation == "clip_render" {
 		request["parent_job_id"] = job.ParentJobID
 		request["clip_index"] = job.ClipIndex
@@ -220,8 +226,35 @@ func (a PythonWorkerAdapter) RunResult(ctx context.Context, job domain.Job, outp
 		request["source_url"] = job.SourceURL
 	}
 	sourcePath, hasSourcePath := job.Metadata["source_path"].(string)
+	hasSourcePath = hasSourcePath && strings.TrimSpace(sourcePath) != ""
 	if hasSourcePath && sourcePath != "" {
 		request["source_path"] = sourcePath
+	}
+	sourceParentJobID, _ := job.Metadata["source_parent_job_id"].(string)
+	if operation == "clip_render" && strings.TrimSpace(job.ParentJobID) != "" {
+		sourceParentJobID = job.ParentJobID
+	}
+	needsSourceRestore := !hasSourcePath
+	if hasSourcePath {
+		if _, err := os.Stat(sourcePath); err != nil {
+			needsSourceRestore = true
+		}
+	}
+	if needsSourceRestore && strings.TrimSpace(sourceParentJobID) != "" && a.ArtifactDownloader != nil {
+		masterDestination := filepath.Join(outputDir, "source.mp4")
+		maxBytes := a.SourceMaxBytes
+		if maxBytes <= 0 {
+			maxBytes = 16 * 1024 * 1024 * 1024
+		}
+		auditID := a.startExternalAudit(ctx, job.ID, "artifact.download", map[string]any{"parent_job_id": strings.TrimSpace(sourceParentJobID)})
+		if err := a.ArtifactDownloader.DownloadJobSourceArtifact(ctx, strings.TrimSpace(sourceParentJobID), masterDestination, maxBytes); err == nil {
+			a.finishExternalAudit(ctx, job.ID, auditID, domain.AuditEventStatusCompleted, "")
+			request["source_path"] = masterDestination
+			sourcePath = masterDestination
+			hasSourcePath = true
+		} else {
+			a.finishExternalAudit(ctx, job.ID, auditID, domain.AuditEventStatusFailed, err.Error())
+		}
 	}
 	if sourceObject, ok := job.Metadata["source_object"].(map[string]any); ok && !hasSourcePath {
 		if a.SourceDownloader == nil {

@@ -3103,6 +3103,7 @@ if __name__ == '__main__':
     input_group.add_argument('--direct-url', type=str, help="Direct HTTP(S) video URL to download and process.")
     parser.add_argument('--source-url', type=str, help="Original HTTPS YouTube or Twitch page used for metadata context only.")
     parser.add_argument('--source-object', type=str, help="JSON MinIO source object reference for provenance.")
+    parser.add_argument('--transcript-file', type=str, help="Reuse a saved source transcript instead of transcribing the video again.")
     
     parser.add_argument('-o', '--output', type=str, help="Output directory or file (if processing whole video).")
     parser.add_argument('--keep-original', action='store_true', help="Keep the downloaded YouTube video.")
@@ -3124,6 +3125,17 @@ if __name__ == '__main__':
     )
     
     args = parser.parse_args()
+    reused_transcript_bundle = None
+    if args.transcript_file:
+        try:
+            with open(args.transcript_file, 'r', encoding='utf-8') as transcript_file:
+                reused_transcript_bundle = json.load(transcript_file)
+        except (OSError, json.JSONDecodeError) as exc:
+            parser.error(f"could not read saved transcript file: {exc}")
+        if not isinstance(reused_transcript_bundle, dict) or not isinstance(reused_transcript_bundle.get("transcript"), dict):
+            parser.error("saved transcript file must contain a transcript object")
+        if not reused_transcript_bundle["transcript"].get("segments"):
+            parser.error("saved transcript file must contain timed transcript segments")
     if args.defer_render and args.render_clip is not None:
         parser.error("--defer-render and --render-clip cannot be used together")
     if args.render_clip is not None and args.skip_analysis:
@@ -3135,6 +3147,11 @@ if __name__ == '__main__':
         source_object = parse_source_object_argument(args.source_object)
     except ValueError as exc:
         parser.error(f"invalid --source-object: {exc}")
+    if source_object is None and reused_transcript_bundle:
+        try:
+            source_object = parse_source_object_argument(reused_transcript_bundle.get("source_object"))
+        except ValueError as exc:
+            parser.error(f"invalid saved source object: {exc}")
 
     script_start_time = time.time()
     job_metrics = JobVideoMetrics()
@@ -3179,6 +3196,11 @@ if __name__ == '__main__':
                 output_dir = os.path.dirname(args.output) or os.path.dirname(input_video)
             else:
                 output_dir = os.path.dirname(input_video)
+
+    if reused_transcript_bundle:
+        saved_title = str(reused_transcript_bundle.get("video_title") or "").strip()
+        if saved_title:
+            video_title = sanitize_filename(saved_title) or video_title
 
     if not os.path.exists(input_video):
         print(f"❌ Input file not found: {input_video}")
@@ -3233,11 +3255,22 @@ if __name__ == '__main__':
         if duration <= 0:
             duration = source_analysis.total_frames / source_analysis.source_fps
         with analysis_job_lock():
-            with job_metrics.timed("transcription"):
-                with get_audit_emitter().stage("transcription.request"):
-                    transcript = transcribe_video(processing_video, duration_seconds=duration)
+            if reused_transcript_bundle:
+                transcript = reused_transcript_bundle["transcript"]
+                source_context_record = reused_transcript_bundle.get("source_context_record") or {
+                    "source_url": args.source_url,
+                    "source_metadata": None,
+                    "source_context": None,
+                    "source_context_status": "unavailable",
+                    "source_context_error": None,
+                }
+                print("♻️ Reusing the saved source transcript; transcription and subtitle generation are skipped.")
+            else:
+                with job_metrics.timed("transcription"):
+                    with get_audit_emitter().stage("transcription.request"):
+                        transcript = transcribe_video(processing_video, duration_seconds=duration)
 
-            source_context_record = prepare_source_context(args.source_url, transcript)
+                source_context_record = prepare_source_context(args.source_url, transcript)
 
             # 4. Clip analysis
             with job_metrics.timed("ai_planning"):
@@ -3255,6 +3288,10 @@ if __name__ == '__main__':
         else:
             print(f"🔥 Found {len(clips_data['shorts'])} viral clips!")
             attach_source_context_to_clip_plan(clips_data, source_context_record)
+            if reused_transcript_bundle:
+                for key in ("source_subtitle_tracks", "source_transcript_use_word_timings", "rediscovered_from_project_id"):
+                    if key in reused_transcript_bundle:
+                        clips_data[key] = reused_transcript_bundle[key]
             if args.defer_render:
                 _, metadata_file = persist_discovered_clip_plan(
                     clips_data,

@@ -2062,6 +2062,9 @@ function App() {
               aiProvider={aiProvider}
               aiApiKey={apiKey}
               getAiHeaders={getAiHeaders}
+              clipAnalysisBackend={clipAnalysisBackend}
+              ollamaBaseUrl={ollamaBaseUrl}
+              ollamaModel={ollamaModel}
               projectId={route.projectId}
               editorClipIndex={route.clipIndex}
               editorOpen={route.editor}
