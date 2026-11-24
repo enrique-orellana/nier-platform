@@ -260,7 +260,7 @@ function CueBlock({
       onDoubleClick={() => onDoubleClick?.(cue)}
       onPointerDown={(event) => beginDrag(event, "move")}
       onKeyDown={(event) => event.key === "Enter" && onSelect(cue, event)}
-      className={`group absolute rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? (current ? "border-primary border-dashed" : "border-white/70 border-dashed") : current ? "border-primary border-solid" : "border-white/20 border-solid hover:border-white/40"}`}
+      className={`group/cue absolute rounded-md border px-2 py-1 text-left text-[11px] font-medium text-white shadow-sm transition-[filter,box-shadow,border-color] hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? (current ? "border-primary border-dashed" : "border-white/70 border-dashed") : current ? "border-primary border-solid" : "border-white/20 border-solid hover:border-white/40"}`}
       style={{
         left: `${left}%`,
         width: `${width}%`,
@@ -274,11 +274,11 @@ function CueBlock({
         <>
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 left-1.5 z-0 w-0 border-l border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
+            className="pointer-events-none absolute inset-y-0 left-1.5 z-0 w-0 border-l border-dashed border-white/55 opacity-0 transition-opacity group-hover/cue:opacity-100"
           />
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-1.5 z-0 w-0 border-r border-dashed border-white/55 opacity-0 transition-opacity group-hover:opacity-100"
+            className="pointer-events-none absolute inset-y-0 right-1.5 z-0 w-0 border-r border-dashed border-white/55 opacity-0 transition-opacity group-hover/cue:opacity-100"
           />
         </>
       )}
@@ -290,7 +290,7 @@ function CueBlock({
         size="icon"
         type="button"
         aria-label="Resize cue start"
-        className="absolute inset-y-0 left-0 z-20 h-full min-h-0 min-w-0 cursor-ew-resize rounded-none border-0 bg-transparent p-0 opacity-0 transition-colors group-hover:opacity-100 hover:bg-transparent focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/70"
+        className="absolute inset-y-0 left-0 z-20 h-full min-h-0 min-w-0 cursor-ew-resize rounded-none border-0 bg-transparent p-0 opacity-0 transition-colors group-hover/cue:opacity-100 hover:bg-transparent focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/70"
         onPointerDown={(event) => beginDrag(event, "start")}
         style={{ width: "min(12px, 25%)" }}
       />
@@ -299,7 +299,7 @@ function CueBlock({
         size="icon"
         type="button"
         aria-label="Resize cue end"
-        className="absolute inset-y-0 right-0 z-20 h-full min-h-0 min-w-0 cursor-ew-resize rounded-none border-0 bg-transparent p-0 opacity-0 transition-colors group-hover:opacity-100 hover:bg-transparent focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/70"
+        className="absolute inset-y-0 right-0 z-20 h-full min-h-0 min-w-0 cursor-ew-resize rounded-none border-0 bg-transparent p-0 opacity-0 transition-colors group-hover/cue:opacity-100 hover:bg-transparent focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/70"
         onPointerDown={(event) => beginDrag(event, "end")}
         style={{ width: "min(12px, 25%)" }}
       />
